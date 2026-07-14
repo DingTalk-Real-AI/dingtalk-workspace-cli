@@ -1483,32 +1483,33 @@
       ]
     },
     "contact user get": {
-      "agent_summary": "批量获取用户详情（逗号分隔 userId）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只有手机号而没有用户 ID 时应先按手机号搜索；该命令不负责发现用户。"
+        "还没有 userId 时先 search / aisearch person",
+        "查自己不要传 me/self，用 contact user get-self"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws contact user get --ids userId1,userId2 --format json"
+        "dws contact user get --ids userId1,userId2"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "批量获取用户详情（逗号分隔 userId）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "批量获取用户详情（逗号分隔 userId）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1536,21 +1537,23 @@
         },
         "avoid_when": {
           "value": [
-            "只有手机号而没有用户 ID 时应先按手机号搜索；该命令不负责发现用户。"
+            "还没有 userId 时先 search / aisearch person",
+            "查自己不要传 me/self，用 contact user get-self"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "只有手机号而没有用户 ID 时应先按手机号搜索；该命令不负责发现用户。"
+                "还没有 userId 时先 search / aisearch person",
+                "查自己不要传 me/self，用 contact user get-self"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1584,21 +1587,21 @@
         },
         "examples": {
           "value": [
-            "dws contact user get --ids userId1,userId2 --format json"
+            "dws contact user get --ids userId1,userId2"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws contact user get --ids userId1,userId2 --format json"
+                "dws contact user get --ids userId1,userId2"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1660,17 +1663,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1690,21 +1693,21 @@
         },
         "use_when": {
           "value": [
-            "已知一个或多个 userId，需要批量读取用户详情时"
+            "已有一个或多个 userId，需要部门、主管等详情"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "已知一个或多个 userId，需要批量读取用户详情时"
+                "已有一个或多个 userId，需要部门、主管等详情"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -1722,24 +1725,26 @@
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact user get",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_user_info_by_user_ids",
+        "internal/cli/schema_command_registry.json#contact.get_user_info_by_user_ids",
         "internal/cli/schema_hints/imported/wukong.json",
         "internal/cli/schema_hints/products/contact.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_user_info_by_user_ids",
+        "live-dws-schema:contact.get_user_info_by_user_ids",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.get_user_info_by_user_ids",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_user_info_by_user_ids"
       ],
       "use_when": [
-        "已知一个或多个 userId，需要批量读取用户详情时"
+        "已有一个或多个 userId，需要部门、主管等详情"
       ]
     },
     "contact user get-self": {
-      "agent_summary": "获取当前用户信息",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "获取当前登录用户资料与 userId",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要查询其他员工或部门时不要使用；该命令只返回当前登录用户的资料。"
+        "查他人详情用 contact user get 或先搜索"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -1749,18 +1754,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "获取当前用户信息",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "获取当前登录用户资料与 userId",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "获取当前用户信息",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "获取当前登录用户资料与 userId",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1788,21 +1793,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要查询其他员工或部门时不要使用；该命令只返回当前登录用户的资料。"
+            "查他人详情用 contact user get 或先搜索"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要查询其他员工或部门时不要使用；该命令只返回当前登录用户的资料。"
+                "查他人详情用 contact user get 或先搜索"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1838,19 +1843,19 @@
           "value": [
             "dws contact user get-self --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws contact user get-self --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1912,17 +1917,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1942,21 +1947,21 @@
         },
         "use_when": {
           "value": [
-            "需要取得当前登录用户的 userId 和基本信息时"
+            "用户问我是谁/我的 userId/当前账号信息"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要取得当前登录用户的 userId 和基本信息时"
+                "用户问我是谁/我的 userId/当前账号信息"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -1974,16 +1979,18 @@
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact user get-self",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_current_user_profile",
+        "internal/cli/schema_command_registry.json#contact.get_current_user_profile",
         "internal/cli/schema_hints/imported/wukong.json",
         "internal/cli/schema_hints/products/contact.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_current_user_profile",
+        "live-dws-schema:contact.get_current_user_profile",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.get_current_user_profile",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_current_user_profile"
       ],
       "use_when": [
-        "需要取得当前登录用户的 userId 和基本信息时"
+        "用户问我是谁/我的 userId/当前账号信息"
       ]
     },
     "contact user profile fields": {
@@ -2230,33 +2237,33 @@
       ]
     },
     "contact user profile get": {
-      "agent_summary": "查询指定员工的授权花名册字段值",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "按字段 code 查询指定员工花名册字段值",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要先发现可见花名册字段时改用字段列表命令；需要变更员工资料时也不要使用该只读查询。"
+        "尚不知道可见字段时先用 contact user profile fields",
+        "普通通讯录姓名搜索不要走花名册"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws contact user profile get --staff-id STAFF_ID --format json",
-        "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2 --format json"
+        "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询指定员工的授权花名册字段值",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "按字段 code 查询指定员工花名册字段值",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "查询指定员工的授权花名册字段值",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "按字段 code 查询指定员工花名册字段值",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2284,21 +2291,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要先发现可见花名册字段时改用字段列表命令；需要变更员工资料时也不要使用该只读查询。"
+            "尚不知道可见字段时先用 contact user profile fields",
+            "普通通讯录姓名搜索不要走花名册"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要先发现可见花名册字段时改用字段列表命令；需要变更员工资料时也不要使用该只读查询。"
+                "尚不知道可见字段时先用 contact user profile fields",
+                "普通通讯录姓名搜索不要走花名册"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2332,23 +2341,21 @@
         },
         "examples": {
           "value": [
-            "dws contact user profile get --staff-id STAFF_ID --format json",
-            "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2 --format json"
+            "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws contact user profile get --staff-id STAFF_ID --format json",
-                "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2 --format json"
+                "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2404,17 +2411,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2434,21 +2441,21 @@
         },
         "use_when": {
           "value": [
-            "已知员工 ID，需要读取权限范围内的花名册字段值时"
+            "已确认 staffId 与可见字段 code，需要读花名册字段"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "已知员工 ID，需要读取权限范围内的花名册字段值时"
+                "已确认 staffId 与可见字段 code，需要读花名册字段"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -2465,22 +2472,27 @@
         "CommandRegistry:canonical_path=contact.get_authorized_emp_rosterInfo",
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact user profile get",
+        "internal/cli/schema_command_registry.json#contact.get_authorized_emp_rosterInfo",
         "internal/cli/schema_hints/products/contact.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_authorized_emp_rosterInfo",
+        "live-dws-schema:contact.get_authorized_emp_rosterInfo#FAILED",
+        "pinned-mcp:contact.get_authorized_emp_rosterInfo",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_authorized_emp_rosterInfo"
       ],
       "use_when": [
-        "已知员工 ID，需要读取权限范围内的花名册字段值时"
+        "已确认 staffId 与可见字段 code，需要读花名册字段"
       ]
     },
     "contact user search": {
-      "agent_summary": "按关键词搜索用户",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "按关键词搜索好友和同事，提取 userId/openDingTalkId",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "企业内语义找人优先使用 aisearch person；已知手机号时使用 contact user search-mobile，已知 userId 时使用 contact user get"
+        "职责/上级/技能等语义找人优先 aisearch person",
+        "已有 userId 查详情用 contact user get",
+        "查自己用 contact user get-self"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -2490,18 +2502,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "按关键词搜索用户",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "按关键词搜索好友和同事，提取 userId/openDingTalkId",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "按关键词搜索用户",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "按关键词搜索好友和同事，提取 userId/openDingTalkId",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2529,21 +2541,25 @@
         },
         "avoid_when": {
           "value": [
-            "企业内语义找人优先使用 aisearch person；已知手机号时使用 contact user search-mobile，已知 userId 时使用 contact user get"
+            "职责/上级/技能等语义找人优先 aisearch person",
+            "已有 userId 查详情用 contact user get",
+            "查自己用 contact user get-self"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "企业内语义找人优先使用 aisearch person；已知手机号时使用 contact user search-mobile，已知 userId 时使用 contact user get"
+                "职责/上级/技能等语义找人优先 aisearch person",
+                "已有 userId 查详情用 contact user get",
+                "查自己用 contact user get-self"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2579,19 +2595,19 @@
           "value": [
             "dws contact user search --query \"张三\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws contact user search --query \"张三\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2653,17 +2669,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2683,21 +2699,21 @@
         },
         "use_when": {
           "value": [
-            "需要按姓名或关键词搜索通讯录用户时"
+            "按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要按姓名或关键词搜索通讯录用户时"
+                "按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -2715,17 +2731,19 @@
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact user search",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_contact_by_key_word",
+        "internal/cli/schema_command_registry.json#contact.search_contact_by_key_word",
         "internal/cli/schema_hints/imported/wukong.json",
         "internal/cli/schema_hints/products/contact.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.search_contact_by_key_word",
+        "live-dws-schema:contact.search_contact_by_key_word",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.search_contact_by_key_word",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.search_contact_by_key_word"
       ],
       "use_when": [
-        "需要按姓名或关键词搜索通讯录用户时"
+        "按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"
       ]
     },
     "contact user search-mobile": {

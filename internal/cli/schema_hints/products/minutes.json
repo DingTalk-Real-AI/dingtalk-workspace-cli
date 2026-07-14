@@ -9,103 +9,103 @@
   "tools": {
     "minutes.add_member_permission": {
       "use_when": [
-        "加/添加/共享/分享/让...看/让...访问",
-        "把某人加到这个听记中/共享听记给某人/给某人添加听记权限/把听记分享给同事/让某人也能看这个听记",
-        "添加参会者/加参会者/批量添加参会者/添加成员/加成员/批量添加成员/加参会人/添加参会人",
-        "添加参会者/批量添加参会者/添加成员/批量添加成员/加参会人/加入成员"
+        "已知听记 uuid，需要批量给听记增加成员并设置权限（policy 0管理员/1所有者/2可编辑/3可查看下载/4仅查看）时"
       ],
       "avoid_when": [
-        "要“批量移除多个听记的成员的权限”请改用 dws minutes permission remove"
+        "要移除成员权限时改用 dws minutes permission remove",
+        "成员、权限策略或听记 id 未确认时不要添加"
       ],
       "examples": [
         "dws minutes permission add --ids <uuid1,uuid2> --member-uids 123456,789012 --policy 3",
         "dws minutes permission add --ids <uuid> --member-uids 123456 --policy 2 --cover"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "批量给多个听记增加成员，并设置成员的权限。"
     },
     "minutes.add_personal_hot_word": {
       "use_when": [
-        "10. 添加个人热词",
-        "加热词/添加热词/设置热词/把某个词加到热词里/这个词总是识别错"
+        "需要添加听记个人热词以优化专有名词/人名识别时（单词不超过约10汉字）"
       ],
       "avoid_when": [
-        "要“查询我的热词列表，返回个人的所有听记配置过的热词列表”请改用 dws minutes hot-word list"
+        "要查看已有热词时改用 dws minutes hot-word list"
       ],
       "examples": [
         "dws minutes hot-word add --words \"钉钉\"",
         "dws minutes hot-word add --words \"OKR,钉钉,Copilot\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "添加听记个人热词，用于优化语音识别中专有名词、人名等的识别准确率。"
     },
     "minutes.batch_get_minutes_details": {
       "use_when": [
-        "批量查询/查多个听记"
+        "已知多个 taskUuid，需要批量查询听记标题/时长/参与人/状态等详情时"
       ],
       "avoid_when": [
-        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
-        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info",
-        "要“获取听记关键字列表”请改用 dws minutes get keywords"
+        "只要 AI 摘要/转写/关键字时改用 get summary/transcription/keywords",
+        "未知 uuid 时先用 list mine/shared/all"
       ],
       "examples": [
         "dws minutes get batch --ids uuid1,uuid2,uuid3"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "根据 taskUuid 列表批量查询听记详情。"
     },
     "minutes.cancel_upload_session": {
       "use_when": [
-        "12d.（可选）取消上传会话",
-        "取消上传"
+        "需要取消已创建的文件上传会话并释放资源时"
       ],
       "avoid_when": [
-        "要“完成文件上传并创建听记（幂等：同一 sessionId 重复调用”请改用 dws minutes upload complete",
-        "要“创建文件上传会话（获取预签名 URL，供 HTTP PUT 上传”请改用 dws minutes upload create"
+        "要完成上传创建听记时改用 upload complete",
+        "要新建上传会话时改用 upload create"
       ],
       "examples": [
         "dws minutes upload cancel --session-id <sessionId>",
         "dws minutes upload cancel --session-id <sessionId> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "取消 create 创建的上传会话，传入要取消的会话 ID。"
     },
     "minutes.complete_upload_session": {
       "use_when": [
-        "12c. 通知服务端上传完成，创建听记"
+        "预签名 PUT 上传完成后，需要通知服务端完成会话并创建听记时（同 sessionId 幂等）"
       ],
       "avoid_when": [
-        "要“取消文件上传会话，释放服务端资源”请改用 dws minutes upload cancel",
-        "要“创建文件上传会话（获取预签名 URL，供 HTTP PUT 上传”请改用 dws minutes upload create"
+        "尚未 PUT 上传文件时不要 complete",
+        "要取消会话时改用 upload cancel"
       ],
       "examples": [
         "dws minutes upload complete --session-id <sessionId>",
         "dws minutes upload complete --session-id <sessionId> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "文件上传完成后，创建听记。"
     },
     "minutes.create_mind_graph": {
       "use_when": [
-        "8. 思维导图",
-        "生成思维导图/创建脑图/帮我添加思维导图/基于这个听记做思维导图/把会议内容做成脑图"
+        "已知 taskUuid，需要触发听记思维导图生成任务时"
       ],
       "avoid_when": [
-        "要“查询思维导图任务状态 (0=进行中 / 1=成功 / 2=失败)”请改用 dws minutes mind-graph status"
+        "要查询任务状态时改用 mind-graph status 并轮询"
       ],
       "examples": [
         "dws minutes mind-graph create --id <taskUuid>",
         "dws minutes mind-graph create --id <taskUuid> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "触发创建听记思维导图任务。触发成功后，可通过 query_mind_graph_status 轮询任务状态。"
     },
     "minutes.create_speaker_summary": {
       "use_when": [
-        "9b. 发言人段落总结（异步：create 触发 → 延迟 5s → 轮询 get，最多 20 次）"
+        "已知听记 uuid，需要触发发言人段落总结异步任务时"
       ],
       "avoid_when": [
-        "要“查询发言人的段落总结任务的结果，该任务将听记的发言人的所有撰写内”请改用 dws minutes speaker summary get"
+        "要取结果时改用 speaker summary get（需等待后轮询）"
       ],
       "examples": [
         "dws minutes speaker summary create --ids <uuid1,uuid2>",
@@ -117,112 +117,104 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "触发创建发言人的段落总结任务，将听记中每位发言人的所有发言内容汇总总结。"
     },
     "minutes.create_upload_session": {
       "use_when": [
-        "12a. 创建上传会话，获取预签名 URL 和 sessionId",
-        "把文件转成听记/上传音频文件/上传录音/把这个 mp3 转成听记/帮我把会议录音转写一下/把附件里的音频文件做转写"
+        "需要把本地音视频上传转成听记：先创建上传会话取得预签名 URL 与 sessionId 时"
       ],
       "avoid_when": [
-        "要“取消文件上传会话，释放服务端资源”请改用 dws minutes upload cancel",
-        "要“完成文件上传并创建听记（幂等：同一 sessionId 重复调用”请改用 dws minutes upload complete"
+        "会话已存在只需 complete/cancel 时不要重复 create"
       ],
       "examples": [
         "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400",
         "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400 --title \"周会录音\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建文件上传会话，获取预签名上传URL。"
     },
     "minutes.get_minutes_ai_summary": {
       "use_when": [
-        "2. 获取 AI 摘要",
-        "修改纪要/更新纪要/编辑纪要内容/重新整理纪要/纪要格式优化/纪要精简",
-        "把 XX 改成 YY；用户只要整体纪要、未指定特定人物",
-        "摘要/总结/会议纪要/纪要"
+        "已知 taskUuid，需要获取 AI 生成的 Markdown 听记摘要时"
       ],
       "avoid_when": [
-        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
-        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info",
-        "要“获取听记关键字列表”请改用 dws minutes get keywords"
+        "要完整转写原文时改用 get transcription",
+        "要基础元数据时改用 get info"
       ],
       "examples": [
         "dws minutes get summary --id <taskUuid>",
         "dws minutes get summary --id <taskUuid> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取由 AI 对听记转写原文进行结构化提炼生成的摘要，返回 Markdown 格式。"
     },
     "minutes.get_minutes_basic_info": {
       "use_when": [
-        "听记详情/听记信息"
+        "已知 taskUuid，需要获取创建人/起止时间/标题/访问链接等基础信息时"
       ],
       "avoid_when": [
-        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
-        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
-        "要“获取听记关键字列表”请改用 dws minutes get keywords"
+        "要摘要或转写时改用 get summary/transcription"
       ],
       "examples": [
         "dws minutes get info --id <taskUuid>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取指定听记的基础元数据信息。"
     },
     "minutes.get_minutes_keywords": {
       "use_when": [
-        "关键字/关键词"
+        "已知 taskUuid，需要获取听记关键字列表时"
       ],
       "avoid_when": [
-        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
-        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
-        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
+        "要摘要/转写/待办时改用对应 get 命令"
       ],
       "examples": [
         "dws minutes get keywords --id <taskUuid>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取指定听记的关键字列表。"
     },
     "minutes.get_minutes_transcription": {
       "use_when": [
-        "3. 查看完整转写原文（拉完后默认按时间线返回，AI 必须主动追问\"是否按发言人聚类\"）",
-        "原文/转写/录音文字/逐字稿"
+        "已知 taskUuid，需要拉取完整语音转写原文（发言人/文本/时间戳）时"
       ],
       "avoid_when": [
-        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
-        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
-        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
+        "只要结构化摘要时改用 get summary"
       ],
       "examples": [
         "dws minutes get transcription --id <taskUuid>",
         "dws minutes get transcription --id <taskUuid> --direction 1"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取指定听记的语音转写原文。"
     },
     "minutes.get_speaker_summary": {
       "use_when": [
-        "等待至少 5 秒..."
+        "已触发 create_speaker_summary 后，需要查询发言人段落总结结果时"
       ],
       "avoid_when": [
-        "要“触发创建发言人的段落总结任务，该任务将听记的发言人的所有撰写内容”请改用 dws minutes speaker summary create"
+        "尚未 create 任务时先 create；不要把本命令当触发器"
       ],
       "examples": [
         "dws minutes speaker summary get --ids <uuid1,uuid2>",
         "dws minutes speaker summary get --task-uuids <uuid1,uuid2>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询发言人段落总结任务的结果，返回每位发言人的发言汇总。"
     },
     "minutes.list_accessible_minutes": {
       "use_when": [
-        "查看当前用户有权限访问的全部听记",
-        "未限定创建来源时按关键词和时间范围搜索听记",
-        "我可访问的听记/我能看到的听记/所有听记/全部听记"
+        "需要按关键词/时间范围覆盖全部可访问听记（含他人共享）时"
       ],
       "avoid_when": [
-        "明确只查询自己创建的听记时使用 dws minutes list mine；明确只查询别人共享的听记时使用 dws minutes list shared；修改数据时不要使用"
+        "明确只要自己创建的听记时改用 list mine；只要共享给我的时改用 list shared"
       ],
       "examples": [
         "dws minutes list all --format json"
@@ -232,15 +224,15 @@
       "interface_ref": {
         "product_id": "minutes",
         "rpc_name": "list_by_keyword_and_time_range"
-      }
+      },
+      "agent_summary": "查询当前用户有权限访问的全部听记，包括自己创建和他人共享的听记，并支持分页、关键字和时间范围筛选。"
     },
     "minutes.list_by_keyword_and_time_range": {
       "use_when": [
-        "查看我自己创建的听记列表并提取 taskUuid",
-        "从我创建、我发起或我自己录制的听记中按关键词和时间范围搜索"
+        "需要按关键词/时间范围查询我自己创建的听记并提取 taskUuid 时"
       ],
       "avoid_when": [
-        "查询别人共享的听记时使用 dws minutes list shared；覆盖全部可访问听记时使用 dws minutes list all；修改数据时不要使用"
+        "只要共享听记时改用 list shared；要覆盖全部可访问时改用 list all"
       ],
       "examples": [
         "dws minutes list mine --format json"
@@ -250,46 +242,44 @@
       "interface_ref": {
         "product_id": "minutes",
         "rpc_name": "list_by_keyword_and_time_range"
-      }
+      },
+      "agent_summary": "查询当前用户自己创建的听记列表，支持分页、关键字和时间范围筛选。"
     },
     "minutes.list_minutes_todos": {
       "use_when": [
-        "4. 提取待办事项",
-        "会议待办/听记待办/待办事项",
-        "把 XX 改成 YY；用户想提取待办"
+        "已知 taskUuid，需要提取听记中的待办事项列表时"
       ],
       "avoid_when": [
-        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
-        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
-        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
+        "要管理钉钉个人待办时改用 todo 产品命令"
       ],
       "examples": [
         "dws minutes get todos --id <taskUuid>",
         "dws minutes get todos --id <taskUuid> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询指定听记中由系统提取的待办事项列表。"
     },
     "minutes.list_my_hotwords": {
       "use_when": [
-        "看看我的热词/我加了哪些热词/热词列表/查热词"
+        "需要查看当前用户已配置的听记个人热词列表时"
       ],
       "avoid_when": [
-        "要“添加个人热词 (优化识别专有名词 / 人名)”请改用 dws minutes hot-word add"
+        "要添加热词时改用 hot-word add"
       ],
       "examples": [
         "dws minutes hot-word list"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询当前用户配置的所有听记热词列表。"
     },
     "minutes.list_shared_minutes": {
       "use_when": [
-        "查看别人共享给我的听记列表",
-        "在共享听记中按关键词和时间范围搜索"
+        "需要查看别人共享给我的听记，或在共享范围内按关键词/时间搜索时"
       ],
       "avoid_when": [
-        "查询自己创建的听记时使用 dws minutes list mine；覆盖全部可访问听记时使用 dws minutes list all；修改数据时不要使用"
+        "只要自己创建时改用 list mine；要全部可访问时改用 list all"
       ],
       "examples": [
         "dws minutes list shared --format json"
@@ -299,67 +289,66 @@
       "interface_ref": {
         "product_id": "minutes",
         "rpc_name": "list_by_keyword_and_time_range"
-      }
+      },
+      "agent_summary": "查询他人共享给当前用户的听记列表，支持分页、关键字和时间范围筛选。"
     },
     "minutes.query_mind_graph_status": {
       "use_when": [
-        "8. 思维导图",
-        "思维导图状态/脑图进度/思维导图好了吗"
+        "已 create 思维导图后，需要查询任务状态（0进行中/1成功/2失败）时"
       ],
       "avoid_when": [
-        "要“触发思维导图生成任务 (完成状态走 mind-graph sta”请改用 dws minutes mind-graph create"
+        "尚未触发创建时先用 mind-graph create"
       ],
       "examples": [
         "dws minutes mind-graph status --id <taskUuid>",
         "dws minutes mind-graph status --id <taskUuid> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询指定听记的思维导图生成状态。"
     },
     "minutes.query_minutes_audio_url": {
       "use_when": [
-        "4b. 获取音频/视频地址（用于下载或播放原始媒体文件）",
-        "音频地址/音频链接/录音文件/下载录音/音频下载/视频文件/媒体地址"
+        "已知 taskUuid 且有读权限，需要获取听记音视频地址以下载或播放时"
       ],
       "avoid_when": [
-        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
-        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
-        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
+        "听记已删除、无痕模式或媒体未就绪时可能无地址；不要用本命令改内容"
       ],
       "examples": [
         "dws minutes get audio --id <taskUuid> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询听记的音频/视频文件地址（OSS 链接）。"
     },
     "minutes.query_minutes_by_tag_id": {
       "use_when": [
-        "查看某个标签下的听记/这个标签下有哪些听记/按标签查听记"
+        "已知 tagId，需要查询该标签/分组下的听记列表时"
       ],
       "avoid_when": [
-        "要“查询我的的听记的标签或者分组列表，标签或者分组在听记页面创建”请改用 dws minutes tag list"
+        "不知道标签时先用 tag list"
       ],
       "examples": [
         "dws minutes tag query --tag-id <tagId>",
         "dws minutes tag query --tag-id <tagId> --limit 20"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "根据用户的标签或分组 ID 查询该标签下的听记列表。"
     },
     "minutes.query_user_tag_list": {
       "use_when": [
-        "我的听记标签/听记分组/听记有哪些标签/有哪些分组",
-        "按标签查/某个标签下的听记/标签筛选",
-        "标签列表/分组列表/有哪些标签/有哪些分组"
+        "需要列出我的听记标签或分组时"
       ],
       "avoid_when": [
-        "要“根据用户的标签或者分组信息来查询听记列表信息，用户的标签通过听记”请改用 dws minutes tag query"
+        "已知 tagId 要查听记时改用 tag query"
       ],
       "examples": [
         "dws minutes tag list"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询当前用户的听记标签或分组列表。"
     },
     "minutes.record_pause": {
       "interface_ref": {
@@ -367,14 +356,10 @@
         "rpc_name": "执行听记指令-发起AI听记录音"
       },
       "use_when": [
-        "7. 录音控制（基于 start 返回的 taskUuid）",
-        "暂停一下/暂停录音",
-        "暂停听记录音"
+        "已知进行中的听记 taskUuid，需要暂停听记录音时"
       ],
       "avoid_when": [
-        "要“恢复听记录音”请改用 dws minutes record resume",
-        "要“发起听记 (开始录音)”请改用 dws minutes record start",
-        "要“结束听记录音”请改用 dws minutes record stop"
+        "要恢复时改用 record resume；要结束时改用 record stop；要开始新听记时改用 record start"
       ],
       "examples": [
         "dws minutes record pause --id <taskUuid>",
@@ -382,7 +367,8 @@
       ],
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "暂停正在进行的听记录音。"
     },
     "minutes.record_resume": {
       "interface_ref": {
@@ -390,14 +376,10 @@
         "rpc_name": "执行听记指令-发起AI听记录音"
       },
       "use_when": [
-        "7. 录音控制（基于 start 返回的 taskUuid）",
-        "恢复听记录音",
-        "继续/继续录音"
+        "已知已暂停的听记 taskUuid，需要恢复听记录音时"
       ],
       "avoid_when": [
-        "要“暂停听记录音”请改用 dws minutes record pause",
-        "要“发起听记 (开始录音)”请改用 dws minutes record start",
-        "要“结束听记录音”请改用 dws minutes record stop"
+        "要暂停/结束/新开始时改用 pause/stop/start"
       ],
       "examples": [
         "dws minutes record resume --id <taskUuid>",
@@ -405,7 +387,8 @@
       ],
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "恢复已暂停的听记录音。"
     },
     "minutes.record_start": {
       "interface_ref": {
@@ -413,14 +396,10 @@
         "rpc_name": "执行听记指令-发起AI听记录音"
       },
       "use_when": [
-        "0. 发起听记（开始录音）",
-        "发起听记 (开始录音)",
-        "开始听记/开始录音/发起一个听记/启动听记/开始听记录这次会议/我要开始听记了/录音开始/我要听记"
+        "需要发起听记并开始录音，取得 taskUuid 时"
       ],
       "avoid_when": [
-        "要“暂停听记录音”请改用 dws minutes record pause",
-        "要“恢复听记录音”请改用 dws minutes record resume",
-        "要“结束听记录音”请改用 dws minutes record stop"
+        "已有进行中的录音只需 pause/resume/stop 时不要重复 start"
       ],
       "examples": [
         "dws minutes record start",
@@ -431,7 +410,8 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "effect": "write",
       "reviewed": true,
-      "risk": "medium"
+      "risk": "medium",
+      "agent_summary": "发起听记并开始录音。"
     },
     "minutes.record_stop": {
       "interface_ref": {
@@ -439,14 +419,10 @@
         "rpc_name": "执行听记指令-发起AI听记录音"
       },
       "use_when": [
-        "7. 录音控制（基于 start 返回的 taskUuid）",
-        "结束听记/结束录音/停止录音/结束",
-        "结束听记录音"
+        "已知 taskUuid，需要结束听记录音时"
       ],
       "avoid_when": [
-        "要“暂停听记录音”请改用 dws minutes record pause",
-        "要“恢复听记录音”请改用 dws minutes record resume",
-        "要“发起听记 (开始录音)”请改用 dws minutes record start"
+        "只需暂停时可改用 pause；尚未 start 时不要 stop"
       ],
       "examples": [
         "dws minutes record stop --id <taskUuid>",
@@ -457,18 +433,19 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "effect": "write",
       "reviewed": true,
-      "risk": "medium"
+      "risk": "medium",
+      "agent_summary": "结束正在进行的听记录音。"
     },
     "minutes.remove_member_permission": {
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
       "use_when": [
-        "移除/取消/删除/不让...看",
-        "移除某人的权限/取消共享/不让某人看这个听记了"
+        "用户明确要求批量移除听记成员权限，使其失去访问时"
       ],
       "avoid_when": [
-        "要“批量给多个听记增加成员，并且设置成员的权限”请改用 dws minutes permission add"
+        "要添加权限时改用 permission add",
+        "成员或听记 id 未确认时不要移除"
       ],
       "examples": [
         "dws minutes permission remove --ids <uuid1,uuid2> --member-uids 123456,789012",
@@ -476,15 +453,16 @@
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "批量移除多个听记的成员权限。移除后，对应成员将失去对这些听记的访问权限。"
     },
     "minutes.replace_minutes_text": {
       "use_when": [
-        "11. 查找替换听记文字",
-        "把所有的A替换成B/查找替换/批量替换文字"
+        "用户明确要求在转写段落与纪要中把原文精确替换为目标文字时"
       ],
       "avoid_when": [
-        "用户未明确要求“在段落 + 纪要中全量替换文字 (区分大小写，精确匹配)”、目标不清楚或尚未确认时不要使用"
+        "搜索词/替换词或 taskUuid 未确认时不要执行",
+        "只要改标题时改用 update title"
       ],
       "examples": [
         "dws minutes replace-text --id <taskUuid> --search \"旧文字\" --replace \"新文字\"",
@@ -495,53 +473,54 @@
       "effect": "write",
       "confirmation": "not_required",
       "risk": "medium",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "把听记中所有出现的原文字替换为目标文字，包括转写段落和纪要摘要中出现的原文字都会被替换。"
     },
     "minutes.replace_speaker": {
       "use_when": [
-        "3b. 用户提供\"某某人讲了 XX\" → AI 模糊匹配关键词后，引导确认替换发言人",
-        "9. 替换发言人",
-        "把 XX 改成 YY；用户直接说\"把发言人1改成张三",
-        "替换发言人/修改发言人/换发言人名字/把说话人改成某某/发言人标注错了"
+        "用户明确要求把转写中指定发言人昵称批量替换为目标发言人时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量替换听记中指定发言人”所述变更时不要使用"
+        "源/目标发言人或 taskUuid 未确认时不要替换"
       ],
       "examples": [
         "dws minutes speaker replace --id <taskUuid> --from \"张三\" --to \"李四\"",
         "dws minutes speaker replace --id <taskUuid> --from \"张三\" --to \"李四\" --target-uid <uid>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "批量替换听记转写中指定发言人，将源发言人（speakerNick）精确匹配的所有段落替换为目标发言人。"
     },
     "minutes.update_minutes_summary": {
       "use_when": [
-        "6. 更新纪要内容"
+        "已知 taskUuid，需要用新文本全量覆盖纪要且不触发 AI 重算时"
       ],
       "avoid_when": [
-        "要“修改听记标题”请改用 dws minutes update title"
+        "只要改标题时改用 update title",
+        "内容未确认时不要覆盖"
       ],
       "examples": [
         "dws minutes update summary --id <taskUuid> --content \"新的纪要内容\"",
         "dws minutes update summary --id <taskUuid> --content \"新的纪要内容\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "用传入的摘要文本全量覆盖听记的纪要内容，不触发 AI 重新生成。"
     },
     "minutes.update_minutes_title": {
       "use_when": [
-        "5. 修改标题",
-        "改听记标题/重命名听记/修改标题"
+        "已知 taskUuid，需要重命名听记标题时"
       ],
       "avoid_when": [
-        "要“全量覆盖纪要内容 (不触发 AI 重算)”请改用 dws minutes update summary"
+        "要改纪要正文时改用 update summary"
       ],
       "examples": [
         "dws minutes update title --id <taskUuid> --title \"Q2 复盘会议\"",
         "dws minutes update title --id <taskUuid> --title \"新标题\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "修改指定听记的标题。"
     }
   }
 }

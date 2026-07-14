@@ -9,42 +9,35 @@
   "tools": {
     "doc.add_permission": {
       "use_when": [
-        "给单人开 READER 权限",
-        "给多人开 EDITOR 权限（最多 30 个 uid）",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；> - \"把某篇文档授权给某人",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；新增权限",
-        "设为管理者",
-        "通过 alidocs URL 直接授权"
+        "给单篇文档做节点级授权（与 drive permission add 同能力的 doc 入口）时"
       ],
       "avoid_when": [
-        "要“查询知识库节点当前的成员权限列表”请改用 dws doc permission list",
-        "要“从知识库节点移除指定企业用户的权限（仅支持 USER 类型）”请改用 dws doc permission remove",
-        "要“修改企业用户在知识库节点上的角色（仅支持 USER 类型）”请改用 dws doc permission update"
+        "知识库容器授权用 wiki member add",
+        "查/改/移除用 permission list/update/remove"
       ],
       "examples": [
-        "dws doc permission add --node <DOC_ID> --users uid1 --role READER",
-        "dws doc permission add --node <DOC_ID> --users uid1,uid2 --role EDITOR"
+        "dws doc permission add --node <DOC_ID> --users uid1 --role READER --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容入口：为文档空间节点添加协作成员权限；文件管理权限命令已迁移到 drive。"
     },
     "doc.copy_document": {
       "use_when": [
-        "复制到指定文件夹（异步）",
-        "复制到目标知识库根目录",
-        "复制到目标知识库根目录（不传 --folder 时）",
-        "复制文档/拷贝一份/复制到；复制",
-        "复制文档到指定文件夹（--node 支持 ID 或 URL）"
+        "用户要复制文档/文件并保留原位置时（尤其保形复制模板：copy + rename + block update）",
+        "目标文件夹 --folder 或知识库根 --workspace；都不传则默认「我的文档」"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将指定节点复制到目标文件夹。”所述变更时不要使用"
+        "要搬走不留副本改用 dws doc move 或 dws drive move",
+        "跨钉盘整理文件优先 dws drive copy"
       ],
       "examples": [
-        "dws doc copy --node <DOC_ID> --folder <TARGET_FOLDER_ID>",
-        "dws doc copy --node <DOC_ID> --workspace <TARGET_WS_ID>"
+        "dws doc copy --node <DOC_ID> --folder <TARGET_FOLDER_ID> --format json",
+        "dws doc copy --node <DOC_ID> --workspace <TARGET_WS_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容入口：复制文档或文件；文件复制能力已迁移到 drive。"
     },
     "doc.create_comment": {
       "interface_ref": {
@@ -52,79 +45,66 @@
         "rpc_name": "create_comment"
       },
       "use_when": [
-        "2. 在文档上创建评论",
-        "再将 userId 传入 --mention",
-        "创建全文评论",
-        "提取 userId 后:"
+        "在文档上创建不绑定具体划词位置的全文评论，可 --mention 时"
       ],
       "avoid_when": [
-        "要“在钉钉文档中创建划词评论，评论关联文档内指定块的文本范围，支持”请改用 dws doc comment create-inline",
-        "要“查询文档评论列表”请改用 dws doc comment list",
-        "要“回复文档评论”请改用 dws doc comment reply"
+        "针对某段选中文本的划词评论改用 create-inline（需 blockId+start/end）",
+        "回复已有评论用 reply；删评论用 delete"
       ],
       "examples": [
-        "dws doc comment create --node <DOC_ID> --content \"这里需要修改\"",
-        "dws doc comment create --node <DOC_ID> --content \"请review\" --mention uid1,uid2"
+        "dws doc comment create --node <DOC_ID> --content \"这里需要修改\" --format json",
+        "dws doc comment create --node <DOC_ID> --content \"请review\" --mention uid1,uid2 --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建文档评论"
     },
     "doc.create_document": {
       "use_when": [
-        "1. 创建空文档拿 nodeId",
-        "2. 一步创建+写入：",
-        "2. 创建文档 — 提取 nodeId",
-        "5. 完整流程: 创建文档 → 写入内容 → 插入附件",
-        "JSONML 创建到指定文件夹",
-        "写文档/创建文档；新建文字文档（adoc）",
-        "创建到指定文件夹",
-        "创建到知识库",
-        "创建空文档（仅取 nodeId 后再分步写入，适合 >200KB 兜底）",
-        "完整流程：创建文档 → 写入内容 → 插入附件",
-        "查看具体命令的完整参数说明",
-        "短纯文本字面量（< 2KB 且无换行/表格才允许）",
-        "详见 doc-create-workflow.md §JSONML 起稿判定",
-        "默认创建到「我的文档」根目录（推荐文件路径）"
+        "用户要新建一篇文字在线文档(adoc)，可空文档或带初始 Markdown 时",
+        "创建到指定文件夹 --folder、知识库根 --workspace，或默认「我的文档」根目录时"
       ],
       "avoid_when": [
-        "在知识库里创建一个文档；创建空文件实体"
+        "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type <type>（勿用 doc create）",
+        "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
+        "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
       ],
       "examples": [
-        "dws doc create --help",
-        "dws doc create --name \"项目周报\""
+        "dws doc create --name \"项目周报\" --format json",
+        "dws doc create --name \"Q1 总结\" --content \"# Q1 总结\" --folder <FOLDER_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建一篇新的在线文档"
     },
     "doc.create_file": {
       "use_when": [
-        "创建文件（文档/表格/脑图/白板/多维表/文件夹等）"
+        "兼容入口：按类型创建文件节点时（已弃用，改用 wiki node create）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建文件（文档/表格/脑图/白板/多维表/文件夹等）”所述变更时不要使用"
+        "请改用 dws wiki node create --workspace <id> --type <type>",
+        "纯文字带内容创建用 doc create"
       ],
       "examples": [
-        "dws doc file create --name \"项目周报\" --type adoc",
-        "dws doc file create --name \"数据统计\" --type axls --folder FOLDER_ID"
+        "dws doc file create --name \"项目周报\" --type adoc --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建文件（文档/表格/脑图/白板/多维表/文件夹等）"
     },
     "doc.create_folder": {
       "use_when": [
-        "在「我的文档」根目录创建",
-        "在指定父文件夹下创建",
-        "在知识库下创建"
+        "兼容入口：创建文件夹（已弃用）时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建文件夹”所述变更时不要使用"
+        "个人空间/钉盘改用 dws drive mkdir；知识库改用 wiki node create --type folder"
       ],
       "examples": [
-        "dws doc folder create --name \"项目资料\"",
-        "dws doc folder create --name \"子文件夹\" --folder <PARENT_DOC_FOLDER_NODE_ID>"
+        "dws doc folder create --name \"项目资料\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建文件夹"
     },
     "doc.create_inline_comment": {
       "interface_ref": {
@@ -132,172 +112,150 @@
         "rpc_name": "create_inline_comment"
       },
       "use_when": [
-        "7. 创建划词评论并附带引用原文 + @ 相关人",
-        "划词评论 + 引用原文 + @人",
-        "确定选中文本在块内的起始偏移量 (start) 和结束偏移量 (end)",
-        "计算偏移后："
+        "针对块内某段文本创建划词评论（必填 blockId、start、end）时"
       ],
       "avoid_when": [
-        "要“创建文档评论”请改用 dws doc comment create",
-        "要“查询文档评论列表”请改用 dws doc comment list",
-        "要“回复文档评论”请改用 dws doc comment reply"
+        "不绑定位置的全文评论用 create",
+        "先 block list 取 blockId 与纯文本偏移再调用"
       ],
       "examples": [
-        "dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 0 --end 10 --content \"这里需要修改\"",
-        "dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 5 --end 20 --content \"建议调整\" --selected-text \"被选中的原文\""
+        "dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 0 --end 10 --content \"这里需要修改\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "在文档选中文本范围创建划词评论"
     },
     "doc.delete_comment": {
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
-      "agent_summary": "永久删除指定文档中的一条评论。",
+      "agent_summary": "永久删除指定文档中的一条评论",
       "use_when": [
-        "用户明确要求并确认永久删除已知文档中的指定评论时。"
+        "用户明确要求永久删除指定文档中的某条评论（已有 commentKey）时"
       ],
       "avoid_when": [
-        "只需修改或回复评论、目标评论不明确，或用户尚未确认永久删除时不要使用。"
+        "只需改文案用 update；回复用 reply；目标评论不明或未确认时不要删"
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "examples": [
+        "dws doc comment delete --node <DOC_ID> --comment-key <COMMENT_KEY> --format json"
+      ]
     },
     "doc.delete_document": {
       "use_when": [
-        "── delete（用户确认后才加 --yes）──",
-        "删除文档/删掉这个文件/移到回收站/丢掉这篇文档；删除节点",
-        "正确流程：1.向用户展示\"即将删除「文档名」到回收站\" → 2.等用户确认 → 3.执行下面命令"
+        "用户明确要求用 doc delete 兼容入口将文档/文件移入回收站，且已确认目标时"
       ],
       "avoid_when": [
-        "用户未明确要求“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。”、目标不清楚或尚未确认时不要使用"
+        "常规文件删除优先 dws drive delete；本入口仅为兼容",
+        "用户未确认或目标不清时不要删",
+        "删块用 doc block delete；删评论用 doc comment delete"
       ],
       "examples": [
-        "dws doc delete --node <DOC_ID> --format json    # 查询 nodeId: dws drive search --query \"...\" 或 dws drive list"
+        "dws doc delete --node <DOC_ID> --format json"
       ],
       "interface_mode": "mcp",
       "availability": "available",
       "effect": "destructive",
       "confirmation": "user_required",
       "risk": "high",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "兼容入口：将文档或文件移入回收站；文件删除能力已迁移到 drive。"
     },
     "doc.delete_document_block": {
       "use_when": [
-        "5. 删除块",
-        "删除（无需 format 区分）",
-        "删除（用户确认后）",
-        "编辑块/改段落/插入标题/删除块；删除"
+        "用户确认后删除文档中指定块元素时"
       ],
       "avoid_when": [
-        "要“将一个新的块元素插入指定文档，需要提供文档ID(dentryUu”请改用 dws doc block insert",
-        "要“查询文档一级块元素列表”请改用 dws doc block list",
-        "要“更新指定文档的指定块元素内容或样式，需要提供文档ID(dentr”请改用 dws doc block update"
+        "未确认或 blockId 不明时不要删；先 block list",
+        "删整篇文档用 doc/drive delete"
       ],
       "examples": [
-        "dws doc block delete --block-id <block-id> --node <node>"
+        "dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --format json"
       ],
       "interface_mode": "mcp",
       "availability": "available",
       "effect": "destructive",
       "confirmation": "user_required",
       "risk": "high",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "删除块元素（不可逆）"
     },
     "doc.download_doc_attachment": {
       "use_when": [
-        "下载文件/导出文件/下载到本地；下载",
-        "下载文档中的附件（resourceId 从 block list 获取）",
-        "下载附件/获取附件/取出文档里的附件；下载附件"
+        "获取文档正文中附件的临时下载 URL（resourceId 来自 block list attachment）时"
       ],
       "avoid_when": [
-        "要“上传本地文件并作为附件插入文档（3 步合一：prepare +”请改用 dws doc media insert"
+        "下载钉盘普通文件用 drive download；导出在线文档用 doc export"
       ],
       "examples": [
-        "dws doc media download --node <DOC_ID> --resource-id <RESOURCE_ID>",
-        "dws doc media download --node \"https://alidocs.dingtalk.com/i/nodes/xxx\" --resource-id <RESOURCE_ID>"
+        "dws doc media download --node <DOC_ID> --resource-id <RESOURCE_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取文档附件的临时下载链接"
     },
     "doc.download_file": {
       "use_when": [
-        "指定文件路径",
-        "自动推断文件名，下到目录"
+        "兼容入口：获取文件下载凭证（已迁移场景优先 drive download）时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取文件下载凭证，供 AI Agent 自行发起 HTTP GET 请求下载文件内容。”"
+        "常规下载普通文件改用 dws drive download --output ...",
+        "在线文档导出 docx 用 doc export"
       ],
       "examples": [
-        "dws doc download --node <NODE_ID>",
-        "dws doc download --node <NODE_ID> --output ./report.pdf"
+        "dws doc download --node <NODE_ID> --output ./report.pdf --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容入口：下载钉盘或文档空间已有文件；文件下载能力已迁移到 drive。"
     },
     "doc.get_document_content": {
       "use_when": [
-        "1. 读出完整 JSONML 结构（输出含 revision，普通改写场景下不需要）",
-        "4. 读取文档内容 (Markdown 格式)",
-        "JSONML 完整结构 → 文件（无损改写前置）",
-        "alidocs URL 直传",
-        "查看具体命令的完整参数说明",
-        "看文档/读内容/文档内容；读取",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"帮我看看这个文档",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；默认",
-        "编辑块/改段落/插入标题/删除块；\"帮我看看这个文档",
-        "编辑块/改段落/插入标题/删除块；默认",
-        "默认 Markdown 输出（最常用）"
+        "用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
+        "用户直接粘贴文档 URL 且无其他指令时（默认读内容）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“读取文档内容（Markdown）”"
+        "非 adoc（表格/多维表/普通文件）不要用本命令；先 doc info 再路由",
+        "要元信息用 doc info；要块结构用 doc block list",
+        "Markdown 为有损投影：保形复制模板请用 doc copy，不要 read→create"
       ],
       "examples": [
-        "dws doc read --help",
-        "dws doc read --node <DOC_ID>"
+        "dws doc read --node <DOC_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "读取文档内容（Markdown）"
     },
     "doc.get_document_info": {
       "use_when": [
-        "3. 获取文档元信息 (标题、类型、权限)",
-        "alidocs URL 直传（CLI 自动解析）",
-        "document/edit URL 直传（必须完整 URL，禁止单独提取 dentryKey）",
-        "document/preview URL 直传",
-        "❌ workspaceId（应作为 --workspace 用）",
-        "❌ 单独的 dentryKey（必须带完整 URL）",
-        "❌ 纯数字 dentryId（drive 链路）",
-        "标准用法（nodeId 直传）",
-        "步骤 1: 查询文件类型",
-        "看文档/读内容/文档内容；元信息",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"这个文档的信息",
-        "编辑块/改段落/插入标题/删除块；\"这个文档的信息",
-        "这个 alidocs 表格链接帮我看下\"（粘贴原始 URL）；先 probe 节点类型"
+        "用户要查看文档/节点元信息（标题、类型、创建者、权限）时",
+        "准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取文档元信息（标题/类型/创建者/权限等）”"
+        "已确认是 adoc 且只要正文改用 dws doc read",
+        "只要目录列表改用 dws drive list / wiki node list"
       ],
       "examples": [
-        "dws doc info --node <DOC_ID>",
-        "dws doc info --node \"https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>\""
+        "dws doc info --node <DOC_ID> --format json",
+        "dws doc info --node \"https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取文档元信息（标题/类型/创建者/权限等）"
     },
     "doc.import_get": {
       "agent_summary": "根据 taskId 查询文档导入任务的执行结果",
       "use_when": [
-        "根据 taskId 查询文档导入任务的执行结果"
+        "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
       ],
       "avoid_when": [
-        "不需要根据 taskId 查询文档导入任务的执行结果时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
       ],
       "examples": [
-        "dws doc import get --task-id <TASK_ID>",
         "dws doc import get --task-id <TASK_ID> --format json"
       ],
       "effect": "write",
@@ -311,51 +269,20 @@
     },
     "doc.insert_document_block": {
       "use_when": [
-        "2. 在文档末尾插入段落",
-        "3. 在指定块之前插入标题",
-        "Callout（element JSON 次选；首选 JSONML container[subType=colorBlocks]）",
-        "分栏（2 栏）",
-        "单元格内含多段落 + 代码块",
-        "在指定 block 之前插入",
-        "在某个 block 后插入",
-        "容器内定位插入（指定 parent + index）",
-        "嵌入文件预览",
-        "带格式文本（多个 leaf）",
-        "带链接（link 是与 text 并列的子节点）",
-        "引用块",
-        "待办列表（checkbox）",
-        "插入 JSONML 节点（同级定位）",
-        "插入 JSONML 节点（容器内定位）",
-        "插入分栏块(columns)：2 栏，children 为每栏的内容",
-        "插入复杂块（callout / 分栏）—— element 默认按 JSON 解析",
-        "插入引用块(blockquote)",
-        "插入段落（同级定位）",
-        "插入行内图片(inline image)：构造一个空 paragraph，在 children 中用 image elementType 指定图片 src",
-        "插入表格(table)：2 行 3 列",
-        "插入附件块(attachment)：resourceId 为资源ID，type 为 MIME 类型，viewType 可选 preview/summary",
-        "文本段落",
-        "无序列表项",
-        "有序列表项（仅第一项设 start，后续项不设，系统自动递增）",
-        "查看具体命令的完整参数说明",
-        "标题（level 1-6）",
-        "纯文本段落",
-        "编辑块/改段落/插入标题/删除块；插入",
-        "缩进子项（level: 1）",
-        "群名片",
-        "蓝色高亮块",
-        "表格（2x3）"
+        "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
       ],
       "avoid_when": [
-        "要“删除块元素（不可逆）”请改用 dws doc block delete",
-        "要“查询文档一级块元素列表”请改用 dws doc block list",
-        "要“更新指定文档的指定块元素内容或样式，需要提供文档ID(dentr”请改用 dws doc block update"
+        "整篇追加 Markdown 优先 doc update --mode append",
+        "插入本地文件附件优先 doc media insert",
+        "删块用 block delete；改已有块用 block update"
       ],
       "examples": [
-        "dws doc block insert --help",
-        "dws doc block insert --node <DOC_ID> --text \"这是一段文字\""
+        "dws doc block insert --node <DOC_ID> --text \"这是一段文字\" --format json",
+        "dws doc block insert --node <DOC_ID> --heading \"二级标题\" --level 2 --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "向文档插入块元素"
     },
     "doc.list_comments": {
       "interface_ref": {
@@ -363,176 +290,145 @@
         "rpc_name": "list_comments"
       },
       "use_when": [
-        "1. 查看文档的所有评论",
-        "仅看未解决的划词评论",
-        "查看文档全部评论"
+        "查看文档评论列表，可按全文/划词、已解决/未解决过滤时"
       ],
       "avoid_when": [
-        "要“创建文档评论”请改用 dws doc comment create",
-        "要“在钉钉文档中创建划词评论，评论关联文档内指定块的文本范围，支持”请改用 dws doc comment create-inline",
-        "要“回复文档评论”请改用 dws doc comment reply"
+        "创建全文评论用 comment create；划词用 create-inline；回复用 reply；删除用 delete"
       ],
       "examples": [
-        "dws doc comment list --node <DOC_ID>",
-        "dws doc comment list --node <DOC_ID> --type inline --resolve-status unresolved"
+        "dws doc comment list --node <DOC_ID> --format json",
+        "dws doc comment list --node <DOC_ID> --type inline --resolve-status unresolved --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询文档评论列表"
     },
     "doc.list_document_blocks": {
       "use_when": [
-        "1. 列出所有 block 拿到 uuid",
-        "1. 查看文档块结构 — 获取 blockId",
-        "1. 获取当前结构",
-        "2. 读单个 block 完整子树",
-        "划词评论（先 block list 取 blockId + paragraph.text，计算 start/end）",
-        "列出 + 取 uuid",
-        "列出所有 block，定位 BLOCK_ID",
-        "列出顶层 JSONML 节点",
-        "编辑块/改段落/插入标题/删除块；查看结构",
-        "读单个 block 完整子树",
-        "读取指定 uuid 的完整子树"
+        "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时"
       ],
       "avoid_when": [
-        "要“删除块元素（不可逆）”请改用 dws doc block delete",
-        "要“将一个新的块元素插入指定文档，需要提供文档ID(dentryUu”请改用 dws doc block insert",
-        "要“更新指定文档的指定块元素内容或样式，需要提供文档ID(dentr”请改用 dws doc block update"
+        "只要全文 Markdown 用 doc read",
+        "要改内容分别用 block insert/update/delete"
       ],
       "examples": [
-        "dws doc block list --node <DOC_ID>",
-        "dws doc block list --node <DOC_ID> --start-index 0 --end-index 5"
+        "dws doc block list --node <DOC_ID> --format json",
+        "dws doc block list --node <DOC_ID> --start-index 0 --end-index 5 --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询文档一级块元素列表"
     },
     "doc.list_nodes": {
       "use_when": [
-        "遍历文件夹或知识库下的直接子节点"
+        "兼容入口：遍历文件夹或知识库直接子节点时（已弃用，日常改用 drive list / wiki node list）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“遍历文件夹或知识库下的直接子节点”"
+        "日常浏览「我的文档」/钉盘用 dws drive list；知识库用 dws wiki node list"
       ],
       "examples": [
-        "dws doc list",
-        "dws doc list --folder FOLDER_ID"
+        "dws doc list --format json",
+        "dws doc list --folder <FOLDER_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容入口：遍历文件夹或知识库的直接子节点；目录浏览能力已迁移到 drive/wiki。"
     },
     "doc.list_permission": {
       "use_when": [
-        "拉取更多结果（默认 50，最大 200）",
-        "按角色过滤查看",
-        "查看谁有权限",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；查看谁有权限"
+        "列出文档节点成员权限时"
       ],
       "avoid_when": [
-        "要“为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员”请改用 dws doc permission add",
-        "要“从知识库节点移除指定企业用户的权限（仅支持 USER 类型）”请改用 dws doc permission remove",
-        "要“修改企业用户在知识库节点上的角色（仅支持 USER 类型）”请改用 dws doc permission update"
+        "增删改权限用 add/update/remove；知识库成员用 wiki member list"
       ],
       "examples": [
-        "dws doc permission list --node <DOC_ID>",
-        "dws doc permission list --node <DOC_ID> --limit 50"
+        "dws doc permission list --node <DOC_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容入口：查询文档空间节点的协作者权限；文件权限命令已迁移到 drive。"
     },
     "doc.media_insert": {
       "use_when": [
-        "1. 基本用法: 插入本地文件到文档",
-        "2. 指定附件显示名称",
-        "3. 指定 MIME 类型 (文件扩展名无法推断时)",
-        "4. 在指定块之前插入附件",
-        "上传本地文件并作为附件插入文档（3 步合一：prepare + PUT + insert）",
-        "在指定块之前插入附件",
-        "基本用法：插入本地文件到文档",
-        "指定 MIME 类型（扩展名无法推断时）",
-        "指定附件显示名称",
-        "提取 nodeId 后:",
-        "插入图片/加图片/放张图/嵌入图片/往文档里插图；插入图片",
-        "插入附件/上传附件到文档/往文档里加文件/加附件；插入附件"
+        "把本地文件/图片作为附件块插入文档正文（自动 prepare+PUT+insert）时"
       ],
       "avoid_when": [
-        "要“获取钉钉文档中指定附件的临时下载 URL”请改用 dws doc media download"
+        "上传为独立文件用 drive/doc upload，不要与正文附件混淆",
+        "下载正文附件用 media download"
       ],
       "examples": [
-        "dws doc media insert --node <DOC_ID> --file ./report.pdf",
-        "dws doc media insert --node <DOC_ID> --file ./data.bin --name \"数据文件.dat\" --mime-type application/octet-stream"
+        "dws doc media insert --node <DOC_ID> --file ./report.pdf --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
       "effect": "write",
       "reviewed": true,
-      "risk": "medium"
+      "risk": "medium",
+      "agent_summary": "上传本地文件并作为附件插入文档"
     },
     "doc.move_document": {
       "use_when": [
-        "移动到指定文件夹",
-        "移动到目标知识库根目录（不传 --folder 时）",
-        "移动到知识库根目录",
-        "移动文档/搬到/移到/转移文件；移动",
-        "移动文档到指定文件夹"
+        "用户要移动文档/文件且原位置不再保留时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将指定节点移动到目标文件夹。”所述变更时不要使用"
+        "要保留副本改用 doc/drive copy",
+        "目标未确认时不要 move"
       ],
       "examples": [
-        "dws doc move --node <DOC_ID> --folder <TARGET_FOLDER_ID>",
-        "dws doc move --node <DOC_ID> --workspace <TARGET_WS_ID>"
+        "dws doc move --node <DOC_ID> --folder <TARGET_FOLDER_ID> --format json",
+        "dws doc move --node <DOC_ID> --workspace <TARGET_WS_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容入口：移动文档或文件；文件移动能力已迁移到 drive。"
     },
     "doc.query_export_job": {
       "use_when": [
-        "兜底：超时或中断后手动查任务"
+        "doc export 超时/中断后，用 jobId 查询导出任务状态与下载链接时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“用于查询通过 submit_export_job 提交的文字文档导出任务的执行状态，任务完成时返回文件下载链接。”"
+        "常规导出请直接 dws doc export（一体化提交+轮询+下载），不要先查 job"
       ],
       "examples": [
-        "dws doc export get --job-id <JOB_ID>"
+        "dws doc export get --job-id <JOB_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询文档导出任务结果"
     },
     "doc.remove_permission": {
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
       "use_when": [
-        "从知识库节点移除指定企业用户的权限（仅支持 USER 类型）。"
+        "移除文档节点上指定用户权限时"
       ],
       "avoid_when": [
-        "要“为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员”请改用 dws doc permission add",
-        "要“查询知识库节点当前的成员权限列表”请改用 dws doc permission list",
-        "要“修改企业用户在知识库节点上的角色（仅支持 USER 类型）”请改用 dws doc permission update"
+        "改角色用 update；知识库撤成员用 wiki member remove"
       ],
       "examples": [
-        "dws doc permission remove --node <node> --users <users>"
+        "dws doc permission remove --node <DOC_ID> --users uid1 --format json"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "兼容入口：移除文档空间节点的协作成员权限；文件权限命令已迁移到 drive。"
     },
     "doc.rename_document": {
       "use_when": [
-        "── rename ──",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"把这个文档标题改成 X\" / \"这个文档改名为 X",
-        "重命名/rename/改名/改文档名/修改文档名称/修改文档标题/把这个文档叫做...；重命名",
-        "重命名文档"
+        "用户要改文档/文件在列表与链接中展示的名称时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“对指定节点进行重命名。”所述变更时不要使用"
+        "改正文标题/章节标题改用 doc block update",
+        "不要用 update 或重新 create 来改名"
       ],
       "examples": [
-        "dws doc rename --node <DOC_ID> --name \"新名称\"",
-        "dws doc rename --node \"https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>\" --name \"项目周报 v2\""
+        "dws doc rename --node <DOC_ID> --name \"新名称\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容入口：重命名文档或文件；文件重命名能力已迁移到 drive。"
     },
     "doc.reply_comment": {
       "interface_ref": {
@@ -540,48 +436,44 @@
         "rpc_name": "reply_comment"
       },
       "use_when": [
-        "4. 回复某条评论（commentKey 从 list 或 create 返回中获取）",
-        "5. 用表情回复评论",
-        "文字回复",
-        "表情回复（--content 填表情名称）"
+        "回复已有评论（文字或 --emoji 表情）；commentKey 来自 list/create"
       ],
       "avoid_when": [
-        "要“创建文档评论”请改用 dws doc comment create",
-        "要“在钉钉文档中创建划词评论，评论关联文档内指定块的文本范围，支持”请改用 dws doc comment create-inline",
-        "要“查询文档评论列表”请改用 dws doc comment list"
+        "新建评论用 create/create-inline；删评论用 delete"
       ],
       "examples": [
-        "dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"同意\"",
-        "dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"比心\" --emoji"
+        "dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"同意\" --format json",
+        "dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"比心\" --emoji --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "回复文档评论"
     },
     "doc.search_documents": {
       "use_when": [
-        "搜索文档（不传关键词返回最近访问）"
+        "兼容入口：按关键词搜文档时（已弃用，日常改用 drive search / wiki node search）"
       ],
       "avoid_when": [
-        "搜一下 OAuth2 接入文档；搜索开发文档",
-        "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息；搜企业知识内容"
+        "全局搜文件用 dws drive search；指定知识库内搜用 dws wiki node search"
       ],
       "examples": [
-        "dws doc search --query \"会议纪要\"",
-        "dws doc search"
+        "dws doc search --query \"会议纪要\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "搜索文档（不传关键词返回最近访问）"
     },
     "doc.template_apply": {
       "agent_summary": "使用指定模板创建新文档",
       "use_when": [
-        "使用指定模板创建新文档"
+        "使用指定模板创建新文档时"
       ],
       "avoid_when": [
-        "不需要使用指定模板创建新文档时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "先 list/search 拿到模板再 apply；普通空文档用 doc create"
       ],
       "examples": [
-        "dws doc template apply --help"
+        "dws doc template apply --template-id <TPL_ID> --name \"我的周报\" --format json",
+        "dws doc template apply --template-id <TPL_ID> --name \"项目方案\" --folder <FOLDER_ID> --format json"
       ],
       "effect": "write",
       "risk": "medium",
@@ -593,15 +485,16 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "doc.template_list": {
-      "agent_summary": "获取当前用户可用的文档模板列表，支持按来源筛选",
+      "agent_summary": "获取当前用户可用的文档模板列表",
       "use_when": [
-        "获取当前用户可用的文档模板列表，支持按来源筛选"
+        "列出当前用户可用的文档模板时"
       ],
       "avoid_when": [
-        "不需要获取当前用户可用的文档模板列表，支持按来源筛选时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "按关键词搜模板用 template search；套用模板用 template apply"
       ],
       "examples": [
-        "dws doc template list --help"
+        "dws doc template list --format json",
+        "dws doc template list --source MY --format json"
       ],
       "effect": "read",
       "risk": "low",
@@ -615,13 +508,14 @@
     "doc.template_search": {
       "agent_summary": "根据关键词搜索文档模板",
       "use_when": [
-        "根据关键词搜索文档模板"
+        "按关键词搜索文档模板时"
       ],
       "avoid_when": [
-        "不需要根据关键词搜索文档模板时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "浏览全部模板用 template list；创建文档用 template apply"
       ],
       "examples": [
-        "dws doc template search --help"
+        "dws doc template search --query \"周报\" --format json",
+        "dws doc template search --query \"会议纪要\" --source PUBLIC --format json"
       ],
       "effect": "read",
       "risk": "low",
@@ -635,126 +529,104 @@
     "doc.update_comment": {
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "更新指定文档评论的文字内容和可选 @提及用户。",
+      "use_when": [
+        "修改已有评论正文；可选更新 --mention"
+      ],
+      "avoid_when": [
+        "删除评论用 delete；回复用 reply"
+      ],
+      "examples": [
+        "dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"已按最新数据修正\" --format json"
+      ]
     },
     "doc.update_document": {
       "use_when": [
-        "2. 一步写入：",
-        "2. 逐个追加：",
-        "3. 写入内容 (追加模式)",
-        "3. 逐个追加：",
-        "4. 提交修改（默认直接覆盖，不做并发检查）",
-        "JSONML 整篇无损 overwrite（默认不做并发检查；并发敏感时加 --revision <N>）",
-        "append 到指定 block 前（index 通过 doc block list 获取）",
-        "append 末尾追加",
-        "heredoc（真实换行，含表格）",
-        "overwrite 整段（用户已确认）",
-        "stdin（heredoc，含表格）",
-        "写文档/创建文档；整篇覆盖替换",
-        "写文档/创建文档；追加内容",
-        "插入分割线：使用 doc update --mode append 以 Markdown 格式追加",
-        "短文本字面量（<2KB 无换行）",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"往这个文档追加内容",
-        "编辑块/改段落/插入标题/删除块；\"往这个文档追加内容"
+        "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
+        "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
+        "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新文档内容（追加 / 覆盖）”所述变更时不要使用"
+        "目标不是 adoc 或只要改单个块时改用 doc block update",
+        "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+        "创建新文档用 doc create，不要用 update 冒充创建"
       ],
       "examples": [
-        "dws doc update --node <DOC_ID> --content \"# 追加内容\" --mode append",
-        "dws doc update --node <DOC_ID> --content \"# 完整替换\" --mode overwrite"
+        "dws doc update --node <DOC_ID> --content \"# 追加内容\" --mode append --format json",
+        "dws doc update --node <DOC_ID> --content-file ./body.md --mode overwrite --dry-run"
       ],
       "interface_mode": "mcp",
       "availability": "available",
       "effect": "write",
       "confirmation": "not_required",
       "risk": "medium",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "更新文档内容（追加 / 覆盖；覆盖需 --yes）"
     },
     "doc.update_document_block": {
       "use_when": [
-        "2. 修改后写回（uuid 不变）",
-        "3. 改完后写回（uuid 必须 == --block-id）",
-        "4. 更新某个块的内容",
-        "修改某块文本",
-        "修改标题",
-        "改一个 block 的文本",
-        "整体替换（update 时 uuid 必须等于 --block-id）",
-        "整体替换（update 的 uuid 必须等于 --block-id）",
-        "更新已有标题",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"把正文里的一级标题/章节标题改成 X",
-        "编辑块/改段落/插入标题/删除块；\"编辑这个文档的标题",
-        "编辑块/改段落/插入标题/删除块；修改"
+        "修改已有块的文本/标题/样式（已知 blockId）时"
       ],
       "avoid_when": [
-        "要“删除块元素（不可逆）”请改用 dws doc block delete",
-        "要“将一个新的块元素插入指定文档，需要提供文档ID(dentryUu”请改用 dws doc block insert",
-        "要“查询文档一级块元素列表”请改用 dws doc block list"
+        "插入新块用 block insert；删除用 block delete",
+        "改文档显示名用 rename；整篇覆盖用 update overwrite"
       ],
       "examples": [
-        "dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text \"新内容\"",
-        "dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --element '{\"blockType\":\"heading\",\"heading\":{\"text\":\"新标题\",\"level\":1}}'"
+        "dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text \"新内容\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "更新文档中的指定块"
     },
     "doc.update_permission": {
       "use_when": [
-        "修改某人角色（READER → EDITOR）",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；修改权限"
+        "变更文档节点上已有用户角色时"
       ],
       "avoid_when": [
-        "要“为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员”请改用 dws doc permission add",
-        "要“查询知识库节点当前的成员权限列表”请改用 dws doc permission list",
-        "要“从知识库节点移除指定企业用户的权限（仅支持 USER 类型）”请改用 dws doc permission remove"
+        "新授权用 add；移除用 remove"
       ],
       "examples": [
-        "dws doc permission update --node <DOC_ID> --users uid1 --role EDITOR",
-        "dws doc permission update --node <DOC_ID> --users uid1,uid2 --role READER"
+        "dws doc permission update --node <DOC_ID> --users uid1 --role EDITOR --format json"
       ],
       "interface_mode": "mcp",
       "availability": "available",
       "effect": "write",
       "confirmation": "not_required",
       "risk": "medium",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "兼容入口：更新文档空间节点的协作成员角色；文件权限命令已迁移到 drive。"
     },
     "doc.upload": {
       "use_when": [
-        "1. 上传到\"我的文档\"根目录",
-        "2. 上传到指定文件夹",
-        "3. 上传到知识库并转换为在线文档",
-        "上传到「我的文档」根目录",
-        "上传到指定文件夹",
-        "上传到知识库并转换为在线文档",
-        "上传文件/传文件/上传到文档/上传到知识库；上传",
-        "上传文件/传文件/上传到文档/上传到知识库；上传并转换",
-        "上传文件到钉钉文档或知识库"
+        "把本地文件上传到文档空间/知识库（可 --convert 转在线文档）时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“上传文件到钉钉文档或知识库”所述变更时不要使用"
+        "钉盘/我的文件上传优先 dws drive upload",
+        "插入文档正文附件用 media insert"
       ],
       "examples": [
-        "dws doc upload --file ./report.pdf",
-        "dws doc upload --file ./slides.pptx --name \"Q1汇报.pptx\" --folder <FOLDER_ID>"
+        "dws doc upload --file ./report.pdf --format json",
+        "dws doc upload --file ./data.xlsx --workspace <WS_ID> --convert --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
       "effect": "write",
       "reviewed": true,
-      "risk": "medium"
+      "risk": "medium",
+      "agent_summary": "兼容入口：上传本地文件到钉盘或文档空间；文件上传能力已迁移到 drive。"
     },
     "doc.version_list": {
       "agent_summary": "查看文档历史版本列表",
       "use_when": [
-        "查看文档历史版本列表"
+        "查看文档历史版本列表以确认版本号时"
       ],
       "avoid_when": [
-        "不需要查看文档历史版本列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "回滚用 version revert（需确认）；保存快照用 version save"
       ],
       "examples": [
-        "dws doc version list --help"
+        "dws doc version list --node <DOC_ID> --format json"
       ],
       "effect": "read",
       "risk": "low",
@@ -766,19 +638,20 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "doc.version_revert": {
-      "agent_summary": "将文档回滚到指定版本",
+      "agent_summary": "将文档回滚到指定历史版本",
       "use_when": [
-        "用户明确要求并确认将文档回滚到指定历史版本时"
+        "用户明确要求将 adoc 回滚到指定历史版本（已从 version list 确认版本号）时"
       ],
       "avoid_when": [
-        "只需查看版本或保存快照时不要使用；未明确目标版本时不要回滚"
+        "只看版本列表用 version list；保存快照用 save",
+        "版本号未确认或用户未同意回滚时不要执行"
       ],
       "examples": [
-        "dws doc version revert --help"
+        "dws doc version revert --node <DOC_ID> --version 3 --format json"
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -788,13 +661,13 @@
     "doc.version_save": {
       "agent_summary": "手动保存文档版本快照",
       "use_when": [
-        "手动保存文档版本快照"
+        "手动保存当前文档版本快照时"
       ],
       "avoid_when": [
-        "不需要手动保存文档版本快照时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "回滚用 revert；只看历史用 list"
       ],
       "examples": [
-        "dws doc version save --help"
+        "dws doc version save --node <DOC_ID> --format json"
       ],
       "effect": "write",
       "risk": "medium",

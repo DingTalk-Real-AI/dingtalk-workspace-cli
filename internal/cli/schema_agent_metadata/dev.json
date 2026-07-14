@@ -2,32 +2,33 @@
   "product_id": "dev",
   "tools": {
     "dev app create": {
-      "agent_summary": "创建开放平台企业内部应用",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "创建钉钉开放平台应用并返回 unifiedAppId/凭证信息",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "配置已有应用或创建机器人建号任务时不要使用"
+        "应用已存在只需改信息时用 dev app update",
+        "只查文档时用 devdoc"
       ],
       "confirmation": "user_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws dev app create --name \"DemoApp\" --desc \"内部应用\" --dry-run --format json"
+        "dws dev app create --name \"我的 AI 机器人\" --desc \"接 opencode\" --dry-run --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "创建开放平台企业内部应用",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "创建钉钉开放平台应用并返回 unifiedAppId/凭证信息",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "创建开放平台企业内部应用",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "创建钉钉开放平台应用并返回 unifiedAppId/凭证信息",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -49,21 +50,23 @@
         },
         "avoid_when": {
           "value": [
-            "配置已有应用或创建机器人建号任务时不要使用"
+            "应用已存在只需改信息时用 dev app update",
+            "只查文档时用 devdoc"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "配置已有应用或创建机器人建号任务时不要使用"
+                "应用已存在只需改信息时用 dev app update",
+                "只查文档时用 devdoc"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -113,21 +116,21 @@
         },
         "examples": {
           "value": [
-            "dws dev app create --name \"DemoApp\" --desc \"内部应用\" --dry-run --format json"
+            "dws dev app create --name \"我的 AI 机器人\" --desc \"接 opencode\" --dry-run --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws dev app create --name \"DemoApp\" --desc \"内部应用\" --dry-run --format json"
+                "dws dev app create --name \"我的 AI 机器人\" --desc \"接 opencode\" --dry-run --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -212,17 +215,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -257,21 +260,21 @@
         },
         "use_when": {
           "value": [
-            "需要新建应用并取得 unifiedAppId 时"
+            "需要新建企业内部应用或三方个人应用并拿到 unifiedAppId"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要新建应用并取得 unifiedAppId 时"
+                "需要新建企业内部应用或三方个人应用并拿到 unifiedAppId"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -283,14 +286,16 @@
       "risk": "high",
       "source_refs": [
         "cobra-help:dws dev app create",
+        "helper:devAppRequireWriteGuard",
         "internal/cli/schema_command_registry.json#dev.create_dev_app",
         "internal/cli/schema_hints/products/dev.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:dev app create",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/dev.md"
       ],
       "use_when": [
-        "需要新建应用并取得 unifiedAppId 时"
+        "需要新建企业内部应用或三方个人应用并拿到 unifiedAppId"
       ]
     },
     "dev app credentials get": {
@@ -570,32 +575,33 @@
       ]
     },
     "dev app delete": {
-      "agent_summary": "删除指定开放平台应用",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "删除开放平台企业内部应用（不可恢复）",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只是临时停用应用时使用 dev app disable"
+        "只需临时下架时用 dev app disable",
+        "用户未确认应用名/影响范围时不要删除"
       ],
       "confirmation": "user_required",
       "effect": "destructive",
       "effect_source": "agent-hint",
       "examples": [
-        "dws dev app delete --unified-app-id \u003cunifiedAppId\u003e --confirm-name \"DemoApp\" --dry-run --format json"
+        "dws dev app delete --unified-app-id \u003cunified-app-id\u003e --dry-run --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "删除指定开放平台应用",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "删除开放平台企业内部应用（不可恢复）",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "删除指定开放平台应用",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "删除开放平台企业内部应用（不可恢复）",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -617,21 +623,23 @@
         },
         "avoid_when": {
           "value": [
-            "只是临时停用应用时使用 dev app disable"
+            "只需临时下架时用 dev app disable",
+            "用户未确认应用名/影响范围时不要删除"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "只是临时停用应用时使用 dev app disable"
+                "只需临时下架时用 dev app disable",
+                "用户未确认应用名/影响范围时不要删除"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -689,21 +697,21 @@
         },
         "examples": {
           "value": [
-            "dws dev app delete --unified-app-id \u003cunifiedAppId\u003e --confirm-name \"DemoApp\" --dry-run --format json"
+            "dws dev app delete --unified-app-id \u003cunified-app-id\u003e --dry-run --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws dev app delete --unified-app-id \u003cunifiedAppId\u003e --confirm-name \"DemoApp\" --dry-run --format json"
+                "dws dev app delete --unified-app-id \u003cunified-app-id\u003e --dry-run --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -788,17 +796,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -834,21 +842,21 @@
         },
         "use_when": {
           "value": [
-            "用户明确要删除应用且能提供确认名称时"
+            "用户明确要求永久删除应用，且接受不可恢复后果"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "用户明确要删除应用且能提供确认名称时"
+                "用户明确要求永久删除应用，且接受不可恢复后果"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -860,14 +868,16 @@
       "risk": "high",
       "source_refs": [
         "cobra-help:dws dev app delete",
+        "helper:devAppRequireWriteGuard",
         "internal/cli/schema_command_registry.json#dev.delete_dev_app",
         "internal/cli/schema_hints/products/dev.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:dev app delete",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/dev.md"
       ],
       "use_when": [
-        "用户明确要删除应用且能提供确认名称时"
+        "用户明确要求永久删除应用，且接受不可恢复后果"
       ]
     },
     "dev app disable": {
@@ -6504,32 +6514,32 @@
       ]
     },
     "dev app update": {
-      "agent_summary": "更新开放平台应用名称、描述或图标",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "更新开放平台应用名称/描述/图标等基础信息",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "机器人、网页或安全配置使用对应专门命令"
+        "创建新应用用 create；停用/启用用 disable/enable；改安全配置用 security config"
       ],
       "confirmation": "user_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws dev app update --unified-app-id \u003cunifiedAppId\u003e --name \"DemoApp2\" --dry-run"
+        "dws dev app update --unified-app-id \u003cunifiedAppId\u003e --name \u003c新名称\u003e --dry-run --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "更新开放平台应用名称、描述或图标",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "更新开放平台应用名称/描述/图标等基础信息",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "更新开放平台应用名称、描述或图标",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "更新开放平台应用名称/描述/图标等基础信息",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -6551,21 +6561,21 @@
         },
         "avoid_when": {
           "value": [
-            "机器人、网页或安全配置使用对应专门命令"
+            "创建新应用用 create；停用/启用用 disable/enable；改安全配置用 security config"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "机器人、网页或安全配置使用对应专门命令"
+                "创建新应用用 create；停用/启用用 disable/enable；改安全配置用 security config"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -6615,21 +6625,21 @@
         },
         "examples": {
           "value": [
-            "dws dev app update --unified-app-id \u003cunifiedAppId\u003e --name \"DemoApp2\" --dry-run"
+            "dws dev app update --unified-app-id \u003cunifiedAppId\u003e --name \u003c新名称\u003e --dry-run --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws dev app update --unified-app-id \u003cunifiedAppId\u003e --name \"DemoApp2\" --dry-run"
+                "dws dev app update --unified-app-id \u003cunifiedAppId\u003e --name \u003c新名称\u003e --dry-run --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -6714,17 +6724,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -6759,21 +6769,21 @@
         },
         "use_when": {
           "value": [
-            "需要修改已有应用的基础资料时"
+            "已有 unifiedAppId，需要修改应用基础信息"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要修改已有应用的基础资料时"
+                "已有 unifiedAppId，需要修改应用基础信息"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -6785,14 +6795,16 @@
       "risk": "high",
       "source_refs": [
         "cobra-help:dws dev app update",
+        "helper:devAppRequireWriteGuard",
         "internal/cli/schema_command_registry.json#dev.update_dev_app",
         "internal/cli/schema_hints/products/dev.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:dev app update",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/dev.md"
       ],
       "use_when": [
-        "需要修改已有应用的基础资料时"
+        "已有 unifiedAppId，需要修改应用基础信息"
       ]
     },
     "dev app version create": {
@@ -7594,32 +7606,33 @@
       ]
     },
     "dev app version publish": {
-      "agent_summary": "提交或发布指定应用版本",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "发布开放平台应用指定版本（可先预检）",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "未创建版本或仍需选择审批人时不要直接完成发布"
+        "还没有 versionId 时先 version create / list / get",
+        "含高敏权限但尚未确认时不要正式发布"
       ],
       "confirmation": "user_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run"
+        "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "提交或发布指定应用版本",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "发布开放平台应用指定版本（可先预检）",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "提交或发布指定应用版本",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "发布开放平台应用指定版本（可先预检）",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -7641,21 +7654,23 @@
         },
         "avoid_when": {
           "value": [
-            "未创建版本或仍需选择审批人时不要直接完成发布"
+            "还没有 versionId 时先 version create / list / get",
+            "含高敏权限但尚未确认时不要正式发布"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "未创建版本或仍需选择审批人时不要直接完成发布"
+                "还没有 versionId 时先 version create / list / get",
+                "含高敏权限但尚未确认时不要正式发布"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -7705,21 +7720,21 @@
         },
         "examples": {
           "value": [
-            "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run"
+            "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run"
+                "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -7804,17 +7819,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -7849,21 +7864,21 @@
         },
         "use_when": {
           "value": [
-            "版本已创建且需要进入审批或正式发布时"
+            "版本已创建，需要预检或正式发布到线上"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "版本已创建且需要进入审批或正式发布时"
+                "版本已创建，需要预检或正式发布到线上"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -7875,14 +7890,16 @@
       "risk": "high",
       "source_refs": [
         "cobra-help:dws dev app version publish",
+        "helper:devAppRequireWriteGuard",
         "internal/cli/schema_command_registry.json#dev.publish_dev_app_version",
         "internal/cli/schema_hints/products/dev.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:dev app version publish",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/dev.md"
       ],
       "use_when": [
-        "版本已创建且需要进入审批或正式发布时"
+        "版本已创建，需要预检或正式发布到线上"
       ]
     },
     "dev app version status": {
@@ -8683,11 +8700,11 @@
       ]
     },
     "dev connect status": {
-      "agent_summary": "查看本地后台机器人连接器状态",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查看后台连接器守护进程状态",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "查询线上机器人发布状态时使用 app robot get 或 version status"
+        "要停止守护进程时用 dev connect stop"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -8697,18 +8714,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查看本地后台机器人连接器状态",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查看后台连接器守护进程状态",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "查看本地后台机器人连接器状态",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查看后台连接器守护进程状态",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -8730,21 +8747,21 @@
         },
         "avoid_when": {
           "value": [
-            "查询线上机器人发布状态时使用 app robot get 或 version status"
+            "要停止守护进程时用 dev connect stop"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "查询线上机器人发布状态时使用 app robot get 或 version status"
+                "要停止守护进程时用 dev connect stop"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -8780,19 +8797,19 @@
           "value": [
             "dws dev connect status --unified-app-id \u003cunifiedAppId\u003e --json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws dev connect status --unified-app-id \u003cunifiedAppId\u003e --json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -8860,17 +8877,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -8897,21 +8914,21 @@
         },
         "use_when": {
           "value": [
-            "需要确认 daemon 建联是否运行或取得本地状态时"
+            "需要确认本地 connect 守护进程是否在跑、pid/日志路径"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要确认 daemon 建联是否运行或取得本地状态时"
+                "需要确认本地 connect 守护进程是否在跑、pid/日志路径"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -8926,19 +8943,20 @@
         "internal/cli/schema_command_registry.json#dev.connect_status",
         "internal/cli/schema_hints/products/dev.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:dev.connect_status#FAILED",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/dev.md"
       ],
       "use_when": [
-        "需要确认 daemon 建联是否运行或取得本地状态时"
+        "需要确认本地 connect 守护进程是否在跑、pid/日志路径"
       ]
     },
     "dev connect stop": {
-      "agent_summary": "停止本地后台机器人连接器",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "优雅停止后台连接器守护进程",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "停用线上机器人能力使用 dev app robot disable"
+        "只想查看状态时用 dev connect status"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -8948,18 +8966,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "停止本地后台机器人连接器",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "优雅停止后台连接器守护进程",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "停止本地后台机器人连接器",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "优雅停止后台连接器守护进程",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -8981,21 +8999,21 @@
         },
         "avoid_when": {
           "value": [
-            "停用线上机器人能力使用 dev app robot disable"
+            "只想查看状态时用 dev connect status"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "停用线上机器人能力使用 dev app robot disable"
+                "只想查看状态时用 dev connect status"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -9039,19 +9057,19 @@
           "value": [
             "dws dev connect stop --unified-app-id \u003cunifiedAppId\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws dev connect stop --unified-app-id \u003cunifiedAppId\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -9119,17 +9137,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -9164,21 +9182,21 @@
         },
         "use_when": {
           "value": [
-            "需要终止指定应用或机器人凭证对应的 daemon 建联时"
+            "用户明确要求停止本地 Stream/连接器守护进程"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要终止指定应用或机器人凭证对应的 daemon 建联时"
+                "用户明确要求停止本地 Stream/连接器守护进程"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -9193,11 +9211,12 @@
         "internal/cli/schema_command_registry.json#dev.connect_stop",
         "internal/cli/schema_hints/products/dev.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:dev.connect_stop#FAILED",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/dev.md"
       ],
       "use_when": [
-        "需要终止指定应用或机器人凭证对应的 daemon 建联时"
+        "用户明确要求停止本地 Stream/连接器守护进程"
       ]
     },
     "dev doc search": {

@@ -2,11 +2,12 @@
   "product_id": "event",
   "tools": {
     "event consume": {
-      "agent_summary": "订阅并持续消费指定个人事件，将事件流以 NDJSON 等格式输出。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+      "agent_summary": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只需查看支持的事件类型或 payload 字段时分别使用 event list 或 event schema；只查历史聊天记录时使用 chat 查询命令。"
+        "只查历史聊天记录时用 chat 查询命令",
+        "只看事件目录/字段时用 event list / event schema"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -16,18 +17,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "订阅并持续消费指定个人事件，将事件流以 NDJSON 等格式输出。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "value": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "订阅并持续消费指定个人事件，将事件流以 NDJSON 等格式输出。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "value": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -49,21 +50,23 @@
         },
         "avoid_when": {
           "value": [
-            "只需查看支持的事件类型或 payload 字段时分别使用 event list 或 event schema；只查历史聊天记录时使用 chat 查询命令。"
+            "只查历史聊天记录时用 chat 查询命令",
+            "只看事件目录/字段时用 event list / event schema"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "只需查看支持的事件类型或 payload 字段时分别使用 event list 或 event schema；只查历史聊天记录时使用 chat 查询命令。"
+                "只查历史聊天记录时用 chat 查询命令",
+                "只看事件目录/字段时用 event list / event schema"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -103,19 +106,19 @@
           "value": [
             "dws event consume user_im_message_receive_at --max-events 1 --format ndjson"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws event consume user_im_message_receive_at --max-events 1 --format ndjson"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -185,17 +188,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -224,21 +227,21 @@
         },
         "use_when": {
           "value": [
-            "需要实时接收一个已知个人事件码的后续事件，并将结果交给 Agent 或管道处理时。"
+            "需要实时监听 @我、指定单聊或指定群的后续消息事件"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要实时接收一个已知个人事件码的后续事件，并将结果交给 Agent 或管道处理时。"
+                "需要实时监听 @我、指定单聊或指定群的后续消息事件"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -249,23 +252,26 @@
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
+        "cobra-help:dws event consume",
         "cobra-help:dws event consume --help",
         "internal/cli/schema_command_registry.json#event.consume",
         "internal/cli/schema_hints/products/event.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:event.consume#FAILED",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
       ],
       "use_when": [
-        "需要实时接收一个已知个人事件码的后续事件，并将结果交给 Agent 或管道处理时。"
+        "需要实时监听 @我、指定单聊或指定群的后续消息事件"
       ]
     },
     "event list": {
-      "agent_summary": "列出当前支持的个人事件目录及其规则、状态和说明。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+      "agent_summary": "列出支持的个人事件目录与状态说明",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要查看某个事件的 payload 字段时使用 event schema；需要开始监听事件时使用 event consume。"
+        "已知 event_key 要看 payload 字段时用 event schema",
+        "要开始监听时用 event consume"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -275,18 +281,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "列出当前支持的个人事件目录及其规则、状态和说明。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "value": "列出支持的个人事件目录与状态说明",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "列出当前支持的个人事件目录及其规则、状态和说明。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "value": "列出支持的个人事件目录与状态说明",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -308,21 +314,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要查看某个事件的 payload 字段时使用 event schema；需要开始监听事件时使用 event consume。"
+            "已知 event_key 要看 payload 字段时用 event schema",
+            "要开始监听时用 event consume"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要查看某个事件的 payload 字段时使用 event schema；需要开始监听事件时使用 event consume。"
+                "已知 event_key 要看 payload 字段时用 event schema",
+                "要开始监听时用 event consume"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -362,19 +370,19 @@
           "value": [
             "dws event list --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws event list --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -444,17 +452,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -483,21 +491,21 @@
         },
         "use_when": {
           "value": [
-            "尚不知道可用 event_key，或需要按分类和启用状态盘点个人事件时。"
+            "尚不知道可用 event_key，需要先盘点个人事件目录"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "尚不知道可用 event_key，或需要按分类和启用状态盘点个人事件时。"
+                "尚不知道可用 event_key，需要先盘点个人事件目录"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -512,19 +520,21 @@
         "internal/cli/schema_command_registry.json#event.list",
         "internal/cli/schema_hints/products/event.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:event.list#FAILED",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
       ],
       "use_when": [
-        "尚不知道可用 event_key，或需要按分类和启用状态盘点个人事件时。"
+        "尚不知道可用 event_key，需要先盘点个人事件目录"
       ]
     },
     "event schema": {
-      "agent_summary": "查询指定个人事件码的 payload 字段 Schema。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+      "agent_summary": "查询指定个人事件码的 payload 字段结构",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要查询 CLI 命令参数契约时使用顶层 dws schema；需要实际接收事件时使用 event consume。"
+        "查询 CLI 命令参数契约时用顶层 dws schema",
+        "要实际收事件时用 event consume"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -534,18 +544,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询指定个人事件码的 payload 字段 Schema。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "value": "查询指定个人事件码的 payload 字段结构",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "查询指定个人事件码的 payload 字段 Schema。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "value": "查询指定个人事件码的 payload 字段结构",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -567,21 +577,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要查询 CLI 命令参数契约时使用顶层 dws schema；需要实际接收事件时使用 event consume。"
+            "查询 CLI 命令参数契约时用顶层 dws schema",
+            "要实际收事件时用 event consume"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要查询 CLI 命令参数契约时使用顶层 dws schema；需要实际接收事件时使用 event consume。"
+                "查询 CLI 命令参数契约时用顶层 dws schema",
+                "要实际收事件时用 event consume"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -621,19 +633,19 @@
           "value": [
             "dws event schema user_im_message_receive_at --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws event schema user_im_message_receive_at --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -703,17 +715,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -742,21 +754,21 @@
         },
         "use_when": {
           "value": [
-            "已知 event_key，需要在消费前理解该事件 payload 的字段结构时。"
+            "已知 event_key，消费前需要理解 payload 字段"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "已知 event_key，需要在消费前理解该事件 payload 的字段结构时。"
+                "已知 event_key，消费前需要理解 payload 字段"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -771,19 +783,20 @@
         "internal/cli/schema_command_registry.json#event.schema",
         "internal/cli/schema_hints/products/event.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:event.schema#FAILED",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
       ],
       "use_when": [
-        "已知 event_key，需要在消费前理解该事件 payload 的字段结构时。"
+        "已知 event_key，消费前需要理解 payload 字段"
       ]
     },
     "event status": {
-      "agent_summary": "查看当前用户的个人事件订阅、本地 event bus 和消费进程状态。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+      "agent_summary": "查看个人事件订阅、本地 bus 与消费进程状态",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要列出支持的事件类型时使用 event list；需要取消订阅或停止消费时使用 event stop。"
+        "取消订阅用 event stop；列事件目录用 event list"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -793,18 +806,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查看当前用户的个人事件订阅、本地 event bus 和消费进程状态。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "value": "查看个人事件订阅、本地 bus 与消费进程状态",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "查看当前用户的个人事件订阅、本地 event bus 和消费进程状态。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "value": "查看个人事件订阅、本地 bus 与消费进程状态",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -826,21 +839,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要列出支持的事件类型时使用 event list；需要取消订阅或停止消费时使用 event stop。"
+            "取消订阅用 event stop；列事件目录用 event list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要列出支持的事件类型时使用 event list；需要取消订阅或停止消费时使用 event stop。"
+                "取消订阅用 event stop；列事件目录用 event list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -892,19 +905,19 @@
           "value": [
             "dws event status --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws event status --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -980,17 +993,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -1025,21 +1038,21 @@
         },
         "use_when": {
           "value": [
-            "需要检查个人事件订阅是否活跃、bus 是否运行或 consume 进程是否仍在消费时。"
+            "需要确认订阅是否活跃、bus/consume 是否仍在运行"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要检查个人事件订阅是否活跃、bus 是否运行或 consume 进程是否仍在消费时。"
+                "需要确认订阅是否活跃、bus/consume 是否仍在运行"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -1054,40 +1067,42 @@
         "internal/cli/schema_command_registry.json#event.status",
         "internal/cli/schema_hints/products/event.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:event.status#FAILED",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
       ],
       "use_when": [
-        "需要检查个人事件订阅是否活跃、bus 是否运行或 consume 进程是否仍在消费时。"
+        "需要确认订阅是否活跃、bus/consume 是否仍在运行"
       ]
     },
     "event stop": {
-      "agent_summary": "取消指定或全部个人事件订阅，停止对应本地消费，并在无剩余订阅时停止 personal bus。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+      "agent_summary": "取消个人事件订阅并停止对应本地消费",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只需检查运行状态时使用 event status；目标订阅不明确或用户尚未确认取消订阅时不要使用。"
+        "只需检查状态时用 event status",
+        "目标订阅不明确或用户未确认时不要停止"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws event stop SUBSCRIBE_ID"
+        "dws event stop SUBSCRIBE_ID --dry-run"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "取消指定或全部个人事件订阅，停止对应本地消费，并在无剩余订阅时停止 personal bus。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "value": "取消个人事件订阅并停止对应本地消费",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "取消指定或全部个人事件订阅，停止对应本地消费，并在无剩余订阅时停止 personal bus。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "value": "取消个人事件订阅并停止对应本地消费",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1109,21 +1124,23 @@
         },
         "avoid_when": {
           "value": [
-            "只需检查运行状态时使用 event status；目标订阅不明确或用户尚未确认取消订阅时不要使用。"
+            "只需检查状态时用 event status",
+            "目标订阅不明确或用户未确认时不要停止"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "只需检查运行状态时使用 event status；目标订阅不明确或用户尚未确认取消订阅时不要使用。"
+                "只需检查状态时用 event status",
+                "目标订阅不明确或用户未确认时不要停止"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1173,21 +1190,21 @@
         },
         "examples": {
           "value": [
-            "dws event stop SUBSCRIBE_ID"
+            "dws event stop SUBSCRIBE_ID --dry-run"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws event stop SUBSCRIBE_ID"
+                "dws event stop SUBSCRIBE_ID --dry-run"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -1263,17 +1280,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -1308,21 +1325,21 @@
         },
         "use_when": {
           "value": [
-            "用户明确要求取消一个已知个人事件订阅并停止对应消费时。"
+            "用户明确要求取消已知 subscribe_id（或清理全部）并停止消费"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "用户明确要求取消一个已知个人事件订阅并停止对应消费时。"
+                "用户明确要求取消已知 subscribe_id（或清理全部）并停止消费"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -1337,11 +1354,13 @@
         "internal/cli/schema_command_registry.json#event.stop",
         "internal/cli/schema_hints/products/event.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:event.stop#FAILED",
+        "note:examples-omit-yes-use-dry-run-first",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
       ],
       "use_when": [
-        "用户明确要求取消一个已知个人事件订阅并停止对应消费时。"
+        "用户明确要求取消已知 subscribe_id（或清理全部）并停止消费"
       ]
     }
   }

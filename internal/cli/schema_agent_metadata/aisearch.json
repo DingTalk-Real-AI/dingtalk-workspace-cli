@@ -2,32 +2,34 @@
   "product_id": "aisearch",
   "tools": {
     "aisearch behavior": {
-      "agent_summary": "仅当用户明确询问“我/某人发过、发给、收到、创建、分享、编辑过什么”等行为动作时，检索企业内部行为记录。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "搜索发送/创建/分享/编辑/接收等明确行为记录",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "只按主题找内容本身时用 aisearch enterprise",
+        "没有行为动作词时不要选用本工具"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\""
+        "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json",
+        "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "仅当用户明确询问“我/某人发过、发给、收到、创建、分享、编辑过什么”等行为动作时，检索企业内部行为记录。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "搜索发送/创建/分享/编辑/接收等明确行为记录",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "仅当用户明确询问“我/某人发过、发给、收到、创建、分享、编辑过什么”等行为动作时，检索企业内部行为记录。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "搜索发送/创建/分享/编辑/接收等明确行为记录",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -55,21 +57,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "只按主题找内容本身时用 aisearch enterprise",
+            "没有行为动作词时不要选用本工具"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "只按主题找内容本身时用 aisearch enterprise",
+                "没有行为动作词时不要选用本工具"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -103,21 +107,23 @@
         },
         "examples": {
           "value": [
-            "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\""
+            "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json",
+            "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\""
+                "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json",
+                "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -173,17 +179,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -203,21 +209,21 @@
         },
         "use_when": {
           "value": [
-            "用户明确询问某人发送、接收、创建、分享或编辑过什么时。"
+            "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "用户明确询问某人发送、接收、创建、分享或编辑过什么时。"
+                "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -233,43 +239,48 @@
       "source_refs": [
         "Cobra help: dws aisearch behavior --help",
         "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_command_registry.json#aisearch.search_enterprise_behavior",
         "internal/cli/schema_hints/products/aisearch.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise_behavior",
+        "live-dws-schema:aisearch.search_enterprise_behavior",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/aisearch.md"
       ],
       "use_when": [
-        "用户明确询问某人发送、接收、创建、分享或编辑过什么时。"
+        "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
       ]
     },
     "aisearch enterprise": {
-      "agent_summary": "检索企业内部知识内容，如文档、消息、日程、待办、听记、日志、图片、链接、AI 表格、企业百科、邮件等。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+        "企业找人时用 aisearch person",
+        "已知具体资源 ID 要读写时改用对应产品命令"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws aisearch enterprise --queries \"智能化方案\" --types document"
+        "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
+        "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "检索企业内部知识内容，如文档、消息、日程、待办、听记、日志、图片、链接、AI 表格、企业百科、邮件等。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "检索企业内部知识内容，如文档、消息、日程、待办、听记、日志、图片、链接、AI 表格、企业百科、邮件等。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -297,21 +308,25 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+            "企业找人时用 aisearch person",
+            "已知具体资源 ID 要读写时改用对应产品命令"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+                "企业找人时用 aisearch person",
+                "已知具体资源 ID 要读写时改用对应产品命令"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -345,21 +360,23 @@
         },
         "examples": {
           "value": [
-            "dws aisearch enterprise --queries \"智能化方案\" --types document"
+            "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
+            "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws aisearch enterprise --queries \"智能化方案\" --types document"
+                "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
+                "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -415,17 +432,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -445,21 +462,23 @@
         },
         "use_when": {
           "value": [
-            "需要按关键词、内容类型或时间范围检索企业内部知识时。"
+            "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+            "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要按关键词、内容类型或时间范围检索企业内部知识时。"
+                "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+                "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -475,43 +494,49 @@
       "source_refs": [
         "Cobra help: dws aisearch enterprise --help",
         "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_command_registry.json#aisearch.search_enterprise",
         "internal/cli/schema_hints/products/aisearch.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise",
+        "live-dws-schema:aisearch.search_enterprise",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/aisearch.md"
       ],
       "use_when": [
-        "需要按关键词、内容类型或时间范围检索企业内部知识时。"
+        "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+        "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
       ]
     },
     "aisearch person": {
-      "agent_summary": "通过关键词搜索企业内人员信息，支持按维度筛选。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "已有 userId 只需详情时用 contact user get",
+        "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+        "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws aisearch person --keyword \"张三\" --dimension name"
+        "dws aisearch person --keyword \"张三\" --dimension name --format json",
+        "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "通过关键词搜索企业内人员信息，支持按维度筛选。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "通过关键词搜索企业内人员信息，支持按维度筛选。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -539,21 +564,25 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "已有 userId 只需详情时用 contact user get",
+            "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+            "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "已有 userId 只需详情时用 contact user get",
+                "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+                "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -587,21 +616,23 @@
         },
         "examples": {
           "value": [
-            "dws aisearch person --keyword \"张三\" --dimension name"
+            "dws aisearch person --keyword \"张三\" --dimension name --format json",
+            "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws aisearch person --keyword \"张三\" --dimension name"
+                "dws aisearch person --keyword \"张三\" --dimension name --format json",
+                "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -657,17 +688,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -687,21 +718,23 @@
         },
         "use_when": {
           "value": [
-            "需要按姓名、部门、职位等维度搜索企业内人员时。"
+            "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+            "需要把维度词映射到 --dimension，关键词只保留目标实体"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要按姓名、部门、职位等维度搜索企业内人员时。"
+                "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+                "需要把维度词映射到 --dimension，关键词只保留目标实体"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AISearch 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -717,15 +750,18 @@
       "source_refs": [
         "Cobra help: dws aisearch person --help",
         "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_command_registry.json#aisearch.enterprise_person_search",
         "internal/cli/schema_hints/products/aisearch.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aisearch.enterprise_person_search",
+        "live-dws-schema:aisearch.enterprise_person_search",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/aisearch.md",
         "skills/mono/references/products/mail.md"
       ],
       "use_when": [
-        "需要按姓名、部门、职位等维度搜索企业内人员时。"
+        "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+        "需要把维度词映射到 --dimension，关键词只保留目标实体"
       ]
     }
   }

@@ -2461,11 +2461,12 @@
       ]
     },
     "mail folder delete": {
-      "agent_summary": "删除指定自定义邮件文件夹",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "删除指定邮箱下的邮件文件夹",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只是清理文件夹内邮件或重命名时不要使用"
+        "不要把文件夹名称当作 ID",
+        "只重命名时用 mail folder update"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -2475,18 +2476,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "删除指定自定义邮件文件夹",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "删除指定邮箱下的邮件文件夹",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "删除指定自定义邮件文件夹",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "删除指定邮箱下的邮件文件夹",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2514,21 +2515,23 @@
         },
         "avoid_when": {
           "value": [
-            "只是清理文件夹内邮件或重命名时不要使用"
+            "不要把文件夹名称当作 ID",
+            "只重命名时用 mail folder update"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "只是清理文件夹内邮件或重命名时不要使用"
+                "不要把文件夹名称当作 ID",
+                "只重命名时用 mail folder update"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2580,19 +2583,19 @@
           "value": [
             "dws mail folder delete --email user@company.com --id \u003cfolderId\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws mail folder delete --email user@company.com --id \u003cfolderId\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -2654,17 +2657,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -2699,21 +2702,21 @@
         },
         "use_when": {
           "value": [
-            "已知 folderId 且明确要删除该文件夹时"
+            "已通过 folder list 拿到文件夹 ID，用户明确要删除该文件夹"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "已知 folderId 且明确要删除该文件夹时"
+                "已通过 folder list 拿到文件夹 ID，用户明确要删除该文件夹"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -2734,11 +2737,12 @@
         "internal/cli/schema_hints/products/mail.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.mail.delete_mail_folder",
+        "live-dws-schema:mail.delete_mail_folder",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/mail.md"
       ],
       "use_when": [
-        "已知 folderId 且明确要删除该文件夹时"
+        "已通过 folder list 拿到文件夹 ID，用户明确要删除该文件夹"
       ]
     },
     "mail folder list": {
@@ -3492,11 +3496,12 @@
       ]
     },
     "mail message batch-delete": {
-      "agent_summary": "批量删除指定邮件",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "批量删除邮件（可移入已删除或按类型删除）",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "仅移动到其他文件夹时使用 mail message batch-move"
+        "只需换文件夹时用 mail message batch-move",
+        "messageId 未确认时先 search/get"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -3506,18 +3511,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "批量删除指定邮件",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "批量删除邮件（可移入已删除或按类型删除）",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "批量删除指定邮件",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "批量删除邮件（可移入已删除或按类型删除）",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -3545,21 +3550,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅移动到其他文件夹时使用 mail message batch-move"
+            "只需换文件夹时用 mail message batch-move",
+            "messageId 未确认时先 search/get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "仅移动到其他文件夹时使用 mail message batch-move"
+                "只需换文件夹时用 mail message batch-move",
+                "messageId 未确认时先 search/get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -3611,19 +3618,19 @@
           "value": [
             "dws mail message batch-delete --email user@company.com --ids \u003cid1\u003e,\u003cid2\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
                 "dws mail message batch-delete --email user@company.com --ids \u003cid1\u003e,\u003cid2\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -3679,17 +3686,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -3724,21 +3731,21 @@
         },
         "use_when": {
           "value": [
-            "已知多个 messageId 且用户明确要删除这些邮件时"
+            "已知多个 messageId，用户明确要求删除这些邮件"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "已知多个 messageId 且用户明确要删除这些邮件时"
+                "已知多个 messageId，用户明确要求删除这些邮件"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -3757,11 +3764,13 @@
         "internal/cli/schema_hints/products/mail.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.mail.batch_delete_message",
+        "live-dws-schema:mail.batch_delete_message",
+        "note:public-catalog-has-no-hard-yes-for-mail-thread-trash/sent-recall",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/mail.md"
       ],
       "use_when": [
-        "已知多个 messageId 且用户明确要删除这些邮件时"
+        "已知多个 messageId，用户明确要求删除这些邮件"
       ]
     },
     "mail message batch-move": {
@@ -4499,32 +4508,33 @@
       ]
     },
     "mail message list": {
-      "agent_summary": "列出收件箱或指定文件夹中的邮件",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "列出收件箱或指定文件夹中的邮件（无需手写 KQL）",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要按主题、发件人或日期组合筛选时使用 mail message search"
+        "需要主题/发件人/日期等组合条件时用 mail message search"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "agent-hint",
       "examples": [
-        "dws mail message list --email user@company.com --folder-id 2 --limit 20"
+        "dws mail message list --email user@company.com",
+        "dws mail message list --email user@company.com --folder-id 1 --limit 50"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "列出收件箱或指定文件夹中的邮件",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "列出收件箱或指定文件夹中的邮件（无需手写 KQL）",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "列出收件箱或指定文件夹中的邮件",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "列出收件箱或指定文件夹中的邮件（无需手写 KQL）",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -4546,21 +4556,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要按主题、发件人或日期组合筛选时使用 mail message search"
+            "需要主题/发件人/日期等组合条件时用 mail message search"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要按主题、发件人或日期组合筛选时使用 mail message search"
+                "需要主题/发件人/日期等组合条件时用 mail message search"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -4610,21 +4620,23 @@
         },
         "examples": {
           "value": [
-            "dws mail message list --email user@company.com --folder-id 2 --limit 20"
+            "dws mail message list --email user@company.com",
+            "dws mail message list --email user@company.com --folder-id 1 --limit 50"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws mail message list --email user@company.com --folder-id 2 --limit 20"
+                "dws mail message list --email user@company.com",
+                "dws mail message list --email user@company.com --folder-id 1 --limit 50"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -4700,17 +4712,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -4745,21 +4757,21 @@
         },
         "use_when": {
           "value": [
-            "需要浏览收件箱、已发送、草稿或其他 folderId 下的邮件时"
+            "浏览某文件夹邮件列表，且没有复杂搜索条件"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要浏览收件箱、已发送、草稿或其他 folderId 下的邮件时"
+                "浏览某文件夹邮件列表，且没有复杂搜索条件"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -4774,11 +4786,12 @@
         "internal/cli/schema_command_registry.json#mail.list_emails",
         "internal/cli/schema_hints/products/mail.json",
         "internal/cli/schema_manual_hints.json",
+        "live-dws-schema:mail.list_emails#FAILED",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/mail.md"
       ],
       "use_when": [
-        "需要浏览收件箱、已发送、草稿或其他 folderId 下的邮件时"
+        "浏览某文件夹邮件列表，且没有复杂搜索条件"
       ]
     },
     "mail message reply": {
@@ -5266,32 +5279,33 @@
       ]
     },
     "mail message search": {
-      "agent_summary": "使用 KQL 条件搜索邮件",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "用 KQL 搜索邮件，返回 ID 与元信息而非完整正文",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只按文件夹浏览邮件时使用 mail message list，不要要求用户编写 KQL"
+        "已知 messageId 直接看正文时用 mail message get",
+        "只列某文件夹邮件且无需复杂条件时优先 mail message list"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws mail message search --email user@company.com --query subject:周报 --limit 20"
+        "dws mail message search --email user@company.com --query \"subject:周报\""
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "使用 KQL 条件搜索邮件",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "用 KQL 搜索邮件，返回 ID 与元信息而非完整正文",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "使用 KQL 条件搜索邮件",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "用 KQL 搜索邮件，返回 ID 与元信息而非完整正文",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5319,21 +5333,23 @@
         },
         "avoid_when": {
           "value": [
-            "只按文件夹浏览邮件时使用 mail message list，不要要求用户编写 KQL"
+            "已知 messageId 直接看正文时用 mail message get",
+            "只列某文件夹邮件且无需复杂条件时优先 mail message list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "只按文件夹浏览邮件时使用 mail message list，不要要求用户编写 KQL"
+                "已知 messageId 直接看正文时用 mail message get",
+                "只列某文件夹邮件且无需复杂条件时优先 mail message list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5367,21 +5383,21 @@
         },
         "examples": {
           "value": [
-            "dws mail message search --email user@company.com --query subject:周报 --limit 20"
+            "dws mail message search --email user@company.com --query \"subject:周报\""
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws mail message search --email user@company.com --query subject:周报 --limit 20"
+                "dws mail message search --email user@company.com --query \"subject:周报\""
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5443,17 +5459,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5473,21 +5489,21 @@
         },
         "use_when": {
           "value": [
-            "需要按主题、发件人、日期、附件或组合条件精确筛选时"
+            "按主题/发件人/时间等条件搜索邮件并提取 messageId"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要按主题、发件人、日期、附件或组合条件精确筛选时"
+                "按主题/发件人/时间等条件搜索邮件并提取 messageId"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -5508,40 +5524,42 @@
         "internal/cli/schema_hints/products/mail.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.mail.search_emails",
+        "live-dws-schema:mail.search_emails",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/mail.md"
       ],
       "use_when": [
-        "需要按主题、发件人、日期、附件或组合条件精确筛选时"
+        "按主题/发件人/时间等条件搜索邮件并提取 messageId"
       ]
     },
     "mail message send": {
-      "agent_summary": "发送一封新的邮件",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "以指定邮箱地址发送一封邮件",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要先保存而不发送时使用 mail draft create"
+        "只需创建草稿不发送时用 mail draft create",
+        "回复/转发已有邮件时用 mail message reply / forward"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周进展\""
+        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周完成...\""
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "发送一封新的邮件",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "以指定邮箱地址发送一封邮件",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "发送一封新的邮件",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "以指定邮箱地址发送一封邮件",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5569,21 +5587,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要先保存而不发送时使用 mail draft create"
+            "只需创建草稿不发送时用 mail draft create",
+            "回复/转发已有邮件时用 mail message reply / forward"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要先保存而不发送时使用 mail draft create"
+                "只需创建草稿不发送时用 mail draft create",
+                "回复/转发已有邮件时用 mail message reply / forward"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5617,21 +5637,21 @@
         },
         "examples": {
           "value": [
-            "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周进展\""
+            "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周完成...\""
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周进展\""
+                "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周完成...\""
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5693,17 +5713,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -5723,21 +5743,21 @@
         },
         "use_when": {
           "value": [
-            "用户明确要立即发送全新邮件且已确认收件人和内容时"
+            "用户明确要发邮件，且已确认发件人邮箱、收件人、主题与正文"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "用户明确要立即发送全新邮件且已确认收件人和内容时"
+                "用户明确要发邮件，且已确认发件人邮箱、收件人、主题与正文"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -5758,11 +5778,12 @@
         "internal/cli/schema_hints/products/mail.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.mail.send_email",
+        "live-dws-schema:mail.send_email",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/mail.md"
       ],
       "use_when": [
-        "用户明确要立即发送全新邮件且已确认收件人和内容时"
+        "用户明确要发邮件，且已确认发件人邮箱、收件人、主题与正文"
       ]
     },
     "mail tag list": {

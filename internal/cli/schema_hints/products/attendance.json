@@ -65,7 +65,7 @@
       ],
       "examples": [
         "dws attendance approve list --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30",
-        "dws attendance approve list --users userId1 --types trip --start 2026-04-01 --end 2026-04-30      # 同时返回出差与外出"
+        "dws attendance approve list --users userId1 --types trip --start 2026-04-01 --end 2026-04-30"
       ],
       "effect": "read",
       "risk": "low",
@@ -101,15 +101,15 @@
     },
     "attendance.batch_get_employee_shifts": {
       "use_when": [
-        "按员工和日期范围查询班次/排班班次"
+        "需要批量查询多个员工在日期范围内的考勤班次（userId/workDate/checkType/planCheckTime/isRest）时"
       ],
       "avoid_when": [
-        "查询实际排班记录时使用 attendance schedule get",
-        "查询班次定义/班次ID时使用 attendance class search 或 attendance class get",
-        "查询考勤组与规则时使用 attendance rules"
+        "要查实际排班记录时改用 schedule get",
+        "要查班次定义时改用 class search/get",
+        "要查考勤组规则时改用 rules"
       ],
       "examples": [
-        "dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07  # 查询 userId: dws contact user search --keyword \"姓名\""
+        "dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07"
       ],
       "interface_mode": "mcp",
       "availability": "available",
@@ -122,20 +122,21 @@
     },
     "attendance.boss_check": {
       "examples": [
-        "dws attendance boss-check --help"
+        "dws attendance boss-check --plan-id 123456 --time \"2025-04-21 08:30\"",
+        "dws attendance boss-check --result-id 789012 --result Normal"
       ],
       "agent_summary": "管理员修正员工打卡结果",
       "use_when": [
-        "管理员确认需要人工修正员工打卡记录或打卡结果"
+        "管理员明确要求修正员工打卡时间或打卡结果，且已确认 planId/resultId 与变更内容时"
       ],
       "avoid_when": [
         "只查询打卡记录时使用 attendance check record/check result",
         "查询考勤统计时使用 attendance summary",
-        "未获得用户明确确认时不要修改打卡结果"
+        "用户尚未确认改签目标与结果时不要执行"
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -212,7 +213,7 @@
     "attendance.class_create": {
       "agent_summary": "创建班次定义",
       "use_when": [
-        "需要新增一个班次/上下班时间规则"
+        "需要新增班次及上下班时间规则，且名称与 class-vo 已确认时"
       ],
       "avoid_when": [
         "查询已有班次时使用 attendance class search/get",
@@ -224,7 +225,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -280,7 +281,7 @@
     "attendance.class_update": {
       "agent_summary": "更新班次定义",
       "use_when": [
-        "需要修改已有班次的名称、上下班时间或规则"
+        "需要修改已有班次的名称、上下班时间或规则，且 classId 与变更内容已确认时"
       ],
       "avoid_when": [
         "查询班次详情时使用 attendance class get",
@@ -293,7 +294,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -302,12 +303,11 @@
     },
     "attendance.get_attendance_summary": {
       "use_when": [
-        "查看员工考勤统计、出勤/异常/请假等摘要"
+        "需要查看员工出勤/异常/请假等考勤统计摘要时"
       ],
       "avoid_when": [
-        "查看单条考勤明细时使用 attendance record get",
-        "查看原始打卡记录时使用 attendance check record",
-        "查看排班时使用 attendance schedule get"
+        "要看单日明细时改用 record get",
+        "要看打卡流水时改用 check record"
       ],
       "examples": [
         "dws attendance summary --user USER_ID --date 2026-03-12 --stats-type week",
@@ -325,16 +325,15 @@
     },
     "attendance.get_user_attendance_record": {
       "use_when": [
-        "查询某个员工某天或时间段的考勤明细"
+        "需要查询指定用户某一天的考勤详情（打卡、班次、考勤组、工时、加班等，受权限限制）时"
       ],
       "avoid_when": [
-        "查询考勤统计汇总时使用 attendance summary",
-        "查询打卡流水/原始打卡记录时使用 attendance check record 或 checkin records",
-        "修改打卡结果时使用 attendance boss-check"
+        "要统计摘要时改用 summary",
+        "要改打卡结果时改用 boss-check"
       ],
       "examples": [
         "dws attendance record get --user 011769261608 --date 2026-03-08",
-        "dws attendance record get --user USER_ID --date 2026-03-08  # 查询 userId: dws contact user search --keyword \"姓名\""
+        "dws attendance record get --user USER_ID --date 2026-03-08"
       ],
       "interface_mode": "mcp",
       "availability": "available",
@@ -370,11 +369,12 @@
     },
     "attendance.globalsetting_save": {
       "examples": [
-        "dws attendance globalsetting save --help"
+        "dws attendance globalsetting save --scope 企业 --setting-scene checkRemind --check-remind-corp=true",
+        "dws attendance globalsetting save --scope 全公司 --setting-scene fastCheck --fast-check-corp=false"
       ],
       "agent_summary": "更新企业全局考勤设置",
       "use_when": [
-        "管理员需要修改企业级打卡提醒、极速打卡等全局设置"
+        "管理员明确要求修改企业级打卡提醒、极速打卡等全局设置，且 scope/scene 与变更值已确认时"
       ],
       "avoid_when": [
         "只查看全局设置时使用 attendance globalsetting get",
@@ -383,7 +383,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -393,7 +393,7 @@
     "attendance.group_create": {
       "agent_summary": "创建考勤组",
       "use_when": [
-        "需要新建一个考勤组并配置规则"
+        "需要新建考勤组并配置规则，且名称、类型与 group-vo 已确认时"
       ],
       "avoid_when": [
         "查询已有考勤组时使用 attendance group search/get",
@@ -406,7 +406,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -483,7 +483,7 @@
     "attendance.group_update": {
       "agent_summary": "更新考勤组配置",
       "use_when": [
-        "需要修改已有考勤组的规则、班次、位置或范围"
+        "需要修改已有考勤组的规则、班次、位置或范围，且 groupId 与变更内容已确认时"
       ],
       "avoid_when": [
         "查询考勤组详情时使用 attendance group get",
@@ -496,7 +496,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -506,7 +506,7 @@
     "attendance.group_update_members": {
       "agent_summary": "增删考勤组成员",
       "use_when": [
-        "需要向考勤组添加或移除成员"
+        "需要向考勤组添加或移除成员，且 groupId 与成员列表已确认时"
       ],
       "avoid_when": [
         "只查询成员信息时使用 attendance group filtered-get 或 group get",
@@ -519,7 +519,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -574,12 +574,11 @@
     },
     "attendance.query_attendance_group_or_rules": {
       "use_when": [
-        "需要查看当前可见的考勤组和规则概览"
+        "需要回答「我属于哪个考勤组/打卡范围/弹性工时怎么算」等规则概览问题时"
       ],
       "avoid_when": [
-        "需要考勤组完整详情时使用 attendance group get",
-        "需要补卡/加班规则时使用 attendance adjustment/overtime search",
-        "需要全局或个人设置时使用 globalsetting/selfsetting get"
+        "要完整考勤组配置时改用 group get",
+        "要补卡/加班规则列表时改用 adjustment/overtime search"
       ],
       "examples": [
         "dws attendance rules --date <今天日期> --format json",
@@ -686,11 +685,11 @@
     },
     "attendance.schedule_import": {
       "examples": [
-        "dws attendance schedule import --help"
+        "dws attendance schedule import --groupId 123456 --scheduleVOS '[{\"userId\":\"user001\",\"workDate\":\"2026-04-22 09:00:00\",\"classId\":123,\"isRest\":\"N\"}]'"
       ],
       "agent_summary": "导入排班制考勤组排班记录",
       "use_when": [
-        "需要批量导入或覆盖排班记录"
+        "需要向排班制考勤组批量导入或覆盖员工排班，且 groupId 与 scheduleVOS 已确认时"
       ],
       "avoid_when": [
         "仅查看排班时使用 attendance schedule get 或 attendance shift list",
@@ -699,7 +698,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -731,11 +730,12 @@
     },
     "attendance.selfsetting_save": {
       "examples": [
-        "dws attendance selfsetting save --help"
+        "dws attendance selfsetting save --setting-scene checkResultNotify --user <USER_ID> --check-result-msg 1 --format json",
+        "dws attendance selfsetting save --setting-scene fastCheck --user <USER_ID> --onduty-check-type 3 --voice-remind-switch=true --format json"
       ],
       "agent_summary": "更新个人考勤设置",
       "use_when": [
-        "需要修改员工个人打卡提醒、极速打卡或结果通知设置"
+        "需要修改员工个人打卡提醒、极速打卡或结果通知设置，且 scene 与变更值已确认时"
       ],
       "avoid_when": [
         "只查看个人设置时使用 attendance selfsetting get",
@@ -744,7 +744,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -800,7 +800,7 @@
     "attendance.vacation_save_balance": {
       "agent_summary": "调整员工假期余额",
       "use_when": [
-        "管理员需要修改指定员工的假期余额数量"
+        "管理员明确要求设置指定员工假期余额（SET 替换而非累加），且 target/leave-code/num/reason 已确认时"
       ],
       "avoid_when": [
         "只查询余额时使用 attendance vacation balance",
@@ -813,7 +813,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -845,7 +845,7 @@
     "attendance.vacation_update_type": {
       "agent_summary": "更新假期类型规则",
       "use_when": [
-        "管理员需要修改已有假期规则或假期类型配置"
+        "管理员明确要求修改已有假期规则或假期类型配置，且 leave-code 与变更字段已确认时"
       ],
       "avoid_when": [
         "只查询假期类型时使用 attendance vacation types",
@@ -858,7 +858,7 @@
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",

@@ -2,33 +2,34 @@
   "product_id": "devdoc",
   "tools": {
     "devdoc article search": {
-      "agent_summary": "按关键词搜索 open.dingtalk.com 开放平台文档",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要查询业务数据或执行 OpenAPI 时不要使用；该命令只检索开放平台文档、字段和错误码说明。"
+        "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+        "要执行开放平台应用配置变更时用 dev"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws devdoc article search \"MCP\" --format json",
-        "dws devdoc article search --query \"MCP\" --page 1 --size 10 --format json"
+        "dws devdoc article search --query \"OAuth2 接入\" --format json",
+        "dws devdoc article search --query \"errcode 40078\" --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "按关键词搜索 open.dingtalk.com 开放平台文档",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "按关键词搜索 open.dingtalk.com 开放平台文档",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -56,21 +57,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要查询业务数据或执行 OpenAPI 时不要使用；该命令只检索开放平台文档、字段和错误码说明。"
+            "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+            "要执行开放平台应用配置变更时用 dev"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要查询业务数据或执行 OpenAPI 时不要使用；该命令只检索开放平台文档、字段和错误码说明。"
+                "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+                "要执行开放平台应用配置变更时用 dev"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -104,23 +107,23 @@
         },
         "examples": {
           "value": [
-            "dws devdoc article search \"MCP\" --format json",
-            "dws devdoc article search --query \"MCP\" --page 1 --size 10 --format json"
+            "dws devdoc article search --query \"OAuth2 接入\" --format json",
+            "dws devdoc article search --query \"errcode 40078\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws devdoc article search \"MCP\" --format json",
-                "dws devdoc article search --query \"MCP\" --page 1 --size 10 --format json"
+                "dws devdoc article search --query \"OAuth2 接入\" --format json",
+                "dws devdoc article search --query \"errcode 40078\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -182,17 +185,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -212,21 +215,21 @@
         },
         "use_when": {
           "value": [
-            "需要查找钉钉 OpenAPI、字段、错误码或接入指南时"
+            "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要查找钉钉 OpenAPI、字段、错误码或接入指南时"
+                "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -244,17 +247,19 @@
         "Skill:skills/mono/references/products/devdoc.md",
         "cobra-help:dws devdoc article search",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.devdoc.prod.json#devdoc.search_open_platform_docs",
+        "internal/cli/schema_command_registry.json#devdoc.search_open_platform_docs_rag",
         "internal/cli/schema_hints/imported/wukong.json",
         "internal/cli/schema_hints/products/devdoc.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_platform_docs_rag",
+        "live-dws-schema:devdoc.search_open_platform_docs_rag",
         "skills/mono/references/products/devdoc.md",
         "skills/mono/references/products/simple.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#devdoc.search_open_platform_docs_rag",
         "structured-hint:internal/cli/schema_hints/selection-review.json#devdoc.search_open_platform_docs_rag"
       ],
       "use_when": [
-        "需要查找钉钉 OpenAPI、字段、错误码或接入指南时"
+        "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
       ]
     }
   }

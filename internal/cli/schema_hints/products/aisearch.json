@@ -9,57 +9,66 @@
   "tools": {
     "aisearch.enterprise_person_search": {
       "use_when": [
-        "13800138000是谁/查手机号；按手机号搜人",
-        "222020这个工号是谁/查工号；按工号搜人",
-        "五道的上级是谁/谁负责XX/XX的下属有谁；AI语义搜人",
-        "找一下张三/搜同事/找人；AI搜人(首选)",
-        "搜人/找人/谁负责/上级是谁/哪个部门的人"
+        "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+        "需要把维度词映射到 --dimension，关键词只保留目标实体"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“企业内找人搜索工具，支持按姓名、部门、职位、技能、工作职责等多维度搜索企业内人员。”"
+        "已有 userId 只需详情时用 contact user get",
+        "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+        "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
       ],
       "examples": [
         "dws aisearch person --keyword \"张三\" --dimension name --format json",
-        "dws aisearch person --keyword \"产品部\" --dimension department --format json"
+        "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选"
     },
     "aisearch.search_enterprise": {
       "use_when": [
-        "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息；搜企业知识内容",
-        "搜资料/找方案/查文档/搜企业知识/项目相关内容/工作总结/周报总结",
-        "最近/本周/今天 + XX相关消息/文档/邮件有哪些"
+        "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+        "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“企业内部知识搜索工具。”"
+        "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+        "企业找人时用 aisearch person",
+        "已知具体资源 ID 要读写时改用对应产品命令"
       ],
       "examples": [
         "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
-        "dws aisearch enterprise --queries \"搜索问题\" --types im --time-range \"最近\" --format json"
+        "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）"
     },
     "aisearch.search_enterprise_behavior": {
       "use_when": [
-        "我发给某人的消息/邮件/文档/今天我干了什么；搜行为记录",
-        "我发过/谁发给我/创建过/分享过/收到过/今天我干了什么"
+        "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“业内部行为记录搜索工具。”"
+        "只按主题找内容本身时用 aisearch enterprise",
+        "没有行为动作词时不要选用本工具"
       ],
       "examples": [
-        "dws aisearch behavior --queries \"智能化方案\" --types document --format json",
-        "dws aisearch behavior --types mail --behavior-type send --direction \"我->汐峰\" --format json"
+        "dws aisearch behavior --types mail --behavior-type send --direction \"我->汐峰\" --format json",
+        "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "搜索发送/创建/分享/编辑/接收等明确行为记录"
     }
   },
   "products": {
     "aisearch": {
-      "agent_summary": "企业内智能搜人，支持按姓名、部门、职位、技能、职责、手机号或工号定位人员"
+      "agent_summary": "企业内智能搜人、搜知识内容与搜行为记录",
+      "use_when": [
+        "语义找人、按主题搜企业知识，或追溯发送/创建/分享等行为"
+      ],
+      "avoid_when": [
+        "已有明确资源 ID 要读写时改用对应产品；普通 OAuth 登录不用 aisearch"
+      ]
     }
   }
 }

@@ -12,19 +12,19 @@
       "risk": "medium",
       "confirmation": "not_required",
       "use_when": [
-        "批量删除邮件"
+        "已知多个 messageId，用户明确要求删除这些邮件"
       ],
       "avoid_when": [
-        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move",
-        "要“创建转发草稿”请改用 dws mail message forward",
-        "要“创建回复草稿”请改用 dws mail message reply"
+        "只需换文件夹时用 mail message batch-move",
+        "messageId 未确认时先 search/get"
       ],
       "examples": [
         "dws mail message batch-delete --email user@company.com --ids <id1>,<id2>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "批量删除邮件（可移入已删除或按类型删除）"
     },
     "mail.batch_delete_user_mail_contacts": {
       "effect": "write",
@@ -194,20 +194,19 @@
       "risk": "medium",
       "confirmation": "not_required",
       "use_when": [
-        "1d. 更新或删除邮件文件夹 — 先通过 folder list 获取目标文件夹 id，再传给 --id"
+        "已通过 folder list 拿到文件夹 ID，用户明确要删除该文件夹"
       ],
       "avoid_when": [
-        "要“创建邮件文件夹”请改用 dws mail folder create",
-        "要“列举邮件文件夹”请改用 dws mail folder list",
-        "要“更新邮件文件夹”请改用 dws mail folder update"
+        "不要把文件夹名称当作 ID",
+        "只重命名时用 mail folder update"
       ],
       "examples": [
-        "dws mail folder delete --email user@company.com --id <folderId>",
-        "dws mail folder delete --email user@company.com --id <folderId> --format json"
+        "dws mail folder delete --email user@company.com --id <folderId>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "删除指定邮箱下的邮件文件夹"
     },
     "mail.delete_user_message_template": {
       "effect": "write",
@@ -275,12 +274,12 @@
       "availability": "available"
     },
     "mail.list_emails": {
-      "agent_summary": "列出收件箱或指定文件夹中的邮件，无需编写 KQL 查询",
+      "agent_summary": "列出收件箱或指定文件夹中的邮件（无需手写 KQL）",
       "use_when": [
-        "列出收件箱、已发送、草稿、垃圾邮件或其他指定文件夹中的邮件"
+        "浏览某文件夹邮件列表，且没有复杂搜索条件"
       ],
       "avoid_when": [
-        "需要按主题、发件人、日期或附件等条件组合搜索时使用 mail message search"
+        "需要主题/发件人/日期等组合条件时用 mail message search"
       ],
       "examples": [
         "dws mail message list --email user@company.com",
@@ -402,29 +401,18 @@
     },
     "mail.search_emails": {
       "use_when": [
-        "2. 搜索邮件 — 提取 messageId",
-        "下载附件/保存附件/把附件存到本地/把所有附件下载到...",
-        "发送草稿/把草稿发出去/发这封草稿",
-        "取返回中的 nextCursor，传入下一次请求（nextCursor=\"$\" 时停止）",
-        "找邮件/搜邮件/查邮件",
-        "把XX邮件的所有附件都下载",
-        "查看会话/获取会话/看这封邮件的会话",
-        "查看附件/邮件附件/有什么附件",
-        "步骤 5.1：先通过 message search 或 message get 获取邮件中的 conversationId",
-        "看邮件/打开邮件/邮件内容",
-        "示例：下载4月所有发票邮件的附件",
-        "第一页"
+        "按主题/发件人/时间等条件搜索邮件并提取 messageId"
       ],
       "avoid_when": [
-        "要“批量删除邮件”请改用 dws mail message batch-delete",
-        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move",
-        "要“创建转发草稿”请改用 dws mail message forward"
+        "已知 messageId 直接看正文时用 mail message get",
+        "只列某文件夹邮件且无需复杂条件时优先 mail message list"
       ],
       "examples": [
-        "dws mail message search --email <email> --query <query>"
+        "dws mail message search --email user@company.com --query \"subject:周报\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "用 KQL 搜索邮件，返回 ID 与元信息而非完整正文"
     },
     "mail.search_mail_users": {
       "use_when": [
@@ -458,21 +446,18 @@
     },
     "mail.send_email": {
       "use_when": [
-        "4. 发送邮件（纯文本）",
-        "4b. 发送带附件的邮件（自动编排：创建草稿→上传附件→发送草稿）",
-        "4c. 发送带内联图片的邮件（正文自动转 HTML，<img> 标签自动注入）"
+        "用户明确要发邮件，且已确认发件人邮箱、收件人、主题与正文"
       ],
       "avoid_when": [
-        "要“批量删除邮件”请改用 dws mail message batch-delete",
-        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move",
-        "要“创建转发草稿”请改用 dws mail message forward"
+        "只需创建草稿不发送时用 mail draft create",
+        "回复/转发已有邮件时用 mail message reply / forward"
       ],
       "examples": [
-        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周完成任务A和任务B\"",
-        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"见附件\" --attachment ./report.pdf"
+        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --content \"本周完成...\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "以指定邮箱地址发送一封邮件"
     },
     "mail.update_draft": {
       "use_when": [
@@ -536,6 +521,18 @@
       ],
       "interface_mode": "mcp",
       "availability": "available"
+    }
+  },
+  "products": {
+    "mail": {
+      "agent_summary": "管理邮箱、邮件、草稿、附件、文件夹、联系人与邮件模板",
+      "use_when": [
+        "查收、搜索、阅读、回复、发送或整理邮件"
+      ],
+      "avoid_when": [
+        "即时消息用 chat；开放平台应用配置用 dev",
+        "公开 catalog 不含 thread trash / sent-message recall 等硬 --yes 命令时不要臆造路径"
+      ]
     }
   }
 }

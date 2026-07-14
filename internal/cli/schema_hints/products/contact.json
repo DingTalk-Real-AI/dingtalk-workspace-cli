@@ -9,36 +9,32 @@
   "tools": {
     "contact.get_authorized_emp_rosterInfo": {
       "use_when": [
-        "11. 根据字段 code 查询指定员工的花名册信息",
-        "12. 查询所有可见字段的花名册信息",
-        "花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同"
+        "已确认 staffId 与可见字段 code，需要读花名册字段"
       ],
       "avoid_when": [
-        "要“查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列”请改用 dws contact user profile fields"
+        "尚不知道可见字段时先用 contact user profile fields",
+        "普通通讯录姓名搜索不要走花名册"
       ],
       "examples": [
-        "dws contact user profile get --staff-id STAFF_ID",
         "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "按字段 code 查询指定员工花名册字段值"
     },
     "contact.get_current_user_profile": {
       "use_when": [
-        "1. 查看自己的信息 — 提取 userId",
-        "我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami"
+        "用户问我是谁/我的 userId/当前账号信息"
       ],
       "avoid_when": [
-        "要“批量获取用户详情（逗号分隔 userId）”请改用 dws contact user get",
-        "要“按关键词搜索用户”请改用 dws contact user search",
-        "要“按手机号搜索用户”请改用 dws contact user search-mobile"
+        "查他人详情用 contact user get 或先搜索"
       ],
       "examples": [
-        "dws contact user get-self",
         "dws contact user get-self --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取当前登录用户资料与 userId"
     },
     "contact.get_dept_info_by_dept_id": {
       "use_when": [
@@ -71,7 +67,7 @@
       ],
       "examples": [
         "dws contact dept list-members --depts 12345,67890",
-        "dws contact dept list-members --depts 1              # 根部门"
+        "dws contact dept list-members --depts 1 # 根部门"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -87,27 +83,26 @@
         "要“按关键词搜索部门”请改用 dws contact dept search"
       ],
       "examples": [
-        "dws contact dept list-children --dept 1           # 枚举根部门下的一级部门",
-        "dws contact dept list-children --dept 12345       # 枚举指定部门的直属子部门"
+        "dws contact dept list-children --dept 1 # 枚举根部门下的一级部门",
+        "dws contact dept list-children --dept 12345 # 枚举指定部门的直属子部门"
       ],
       "interface_mode": "mcp",
       "availability": "available"
     },
     "contact.get_user_info_by_user_ids": {
       "use_when": [
-        "查用户详情/部门/主管/管理员"
+        "已有一个或多个 userId，需要部门、主管等详情"
       ],
       "avoid_when": [
-        "要“获取当前用户信息”请改用 dws contact user get-self",
-        "要“按关键词搜索用户”请改用 dws contact user search",
-        "要“按手机号搜索用户”请改用 dws contact user search-mobile"
+        "还没有 userId 时先 search / aisearch person",
+        "查自己不要传 me/self，用 contact user get-self"
       ],
       "examples": [
-        "dws contact user get --ids userId1,userId2",
-        "dws contact user get --ids userId1,userId2  # 查询 userId: dws contact user search --keyword \"姓名\""
+        "dws contact user get --ids userId1,userId2"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）"
     },
     "contact.list_authorized_roster_fields": {
       "use_when": [
@@ -154,19 +149,19 @@
     },
     "contact.search_contact_by_key_word": {
       "use_when": [
-        "2. 按名字搜索同事或好友 — 可提取 同事的userId，或好友的openDingTalkId"
+        "按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"
       ],
       "avoid_when": [
-        "要“获取当前用户信息”请改用 dws contact user get-self",
-        "要“批量获取用户详情（逗号分隔 userId）”请改用 dws contact user get",
-        "要“按手机号搜索用户”请改用 dws contact user search-mobile"
+        "职责/上级/技能等语义找人优先 aisearch person",
+        "已有 userId 查详情用 contact user get",
+        "查自己用 contact user get-self"
       ],
       "examples": [
-        "dws contact user search --query \"张三\"",
         "dws contact user search --query \"张三\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "按关键词搜索好友和同事，提取 userId/openDingTalkId"
     },
     "contact.search_dept_by_keyword": {
       "use_when": [
@@ -199,6 +194,17 @@
       ],
       "interface_mode": "mcp",
       "availability": "available"
+    }
+  },
+  "products": {
+    "contact": {
+      "agent_summary": "查询通讯录用户、部门、关注关系与授权花名册",
+      "use_when": [
+        "按姓名/手机号/userId/部门条件做通讯录精确查询"
+      ],
+      "avoid_when": [
+        "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息"
+      ]
     }
   }
 }

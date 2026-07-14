@@ -44,7 +44,7 @@
         "要“移除开放平台应用已授予的权限点”请改用 dws dev app permission remove"
       ],
       "examples": [
-        "dws dev app permission add   --unified-app-id <unifiedAppId> --scope-values <scopeValue> --format json"
+        "dws dev app permission add --unified-app-id <unifiedAppId> --scope-values <scopeValue> --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -57,37 +57,37 @@
     },
     "dev.connect_status": {
       "use_when": [
-        "查看/停止后台连接器（status/list 忽略全局 --format，出 JSON 用专属 --json）",
-        "查看后台连接器守护进程状态（pid、运行时长、日志路径）"
+        "需要确认本地 connect 守护进程是否在跑、pid/日志路径"
       ],
       "avoid_when": [
-        "要“优雅停止后台连接器守护进程（释放单实例锁与 Stream 连接）”请改用 dws dev connect stop"
+        "要停止守护进程时用 dev connect stop"
       ],
       "examples": [
-        "dws dev connect status --json"
+        "dws dev connect status --unified-app-id <unifiedAppId> --json"
       ],
       "interface_mode": "local",
       "availability": "available",
       "interface_reason": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "查看后台连接器守护进程状态"
     },
     "dev.connect_stop": {
       "use_when": [
-        "优雅停止后台连接器守护进程（释放单实例锁与 Stream 连接）",
-        "查看/停止后台连接器（status/list 忽略全局 --format，出 JSON 用专属 --json）"
+        "用户明确要求停止本地 Stream/连接器守护进程"
       ],
       "avoid_when": [
-        "要“查看后台连接器守护进程状态（pid、运行时长、日志路径）”请改用 dws dev connect status"
+        "只想查看状态时用 dev connect status"
       ],
       "examples": [
-        "dws dev connect stop"
+        "dws dev connect stop --unified-app-id <unifiedAppId>"
       ],
       "interface_mode": "local",
       "availability": "available",
       "interface_reason": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
       "effect": "write",
       "reviewed": true,
-      "risk": "medium"
+      "risk": "medium",
+      "agent_summary": "优雅停止后台连接器守护进程"
     },
     "dev.create_dev_app": {
       "interface_ref": {
@@ -95,14 +95,11 @@
         "rpc_name": "create_dev_app"
       },
       "use_when": [
-        "创建应用",
-        "创建开放平台企业内部应用",
-        "创建开放平台应用，拿 unifiedAppId"
+        "需要新建企业内部应用或三方个人应用并拿到 unifiedAppId"
       ],
       "avoid_when": [
-        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete",
-        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
-        "要“启用开放平台企业内部应用”请改用 dws dev app enable"
+        "应用已存在只需改信息时用 dev app update",
+        "只查文档时用 devdoc"
       ],
       "examples": [
         "dws dev app create --name \"我的 AI 机器人\" --desc \"接 opencode\" --dry-run --format json"
@@ -114,7 +111,8 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "创建钉钉开放平台应用并返回 unifiedAppId/凭证信息"
     },
     "dev.create_dev_app_version": {
       "interface_ref": {
@@ -148,16 +146,14 @@
         "rpc_name": "delete_dev_app"
       },
       "use_when": [
-        "删除应用（不可逆，需 --confirm-name 二次确认）",
-        "删除开放平台企业内部应用（不可逆，需 --confirm-name 二次确认）"
+        "用户明确要求永久删除应用，且接受不可恢复后果"
       ],
       "avoid_when": [
-        "要“创建开放平台企业内部应用”请改用 dws dev app create",
-        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
-        "要“启用开放平台企业内部应用”请改用 dws dev app enable"
+        "只需临时下架时用 dev app disable",
+        "用户未确认应用名/影响范围时不要删除"
       ],
       "examples": [
-        "dws dev app delete --unified-app-id <unified-app-id>"
+        "dws dev app delete --unified-app-id <unified-app-id> --dry-run --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -166,7 +162,8 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "删除开放平台企业内部应用（不可恢复）"
     },
     "dev.disable_dev_app": {
       "agent_summary": "停用开放平台应用，停用后应用能力对外不可用（可重新启用）",
@@ -261,7 +258,7 @@
         "要“查询机器人异步创建任务结果”请改用 dws dev app robot result"
       ],
       "examples": [
-        "dws dev app robot enable  --unified-app-id <unifiedAppId> --format json"
+        "dws dev app robot enable --unified-app-id <unifiedAppId> --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -354,7 +351,7 @@
       ],
       "examples": [
         "dws dev app version status --unified-app-id <unifiedAppId> --version-id <versionId> --format json",
-        "dws dev app version status         --unified-app-id <unifiedAppId> --version-id <versionId> --format json"
+        "dws dev app version status --unified-app-id <unifiedAppId> --version-id <versionId> --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -442,7 +439,7 @@
         "要“取消订阅应用事件”请改用 dws dev app event unsubscribe"
       ],
       "examples": [
-        "dws dev app event list        --unified-app-id <unifiedAppId> --keyword <关键词> --format json"
+        "dws dev app event list --unified-app-id <unifiedAppId> --keyword <关键词> --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -483,7 +480,7 @@
         "要“移除开放平台应用已授予的权限点”请改用 dws dev app permission remove"
       ],
       "examples": [
-        "dws dev app permission list  --unified-app-id <unifiedAppId> --format json"
+        "dws dev app permission list --unified-app-id <unifiedAppId> --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -518,13 +515,11 @@
         "rpc_name": "publish_dev_app_version"
       },
       "use_when": [
-        "发布指定版本（含高敏权限需 --confirmed-sensitive）",
-        "版本发布/审批，线上搜索、加群、路由消息以 RELEASE 为准"
+        "版本已创建，需要预检或正式发布到线上"
       ],
       "avoid_when": [
-        "要“基于当前配置创建应用新版本”请改用 dws dev app version create",
-        "要“查询指定版本详情”请改用 dws dev app version get",
-        "要“查询版本发布/审批状态”请改用 dws dev app version status"
+        "还没有 versionId 时先 version create / list / get",
+        "含高敏权限但尚未确认时不要正式发布"
       ],
       "examples": [
         "dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versionId> --dry-run --format json"
@@ -536,7 +531,8 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "发布开放平台应用指定版本（可先预检）"
     },
     "dev.query_robot_create_result": {
       "interface_ref": {
@@ -718,7 +714,7 @@
         "要“取消订阅应用事件”请改用 dws dev app event unsubscribe"
       ],
       "examples": [
-        "dws dev app event subscribe   --unified-app-id <unifiedAppId> --event-codes <code1>,<code2> --dry-run --format json"
+        "dws dev app event subscribe --unified-app-id <unifiedAppId> --event-codes <code1>,<code2> --dry-run --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -759,13 +755,10 @@
         "rpc_name": "update_dev_app"
       },
       "use_when": [
-        "修改开放平台企业内部应用基础信息",
-        "更新应用信息（写操作：先 --dry-run 预览，确认后加 --yes 执行；不加 --yes 会被拦下）"
+        "已有 unifiedAppId，需要修改应用基础信息"
       ],
       "avoid_when": [
-        "要“创建开放平台企业内部应用”请改用 dws dev app create",
-        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete",
-        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable"
+        "创建新应用用 create；停用/启用用 disable/enable；改安全配置用 security config"
       ],
       "examples": [
         "dws dev app update --unified-app-id <unifiedAppId> --name <新名称> --dry-run --format json"
@@ -777,7 +770,8 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "更新开放平台应用名称/描述/图标等基础信息"
     },
     "dev.update_dev_app_security_config": {
       "interface_ref": {
@@ -805,13 +799,12 @@
   },
   "products": {
     "dev": {
-      "agent_summary": "管理钉钉开放平台应用、权限、版本、机器人、事件订阅与连接器",
+      "agent_summary": "管理开放平台应用、权限、机器人、版本发布与本地连接器",
       "use_when": [
-        "开发或维护钉钉开放平台应用",
-        "配置应用机器人、权限、成员、事件或发布版本"
+        "创建/配置开放平台应用、机器人、权限、事件订阅或发布版本"
       ],
       "avoid_when": [
-        "只需要查询开放平台文档时优先使用 devdoc"
+        "只查开放平台文档用 devdoc；业务聊天/邮信用 chat/mail"
       ]
     }
   }

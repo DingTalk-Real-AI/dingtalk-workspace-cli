@@ -2,32 +2,32 @@
   "product_id": "ding",
   "tools": {
     "ding message recall": {
-      "agent_summary": "撤回 DING 消息",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "撤回已发送的机器人 DING",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要以用户身份撤回 DING 时不要使用；本命令只撤回机器人身份发送的 DING"
+        "需要以用户身份撤回 DING 时不要使用本命令"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws ding message recall --robot-code \u003crobot-code\u003e --id \u003copen-ding-id\u003e --format json"
+        "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "撤回 DING 消息",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "撤回已发送的机器人 DING",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "撤回 DING 消息",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "撤回已发送的机器人 DING",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -55,21 +55,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要以用户身份撤回 DING 时不要使用；本命令只撤回机器人身份发送的 DING"
+            "需要以用户身份撤回 DING 时不要使用本命令"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要以用户身份撤回 DING 时不要使用；本命令只撤回机器人身份发送的 DING"
+                "需要以用户身份撤回 DING 时不要使用本命令"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -133,21 +133,21 @@
         },
         "examples": {
           "value": [
-            "dws ding message recall --robot-code \u003crobot-code\u003e --id \u003copen-ding-id\u003e --format json"
+            "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws ding message recall --robot-code \u003crobot-code\u003e --id \u003copen-ding-id\u003e --format json"
+                "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -209,17 +209,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             },
             {
               "value": true,
@@ -261,21 +261,21 @@
         },
         "use_when": {
           "value": [
-            "用户明确要撤回一个已知 openDingId 的机器人 DING 时"
+            "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "用户明确要撤回一个已知 openDingId 的机器人 DING 时"
+                "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -293,10 +293,12 @@
         "Skill:skills/mono/references/products/ding.md",
         "cobra-help:dws ding message recall",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.recall_ding_message",
+        "internal/cli/schema_command_registry.json#ding.recall_ding_message",
         "internal/cli/schema_hints/imported/wukong.json",
         "internal/cli/schema_hints/products/ding.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message",
+        "live-dws-schema:ding.recall_ding_message",
         "skills/mono/SKILL.md",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/ding.md",
@@ -304,37 +306,39 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#ding.recall_ding_message"
       ],
       "use_when": [
-        "用户明确要撤回一个已知 openDingId 的机器人 DING 时"
+        "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
       ]
     },
     "ding message send": {
-      "agent_summary": "发送 DING 消息（应用内 / 短信 / 电话）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "以企业机器人发送应用内/短信/电话 DING",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要以用户身份发送或把聊天消息转成 DING 时不要使用；本命令使用机器人身份"
+        "普通聊天消息用 chat message send / send-by-bot",
+        "需要用户身份 DING 时不要用本命令（机器人身份）",
+        "短信/电话有成本，用户未确认前不要发 call/sms"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws ding message send --robot-code \u003crobot-code\u003e --users userId1,userId2 --content \"请查看\" --format json",
-        "dws ding message send --robot-code \u003crobot-code\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "发送 DING 消息（应用内 / 短信 / 电话）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "以企业机器人发送应用内/短信/电话 DING",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "发送 DING 消息（应用内 / 短信 / 电话）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "以企业机器人发送应用内/短信/电话 DING",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -362,21 +366,25 @@
         },
         "avoid_when": {
           "value": [
-            "需要以用户身份发送或把聊天消息转成 DING 时不要使用；本命令使用机器人身份"
+            "普通聊天消息用 chat message send / send-by-bot",
+            "需要用户身份 DING 时不要用本命令（机器人身份）",
+            "短信/电话有成本，用户未确认前不要发 call/sms"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "需要以用户身份发送或把聊天消息转成 DING 时不要使用；本命令使用机器人身份"
+                "普通聊天消息用 chat message send / send-by-bot",
+                "需要用户身份 DING 时不要用本命令（机器人身份）",
+                "短信/电话有成本，用户未确认前不要发 call/sms"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -410,23 +418,23 @@
         },
         "examples": {
           "value": [
-            "dws ding message send --robot-code \u003crobot-code\u003e --users userId1,userId2 --content \"请查看\" --format json",
-            "dws ding message send --robot-code \u003crobot-code\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+            "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+            "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "dws ding message send --robot-code \u003crobot-code\u003e --users userId1,userId2 --content \"请查看\" --format json",
-                "dws ding message send --robot-code \u003crobot-code\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+                "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+                "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -488,17 +496,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         },
@@ -518,21 +526,21 @@
         },
         "use_when": {
           "value": [
-            "用户明确要以机器人身份发送应用内、短信或电话 DING 时"
+            "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": [
-                "用户明确要以机器人身份发送应用内、短信或电话 DING 时"
+                "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
         }
@@ -550,17 +558,19 @@
         "Skill:skills/mono/references/products/ding.md",
         "cobra-help:dws ding message send",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.send_ding_message",
+        "internal/cli/schema_command_registry.json#ding.send_ding_message",
         "internal/cli/schema_hints/imported/wukong.json",
         "internal/cli/schema_hints/products/ding.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message",
+        "live-dws-schema:ding.send_ding_message",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/ding.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#ding.send_ding_message",
         "structured-hint:internal/cli/schema_hints/selection-review.json#ding.send_ding_message"
       ],
       "use_when": [
-        "用户明确要以机器人身份发送应用内、短信或电话 DING 时"
+        "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
       ]
     }
   }

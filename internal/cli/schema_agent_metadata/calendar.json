@@ -2,11 +2,11 @@
   "product_id": "calendar",
   "tools": {
     "calendar acl list": {
-      "agent_summary": "查询当前用户主日历的访问控制列表——即\"我的日历共享给了哪些人、各自什么权限\"。注意：这不是查日历本列表（那是 book list）。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询主日历访问控制列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "要列日历本时改用 dws calendar book list"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -16,18 +16,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询当前用户主日历的访问控制列表——即\"我的日历共享给了哪些人、各自什么权限\"。注意：这不是查日历本列表（那是 book list）。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询主日历访问控制列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "查询当前用户主日历的访问控制列表——即\"我的日历共享给了哪些人、各自什么权限\"。注意：这不是查日历本列表（那是 book list）。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询主日历访问控制列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -55,21 +55,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "要列日历本时改用 dws calendar book list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "要列日历本时改用 dws calendar book list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -105,19 +105,19 @@
           "value": [
             "dws calendar acl list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
                 "dws calendar acl list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -173,17 +173,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -203,21 +203,21 @@
         },
         "use_when": {
           "value": [
-            "需要查询当前用户主日历的访问控制列表——即\"我的日历共享给了哪些人、各自什么权限\"时。"
+            "需要查看主日历共享给了谁、各自权限时（不是日历本列表）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要查询当前用户主日历的访问控制列表——即\"我的日历共享给了哪些人、各自什么权限\"时。"
+                "需要查看主日历共享给了谁、各自权限时（不是日历本列表）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -236,39 +236,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.list_acls",
+        "live-dws-schema:calendar.list_acls",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要查询当前用户主日历的访问控制列表——即\"我的日历共享给了哪些人、各自什么权限\"时。"
+        "需要查看主日历共享给了谁、各自权限时（不是日历本列表）"
       ]
     },
     "calendar attachment add": {
-      "agent_summary": "为指定日程添加附件。需先用钉盘上传文件得到 fileId，再以 \u003cfileId\u003e:\u003cname\u003e 形式逗号分隔传入。注意：订阅日历下的日程不支持添加附件。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "为日程添加附件",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+        "尚未上传钉盘文件取得 fileId 时不要调用",
+        "只需查询日程时改用 dws calendar event get"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar attachment add --event EVENT_ID --files fileId1:report.pdf,fileId2:slides.pptx"
+        "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf,\u003cFILE_ID2\u003e:slides.pptx",
+        "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "为指定日程添加附件。需先用钉盘上传文件得到 fileId，再以 \u003cfileId\u003e:\u003cname\u003e 形式逗号分隔传入。注意：订阅日历下的日程不支持添加附件。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "为日程添加附件",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "为指定日程添加附件。需先用钉盘上传文件得到 fileId，再以 \u003cfileId\u003e:\u003cname\u003e 形式逗号分隔传入。注意：订阅日历下的日程不支持添加附件。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "为日程添加附件",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -296,21 +299,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+            "尚未上传钉盘文件取得 fileId 时不要调用",
+            "只需查询日程时改用 dws calendar event get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+                "尚未上传钉盘文件取得 fileId 时不要调用",
+                "只需查询日程时改用 dws calendar event get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -344,21 +349,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar attachment add --event EVENT_ID --files fileId1:report.pdf,fileId2:slides.pptx"
+            "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf,\u003cFILE_ID2\u003e:slides.pptx",
+            "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar attachment add --event EVENT_ID --files fileId1:report.pdf,fileId2:slides.pptx"
+                "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf,\u003cFILE_ID2\u003e:slides.pptx",
+                "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -414,17 +421,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -444,21 +451,21 @@
         },
         "use_when": {
           "value": [
-            "需要为指定日程添加附件时。"
+            "已知 eventId，已有钉盘 fileId，需要为日程添加附件时（订阅日历日程不支持）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要为指定日程添加附件时。"
+                "已知 eventId，已有钉盘 fileId，需要为日程添加附件时（订阅日历日程不支持）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -477,39 +484,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.add_attachments",
+        "live-dws-schema:calendar.add_attachments",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要为指定日程添加附件时。"
+        "已知 eventId，已有钉盘 fileId，需要为日程添加附件时（订阅日历日程不支持）"
       ]
     },
     "calendar attendee add": {
-      "agent_summary": "添加日程的参会人。注意：订阅日历下的日程无参会人，因此不可添加。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "添加日程参与人",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+        "要查看参会人时改用 dws calendar attendee list",
+        "要移除参会人时改用 dws calendar attendee delete"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar attendee add --event EVENT_ID --attendees userId1,userId2"
+        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --optional"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "添加日程的参会人。注意：订阅日历下的日程无参会人，因此不可添加。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "添加日程参与人",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "添加日程的参会人。注意：订阅日历下的日程无参会人，因此不可添加。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "添加日程参与人",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -537,21 +547,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+            "要查看参会人时改用 dws calendar attendee list",
+            "要移除参会人时改用 dws calendar attendee delete"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+                "要查看参会人时改用 dws calendar attendee list",
+                "要移除参会人时改用 dws calendar attendee delete"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -585,21 +597,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar attendee add --event EVENT_ID --attendees userId1,userId2"
+            "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+            "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --optional"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar attendee add --event EVENT_ID --attendees userId1,userId2"
+                "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+                "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --optional"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -661,17 +675,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -691,21 +705,21 @@
         },
         "use_when": {
           "value": [
-            "需要添加日程的参会人时。"
+            "已知 eventId，需要向已有日程批量添加参会人时（订阅日历日程无参会人）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要添加日程的参会人时。"
+                "已知 eventId，需要向已有日程批量添加参会人时（订阅日历日程无参会人）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -726,39 +740,41 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.add_calendar_participant",
+        "live-dws-schema:calendar.add_calendar_participant",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要添加日程的参会人时。"
+        "已知 eventId，需要向已有日程批量添加参会人时（订阅日历日程无参会人）"
       ]
     },
     "calendar attendee delete": {
-      "agent_summary": "移除日程的参会人。注意：订阅日历下的日程无参会人，因此不可移除。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "删除日程参与人",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+        "要添加参会人时改用 attendee add",
+        "要查看参会人时改用 attendee list"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws calendar attendee delete --event EVENT_ID --attendees userId1"
+        "dws calendar attendee delete --attendees \u003cattendees\u003e --event \u003cevent\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "移除日程的参会人。注意：订阅日历下的日程无参会人，因此不可移除。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "删除日程参与人",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "移除日程的参会人。注意：订阅日历下的日程无参会人，因此不可移除。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "删除日程参与人",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -786,21 +802,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+            "要添加参会人时改用 attendee add",
+            "要查看参会人时改用 attendee list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+                "要添加参会人时改用 attendee add",
+                "要查看参会人时改用 attendee list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -856,21 +874,21 @@
         },
         "examples": {
           "value": [
-            "dws calendar attendee delete --event EVENT_ID --attendees userId1"
+            "dws calendar attendee delete --attendees \u003cattendees\u003e --event \u003cevent\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar attendee delete --event EVENT_ID --attendees userId1"
+                "dws calendar attendee delete --attendees \u003cattendees\u003e --event \u003cevent\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -932,17 +950,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             },
             {
               "value": true,
@@ -983,21 +1001,21 @@
         },
         "use_when": {
           "value": [
-            "需要移除日程的参会人时。"
+            "已知 eventId，需要从日程批量移除参会人时（订阅日历日程无参会人）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要移除日程的参会人时。"
+                "已知 eventId，需要从日程批量移除参会人时（订阅日历日程无参会人）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1018,39 +1036,40 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.remove_calendar_participant",
+        "live-dws-schema:calendar.remove_calendar_participant",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要移除日程的参会人时。"
+        "已知 eventId，需要从日程批量移除参会人时（订阅日历日程无参会人）"
       ]
     },
     "calendar attendee list": {
-      "agent_summary": "查看日程的参会人列表。注意：订阅日历下的日程无参会人，因此不可查看。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "获取日程参与人",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "要添加/移除参会人时改用 attendee add/delete"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar attendee list --event EVENT_ID"
+        "dws calendar attendee list --event \u003cEVENT_ID\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查看日程的参会人列表。注意：订阅日历下的日程无参会人，因此不可查看。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "获取日程参与人",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "查看日程的参会人列表。注意：订阅日历下的日程无参会人，因此不可查看。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "获取日程参与人",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1078,21 +1097,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "要添加/移除参会人时改用 attendee add/delete"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "要添加/移除参会人时改用 attendee add/delete"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1126,21 +1145,21 @@
         },
         "examples": {
           "value": [
-            "dws calendar attendee list --event EVENT_ID"
+            "dws calendar attendee list --event \u003cEVENT_ID\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar attendee list --event EVENT_ID"
+                "dws calendar attendee list --event \u003cEVENT_ID\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1202,17 +1221,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1232,21 +1251,21 @@
         },
         "use_when": {
           "value": [
-            "需要查看日程的参会人列表时。"
+            "已知 eventId，需要查看参会人列表及状态时（订阅日历日程无参会人）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要查看日程的参会人列表时。"
+                "已知 eventId，需要查看参会人列表及状态时（订阅日历日程无参会人）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1267,39 +1286,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.get_calendar_participants",
+        "live-dws-schema:calendar.get_calendar_participants",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要查看日程的参会人列表时。"
+        "已知 eventId，需要查看参会人列表及状态时（订阅日历日程无参会人）"
       ]
     },
     "calendar book get": {
-      "agent_summary": "根据日历id查询指定日历的信息。用户主日历本id固定为 \"primary\"。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询指定日历信息",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "要列全部日历时改用 dws calendar book list",
+        "要按名称搜索日历本时改用 dws calendar book search"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar book get --id primary"
+        "dws calendar book get --id primary",
+        "dws calendar book get --id CALENDAR_ID"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "根据日历id查询指定日历的信息。用户主日历本id固定为 \"primary\"。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询指定日历信息",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "根据日历id查询指定日历的信息。用户主日历本id固定为 \"primary\"。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询指定日历信息",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1327,21 +1349,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "要列全部日历时改用 dws calendar book list",
+            "要按名称搜索日历本时改用 dws calendar book search"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "要列全部日历时改用 dws calendar book list",
+                "要按名称搜索日历本时改用 dws calendar book search"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1375,21 +1399,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar book get --id primary"
+            "dws calendar book get --id primary",
+            "dws calendar book get --id CALENDAR_ID"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar book get --id primary"
+                "dws calendar book get --id primary",
+                "dws calendar book get --id CALENDAR_ID"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1445,17 +1471,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1475,21 +1501,21 @@
         },
         "use_when": {
           "value": [
-            "需要根据日历id查询指定日历的信息时。"
+            "已知日历 id（主日历固定 primary），需要查询该日历本信息时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要根据日历id查询指定日历的信息时。"
+                "已知日历 id（主日历固定 primary），需要查询该日历本信息时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1508,18 +1534,20 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.get_calendar",
+        "live-dws-schema:calendar.get_calendar",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要根据日历id查询指定日历的信息时。"
+        "已知日历 id（主日历固定 primary），需要查询该日历本信息时"
       ]
     },
     "calendar book list": {
-      "agent_summary": "查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历。主日历 id 固定为 \"primary\"。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询用户日历列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "已知日历 id 要详情时改用 dws calendar book get",
+        "要按名称模糊搜索时改用 dws calendar book search"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -1529,18 +1557,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历。主日历 id 固定为 \"primary\"。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询用户日历列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历。主日历 id 固定为 \"primary\"。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询用户日历列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1568,21 +1596,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "已知日历 id 要详情时改用 dws calendar book get",
+            "要按名称模糊搜索时改用 dws calendar book search"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "已知日历 id 要详情时改用 dws calendar book get",
+                "要按名称模糊搜索时改用 dws calendar book search"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1618,19 +1648,19 @@
           "value": [
             "dws calendar book list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
                 "dws calendar book list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1686,17 +1716,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1716,21 +1746,21 @@
         },
         "use_when": {
           "value": [
-            "需要查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历时。"
+            "需要列出自己的、已订阅的、他人共享的日历本（主日历 id=primary）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历时。"
+                "需要列出自己的、已订阅的、他人共享的日历本（主日历 id=primary）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1749,39 +1779,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.list_calendars",
+        "live-dws-schema:calendar.list_calendars",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历时。"
+        "需要列出自己的、已订阅的、他人共享的日历本（主日历 id=primary）时"
       ]
     },
     "calendar book search": {
-      "agent_summary": "搜索当前用户拥有的日历本，支持按日历本名模糊搜索。获取全部日历请使用 list。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "搜索日历本列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "要获取全部日历时改用 dws calendar book list",
+        "已知 id 要详情时改用 book get"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar book search --query \"项目\""
+        "dws calendar book search --query \"项目\"",
+        "dws calendar book search --query \"团队周报\""
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "搜索当前用户拥有的日历本，支持按日历本名模糊搜索。获取全部日历请使用 list。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "搜索日历本列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "搜索当前用户拥有的日历本，支持按日历本名模糊搜索。获取全部日历请使用 list。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "搜索日历本列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1809,21 +1842,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "要获取全部日历时改用 dws calendar book list",
+            "已知 id 要详情时改用 book get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "要获取全部日历时改用 dws calendar book list",
+                "已知 id 要详情时改用 book get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1857,21 +1892,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar book search --query \"项目\""
+            "dws calendar book search --query \"项目\"",
+            "dws calendar book search --query \"团队周报\""
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar book search --query \"项目\""
+                "dws calendar book search --query \"项目\"",
+                "dws calendar book search --query \"团队周报\""
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1927,17 +1964,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1957,21 +1994,21 @@
         },
         "use_when": {
           "value": [
-            "需要搜索当前用户拥有的日历本，支持按日历本名模糊搜索时。"
+            "需要按日历本名模糊搜索当前用户拥有的日历本时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要搜索当前用户拥有的日历本，支持按日历本名模糊搜索时。"
+                "需要按日历本名模糊搜索当前用户拥有的日历本时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1990,39 +2027,41 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.search_calendar",
+        "live-dws-schema:calendar.search_calendar",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要搜索当前用户拥有的日历本，支持按日历本名模糊搜索时。"
+        "需要按日历本名模糊搜索当前用户拥有的日历本时"
       ]
     },
     "calendar busy search": {
-      "agent_summary": "查询指定用户或会议室在给定时间范围内的闲忙状态。--users 与 --rooms 至少指定其一，也可以同时指定（查询用户+会议室）。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询用户或会议室闲忙",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "需要创建或改日程时不要使用；本命令只返回闲忙时间片段"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar busy search --users userId1,userId2 --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+        "dws calendar busy search --users \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+        "dws calendar busy search --rooms \u003cROOM_ID_1\u003e,\u003cROOM_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询指定用户或会议室在给定时间范围内的闲忙状态。--users 与 --rooms 至少指定其一，也可以同时指定（查询用户+会议室）。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询用户或会议室闲忙",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "查询指定用户或会议室在给定时间范围内的闲忙状态。--users 与 --rooms 至少指定其一，也可以同时指定（查询用户+会议室）。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询用户或会议室闲忙",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2050,21 +2089,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "需要创建或改日程时不要使用；本命令只返回闲忙时间片段"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "需要创建或改日程时不要使用；本命令只返回闲忙时间片段"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2098,21 +2137,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar busy search --users userId1,userId2 --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+            "dws calendar busy search --users \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+            "dws calendar busy search --rooms \u003cROOM_ID_1\u003e,\u003cROOM_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar busy search --users userId1,userId2 --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+                "dws calendar busy search --users \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+                "dws calendar busy search --rooms \u003cROOM_ID_1\u003e,\u003cROOM_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2174,17 +2215,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2204,21 +2245,21 @@
         },
         "use_when": {
           "value": [
-            "需要查询指定用户或会议室在给定时间范围内的闲忙状态时。"
+            "需要查询指定用户和/或会议室在时间范围内的已占用时段时（users 与 rooms 至少其一）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要查询指定用户或会议室在给定时间范围内的闲忙状态时。"
+                "需要查询指定用户和/或会议室在时间范围内的已占用时段时（users 与 rooms 至少其一）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -2239,39 +2280,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.query_busy_status",
+        "live-dws-schema:calendar.query_busy_status",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要查询指定用户或会议室在给定时间范围内的闲忙状态时。"
+        "需要查询指定用户和/或会议室在时间范围内的已占用时段时（users 与 rooms 至少其一）"
       ]
     },
     "calendar event create": {
-      "agent_summary": "创建日程。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "创建日程",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+        "只需查询日程列表或详情时改用 event list/get",
+        "只改已有日程字段时改用 event update；改参会人/会议室用 attendee/room 命令"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\""
+        "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+        "dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "创建日程。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "创建日程",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "创建日程。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "创建日程",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2299,21 +2343,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+            "只需查询日程列表或详情时改用 event list/get",
+            "只改已有日程字段时改用 event update；改参会人/会议室用 attendee/room 命令"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+                "只需查询日程列表或详情时改用 event list/get",
+                "只改已有日程字段时改用 event update；改参会人/会议室用 attendee/room 命令"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2347,21 +2393,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\""
+            "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+            "dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\""
+                "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+                "dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2417,17 +2465,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2447,21 +2495,21 @@
         },
         "use_when": {
           "value": [
-            "需要创建日程时。"
+            "需要创建新日程（时间、可选参会人/提醒/会议室/循环规则）并提取 eventId 时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建日程时。"
+                "需要创建新日程（时间、可选参会人/提醒/会议室/循环规则）并提取 eventId 时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -2480,40 +2528,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.create_calendar_event",
+        "live-dws-schema:calendar.create_calendar_event",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要创建日程时。"
+        "需要创建新日程（时间、可选参会人/提醒/会议室/循环规则）并提取 eventId 时"
       ]
     },
     "calendar event delete": {
-      "agent_summary": "删除日程。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "删除指定日程",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+        "只需从自己日历移除参与身份且非组织者场景需区分影响范围",
+        "目标 eventId 未确认或仍需保留日程时不要删除"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws calendar event delete --id EVENT_ID"
+        "dws calendar event delete --id \u003cid\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "删除日程。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "删除指定日程",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "删除日程。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "删除指定日程",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2541,21 +2591,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+            "只需从自己日历移除参与身份且非组织者场景需区分影响范围",
+            "目标 eventId 未确认或仍需保留日程时不要删除"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+                "只需从自己日历移除参与身份且非组织者场景需区分影响范围",
+                "目标 eventId 未确认或仍需保留日程时不要删除"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2613,21 +2665,21 @@
         },
         "examples": {
           "value": [
-            "dws calendar event delete --id EVENT_ID"
+            "dws calendar event delete --id \u003cid\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar event delete --id EVENT_ID"
+                "dws calendar event delete --id \u003cid\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2689,17 +2741,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             },
             {
               "value": true,
@@ -2761,21 +2813,21 @@
         },
         "use_when": {
           "value": [
-            "需要删除日程时。"
+            "用户明确要求删除/取消指定日程，且 eventId 已确认时（组织者删除会通知所有参与者）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要删除日程时。"
+                "用户明确要求删除/取消指定日程，且 eventId 已确认时（组织者删除会通知所有参与者）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -2796,6 +2848,7 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.delete_calendar_event",
+        "live-dws-schema:calendar.delete_calendar_event",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/calendar.md"
       ],
@@ -2803,36 +2856,38 @@
         "Runtime 无确认门禁；删除后所有参与者同步取消，调用前请自行确认"
       ],
       "use_when": [
-        "需要删除日程时。"
+        "用户明确要求删除/取消指定日程，且 eventId 已确认时（组织者删除会通知所有参与者）"
       ]
     },
     "calendar event get": {
-      "agent_summary": "获取日程详情。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询日程详情",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "要按时间查列表时改用 dws calendar event list",
+        "要创建/删除时改用 create/delete"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event get --id EVENT_ID"
+        "dws calendar event get --id \u003cEVENT_ID\u003e",
+        "dws calendar event get --id \u003cEVENT_ID\u003e --calendar-id primary"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "获取日程详情。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询日程详情",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "获取日程详情。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询日程详情",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2860,21 +2915,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "要按时间查列表时改用 dws calendar event list",
+            "要创建/删除时改用 create/delete"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "要按时间查列表时改用 dws calendar event list",
+                "要创建/删除时改用 create/delete"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2908,21 +2965,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar event get --id EVENT_ID"
+            "dws calendar event get --id \u003cEVENT_ID\u003e",
+            "dws calendar event get --id \u003cEVENT_ID\u003e --calendar-id primary"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar event get --id EVENT_ID"
+                "dws calendar event get --id \u003cEVENT_ID\u003e",
+                "dws calendar event get --id \u003cEVENT_ID\u003e --calendar-id primary"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -2984,17 +3043,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3014,21 +3073,21 @@
         },
         "use_when": {
           "value": [
-            "需要获取日程详情时。"
+            "已知 eventId，需要查看日程明细时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要获取日程详情时。"
+                "已知 eventId，需要查看日程明细时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -3049,39 +3108,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.get_calendar_detail",
+        "live-dws-schema:calendar.get_calendar_detail",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要获取日程详情时。"
+        "已知 eventId，需要查看日程明细时"
       ]
     },
     "calendar event list": {
-      "agent_summary": "查询当前用户可访问的日程列表；未指定起止时间时默认查询当天日程。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询当前用户日程列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "已知 eventId 要详情时改用 dws calendar event get",
+        "要创建日程时改用 dws calendar event create"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event list"
+        "dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+        "dws calendar event list --calendar-id primary"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询当前用户可访问的日程列表；未指定起止时间时默认查询当天日程。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询当前用户日程列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "查询当前用户可访问的日程列表；未指定起止时间时默认查询当天日程。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询当前用户日程列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3109,21 +3171,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "已知 eventId 要详情时改用 dws calendar event get",
+            "要创建日程时改用 dws calendar event create"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "已知 eventId 要详情时改用 dws calendar event get",
+                "要创建日程时改用 dws calendar event create"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3157,21 +3221,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar event list"
+            "dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+            "dws calendar event list --calendar-id primary"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar event list"
+                "dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+                "dws calendar event list --calendar-id primary"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3227,17 +3293,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3257,21 +3323,21 @@
         },
         "use_when": {
           "value": [
-            "需要查询当前用户可访问的日程列表；未指定起止时间时默认查询当天日程时。"
+            "需要按起止时间检索指定日历本下的日程列表时（未传起止默认查当天）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要查询当前用户可访问的日程列表；未指定起止时间时默认查询当天日程时。"
+                "需要按起止时间检索指定日历本下的日程列表时（未传起止默认查当天）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -3290,39 +3356,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.list_calendar_events",
+        "live-dws-schema:calendar.list_calendar_events",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要查询当前用户可访问的日程列表；未指定起止时间时默认查询当天日程时。"
+        "需要按起止时间检索指定日历本下的日程列表时（未传起止默认查当天）"
       ]
     },
     "calendar event respond": {
-      "agent_summary": "作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）。注意：订阅日历下的日程无参会人，因此不可响应。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "响应日程",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询当前状态时不要使用；执行前应确认目标标识与期望的新状态。"
+        "是组织者要改日程内容时改用 event update",
+        "订阅日历日程不可响应"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event respond --id EVENT_ID --status accepted"
+        "dws calendar event respond --id \u003cEVENT_ID\u003e --status accepted",
+        "dws calendar event respond --id \u003cEVENT_ID\u003e --status declined"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）。注意：订阅日历下的日程无参会人，因此不可响应。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "响应日程",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）。注意：订阅日历下的日程无参会人，因此不可响应。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "响应日程",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3350,21 +3419,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询当前状态时不要使用；执行前应确认目标标识与期望的新状态。"
+            "是组织者要改日程内容时改用 event update",
+            "订阅日历日程不可响应"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询当前状态时不要使用；执行前应确认目标标识与期望的新状态。"
+                "是组织者要改日程内容时改用 event update",
+                "订阅日历日程不可响应"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3398,21 +3469,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar event respond --id EVENT_ID --status accepted"
+            "dws calendar event respond --id \u003cEVENT_ID\u003e --status accepted",
+            "dws calendar event respond --id \u003cEVENT_ID\u003e --status declined"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar event respond --id EVENT_ID --status accepted"
+                "dws calendar event respond --id \u003cEVENT_ID\u003e --status accepted",
+                "dws calendar event respond --id \u003cEVENT_ID\u003e --status declined"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3468,17 +3541,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3498,21 +3571,21 @@
         },
         "use_when": {
           "value": [
-            "需要作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）时。"
+            "作为参会人需要设置自己的响应状态（accepted/declined/tentative）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）时。"
+                "作为参会人需要设置自己的响应状态（accepted/declined/tentative）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -3531,39 +3604,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.respond",
+        "live-dws-schema:calendar.respond",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）时。"
+        "作为参会人需要设置自己的响应状态（accepted/declined/tentative）时"
       ]
     },
     "calendar event suggest": {
-      "agent_summary": "对于非明确时间或一段时间范围的约会场景，可基于所有参会人的忙闲状态，推荐多个可用的时间块方案，用于解决会议时间协调问题。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "建议日程时间",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "时间已确定只需创建日程时改用 event create",
+        "只查闲忙片段时改用 busy search"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event suggest --users userId1,userId2 --duration 60"
+        "dws calendar event suggest --users userId1,userId2 --duration 60",
+        "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "对于非明确时间或一段时间范围的约会场景，可基于所有参会人的忙闲状态，推荐多个可用的时间块方案，用于解决会议时间协调问题。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "建议日程时间",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "对于非明确时间或一段时间范围的约会场景，可基于所有参会人的忙闲状态，推荐多个可用的时间块方案，用于解决会议时间协调问题。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "建议日程时间",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3591,21 +3667,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "时间已确定只需创建日程时改用 event create",
+            "只查闲忙片段时改用 busy search"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "时间已确定只需创建日程时改用 event create",
+                "只查闲忙片段时改用 busy search"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3639,21 +3717,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar event suggest --users userId1,userId2 --duration 60"
+            "dws calendar event suggest --users userId1,userId2 --duration 60",
+            "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar event suggest --users userId1,userId2 --duration 60"
+                "dws calendar event suggest --users userId1,userId2 --duration 60",
+                "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3715,17 +3795,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3745,21 +3825,21 @@
         },
         "use_when": {
           "value": [
-            "需要对于非明确时间或一段时间范围的约会场景，可基于所有参会人的忙闲状态，推荐多个可用的时间块方案，用于解决会议时间协调问题时。"
+            "时间未定，需要基于参会人闲忙推荐可用时间块时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要对于非明确时间或一段时间范围的约会场景，可基于所有参会人的忙闲状态，推荐多个可用的时间块方案，用于解决会议时间协调问题时。"
+                "时间未定，需要基于参会人闲忙推荐可用时间块时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -3780,39 +3860,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.list_suggested_event_times",
+        "live-dws-schema:calendar.list_suggested_event_times",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要对于非明确时间或一段时间范围的约会场景，可基于所有参会人的忙闲状态，推荐多个可用的时间块方案，用于解决会议时间协调问题时。"
+        "时间未定，需要基于参会人闲忙推荐可用时间块时"
       ]
     },
     "calendar event update": {
-      "agent_summary": "支持修改标题、描述、时间、地点、忙碌状态等。如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "修改日程",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询当前状态时不要使用；执行前应确认目标标识与期望的新状态。"
+        "改参会人请用 attendee add/delete；改会议室请用 room add/delete",
+        "目标字段未确认时不要更新"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event update --id EVENT_ID --title \"新标题\""
+        "dws calendar event update --id \u003cEVENT_ID\u003e --title \"新标题\"",
+        "dws calendar event update --id \u003cEVENT_ID\u003e --desc \"新描述\" --timezone Asia/Tokyo"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "支持修改标题、描述、时间、地点、忙碌状态等。如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "修改日程",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "支持修改标题、描述、时间、地点、忙碌状态等。如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "修改日程",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3840,21 +3923,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询当前状态时不要使用；执行前应确认目标标识与期望的新状态。"
+            "改参会人请用 attendee add/delete；改会议室请用 room add/delete",
+            "目标字段未确认时不要更新"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询当前状态时不要使用；执行前应确认目标标识与期望的新状态。"
+                "改参会人请用 attendee add/delete；改会议室请用 room add/delete",
+                "目标字段未确认时不要更新"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3888,21 +3973,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar event update --id EVENT_ID --title \"新标题\""
+            "dws calendar event update --id \u003cEVENT_ID\u003e --title \"新标题\"",
+            "dws calendar event update --id \u003cEVENT_ID\u003e --desc \"新描述\" --timezone Asia/Tokyo"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar event update --id EVENT_ID --title \"新标题\""
+                "dws calendar event update --id \u003cEVENT_ID\u003e --title \"新标题\"",
+                "dws calendar event update --id \u003cEVENT_ID\u003e --desc \"新描述\" --timezone Asia/Tokyo"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3958,17 +4045,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -3988,21 +4075,21 @@
         },
         "use_when": {
           "value": [
-            "需要支持修改标题、描述、时间、地点、忙碌状态等时。"
+            "已知 eventId 且具备组织者权限，需要修改标题、时间、地点、描述等字段时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要支持修改标题、描述、时间、地点、忙碌状态等时。"
+                "已知 eventId 且具备组织者权限，需要修改标题、时间、地点、描述等字段时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -4021,39 +4108,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.update_calendar_event",
+        "live-dws-schema:calendar.update_calendar_event",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要支持修改标题、描述、时间、地点、忙碌状态等时。"
+        "已知 eventId 且具备组织者权限，需要修改标题、时间、地点、描述等字段时"
       ]
     },
     "calendar room add": {
-      "agent_summary": "为已有日程预订并添加一个或多个线下会议室。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "为日程预订会议室",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+        "要搜索空闲会议室时先用 dws calendar room search",
+        "要取消会议室预订时改用 dws calendar room delete"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar room add --event EVENT_ID --rooms roomId1,roomId2"
+        "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e",
+        "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "为已有日程预订并添加一个或多个线下会议室。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "为日程预订会议室",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "为已有日程预订并添加一个或多个线下会议室。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "为日程预订会议室",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4081,21 +4171,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+            "要搜索空闲会议室时先用 dws calendar room search",
+            "要取消会议室预订时改用 dws calendar room delete"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询现有资源时不要使用；执行前应确认目标容器、输入内容和预期结果。"
+                "要搜索空闲会议室时先用 dws calendar room search",
+                "要取消会议室预订时改用 dws calendar room delete"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4129,21 +4221,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar room add --event EVENT_ID --rooms roomId1,roomId2"
+            "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e",
+            "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar room add --event EVENT_ID --rooms roomId1,roomId2"
+                "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e",
+                "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4205,17 +4299,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4235,21 +4329,21 @@
         },
         "use_when": {
           "value": [
-            "需要为已有日程预订并添加一个或多个线下会议室时。"
+            "已知 eventId 与 roomId，需要为已有日程预订线下会议室时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要为已有日程预订并添加一个或多个线下会议室时。"
+                "已知 eventId 与 roomId，需要为已有日程预订线下会议室时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -4270,39 +4364,41 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.add_meeting_room",
+        "live-dws-schema:calendar.add_meeting_room",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要为已有日程预订并添加一个或多个线下会议室时。"
+        "已知 eventId 与 roomId，需要为已有日程预订线下会议室时"
       ]
     },
     "calendar room delete": {
-      "agent_summary": "移除会议室。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "移除日程中的会议室",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+        "要新增预订时改用 dws calendar room add",
+        "eventId/roomId 未确认时不要移除"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws calendar room delete --event EVENT_ID --rooms roomId1"
+        "dws calendar room delete --event \u003cevent\u003e --rooms \u003crooms\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "移除会议室。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "移除日程中的会议室",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "移除会议室。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "移除日程中的会议室",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4330,21 +4426,23 @@
         },
         "avoid_when": {
           "value": [
-            "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+            "要新增预订时改用 dws calendar room add",
+            "eventId/roomId 未确认时不要移除"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "仅查询或仍需保留目标资源时不要使用；执行前应确认目标标识和影响范围。"
+                "要新增预订时改用 dws calendar room add",
+                "eventId/roomId 未确认时不要移除"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4402,21 +4500,21 @@
         },
         "examples": {
           "value": [
-            "dws calendar room delete --event EVENT_ID --rooms roomId1"
+            "dws calendar room delete --event \u003cevent\u003e --rooms \u003crooms\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar room delete --event EVENT_ID --rooms roomId1"
+                "dws calendar room delete --event \u003cevent\u003e --rooms \u003crooms\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4478,17 +4576,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             },
             {
               "value": true,
@@ -4530,21 +4628,21 @@
         },
         "use_when": {
           "value": [
-            "需要移除会议室时。"
+            "已知 eventId 与 roomId，需要取消日程会议室预订并释放占用时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要移除会议室时。"
+                "已知 eventId 与 roomId，需要取消日程会议室预订并释放占用时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -4565,40 +4663,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.delete_meeting_room",
+        "live-dws-schema:calendar.delete_meeting_room",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要移除会议室时。"
+        "已知 eventId 与 roomId，需要取消日程会议室预订并释放占用时"
       ]
     },
     "calendar room list-groups": {
-      "agent_summary": "会议室分组列表。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询会议室分组列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "要搜空闲会议室时改用 dws calendar room search"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar room list-groups"
+        "dws calendar room list-groups",
+        "dws calendar room list-groups --limit 20 --page 0"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "会议室分组列表。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询会议室分组列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "会议室分组列表。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询会议室分组列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4626,21 +4726,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "要搜空闲会议室时改用 dws calendar room search"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "要搜空闲会议室时改用 dws calendar room search"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4674,21 +4774,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar room list-groups"
+            "dws calendar room list-groups",
+            "dws calendar room list-groups --limit 20 --page 0"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar room list-groups"
+                "dws calendar room list-groups",
+                "dws calendar room list-groups --limit 20 --page 0"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4750,17 +4852,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4780,21 +4882,21 @@
         },
         "use_when": {
           "value": [
-            "需要会议室分组列表时。"
+            "需要分页查看企业会议室分组（groupId/parentId）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要会议室分组列表时。"
+                "需要分页查看企业会议室分组（groupId/parentId）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -4815,39 +4917,42 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.list_meeting_room_groups",
+        "live-dws-schema:calendar.list_meeting_room_groups",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要会议室分组列表时。"
+        "需要分页查看企业会议室分组（groupId/parentId）时"
       ]
     },
     "calendar room search": {
-      "agent_summary": "按名称检索会议室，或按时间、会议室组和名称查询可用会议室。",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询空闲或按名搜索会议室",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+        "要完成预订时在取得 roomId 后改用 room add",
+        "只要会议室分组时改用 room list-groups"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar room search --room-name 永澄亭"
+        "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+        "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --group-id \u003cGROUP_ID\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "按名称检索会议室，或按时间、会议室组和名称查询可用会议室。",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询空闲或按名搜索会议室",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "按名称检索会议室，或按时间、会议室组和名称查询可用会议室。",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询空闲或按名搜索会议室",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4875,21 +4980,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+            "要完成预订时在取得 roomId 后改用 room add",
+            "只要会议室分组时改用 room list-groups"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要创建、修改或删除资源时不要使用；本命令用于读取、检索或检查现有状态。"
+                "要完成预订时在取得 roomId 后改用 room add",
+                "只要会议室分组时改用 room list-groups"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4923,21 +5030,23 @@
         },
         "examples": {
           "value": [
-            "dws calendar room search --room-name 永澄亭"
+            "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+            "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --group-id \u003cGROUP_ID\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws calendar room search --room-name 永澄亭"
+                "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+                "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --group-id \u003cGROUP_ID\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -4993,17 +5102,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -5023,21 +5132,21 @@
         },
         "use_when": {
           "value": [
-            "需要按名称检索会议室，或按时间、会议室组和名称查询可用会议室时。"
+            "需要按名称模糊搜会议室，或按时间段查询全程空闲且可预订的会议室时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要按名称检索会议室，或按时间、会议室组和名称查询可用会议室时。"
+                "需要按名称模糊搜会议室，或按时间段查询全程空闲且可预订的会议室时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -5056,10 +5165,11 @@
         "internal/cli/schema_hints/products/calendar.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.calendar.query_available_meeting_room",
+        "live-dws-schema:calendar.query_available_meeting_room",
         "skills/mono/references/products/calendar.md"
       ],
       "use_when": [
-        "需要按名称检索会议室，或按时间、会议室组和名称查询可用会议室时。"
+        "需要按名称模糊搜会议室，或按时间段查询全程空闲且可预订的会议室时"
       ]
     }
   }

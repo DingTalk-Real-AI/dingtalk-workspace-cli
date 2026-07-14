@@ -65,20 +65,18 @@
         "rpc_name": "add_robot_to_group"
       },
       "use_when": [
-        "加机器人到群",
-        "邀请机器人进群"
+        "需要把已有企业机器人加入指定群"
       ],
       "avoid_when": [
-        "要“向群中添加成员”请改用 dws chat group members add",
-        "要“查看群成员列表”请改用 dws chat group members list",
-        "要“从群中移除成员”请改用 dws chat group members remove"
+        "添加普通成员时使用 chat group members add",
+        "移除群内机器人时使用 chat group members remove-bot"
       ],
       "examples": [
-        "dws chat group members add-bot --robot-code <robot-code> --id <openconversation_id>",
-        "dws chat group members add-bot --group <openconversation_id> --robot-code <robot-code>"
+        "dws chat group members add-bot --robot-code <robot-code> --id <openconversation_id>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "把企业机器人拉进我有管理权限的群"
     },
     "chat.add_text_emotion": {
       "use_when": [
@@ -134,19 +132,19 @@
         "rpc_name": "create_group_conversation"
       },
       "use_when": [
-        "帮我建一个项目群；创建群聊",
-        "建群/创建群聊"
+        "需要新建内部/外部群或话题圈，并带上初始成员",
+        "用户明确要建群且已给出群名与成员标识"
       ],
       "avoid_when": [
-        "要“解散群聊”请改用 dws chat group dismiss",
-        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
-        "要“获取群邀请链接”请改用 dws chat group invite-url"
+        "已有群只需加人时使用 chat group members add",
+        "只是搜索已有群时使用 chat search"
       ],
       "examples": [
         "dws chat group create --name \"Q1 项目冲刺群\" --users userId1,userId2,userId3"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建群聊并可指定群名与初始成员"
     },
     "chat.create_smart_conv_category": {
       "interface_ref": {
@@ -186,24 +184,25 @@
     },
     "chat.dismiss_group": {
       "use_when": [
-        "解散群/解散群聊",
-        "解散群/解散群聊；解散群聊"
+        "群主明确要求永久解散整个群，而不是自己退出",
+        "已确认 openConversationId，且用户接受群与历史消息一并消失"
       ],
       "avoid_when": [
-        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
-        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
-        "要“获取群邀请链接”请改用 dws chat group invite-url"
+        "当前用户只想自己离开群时使用 chat group quit",
+        "仍需保留群供他人继续使用时不要解散",
+        "目标群未确认或用户未明确同意不可恢复后果时不要执行"
       ],
       "examples": [
         "dws chat group dismiss --group <openConversationId>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "effect": "write",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "永久解散指定群聊（不可恢复，仅群主）"
     },
     "chat.download_media": {
       "use_when": [
@@ -373,19 +372,17 @@
         "rpc_name": "list_group_bots"
       },
       "use_when": [
-        "群机器人列表/群里有哪些机器人/查看群机器人",
-        "群里有哪些机器人/查看群机器人/列出群机器人；查看群内机器人列表"
+        "需要查看某群已安装哪些机器人或提取 openBotId"
       ],
       "avoid_when": [
-        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
-        "要“解散群聊”请改用 dws chat group dismiss",
-        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id"
+        "搜索企业内机器人目录时使用 chat bot find"
       ],
       "examples": [
         "dws chat group bots --group <openConversationId>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "列出群内机器人"
     },
     "chat.list_individual_chat_message": {
       "use_when": [
@@ -569,31 +566,29 @@
     },
     "chat.quit_group": {
       "use_when": [
-        "退群/退出群聊/离开群；退出群聊"
+        "用户只要自己离开某个群，不需要解散群"
       ],
       "avoid_when": [
-        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
-        "要“解散群聊”请改用 dws chat group dismiss",
-        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id"
+        "需要永久解散整个群时使用 chat group dismiss",
+        "需要踢出其他成员时使用 chat group members remove"
       ],
       "examples": [
         "dws chat group quit --group <openConversationId>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "当前用户退出群聊，群本身保留"
     },
     "chat.recall_message": {
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
       "use_when": [
-        "撤回我发的消息/撤回消息",
-        "撤回我发的消息/撤回消息；撤回个人消息"
+        "已知会话与消息 ID，需要撤回自己发出的那条消息"
       ],
       "avoid_when": [
-        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
-        "要“添加文字表情”请改用 dws chat message add-text-emotion",
-        "要“合并转发消息”请改用 dws chat message combine-forward"
+        "撤回机器人消息时使用 chat message recall-by-bot",
+        "消息 ID 未确认时先用消息查询/搜索拿到 openMessageId"
       ],
       "examples": [
         "dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>"
@@ -603,7 +598,8 @@
       "tips": [
         "Runtime 无确认门禁；撤回后不可恢复，调用前请自行确认"
       ],
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "撤回当前用户已发送的单条消息"
     },
     "chat.recall_robot_message": {
       "use_when": [
@@ -714,20 +710,19 @@
         "rpc_name": "remove_robot_in_group"
       },
       "use_when": [
-        "从群里移除机器人/踢出机器人",
-        "从群里移除机器人/踢机器人；移除群内机器人"
+        "需要把某个机器人踢出指定群"
       ],
       "avoid_when": [
-        "要“向群中添加成员”请改用 dws chat group members add",
-        "要“将机器人添加到群中”请改用 dws chat group members add-bot",
-        "要“查看群成员列表”请改用 dws chat group members list"
+        "移除普通成员时使用 chat group members remove",
+        "解散整个群时使用 chat group dismiss"
       ],
       "examples": [
         "dws chat group members remove-bot --id <openConversationId> --bot-id <openBotId>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "从群内移除指定机器人"
     },
     "chat.remove_text_emotion": {
       "use_when": [
@@ -794,21 +789,18 @@
         "rpc_name": "search_bots"
       },
       "use_when": [
-        "搜索机器人 — 提取 openDingTalkId（必须用 find，search 没有此字段）",
-        "搜索机器人/找机器人/查机器人/帮我找XXX机器人",
-        "搜索机器人/找机器人/查机器人/帮我找XXX机器人；搜索全部可用机器人",
-        "给机器人发单聊/给机器人发消息/跟机器人聊天",
-        "给机器人发单聊/给机器人发消息/跟机器人聊天；给机器人发单聊消息"
+        "要找可用机器人并提取 openDingTalkId（例如后续单聊机器人）"
       ],
       "avoid_when": [
-        "要“搜索我创建的机器人”请改用 dws chat bot search"
+        "只查我创建的机器人时使用 chat bot search",
+        "已有 robot-code 直接发消息时不要先搜"
       ],
       "examples": [
-        "dws chat bot find --query \"日报\"",
-        "dws chat bot find --query \"日报\" --limit 20"
+        "dws chat bot find --query \"日报\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "按关键词搜索企业机器人并拿到 openDingTalkId"
     },
     "chat.search_common_groups": {
       "use_when": [
@@ -828,14 +820,12 @@
     },
     "chat.search_groups": {
       "use_when": [
-        "1. 搜索群 — 提取 openconversation_id",
-        "搜索群/找群"
+        "只知道群名关键词，需要定位群并提取 openConversationId"
       ],
       "avoid_when": [
-        "我创建的群/我管理的群/我是群主的群/我当管理员的群；拉取我创建/管理的群",
-        "我和风雷的共同群/我们都在哪些群；搜索共同群",
-        "搜一下消息里的changefree链接；消息搜索",
-        "根据群号查群信息/群号转openConversationId；群号查群聊信息"
+        "已有群号时用 chat group get-by-group-id",
+        "查我创建/管理的群用 chat group list-my-groups",
+        "查与某人的共同群用 chat search-common"
       ],
       "examples": [
         "dws chat search --query \"项目冲刺\"",
@@ -843,27 +833,24 @@
       ],
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls im/search_groups with a flat payload, while the pinned snapshot only contains the incompatible chat/search_groups_by_keyword contract."
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls im/search_groups with a flat payload, while the pinned snapshot only contains the incompatible chat/search_groups_by_keyword contract.",
+      "agent_summary": "按关键词搜索群聊并拿到 openConversationId"
     },
     "chat.search_messages": {
       "use_when": [
-        "多维度搜索/按发送者搜索/按人搜消息/指定多个群搜索/@我的消息搜索",
-        "按发送者搜索/指定多个群搜索/多维度搜消息；多维度搜索消息",
-        "搜一下消息里的changefree链接；消息搜索",
-        "搜索消息/查找关键词/搜一下消息里的XX",
-        "搜索消息里的关键词/包含XX的消息"
+        "需要组合时间范围、关键词、发送者、@我/@某人、指定会话等条件搜消息"
       ],
       "avoid_when": [
-        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
-        "要“添加文字表情”请改用 dws chat message add-text-emotion",
-        "要“合并转发消息”请改用 dws chat message combine-forward"
+        "只需按关键词在会话里搜时优先评估 chat message search",
+        "只需拉取某会话时间线时使用 chat message list",
+        "只需某人发给我的消息时使用 chat message list-by-sender"
       ],
       "examples": [
-        "dws chat message search-advanced --query \"周报\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\"",
-        "dws chat message search-advanced --user <userId> --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\""
+        "dws chat message search-advanced --query \"周报\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "按时间、关键词、发送者、@ 或会话等多维度搜索消息"
     },
     "chat.search_messages_by_keyword": {
       "use_when": [
@@ -923,20 +910,17 @@
         "rpc_name": "search_my_robots"
       },
       "use_when": [
-        "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人",
-        "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人；搜索我创建的机器人",
-        "查我的机器人 — 提取 robot-code",
-        "查看我的机器人"
+        "需要我自己创建的机器人及其 robot-code"
       ],
       "avoid_when": [
-        "要“搜索机器人”请改用 dws chat bot find"
+        "搜索全部可用企业机器人时使用 chat bot find"
       ],
       "examples": [
-        "dws chat bot search --page 1",
         "dws chat bot search --page 1 --size 10 --name \"日报\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "搜索我创建的企业机器人并提取 robot-code"
     },
     "chat.send_message_by_custom_robot": {
       "interface_ref": {
@@ -944,21 +928,18 @@
         "rpc_name": "send_message_by_custom_robot"
       },
       "use_when": [
-        "7. Webhook 发告警",
-        "CPU 超过 90% 自动告警；Webhook 告警",
-        "Webhook 发消息/告警消息"
+        "已有自定义机器人 webhook token，需要向群发告警或通知"
       ],
       "avoid_when": [
-        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
-        "要“添加文字表情”请改用 dws chat message add-text-emotion",
-        "要“合并转发消息”请改用 dws chat message combine-forward"
+        "使用企业机器人 robot-code 发消息时用 chat message send-by-bot",
+        "以个人身份发消息时用 chat message send"
       ],
       "examples": [
-        "dws chat message send-by-webhook --token <webhook-token> --title \"告警\" --text \"CPU 超 90% @10\" --at-all",
-        "dws chat message send-by-webhook --token <webhook-token> --title \"test\" --text \"hi @118785\" --at-users 118785"
+        "dws chat message send-by-webhook --token <webhook-token> --title \"告警\" --text \"CPU 超 90%\" --at-all"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "用自定义机器人 Webhook 向群发送消息"
     },
     "chat.send_personal_message": {
       "interface_ref": {
@@ -1280,6 +1261,17 @@
       ],
       "interface_mode": "mcp",
       "availability": "available"
+    }
+  },
+  "products": {
+    "chat": {
+      "agent_summary": "管理钉钉会话、群聊、群成员、机器人、消息检索与发送",
+      "use_when": [
+        "请求涉及群聊管理、聊天记录、消息发送、会话设置或群机器人"
+      ],
+      "avoid_when": [
+        "邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person"
+      ]
     }
   }
 }

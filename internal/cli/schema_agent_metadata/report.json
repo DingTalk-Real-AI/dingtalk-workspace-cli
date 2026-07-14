@@ -2,32 +2,34 @@
   "product_id": "report",
   "tools": {
     "report entry get": {
-      "agent_summary": "读取单份日报正文（含字段明细 + 钉钉跳转链接）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "获取指定一篇日志的详情信息",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要日志列表、已读统计或修改日志时不要使用；该命令只读取指定 reportId 的正文。"
+        "要提交新日志时改用 dws report entry submit",
+        "要看已读/评论统计时改用 dws report entry stats"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws report entry get --report-id \u003creportId\u003e --format json"
+        "dws report entry get --report-id \u003creportId\u003e --format json",
+        "dws report entry get --report-id \u003creportId\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "读取单份日报正文（含字段明细 + 钉钉跳转链接）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "获取指定一篇日志的详情信息",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "读取单份日报正文（含字段明细 + 钉钉跳转链接）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "获取指定一篇日志的详情信息",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -55,21 +57,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要日志列表、已读统计或修改日志时不要使用；该命令只读取指定 reportId 的正文。"
+            "要提交新日志时改用 dws report entry submit",
+            "要看已读/评论统计时改用 dws report entry stats"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要日志列表、已读统计或修改日志时不要使用；该命令只读取指定 reportId 的正文。"
+                "要提交新日志时改用 dws report entry submit",
+                "要看已读/评论统计时改用 dws report entry stats"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -103,21 +107,23 @@
         },
         "examples": {
           "value": [
-            "dws report entry get --report-id \u003creportId\u003e --format json"
+            "dws report entry get --report-id \u003creportId\u003e --format json",
+            "dws report entry get --report-id \u003creportId\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws report entry get --report-id \u003creportId\u003e --format json"
+                "dws report entry get --report-id \u003creportId\u003e --format json",
+                "dws report entry get --report-id \u003creportId\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -179,17 +185,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -209,21 +215,21 @@
         },
         "use_when": {
           "value": [
-            "已知 reportId，需要读取单份日志正文和钉钉跳转链接时"
+            "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "已知 reportId，需要读取单份日志正文和钉钉跳转链接时"
+                "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -245,41 +251,44 @@
         "internal/cli/schema_hints/products/report.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details",
+        "live-dws-schema:report.get_report_entry_details",
         "skills/mono/references/products/report.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_report_entry_details",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_report_entry_details"
       ],
       "use_when": [
-        "已知 reportId，需要读取单份日志正文和钉钉跳转链接时"
+        "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
       ]
     },
     "report entry stats": {
-      "agent_summary": "读取单份日报的已读统计",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "获取指定日志的统计数据",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要日志正文、列表或提交新日志时不要使用；该命令只读取指定 reportId 的已读统计。"
+        "要读正文时改用 dws report entry get",
+        "要提交新日志时改用 dws report entry submit"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
+        "dws report entry stats --report-id \u003creportId\u003e",
         "dws report entry stats --report-id \u003creportId\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "读取单份日报的已读统计",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "获取指定日志的统计数据",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "读取单份日报的已读统计",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "获取指定日志的统计数据",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -307,21 +316,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要日志正文、列表或提交新日志时不要使用；该命令只读取指定 reportId 的已读统计。"
+            "要读正文时改用 dws report entry get",
+            "要提交新日志时改用 dws report entry submit"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要日志正文、列表或提交新日志时不要使用；该命令只读取指定 reportId 的已读统计。"
+                "要读正文时改用 dws report entry get",
+                "要提交新日志时改用 dws report entry submit"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -355,21 +366,23 @@
         },
         "examples": {
           "value": [
+            "dws report entry stats --report-id \u003creportId\u003e",
             "dws report entry stats --report-id \u003creportId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
+                "dws report entry stats --report-id \u003creportId\u003e",
                 "dws report entry stats --report-id \u003creportId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -431,17 +444,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -461,21 +474,21 @@
         },
         "use_when": {
           "value": [
-            "已知 reportId，需要查看该日志已读统计时"
+            "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "已知 reportId，需要查看该日志已读统计时"
+                "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -497,42 +510,44 @@
         "internal/cli/schema_hints/products/report.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id",
+        "live-dws-schema:report.get_report_statistics_by_id",
         "skills/mono/references/products/report.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_report_statistics_by_id",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_report_statistics_by_id"
       ],
       "use_when": [
-        "已知 reportId，需要查看该日志已读统计时"
+        "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
       ]
     },
     "report entry submit": {
-      "agent_summary": "提交一份新日报（按模版）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "按模版提交一份新日报",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "尚未读取模板字段、只需查看已有日志，或提交内容未确认时不要创建日报或周报。"
+        "尚未读取模板字段时先用 dws report template list / template get",
+        "只需查看已有日志正文时改用 dws report entry get"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws report entry submit --template-id TPL_ID --contents '[{\"content\":\"完成开发\",\"sort\":\"0\",\"key\":\"今日完成\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json",
-        "dws report entry submit --template-id TPL_ID --contents-file ./report.json --format json"
+        "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+        "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "提交一份新日报（按模版）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "按模版提交一份新日报",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "提交一份新日报（按模版）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "按模版提交一份新日报",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -560,21 +575,23 @@
         },
         "avoid_when": {
           "value": [
-            "尚未读取模板字段、只需查看已有日志，或提交内容未确认时不要创建日报或周报。"
+            "尚未读取模板字段时先用 dws report template list / template get",
+            "只需查看已有日志正文时改用 dws report entry get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "尚未读取模板字段、只需查看已有日志，或提交内容未确认时不要创建日报或周报。"
+                "尚未读取模板字段时先用 dws report template list / template get",
+                "只需查看已有日志正文时改用 dws report entry get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -608,23 +625,23 @@
         },
         "examples": {
           "value": [
-            "dws report entry submit --template-id TPL_ID --contents '[{\"content\":\"完成开发\",\"sort\":\"0\",\"key\":\"今日完成\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json",
-            "dws report entry submit --template-id TPL_ID --contents-file ./report.json --format json"
+            "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+            "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws report entry submit --template-id TPL_ID --contents '[{\"content\":\"完成开发\",\"sort\":\"0\",\"key\":\"今日完成\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json",
-                "dws report entry submit --template-id TPL_ID --contents-file ./report.json --format json"
+                "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+                "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -686,17 +703,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -716,21 +733,21 @@
         },
         "use_when": {
           "value": [
-            "已读取模板字段定义，需要按模板提交日报或周报时"
+            "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "已读取模板字段定义，需要按模板提交日报或周报时"
+                "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -752,20 +769,22 @@
         "internal/cli/schema_hints/products/report.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.report.create_report",
+        "live-dws-schema:report.create_report",
         "skills/mono/references/products/report.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.create_report",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.create_report"
       ],
       "use_when": [
-        "已读取模板字段定义，需要按模板提交日报或周报时"
+        "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
       ]
     },
     "report inbox list": {
-      "agent_summary": "列出我收到的日报",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询当前人收到的日志列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要查看自己发出的日志时使用 report outbox list；需要单份正文时用 report entry get"
+        "要看自己发出的日志时改用 dws report outbox list",
+        "已知 reportId 要看正文时改用 dws report entry get"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -775,18 +794,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "列出我收到的日报",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询当前人收到的日志列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "列出我收到的日报",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询当前人收到的日志列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -814,21 +833,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要查看自己发出的日志时使用 report outbox list；需要单份正文时用 report entry get"
+            "要看自己发出的日志时改用 dws report outbox list",
+            "已知 reportId 要看正文时改用 dws report entry get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要查看自己发出的日志时使用 report outbox list；需要单份正文时用 report entry get"
+                "要看自己发出的日志时改用 dws report outbox list",
+                "已知 reportId 要看正文时改用 dws report entry get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -864,19 +885,19 @@
           "value": [
             "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
                 "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -938,17 +959,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -968,21 +989,21 @@
         },
         "use_when": {
           "value": [
-            "需要列出别人发给当前用户的日志时"
+            "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要列出别人发给当前用户的日志时"
+                "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1004,42 +1025,44 @@
         "internal/cli/schema_hints/products/report.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list",
+        "live-dws-schema:report.get_received_report_list",
         "skills/mono/references/products/report.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_received_report_list",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_received_report_list"
       ],
       "use_when": [
-        "需要列出别人发给当前用户的日志时"
+        "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
       ]
     },
     "report outbox list": {
-      "agent_summary": "列出我发出的日报",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "查询当前人创建的日志详情列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要查看别人发来的日志时使用 report inbox list；需要单份正文时用 report entry get"
+        "要看收到的日志时改用 dws report inbox list",
+        "已知 reportId 要完整正文时改用 dws report entry get"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
         "dws report outbox list --cursor 0 --size 20 --format json",
-        "dws report outbox list --cursor 0 --size 20 --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --format json"
+        "dws report outbox list --cursor 0 --size 20"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "列出我发出的日报",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "查询当前人创建的日志详情列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "列出我发出的日报",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "查询当前人创建的日志详情列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1067,21 +1090,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要查看别人发来的日志时使用 report inbox list；需要单份正文时用 report entry get"
+            "要看收到的日志时改用 dws report inbox list",
+            "已知 reportId 要完整正文时改用 dws report entry get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要查看别人发来的日志时使用 report inbox list；需要单份正文时用 report entry get"
+                "要看收到的日志时改用 dws report inbox list",
+                "已知 reportId 要完整正文时改用 dws report entry get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1116,22 +1141,22 @@
         "examples": {
           "value": [
             "dws report outbox list --cursor 0 --size 20 --format json",
-            "dws report outbox list --cursor 0 --size 20 --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --format json"
+            "dws report outbox list --cursor 0 --size 20"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
                 "dws report outbox list --cursor 0 --size 20 --format json",
-                "dws report outbox list --cursor 0 --size 20 --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --format json"
+                "dws report outbox list --cursor 0 --size 20"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1193,17 +1218,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1223,21 +1248,21 @@
         },
         "use_when": {
           "value": [
-            "需要列出当前用户已发出的日志时"
+            "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要列出当前用户已发出的日志时"
+                "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1259,41 +1284,43 @@
         "internal/cli/schema_hints/products/report.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list",
+        "live-dws-schema:report.get_send_report_list",
         "skills/mono/references/products/report.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_send_report_list",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_send_report_list"
       ],
       "use_when": [
-        "需要列出当前用户已发出的日志时"
+        "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
       ]
     },
     "report template get": {
-      "agent_summary": "读取单个日志模版的字段定义",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "按名称获取日志模版字段定义",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "需要浏览可用模板时使用 report template list；不要在未读取字段定义时编造提交字段"
+        "不知道有哪些模版时先用 dws report template list"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws report template get --name \u003ctemplateName\u003e --format json"
+        "dws report template get --name \u003ctemplateName\u003e",
+        "dws report template get --name \"日报\" --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "读取单个日志模版的字段定义",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "按名称获取日志模版字段定义",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "读取单个日志模版的字段定义",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "按名称获取日志模版字段定义",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1321,21 +1348,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要浏览可用模板时使用 report template list；不要在未读取字段定义时编造提交字段"
+            "不知道有哪些模版时先用 dws report template list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "需要浏览可用模板时使用 report template list；不要在未读取字段定义时编造提交字段"
+                "不知道有哪些模版时先用 dws report template list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1369,21 +1396,23 @@
         },
         "examples": {
           "value": [
-            "dws report template get --name \u003ctemplateName\u003e --format json"
+            "dws report template get --name \u003ctemplateName\u003e",
+            "dws report template get --name \"日报\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "dws report template get --name \u003ctemplateName\u003e --format json"
+                "dws report template get --name \u003ctemplateName\u003e",
+                "dws report template get --name \"日报\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1445,17 +1474,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1475,21 +1504,21 @@
         },
         "use_when": {
           "value": [
-            "已知模板名称，需要读取字段定义以准备提交日志时"
+            "已知模版名称，提交前需要读取字段名称、类型与排序时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "已知模板名称，需要读取字段定义以准备提交日志时"
+                "已知模版名称，提交前需要读取字段名称、类型与排序时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1511,41 +1540,43 @@
         "internal/cli/schema_hints/products/report.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name",
+        "live-dws-schema:report.get_template_details_by_name",
         "skills/mono/references/products/report.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_template_details_by_name",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_template_details_by_name"
       ],
       "use_when": [
-        "已知模板名称，需要读取字段定义以准备提交日志时"
+        "已知模版名称，提交前需要读取字段名称、类型与排序时"
       ]
     },
     "report template list": {
-      "agent_summary": "获取当前用户可用的日志模版列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary": "获取当前员工可使用的日志模版列表",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
       "availability": "available",
       "avoid_when": [
-        "已知模板名称并需要字段定义时使用 report template get"
+        "已知模版名称需要字段定义时改用 dws report template get"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
+        "dws report template list",
         "dws report template list --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "获取当前用户可用的日志模版列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "value": "获取当前员工可使用的日志模版列表",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "获取当前用户可用的日志模版列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "value": "获取当前员工可使用的日志模版列表",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1573,21 +1604,21 @@
         },
         "avoid_when": {
           "value": [
-            "已知模板名称并需要字段定义时使用 report template get"
+            "已知模版名称需要字段定义时改用 dws report template get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "已知模板名称并需要字段定义时使用 report template get"
+                "已知模版名称需要字段定义时改用 dws report template get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1621,21 +1652,23 @@
         },
         "examples": {
           "value": [
+            "dws report template list",
             "dws report template list --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
+                "dws report template list",
                 "dws report template list --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1697,17 +1730,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
@@ -1727,21 +1760,21 @@
         },
         "use_when": {
           "value": [
-            "提交日志前，需要先列出当前用户可用模板时"
+            "提交日志前需要列出可用模版名称与 templateId 时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": [
-                "提交日志前，需要先列出当前用户可用模板时"
+                "提交日志前需要列出可用模版名称与 templateId 时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         }
@@ -1763,12 +1796,13 @@
         "internal/cli/schema_hints/products/report.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates",
+        "live-dws-schema:report.get_available_report_templates",
         "skills/mono/references/products/report.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_available_report_templates",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_available_report_templates"
       ],
       "use_when": [
-        "提交日志前，需要先列出当前用户可用模板时"
+        "提交日志前需要列出可用模版名称与 templateId 时"
       ]
     }
   }

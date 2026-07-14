@@ -3,32 +3,33 @@
   "tools": {
     "wiki member add": {
       "agent_summary": "为指定知识库添加一个或多个成员，并授予指定角色",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只需查看知识库成员，或知识库、成员与目标角色未确认时不要授权。"
+        "「我的文档」不支持容器成员——改用 drive/doc permission add 做节点授权",
+        "单篇文档分享用节点 permission，不要用 member add"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki member add --workspace \u003cworkspaceId\u003e --users uid1 --role READER --format json",
-        "dws wiki member add --workspace \u003cworkspaceId\u003e --users uid1,uid2,uid3 --role EDITOR --format json"
+        "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1 --role READER --format json",
+        "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1,uid2 --role EDITOR --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "为指定知识库添加一个或多个成员，并授予指定角色",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "为指定知识库添加一个或多个成员，并授予指定角色",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -56,21 +57,23 @@
         },
         "avoid_when": {
           "value": [
-            "只需查看知识库成员，或知识库、成员与目标角色未确认时不要授权。"
+            "「我的文档」不支持容器成员——改用 drive/doc permission add 做节点授权",
+            "单篇文档分享用节点 permission，不要用 member add"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "只需查看知识库成员，或知识库、成员与目标角色未确认时不要授权。"
+                "「我的文档」不支持容器成员——改用 drive/doc permission add 做节点授权",
+                "单篇文档分享用节点 permission，不要用 member add"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -104,23 +107,23 @@
         },
         "examples": {
           "value": [
-            "dws wiki member add --workspace \u003cworkspaceId\u003e --users uid1 --role READER --format json",
-            "dws wiki member add --workspace \u003cworkspaceId\u003e --users uid1,uid2,uid3 --role EDITOR --format json"
+            "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1 --role READER --format json",
+            "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1,uid2 --role EDITOR --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki member add --workspace \u003cworkspaceId\u003e --users uid1 --role READER --format json",
-                "dws wiki member add --workspace \u003cworkspaceId\u003e --users uid1,uid2,uid3 --role EDITOR --format json"
+                "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1 --role READER --format json",
+                "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1,uid2 --role EDITOR --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -176,17 +179,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -206,21 +209,21 @@
         },
         "use_when": {
           "value": [
-            "需要为指定知识库添加一个或多个成员，并授予指定角色时"
+            "给知识库容器添加成员（USER + 角色）；新员工入职开通整库访问时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要为指定知识库添加一个或多个成员，并授予指定角色时"
+                "给知识库容器添加成员（USER + 角色）；新员工入职开通整库访问时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -240,42 +243,44 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.add_member",
+        "live-mcp:dws schema wiki.add_member",
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.add_member"
       ],
       "use_when": [
-        "需要为指定知识库添加一个或多个成员，并授予指定角色时"
+        "给知识库容器添加成员（USER + 角色）；新员工入职开通整库访问时"
       ]
     },
     "wiki member list": {
       "agent_summary": "查询指定知识库的成员列表，返回每位成员的 userId、姓名、角色等信息",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要新增、更新或移除成员时不要使用；该命令只查看知识库成员与角色。"
+        "返回无 userId：要 update/remove 需另用 contact user search 反查",
+        "增删改成员用 add/update/remove"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki member list --workspace \u003cworkspaceId\u003e --format json",
-        "dws wiki member list --workspace \u003cworkspaceId\u003e --limit 100 --format json"
+        "dws wiki member list --workspace \u003cWS_ID\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "查询指定知识库的成员列表，返回每位成员的 userId、姓名、角色等信息",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "查询指定知识库的成员列表，返回每位成员的 userId、姓名、角色等信息",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -303,21 +308,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要新增、更新或移除成员时不要使用；该命令只查看知识库成员与角色。"
+            "返回无 userId：要 update/remove 需另用 contact user search 反查",
+            "增删改成员用 add/update/remove"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要新增、更新或移除成员时不要使用；该命令只查看知识库成员与角色。"
+                "返回无 userId：要 update/remove 需另用 contact user search 反查",
+                "增删改成员用 add/update/remove"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -351,23 +358,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki member list --workspace \u003cworkspaceId\u003e --format json",
-            "dws wiki member list --workspace \u003cworkspaceId\u003e --limit 100 --format json"
+            "dws wiki member list --workspace \u003cWS_ID\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki member list --workspace \u003cworkspaceId\u003e --format json",
-                "dws wiki member list --workspace \u003cworkspaceId\u003e --limit 100 --format json"
+                "dws wiki member list --workspace \u003cWS_ID\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -423,17 +428,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -453,21 +458,21 @@
         },
         "use_when": {
           "value": [
-            "需要查看指定知识库当前成员和角色时"
+            "查看知识库成员名单与角色时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要查看指定知识库当前成员和角色时"
+                "查看知识库成员名单与角色时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -487,41 +492,43 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.list_member",
+        "live-mcp:dws schema wiki.list_member",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.list_member"
       ],
       "use_when": [
-        "需要查看指定知识库当前成员和角色时"
+        "查看知识库成员名单与角色时"
       ]
     },
     "wiki member remove": {
       "agent_summary": "从指定知识库中移除一个或多个成员（仅支持 USER 类型）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "用户未明确移除，或知识库与成员身份未确认时不要撤销访问权限。"
+        "改角色用 update；节点级权限用 drive permission remove",
+        "OWNER 不可移除此接口"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws wiki member remove --workspace \u003cworkspaceId\u003e --users uid1 --format json",
-        "dws wiki member remove --workspace \u003cworkspaceId\u003e --users uid1,uid2,uid3 --format json"
+        "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1 --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "从指定知识库中移除一个或多个成员（仅支持 USER 类型）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "从指定知识库中移除一个或多个成员（仅支持 USER 类型）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -549,21 +556,23 @@
         },
         "avoid_when": {
           "value": [
-            "用户未明确移除，或知识库与成员身份未确认时不要撤销访问权限。"
+            "改角色用 update；节点级权限用 drive permission remove",
+            "OWNER 不可移除此接口"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "用户未明确移除，或知识库与成员身份未确认时不要撤销访问权限。"
+                "改角色用 update；节点级权限用 drive permission remove",
+                "OWNER 不可移除此接口"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -613,23 +622,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki member remove --workspace \u003cworkspaceId\u003e --users uid1 --format json",
-            "dws wiki member remove --workspace \u003cworkspaceId\u003e --users uid1,uid2,uid3 --format json"
+            "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki member remove --workspace \u003cworkspaceId\u003e --users uid1 --format json",
-                "dws wiki member remove --workspace \u003cworkspaceId\u003e --users uid1,uid2,uid3 --format json"
+                "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -685,17 +692,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             },
             {
               "value": true,
@@ -730,21 +737,21 @@
         },
         "use_when": {
           "value": [
-            "需要从指定知识库中移除一个或多个成员（仅支持 USER 类型）时"
+            "从知识库移除成员访问（离职/清理）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要从指定知识库中移除一个或多个成员（仅支持 USER 类型）时"
+                "从知识库移除成员访问（离职/清理）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -764,41 +771,42 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.remove_member",
+        "live-mcp:dws schema wiki.remove_member",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.remove_member"
       ],
       "use_when": [
-        "需要从指定知识库中移除一个或多个成员（仅支持 USER 类型）时"
+        "从知识库移除成员访问（离职/清理）时"
       ]
     },
     "wiki member update": {
       "agent_summary": "更新指定知识库已有成员的角色",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "成员当前权限或目标角色未确认时不要修改；新增或移除成员应使用对应命令。"
+        "新加成员用 add；移除用 remove；OWNER 不可经此变更"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki member update --workspace \u003cworkspaceId\u003e --users uid1 --role EDITOR --format json",
-        "dws wiki member update --workspace \u003cworkspaceId\u003e --users uid1,uid2 --role READER --format json"
+        "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1 --role EDITOR --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "更新指定知识库已有成员的角色",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "更新指定知识库已有成员的角色",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -826,21 +834,21 @@
         },
         "avoid_when": {
           "value": [
-            "成员当前权限或目标角色未确认时不要修改；新增或移除成员应使用对应命令。"
+            "新加成员用 add；移除用 remove；OWNER 不可经此变更"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "成员当前权限或目标角色未确认时不要修改；新增或移除成员应使用对应命令。"
+                "新加成员用 add；移除用 remove；OWNER 不可经此变更"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -874,23 +882,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki member update --workspace \u003cworkspaceId\u003e --users uid1 --role EDITOR --format json",
-            "dws wiki member update --workspace \u003cworkspaceId\u003e --users uid1,uid2 --role READER --format json"
+            "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1 --role EDITOR --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki member update --workspace \u003cworkspaceId\u003e --users uid1 --role EDITOR --format json",
-                "dws wiki member update --workspace \u003cworkspaceId\u003e --users uid1,uid2 --role READER --format json"
+                "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1 --role EDITOR --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -946,17 +952,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -976,21 +982,21 @@
         },
         "use_when": {
           "value": [
-            "需要更新指定知识库已有成员的角色时"
+            "调整知识库成员角色（如升为 EDITOR/MANAGER）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要更新指定知识库已有成员的角色时"
+                "调整知识库成员角色（如升为 EDITOR/MANAGER）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -1010,41 +1016,43 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.update_member",
+        "live-mcp:dws schema wiki.update_member",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.update_member"
       ],
       "use_when": [
-        "需要更新指定知识库已有成员的角色时"
+        "调整知识库成员角色（如升为 EDITOR/MANAGER）时"
       ]
     },
     "wiki node copy": {
       "agent_summary": "将知识库中的节点复制到指定位置",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要迁移原节点而非保留副本时改用移动命令；目标位置未确认时不要复制。"
+        "跨产品/默认文档空间复制优先 dws drive copy",
+        "要移动不留副本用 node move"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json",
         "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "将知识库中的节点复制到指定位置",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "将知识库中的节点复制到指定位置",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1072,21 +1080,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要迁移原节点而非保留副本时改用移动命令；目标位置未确认时不要复制。"
+            "跨产品/默认文档空间复制优先 dws drive copy",
+            "要移动不留副本用 node move"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要迁移原节点而非保留副本时改用移动命令；目标位置未确认时不要复制。"
+                "跨产品/默认文档空间复制优先 dws drive copy",
+                "要移动不留副本用 node move"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1120,23 +1130,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json",
             "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json",
                 "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1200,17 +1208,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1230,21 +1238,21 @@
         },
         "use_when": {
           "value": [
-            "需要将知识库中的节点复制到指定位置时"
+            "在知识库上下文内复制节点到同库某文件夹（需 --workspace + --node）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要将知识库中的节点复制到指定位置时"
+                "在知识库上下文内复制节点到同库某文件夹（需 --workspace + --node）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -1264,19 +1272,23 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_copy",
+        "live-mcp:dws schema doc.copy_document",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.node_copy"
       ],
       "use_when": [
-        "需要将知识库中的节点复制到指定位置时"
+        "在知识库上下文内复制节点到同库某文件夹（需 --workspace + --node）时"
       ]
     },
     "wiki node create": {
       "agent_summary": "在指定知识库中创建文档、文件夹或其他类型的节点",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只需查询节点，或知识库、父节点、节点类型与名称未确认时不要创建。"
+        "要带初始 Markdown 的文字文档可用 doc create",
+        "钉盘普通文件夹用 drive mkdir（无需 workspace）",
+        "type 不要用 asheet，在线表格用 axls"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -1288,17 +1300,17 @@
       "field_provenance": {
         "agent_summary": {
           "value": "在指定知识库中创建文档、文件夹或其他类型的节点",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "在指定知识库中创建文档、文件夹或其他类型的节点",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1326,21 +1338,25 @@
         },
         "avoid_when": {
           "value": [
-            "只需查询节点，或知识库、父节点、节点类型与名称未确认时不要创建。"
+            "要带初始 Markdown 的文字文档可用 doc create",
+            "钉盘普通文件夹用 drive mkdir（无需 workspace）",
+            "type 不要用 asheet，在线表格用 axls"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "只需查询节点，或知识库、父节点、节点类型与名称未确认时不要创建。"
+                "要带初始 Markdown 的文字文档可用 doc create",
+                "钉盘普通文件夹用 drive mkdir（无需 workspace）",
+                "type 不要用 asheet，在线表格用 axls"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1377,20 +1393,20 @@
             "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"新文档\" --format json",
             "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"方案目录\" --type folder --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
                 "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"新文档\" --format json",
                 "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"方案目录\" --type folder --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1454,17 +1470,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1484,21 +1500,21 @@
         },
         "use_when": {
           "value": [
-            "需要在指定知识库中创建文档、文件夹或其他类型的节点时"
+            "在知识库内创建空节点：adoc/axls/appt/adraw/amind/able/folder（必须 --workspace）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要在指定知识库中创建文档、文件夹或其他类型的节点时"
+                "在知识库内创建空节点：adoc/axls/appt/adraw/amind/able/folder（必须 --workspace）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -1518,21 +1534,24 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.create_file",
+        "live-mcp:dws schema doc.create_file",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.create_file"
       ],
       "use_when": [
-        "需要在指定知识库中创建文档、文件夹或其他类型的节点时"
+        "在知识库内创建空节点：adoc/axls/appt/adraw/amind/able/folder（必须 --workspace）时"
       ]
     },
     "wiki node delete": {
       "agent_summary": "将知识库中的节点移入回收站",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "未明确要求移入回收站、节点不确定或仍需保留知识库节点时不要删除。"
+        "删整个知识库用 space delete",
+        "未确认或 node 不明时不要删"
       ],
       "confirmation": "user_required",
       "effect": "destructive",
@@ -1543,17 +1562,17 @@
       "field_provenance": {
         "agent_summary": {
           "value": "将知识库中的节点移入回收站",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "将知识库中的节点移入回收站",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1581,21 +1600,23 @@
         },
         "avoid_when": {
           "value": [
-            "未明确要求移入回收站、节点不确定或仍需保留知识库节点时不要删除。"
+            "删整个知识库用 space delete",
+            "未确认或 node 不明时不要删"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "未明确要求移入回收站、节点不确定或仍需保留知识库节点时不要删除。"
+                "删整个知识库用 space delete",
+                "未确认或 node 不明时不要删"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1647,19 +1668,19 @@
           "value": [
             "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
                 "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1723,17 +1744,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             },
             {
               "value": true,
@@ -1768,21 +1789,21 @@
         },
         "use_when": {
           "value": [
-            "需要将知识库中的节点移入回收站时"
+            "用户确认后删除知识库内节点（移入回收站；需 --workspace 校验权限）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要将知识库中的节点移入回收站时"
+                "用户确认后删除知识库内节点（移入回收站；需 --workspace 校验权限）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -1802,19 +1823,22 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.delete_document",
+        "live-mcp:dws schema doc.delete_document",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.delete_document"
       ],
       "use_when": [
-        "需要将知识库中的节点移入回收站时"
+        "用户确认后删除知识库内节点（移入回收站；需 --workspace 校验权限）时"
       ]
     },
     "wiki node list": {
       "agent_summary": "列出指定知识库下的直接子节点（文档、文件夹、表格等）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要按关键词检索节点时使用 wiki node search；需要读取在线文档正文时使用 doc read"
+        "库内关键词搜索用 node search；全局搜用 drive search",
+        "读文档内容拿到 nodeId 后用 doc read"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -1826,17 +1850,17 @@
       "field_provenance": {
         "agent_summary": {
           "value": "列出指定知识库下的直接子节点（文档、文件夹、表格等）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "列出指定知识库下的直接子节点（文档、文件夹、表格等）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1864,21 +1888,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要按关键词检索节点时使用 wiki node search；需要读取在线文档正文时使用 doc read"
+            "库内关键词搜索用 node search；全局搜用 drive search",
+            "读文档内容拿到 nodeId 后用 doc read"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要按关键词检索节点时使用 wiki node search；需要读取在线文档正文时使用 doc read"
+                "库内关键词搜索用 node search；全局搜用 drive search",
+                "读文档内容拿到 nodeId 后用 doc read"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1915,20 +1941,20 @@
             "dws wiki node list --workspace \u003cworkspaceId\u003e --format json",
             "dws wiki node list --workspace \u003cworkspaceId\u003e --folder \u003cparentNodeId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
                 "dws wiki node list --workspace \u003cworkspaceId\u003e --format json",
                 "dws wiki node list --workspace \u003cworkspaceId\u003e --folder \u003cparentNodeId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -1992,17 +2018,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2022,21 +2048,21 @@
         },
         "use_when": {
           "value": [
-            "需要浏览指定知识库或文件夹的直接子节点时"
+            "在已知 workspace 下浏览知识库根目录或某文件夹子节点时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要浏览指定知识库或文件夹的直接子节点时"
+                "在已知 workspace 下浏览知识库根目录或某文件夹子节点时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -2056,42 +2082,43 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.list_nodes",
+        "live-mcp:dws schema doc.list_nodes",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.list_nodes"
       ],
       "use_when": [
-        "需要浏览指定知识库或文件夹的直接子节点时"
+        "在已知 workspace 下浏览知识库根目录或某文件夹子节点时"
       ]
     },
     "wiki node move": {
       "agent_summary": "将知识库中的节点移动到指定位置",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要在原位置保留副本时改用复制命令；目标位置未确认时不要移动。"
+        "要保留副本用 node copy / drive copy"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
-        "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
+        "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "将知识库中的节点移动到指定位置",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "将知识库中的节点移动到指定位置",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2119,21 +2146,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要在原位置保留副本时改用复制命令；目标位置未确认时不要移动。"
+            "要保留副本用 node copy / drive copy"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要在原位置保留副本时改用复制命令；目标位置未确认时不要移动。"
+                "要保留副本用 node copy / drive copy"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2167,23 +2194,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
-            "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
+            "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
-                "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
+                "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2247,17 +2272,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2277,21 +2302,21 @@
         },
         "use_when": {
           "value": [
-            "需要将知识库中的节点移动到指定位置时"
+            "在知识库内移动节点到目标文件夹时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要将知识库中的节点移动到指定位置时"
+                "在知识库内移动节点到目标文件夹时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -2311,41 +2336,43 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_move",
+        "live-mcp:dws schema doc.move_document",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.node_move"
       ],
       "use_when": [
-        "需要将知识库中的节点移动到指定位置时"
+        "在知识库内移动节点到目标文件夹时"
       ]
     },
     "wiki node search": {
       "agent_summary": "在指定知识库内搜索文档/文件夹/表格等节点",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要逐层浏览目录时使用 wiki node list；需要全局跨空间搜索时使用 drive search"
+        "全局/钉盘搜索用 drive search；浏览目录用 node list"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"产品方案\" --format json",
-        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"设计\" --extensions adoc,asheet --format json"
+        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"方案\" --format json",
+        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"周报\" --extensions adoc --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "在指定知识库内搜索文档/文件夹/表格等节点",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "在指定知识库内搜索文档/文件夹/表格等节点",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2373,21 +2400,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要逐层浏览目录时使用 wiki node list；需要全局跨空间搜索时使用 drive search"
+            "全局/钉盘搜索用 drive search；浏览目录用 node list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要逐层浏览目录时使用 wiki node list；需要全局跨空间搜索时使用 drive search"
+                "全局/钉盘搜索用 drive search；浏览目录用 node list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2421,23 +2448,23 @@
         },
         "examples": {
           "value": [
-            "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"产品方案\" --format json",
-            "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"设计\" --extensions adoc,asheet --format json"
+            "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"方案\" --format json",
+            "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"周报\" --extensions adoc --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"产品方案\" --format json",
-                "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"设计\" --extensions adoc,asheet --format json"
+                "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"方案\" --format json",
+                "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"周报\" --extensions adoc --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2501,17 +2528,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2531,21 +2558,21 @@
         },
         "use_when": {
           "value": [
-            "已知 workspace，需要在该知识库内按关键词搜索节点时"
+            "在指定知识库内按关键词搜节点（可 --extensions）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "已知 workspace，需要在该知识库内按关键词搜索节点时"
+                "在指定知识库内按关键词搜节点（可 --extensions）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -2565,20 +2592,22 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_search",
+        "live-mcp:dws schema doc.search_documents",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.node_search"
       ],
       "use_when": [
-        "已知 workspace，需要在该知识库内按关键词搜索节点时"
+        "在指定知识库内按关键词搜节点（可 --extensions）时"
       ]
     },
     "wiki space create": {
       "agent_summary": "创建一个新的钉钉文档知识库（WikiSpace）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "只需查看现有知识库，或名称、可见范围等创建信息未确认时不要创建。"
+        "在已有知识库内建文档/文件夹用 node create，不要反复 create space"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -2590,17 +2619,17 @@
       "field_provenance": {
         "agent_summary": {
           "value": "创建一个新的钉钉文档知识库（WikiSpace）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "创建一个新的钉钉文档知识库（WikiSpace）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2628,21 +2657,21 @@
         },
         "avoid_when": {
           "value": [
-            "只需查看现有知识库，或名称、可见范围等创建信息未确认时不要创建。"
+            "在已有知识库内建文档/文件夹用 node create，不要反复 create space"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "只需查看现有知识库，或名称、可见范围等创建信息未确认时不要创建。"
+                "在已有知识库内建文档/文件夹用 node create，不要反复 create space"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2679,20 +2708,20 @@
             "dws wiki space create --name \"产品文档库\" --format json",
             "dws wiki space create --name \"技术方案\" --desc \"团队技术方案归档\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
                 "dws wiki space create --name \"产品文档库\" --format json",
                 "dws wiki space create --name \"技术方案\" --desc \"团队技术方案归档\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2748,17 +2777,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2778,21 +2807,21 @@
         },
         "use_when": {
           "value": [
-            "需要创建一个新的钉钉文档知识库（WikiSpace）时"
+            "用户要新建一个知识库容器时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要创建一个新的钉钉文档知识库（WikiSpace）时"
+                "用户要新建一个知识库容器时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -2812,41 +2841,43 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.create_wikiSpace",
+        "live-mcp:dws schema wiki.create_wikiSpace",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.create_wikiSpace"
       ],
       "use_when": [
-        "需要创建一个新的钉钉文档知识库（WikiSpace）时"
+        "用户要新建一个知识库容器时"
       ]
     },
     "wiki space delete": {
       "agent_summary": "将指定知识库移入回收站",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "用户未明确删除整个知识库，或知识库身份和影响范围未确认时不要执行。"
+        "只删库内某个节点用 wiki node delete",
+        "未确认或只要看详情用 space get"
       ],
       "confirmation": "user_required",
       "effect": "destructive",
       "effect_source": "agent-hint",
       "examples": [
-        "dws wiki space delete --workspace \u003cworkspaceId\u003e --format json",
-        "dws wiki space delete --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\" --format json"
+        "dws wiki space delete --workspace \u003cworkspaceId\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "将指定知识库移入回收站",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "将指定知识库移入回收站",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2874,21 +2905,23 @@
         },
         "avoid_when": {
           "value": [
-            "用户未明确删除整个知识库，或知识库身份和影响范围未确认时不要执行。"
+            "只删库内某个节点用 wiki node delete",
+            "未确认或只要看详情用 space get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "用户未明确删除整个知识库，或知识库身份和影响范围未确认时不要执行。"
+                "只删库内某个节点用 wiki node delete",
+                "未确认或只要看详情用 space get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -2938,23 +2971,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki space delete --workspace \u003cworkspaceId\u003e --format json",
-            "dws wiki space delete --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\" --format json"
+            "dws wiki space delete --workspace \u003cworkspaceId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki space delete --workspace \u003cworkspaceId\u003e --format json",
-                "dws wiki space delete --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\" --format json"
+                "dws wiki space delete --workspace \u003cworkspaceId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3010,17 +3041,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             },
             {
               "value": true,
@@ -3055,21 +3086,21 @@
         },
         "use_when": {
           "value": [
-            "需要将指定知识库移入回收站时"
+            "用户明确要求删除整个知识库（移入回收站），且已确认 workspace 与影响范围时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要将指定知识库移入回收站时"
+                "用户明确要求删除整个知识库（移入回收站），且已确认 workspace 与影响范围时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -3089,41 +3120,42 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.delete_wikiSpace",
+        "live-mcp:dws schema wiki.delete_wikiSpace",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.delete_wikiSpace"
       ],
       "use_when": [
-        "需要将指定知识库移入回收站时"
+        "用户明确要求删除整个知识库（移入回收站），且已确认 workspace 与影响范围时"
       ]
     },
     "wiki space get": {
       "agent_summary": "获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员数量等",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要列出或搜索知识库时使用 wiki space list/search；需要管理成员时使用 wiki member 命令"
+        "列知识库用 list；删库用 space delete（需确认）"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki space get --workspace \u003cworkspaceId\u003e --format json",
-        "dws wiki space get --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\" --format json"
+        "dws wiki space get --workspace \u003cworkspaceId\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员数量等",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员数量等",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3151,21 +3183,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要列出或搜索知识库时使用 wiki space list/search；需要管理成员时使用 wiki member 命令"
+            "列知识库用 list；删库用 space delete（需确认）"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要列出或搜索知识库时使用 wiki space list/search；需要管理成员时使用 wiki member 命令"
+                "列知识库用 list；删库用 space delete（需确认）"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3199,23 +3231,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki space get --workspace \u003cworkspaceId\u003e --format json",
-            "dws wiki space get --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\" --format json"
+            "dws wiki space get --workspace \u003cworkspaceId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki space get --workspace \u003cworkspaceId\u003e --format json",
-                "dws wiki space get --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\" --format json"
+                "dws wiki space get --workspace \u003cworkspaceId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3271,17 +3301,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3301,21 +3331,21 @@
         },
         "use_when": {
           "value": [
-            "已知 workspace，需要查看知识库详情时"
+            "查看指定知识库详情（名称、描述、创建者等）时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "已知 workspace，需要查看知识库详情时"
+                "查看指定知识库详情（名称、描述、创建者等）时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -3335,19 +3365,22 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.get_wikiSpace",
+        "live-mcp:dws schema wiki.get_wikiSpace",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.get_wikiSpace"
       ],
       "use_when": [
-        "已知 workspace，需要查看知识库详情时"
+        "查看指定知识库详情（名称、描述、创建者等）时"
       ]
     },
     "wiki space list": {
       "agent_summary": "列出当前用户可访问的知识库或钉盘空间",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要按关键词定位知识库时使用 wiki space search；需要查看单个知识库详情时使用 wiki space get"
+        "按名称搜知识库用 space search",
+        "看单个知识库详情用 space get"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -3359,17 +3392,17 @@
       "field_provenance": {
         "agent_summary": {
           "value": "列出当前用户可访问的知识库或钉盘空间",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "列出当前用户可访问的知识库或钉盘空间",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3397,21 +3430,23 @@
         },
         "avoid_when": {
           "value": [
-            "需要按关键词定位知识库时使用 wiki space search；需要查看单个知识库详情时使用 wiki space get"
+            "按名称搜知识库用 space search",
+            "看单个知识库详情用 space get"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要按关键词定位知识库时使用 wiki space search；需要查看单个知识库详情时使用 wiki space get"
+                "按名称搜知识库用 space search",
+                "看单个知识库详情用 space get"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3448,20 +3483,20 @@
             "dws wiki space list --format json",
             "dws wiki space list --type myWikiSpace --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
                 "dws wiki space list --format json",
                 "dws wiki space list --type myWikiSpace --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3543,17 +3578,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3573,21 +3608,23 @@
         },
         "use_when": {
           "value": [
-            "需要枚举当前用户可访问的知识库或钉盘空间时"
+            "列出组织知识库（默认）、我的文档(--type myWikiSpace)、钉盘企业空间(--type orgSpace)或我的文件(--type mySpace)时",
+            "需要 workspaceId / rootFolderId 作为后续 node/drive 操作前置时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要枚举当前用户可访问的知识库或钉盘空间时"
+                "列出组织知识库（默认）、我的文档(--type myWikiSpace)、钉盘企业空间(--type orgSpace)或我的文件(--type mySpace)时",
+                "需要 workspaceId / rootFolderId 作为后续 node/drive 操作前置时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -3604,43 +3641,45 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.list_wikiSpaces",
+        "live-mcp:dws schema wiki.list_wikiSpaces",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/drive.md",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.list_wikiSpaces"
       ],
       "use_when": [
-        "需要枚举当前用户可访问的知识库或钉盘空间时"
+        "列出组织知识库（默认）、我的文档(--type myWikiSpace)、钉盘企业空间(--type orgSpace)或我的文件(--type mySpace)时",
+        "需要 workspaceId / rootFolderId 作为后续 node/drive 操作前置时"
       ]
     },
     "wiki space search": {
       "agent_summary": "根据关键词搜索当前用户有权限访问的知识库列表，匹配知识库名称和描述",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
       "availability": "available",
       "avoid_when": [
-        "需要枚举全部可访问空间时使用 wiki space list；已知 workspace 时使用 wiki space get"
+        "直接列全部知识库用 space list；我的文档用 list --type myWikiSpace"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki space search --query \"产品文档\" --format json",
-        "dws wiki space search --query \"技术方案\" --limit 20 --format json"
+        "dws wiki space search --query \"产品文档\" --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "value": "根据关键词搜索当前用户有权限访问的知识库列表，匹配知识库名称和描述",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "根据关键词搜索当前用户有权限访问的知识库列表，匹配知识库名称和描述",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3668,21 +3707,21 @@
         },
         "avoid_when": {
           "value": [
-            "需要枚举全部可访问空间时使用 wiki space list；已知 workspace 时使用 wiki space get"
+            "直接列全部知识库用 space list；我的文档用 list --type myWikiSpace"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "需要枚举全部可访问空间时使用 wiki space list；已知 workspace 时使用 wiki space get"
+                "直接列全部知识库用 space list；我的文档用 list --type myWikiSpace"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3716,23 +3755,21 @@
         },
         "examples": {
           "value": [
-            "dws wiki space search --query \"产品文档\" --format json",
-            "dws wiki space search --query \"技术方案\" --limit 20 --format json"
+            "dws wiki space search --query \"产品文档\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "dws wiki space search --query \"产品文档\" --format json",
-                "dws wiki space search --query \"技术方案\" --limit 20 --format json"
+                "dws wiki space search --query \"产品文档\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3788,17 +3825,17 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -3818,21 +3855,21 @@
         },
         "use_when": {
           "value": [
-            "只知道名称或关键词，需要定位知识库时"
+            "按关键词搜索有权访问的组织知识库时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
-                "只知道名称或关键词，需要定位知识库时"
+                "按关键词搜索有权访问的组织知识库时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@human-feishu-style-2026-07-14-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -3852,11 +3889,13 @@
         "internal/cli/schema_hints/products/wiki.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.wiki.search_wikiSpaces",
+        "live-mcp:dws schema wiki.search_wikiSpaces",
         "skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.search_wikiSpaces"
       ],
       "use_when": [
-        "只知道名称或关键词，需要定位知识库时"
+        "按关键词搜索有权访问的组织知识库时"
       ]
     }
   }

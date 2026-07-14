@@ -67,33 +67,29 @@
     },
     "devdoc.search_open_platform_docs_rag": {
       "use_when": [
-        "命中结果多时翻页",
-        "开发文档/API 文档/接口文档",
-        "开发者问\"OAuth2 怎么接",
-        "查错误码 / 字段含义"
+        "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
       ],
       "avoid_when": [
-        "要“按关键词检索钉钉开放平台文档，只返回参考资料、参考资料链接和RA”请改用 dws devdoc article rag-pretest",
-        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search",
-        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search-open-platform"
+        "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+        "要执行开放平台应用配置变更时用 dev"
       ],
       "examples": [
-        "dws devdoc article search --query \"OAuth2 接入\"",
-        "dws devdoc article search --query \"消息卡片\" --page 2 --size 5"
+        "dws devdoc article search --query \"OAuth2 接入\" --format json",
+        "dws devdoc article search --query \"errcode 40078\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）"
     }
   },
   "products": {
     "devdoc": {
-      "agent_summary": "搜索钉钉开放平台开发文档并辅助排查 API 调用错误",
+      "agent_summary": "搜索钉钉开放平台开发文档与错误排查资料",
       "use_when": [
-        "搜索钉钉开放平台开发、API 或 OAuth2 接入文档",
-        "排查开放平台 API 调用错误、错误码、requestId 或 traceId"
+        "查询 OpenAPI、字段、错误码、SDK、鉴权或接入指南"
       ],
       "avoid_when": [
-        "搜索用户自己的钉钉文档时使用 drive search 或 wiki node search"
+        "搜索用户业务文档或读写业务数据时不要用 devdoc"
       ]
     }
   }

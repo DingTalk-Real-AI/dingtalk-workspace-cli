@@ -9,46 +9,42 @@
   "tools": {
     "sheet.add_dimension": {
       "use_when": [
-        "追加空行/追加空列/增加行数/增加列数/扩展表格/在末尾加空行；追加空行/空列"
+        "需要扩展表格维度（末尾加空行/空列）时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉表格的指定工作表末尾追加空行或空列。”所述变更时不要使用"
+        "追加带数据的行用 append；在中间插入用 insert-dimension"
       ],
       "examples": [
-        "dws sheet add-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --length 5",
-        "dws sheet add-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension COLUMNS --length 3"
+        "dws sheet add-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --length 5"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "在工作表末尾追加空行或空列。"
     },
     "sheet.append_rows": {
       "use_when": [
-        "3. 追加单行数据",
-        "4. 追加多行数据",
-        "插入行/插入列/在某行前插入/在某列前插入；在末尾追加",
-        "追加数据/添加行/在末尾加数据/新增记录；追加数据"
+        "要在已有数据下方追加记录行（带 values）时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉电子表格的指定工作表末尾追加若干行数据。”所述变更时不要使用"
+        "末尾追加空行/空列用 add-dimension；中间插入空行用 insert-dimension；覆盖已有区域用 range update/csv-put"
       ],
       "examples": [
-        "dws sheet append --node <NODE_ID> --sheet-id <SHEET_ID> --values '[[\"张三\",\"销售部\",50000]]'",
-        "dws sheet append --node <NODE_ID> --sheet-id \"Sheet1\" --values '[[\"李四\",\"市场部\",38000],[\"王五\",\"销售部\",62000]]'"
+        "dws sheet append --node <NODE_ID> --sheet-id <SHEET_ID> --values '[[\"张三\",\"销售部\",50000]]'"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "在工作表数据末尾追加带值的数据行。"
     },
     "sheet.batch_update": {
-      "agent_summary": "批量执行多个工作表写操作，其中可包含清除、删除等不可恢复子操作。",
+      "agent_summary": "批量打包多个写操作原子执行（可含清除/删除，需确认后加 --yes）。",
       "use_when": [
-        "用户明确要求将多个已审查的工作表写操作作为一个批次执行时。"
+        "用户明确要求把多个已审查写操作作为一批执行时"
       ],
       "avoid_when": [
-        "只需读取或预览、子操作未完整审查，或用户尚未确认可能的清除/删除影响时不要实际执行。"
+        "单操作请用对应原子命令；仅预览用 --dry-run，不要在未确认时加 --yes"
       ],
       "examples": [
-        "dws sheet batch-update --node <NODE_ID> --operations '[",
-        "dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]'"
+        "dws sheet batch-update --node <NODE_ID> --operations '[{\"toolName\":\"range clear\",\"input\":{\"sheet-id\":\"Sheet1\",\"range\":\"A1:B3\",\"type\":\"content\"}}]'"
       ],
       "effect": "write",
       "risk": "medium",
@@ -60,18 +56,15 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "sheet.chart_create": {
-      "agent_summary": "在钉钉电子表格的指定工作表中创建一个浮动图表",
+      "agent_summary": "创建浮动图表。",
       "use_when": [
-        "3. 创建柱形图",
-        "创建折线图",
-        "创建柱形图"
+        "需要在电子表格工作表上新建柱状/折线等浮动图表时"
       ],
       "avoid_when": [
-        "不需要在钉钉电子表格的指定工作表中创建一个浮动图表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "更新已有图表用 chart update；删除用 chart delete；AI 表格图表走 aitable"
       ],
       "examples": [
-        "dws sheet chart create --node NODE_ID --sheet-id SHEET_ID --properties '{",
-        "dws sheet chart create --node <NODE_ID> --sheet-id <SHEET_ID> --properties '{"
+        "dws sheet chart create --node NODE_ID --sheet-id SHEET_ID --properties '{\"chartType\":\"bar\",\"range\":\"A1:B10\"}'"
       ],
       "effect": "write",
       "risk": "medium",
@@ -83,12 +76,12 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "sheet.chart_delete": {
-      "agent_summary": "删除钉钉电子表格中指定的浮动图表。",
+      "agent_summary": "删除浮动图表（需确认后加 --yes）。",
       "use_when": [
-        "当用户需要删除钉钉电子表格中指定的浮动图表，并能提供命令所需的查询条件时使用。"
+        "用户明确要求删除某浮动图表时"
       ],
       "avoid_when": [
-        "当用户实际需要获取钉钉电子表格指定工作表中的浮动图表时，改用 dws sheet chart list。"
+        "列目录用 chart list"
       ],
       "examples": [
         "dws sheet chart delete --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID"
@@ -103,19 +96,15 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "sheet.chart_list": {
-      "agent_summary": "获取钉钉电子表格指定工作表中的浮动图表",
+      "agent_summary": "列出工作表浮动图表。",
       "use_when": [
-        "1. 获取现有配置",
-        "4. 验证创建结果",
-        "列出所有浮动图表",
-        "获取单个图表详情"
+        "需要枚举图表 ID 以便 update/delete 时"
       ],
       "avoid_when": [
-        "不需要获取钉钉电子表格指定工作表中的浮动图表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "创建用 chart create；AI 表格图表用 aitable chart"
       ],
       "examples": [
-        "dws sheet chart list --node NODE_ID --sheet-id SHEET_ID",
-        "dws sheet chart list --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID"
+        "dws sheet chart list --node <NODE_ID> --sheet-id <SHEET_ID>"
       ],
       "effect": "read",
       "risk": "low",
@@ -127,16 +116,15 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "sheet.chart_update": {
-      "agent_summary": "更新钉钉电子表格中指定浮动图表的配置",
+      "agent_summary": "更新浮动图表属性。",
       "use_when": [
-        "3. 整体回写"
+        "已知 chart-id，需要调整图表配置时"
       ],
       "avoid_when": [
-        "不需要更新钉钉电子表格中指定浮动图表的配置时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "新建用 create；删除用 delete"
       ],
       "examples": [
-        "dws sheet chart update --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID --properties '{",
-        "dws sheet chart update --node <NODE_ID> --sheet-id <SHEET_ID> --chart-id <CHART_ID> --properties '<完整修改后的 JSON>'"
+        "dws sheet chart update --node <NODE_ID> --sheet-id <SHEET_ID> --chart-id <CHART_ID> --properties '{\"title\":\"新标题\"}'"
       ],
       "effect": "write",
       "risk": "medium",
@@ -149,20 +137,13 @@
     },
     "sheet.clear_range": {
       "use_when": [
-        "删除行/删除列/删掉第几行/删掉某列/移除行/移除列；仅清空内容但保留行/列",
-        "清空/清除区域/擦除内容/清除格式；仅清除值",
-        "清空/清除区域/擦除内容/清除格式；仅清除格式",
-        "清空/清除区域/擦除内容/清除格式；全部清除",
-        "清空/清除区域/擦除内容/清除格式；清除区域",
-        "清空整片区域请改用 range clear"
+        "需要清空一片区域且保留行列占位时"
       ],
       "avoid_when": [
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-        "要“将源范围的数据复制到目标位置”请改用 dws sheet range copy-to"
+        "要物理删除行列用 delete-dimension；删整张工作表用 delete-sheet；单格写空可用 range update 但整片清除应优先本命令"
       ],
       "examples": [
-        "dws sheet range clear --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\""
+        "dws sheet range clear --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\" --type content"
       ],
       "interface_mode": "mcp",
       "availability": "available",
@@ -170,43 +151,36 @@
       "risk": "medium",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "清除指定范围的内容、格式或全部（需确认后加 --yes）。"
     },
     "sheet.copy_sheet": {
       "use_when": [
-        "只指定名称",
-        "复制工作表/拷贝工作表/克隆工作表/工作表副本；复制工作表",
-        "复制工作表/拷贝工作表/克隆工作表/工作表副本；复制并指定位置",
-        "复制工作表/拷贝工作表/克隆工作表/工作表副本；复制并指定名称",
-        "指定副本名称和位置",
-        "按默认位置复制"
+        "需要基于现有工作表创建完整副本时可选用，可指定副本名与位置"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“复制钉钉电子表格中的指定工作表，在同一表格中创建一个副本，可同时指定副本的目标位置。”所述变更时不要使用"
+        "只要新建空白工作表用 sheet new；跨文档复制请走文档/知识库复制能力，不要用本命令"
       ],
       "examples": [
-        "dws sheet copy --node <NODE_ID> --sheet-id <SHEET_ID>",
-        "dws sheet copy --node <NODE_ID> --sheet-id <SHEET_ID> --title \"销售副本\" --index 2"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
-    },
-    "sheet.create_cond_format": {
-      "use_when": [
-        "按条件高亮或设置格式规则"
-      ],
-      "avoid_when": [
-        "只设置静态样式用 sheet range set-style",
-        "更新已有条件格式用 sheet cond-format update",
-        "查看条件格式列表用 sheet cond-format list"
-      ],
-      "examples": [
-        "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A2:H100\"]' --condition '{\"formulaCondition\":{\"formula\":\"=$H2=\\\"是\\\"\"}}' --cell-style '{\"backgroundColor\":\"#FFECEC\"}'",
-        "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A2:H100\"]' --condition '{\"formulaCondition\":{\"formula\":\"=$A2>$B2\"}}' --cell-style '{\"backgroundColor\":\"#FFECEC\"}'"
+        "dws sheet copy --node <NODE_ID> --sheet-id <SHEET_ID> --title \"销售副本\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "创建条件格式规则",
+      "agent_summary": "在同一文档内复制工作表（含数据与格式）。"
+    },
+    "sheet.create_cond_format": {
+      "use_when": [
+        "需要按条件自动着色/标注单元格时"
+      ],
+      "avoid_when": [
+        "改已有规则用 update；删规则用 delete；普通样式刷用 set-style"
+      ],
+      "examples": [
+        "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A1:E10\"]' --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"80\"}}' --cell-style '{\"backgroundColor\":\"#FFEB3B\"}'"
+      ],
+      "interface_mode": "mcp",
+      "availability": "available",
+      "agent_summary": "创建条件格式规则。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -215,20 +189,17 @@
     },
     "sheet.create_filter": {
       "use_when": [
-        "需要在普通筛选范围上开启筛选"
+        "用户说筛选/过滤/只看某些行，且要影响所有协作者视图时创建全局筛选"
       ],
       "avoid_when": [
-        "管理筛选视图用 sheet filter-view create/update/list",
-        "更新筛选条件用 sheet filter update 或 clear-criteria",
-        "只查看筛选信息用 sheet filter get"
+        "个人化筛选视图用 filter-view create；已存在全局筛选时先 get 再 update；禁止删行来代替筛选"
       ],
       "examples": [
-        "dws sheet filter create --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:E100\"",
-        "dws sheet filter create --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:E100\" --criteria '[{\"column\":1,\"filterType\":\"values\",\"visibleValues\":[\"北京\",\"上海\"]}]'"
+        "dws sheet filter create --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:E100\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "为工作表创建基础筛选",
+      "agent_summary": "创建全局筛选（每表仅一个；range 须含表头）。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -237,20 +208,17 @@
     },
     "sheet.create_filter_view": {
       "use_when": [
-        "需要创建可保存的筛选视图"
+        "需要命名的个人化筛选视角且不影响其他协作者时"
       ],
       "avoid_when": [
-        "创建普通筛选用 sheet filter create",
-        "更新已有筛选视图用 sheet filter-view update",
-        "查看筛选视图列表用 sheet filter-view list"
+        "影响全员的全局筛选用 filter create；只改已有视图属性用 filter-view update"
       ],
       "examples": [
-        "dws sheet filter-view create --help",
-        "dws sheet filter-view create --node <NODE_ID> --sheet-id <SHEET_ID> --name \"我的视图\" --range \"A1:E10\""
+        "dws sheet filter-view create --node <NODE_ID> --sheet-id <SHEET_ID> --name \"销售筛选\" --range \"A1:E10\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "创建筛选视图",
+      "agent_summary": "创建个人筛选视图（可同时带 criteria）。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -259,18 +227,17 @@
     },
     "sheet.create_float_image": {
       "use_when": [
-        "再创建浮动图片",
-        "带偏移量"
+        "需要在单元格上方悬浮图片、不占用单元格内容时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉电子表格的指定工作表中插入一张浮动图片。”所述变更时不要使用"
+        "单元格内嵌图片用 write-image；更新/删除浮动图用 update/delete-float-image"
       ],
       "examples": [
-        "dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --src \"/core/api/resources/img/xxxx...\" --range A1 --width 400 --height 300",
-        "dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --src \"/core/api/resources/img/xxxx...\" --range B2 --width 200 --height 150 --offset-x 10 --offset-y 20"
+        "dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --src \"/core/api/resources/img/...\" --range A1 --width 400 --height 300"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建浮动图片（src 必须来自 media-upload 的 resourceUrl）。"
     },
     "sheet.create_pivot_table": {
       "interface_mode": "composite",
@@ -280,58 +247,63 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "non_idempotent",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "创建原生透视表。",
+      "use_when": [
+        "需要基于源数据区域创建透视表时"
+      ],
+      "avoid_when": [
+        "更新配置用 update；删除用 delete"
+      ],
+      "examples": [
+        "dws sheet pivot-table create --node NODE_ID --source \"'Sheet1'!A1:D100\" --properties '{\"rows\":[{\"field\":\"A\"}],\"values\":[{\"field\":\"D\",\"aggregation\":\"sum\"}]}'"
+      ]
     },
     "sheet.create_sheet": {
       "use_when": [
-        "1. 新建工作表",
-        "加工作表/新增Sheet；新建工作表"
+        "已有 axls 文档，需要新增一个工作表页签时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“新建工作表”所述变更时不要使用"
+        "要新建整份表格文档用 sheet create；复制已有工作表用 sheet copy；删除工作表用 sheet delete-sheet"
       ],
       "examples": [
-        "dws sheet new --node <NODE_ID> --name \"Sheet2\"",
-        "dws sheet new --node <NODE_ID> --name \"数据汇总\""
+        "dws sheet new --node <NODE_ID> --name \"Sheet2\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "在已有电子表格文档中新建工作表（Sheet 页签）。"
     },
     "sheet.create_workspace_sheet": {
       "use_when": [
-        "1. 创建表格文档 — 提取 nodeId",
-        "4. 完整流程: 创建表格 → 上传附件",
-        "4. 完整流程: 创建表格 → 写表头 → 写入图片",
-        "创建表格/新建电子表格；创建表格文档"
+        "需要新建一份钉钉在线电子表格文档（不是 AI 表格 Base，也不是本地 xlsx）时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建钉钉表格文档”所述变更时不要使用"
+        "要创建 AI 多维表 Base 用 aitable base create；只要在已有表格里加工作表用 sheet new；本地 xlsx 用 doc download"
       ],
       "examples": [
         "dws sheet create --name \"销售数据\"",
         "dws sheet create --name \"Q1 数据\" --folder <FOLDER_ID>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建钉钉在线电子表格文档（axls），返回 nodeId。"
     },
     "sheet.delete_cond_format": {
       "effect": "destructive",
       "risk": "high",
       "confirmation": "user_required",
       "use_when": [
-        "删除某条条件格式规则"
+        "用户明确要求删除某条条件格式规则时"
       ],
       "avoid_when": [
-        "只修改规则用 sheet cond-format update",
-        "删除普通筛选用 sheet filter delete",
-        "删除筛选视图用 sheet filter-view delete"
+        "只想改规则用 update；列目录用 list"
       ],
       "examples": [
-        "dws sheet cond-format delete --node <node> --rule-id <rule-id> --sheet-id <sheet-id>"
+        "dws sheet cond-format delete --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "删除条件格式规则",
+      "agent_summary": "删除条件格式规则（需确认后加 --yes）。",
       "idempotency": "unknown",
       "reviewed": true
     },
@@ -340,45 +312,35 @@
       "risk": "medium",
       "confirmation": "user_required",
       "use_when": [
-        "2. 从第 3 行开始删除 2 行",
-        "3. 从 A 列开始删除 1 列",
-        "4. 使用工作表前缀指定位置",
-        "从 A 列开始删除 1 列",
-        "从 AB 列开始删除 3 列",
-        "从第 3 行开始删除 2 行",
-        "使用工作表前缀（忽略 --sheet-id）",
-        "删除行/删除列/删掉第几行/删掉某列/移除行/移除列；删除行或列"
+        "用户明确要物理删除若干行/列时"
       ],
       "avoid_when": [
-        "用户未明确要求“在钉钉表格指定工作表中，从指定位置起删除若干连续的行或列。”、目标不清楚或尚未确认时不要使用"
+        "只清空内容保留占位用 range clear；移动行列用 move-dimension"
       ],
       "examples": [
-        "dws sheet delete-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --position \"3\" --length 2",
-        "dws sheet delete-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension COLUMNS --position \"A\" --length 1"
+        "dws sheet delete-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --position \"3\" --length 2"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "删除指定位置起的连续行或列（需确认后加 --yes）。"
     },
     "sheet.delete_dropdown_lists": {
       "effect": "write",
       "risk": "medium",
       "confirmation": "user_required",
       "use_when": [
-        "移除指定范围的下拉列表配置"
+        "需要移除下拉约束但保留单元格已有值时"
       ],
       "avoid_when": [
-        "只查询下拉配置用 sheet get-dropdown",
-        "修改下拉选项用 sheet set-dropdown",
-        "清空单元格内容用 sheet range clear"
+        "只改选项用 set-dropdown 覆盖；清单元格内容用 range clear"
       ],
       "examples": [
-        "dws sheet delete-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\"",
-        "dws sheet delete-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"B1:D10\""
+        "dws sheet delete-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "删除单元格下拉列表配置",
+      "agent_summary": "删除指定范围的下拉列表（需确认后加 --yes；不清除已填值）。",
       "idempotency": "unknown",
       "reviewed": true
     },
@@ -387,19 +349,17 @@
       "risk": "medium",
       "confirmation": "user_required",
       "use_when": [
-        "移除整张表的普通筛选配置"
+        "需要移除整张表的全局筛选及全部条件时"
       ],
       "avoid_when": [
-        "只清除某列条件用 sheet filter clear-criteria",
-        "删除筛选视图用 sheet filter-view delete",
-        "仅查看筛选信息用 sheet filter get"
+        "只清某列条件用 filter clear-criteria；删筛选视图用 filter-view delete"
       ],
       "examples": [
-        "dws sheet filter delete --node <node> --sheet-id <sheet-id>"
+        "dws sheet filter delete --node <NODE_ID> --sheet-id <SHEET_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "删除工作表基础筛选",
+      "agent_summary": "删除全局筛选（需确认后加 --yes）。",
       "idempotency": "unknown",
       "reviewed": true
     },
@@ -408,20 +368,17 @@
       "risk": "medium",
       "confirmation": "user_required",
       "use_when": [
-        "删除一个已保存的筛选视图"
+        "用户明确要删除某个筛选视图及其全部条件时"
       ],
       "avoid_when": [
-        "只删除某列条件用 sheet filter-view delete-criteria",
-        "删除基础筛选用 sheet filter delete",
-        "查看筛选视图详情用 sheet filter-view info"
+        "只清某列条件用 delete-criteria；删全局筛选用 filter delete"
       ],
       "examples": [
-        "dws sheet filter-view delete --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>",
-        "dws sheet filter-view delete --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> -f json"
+        "dws sheet filter-view delete --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "删除筛选视图",
+      "agent_summary": "删除整个筛选视图（需确认后加 --yes）。",
       "idempotency": "unknown",
       "reviewed": true
     },
@@ -430,67 +387,70 @@
       "risk": "medium",
       "confirmation": "user_required",
       "use_when": [
-        "删除浮动图片/移除浮动图片；删除浮动图片"
+        "用户明确要求删除某张浮动图片时"
       ],
       "avoid_when": [
-        "用户未明确要求“删除钉钉电子表格中指定的浮动图片。”、目标不清楚或尚未确认时不要使用"
+        "删除单元格内嵌图需改写单元格；列目录用 list-float-images"
       ],
       "examples": [
         "dws sheet delete-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "删除浮动图片（需确认后加 --yes）。"
     },
     "sheet.delete_pivot_table": {
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
-      "agent_summary": "永久删除指定在线表格中的一张透视表。",
+      "agent_summary": "删除透视表（需确认后加 --yes）。",
       "use_when": [
-        "用户明确要求并确认永久删除已知工作表中的指定透视表时。"
+        "用户明确要求永久删除指定透视表时"
       ],
       "avoid_when": [
-        "只需更新或读取透视表、目标 ID 不明确，或用户尚未确认永久删除时不要使用。"
+        "只更新配置用 update"
       ],
       "effect": "write",
       "risk": "medium",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true
+      "reviewed": true,
+      "examples": [
+        "dws sheet pivot-table delete --node NODE_ID --sheet-id SHEET_ID --pivot-table-id PT_ID"
+      ]
     },
     "sheet.delete_sheet": {
       "effect": "write",
       "risk": "medium",
       "confirmation": "user_required",
       "use_when": [
-        "删除工作表/移除工作表/删掉这个Sheet；删除工作表"
+        "用户明确要求永久删除某个工作表页签，且已确认目标 sheetId 时"
       ],
       "avoid_when": [
-        "用户未明确要求“删除钉钉电子表格中的指定工作表”、目标不清楚或尚未确认时不要使用"
+        "只想清空单元格内容用 range clear；删行列用 delete-dimension；隐藏工作表用 update --hidden"
       ],
       "examples": [
         "dws sheet delete-sheet --node <NODE_ID> --sheet-id <SHEET_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "删除指定工作表（不可逆，需确认后加 --yes）。"
     },
     "sheet.fill_range": {
       "use_when": [
-        "自动填充/填充序列/向下填充/拖拽填充/序列递增；自动填充"
+        "需要像拖拽填充一样把源范围扩展到目标范围时"
       ],
       "avoid_when": [
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-        "要“将源范围的数据复制到目标位置”请改用 dws sheet range copy-to"
+        "直接写死值用 range update/csv-put；区域复制到另一位置用 range copy-to"
       ],
       "examples": [
-        "dws sheet range fill --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:A5\" --target-range \"A6:A20\"",
-        "dws sheet range fill --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:A5\" --target-range \"A6:A20\" --fill-type copy"
+        "dws sheet range fill --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:A5\" --target-range \"A6:A20\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "按源区域对目标区域做自动填充（复制或序列）。"
     },
     "sheet.filter_clear_criteria": {
       "interface_ref": {
@@ -498,20 +458,17 @@
         "rpc_name": "clear_filter_criteria"
       },
       "use_when": [
-        "仅清除普通筛选的某列筛选条件"
+        "只需取消某列过滤、保留全局筛选框架时"
       ],
       "avoid_when": [
-        "删除整个基础筛选用 sheet filter delete",
-        "更新筛选条件用 sheet filter update",
-        "筛选视图条件用 sheet filter-view delete-criteria"
+        "删除整个全局筛选用 filter delete；筛选视图列条件用 filter-view delete-criteria"
       ],
       "examples": [
-        "dws sheet filter clear-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --column 1",
-        "dws sheet filter clear-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --column 0"
+        "dws sheet filter clear-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --column 1"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "清除基础筛选中某一列条件",
+      "agent_summary": "清除全局筛选中某一列条件（不删筛选本身）。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -527,20 +484,17 @@
         "rpc_name": "clear_filter_view_criteria"
       },
       "use_when": [
-        "清除筛选视图中某列的筛选条件"
+        "只需取消筛选视图中某列过滤时"
       ],
       "avoid_when": [
-        "删除整个筛选视图用 sheet filter-view delete",
-        "基础筛选清除列条件用 sheet filter clear-criteria",
-        "更新条件用 sheet filter-view update-criteria"
+        "删除整个筛选视图用 filter-view delete"
       ],
       "examples": [
-        "dws sheet filter-view delete-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0",
-        "dws sheet filter-view delete-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 2"
+        "dws sheet filter-view delete-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "删除筛选视图单列筛选条件",
+      "agent_summary": "清除筛选视图某列条件（需确认后加 --yes；保留视图）。",
       "idempotency": "unknown",
       "reviewed": true
     },
@@ -550,20 +504,17 @@
         "rpc_name": "get_filter_views"
       },
       "use_when": [
-        "查看筛选视图某一列的筛选条件"
+        "修改某列条件前先查看该列当前 filterType/operators 时"
       ],
       "avoid_when": [
-        "列出所有列条件用 sheet filter-view list-criteria",
-        "更新单列条件用 sheet filter-view update-criteria",
-        "删除单列条件用 sheet filter-view delete-criteria"
+        "全部列条件用 list-criteria"
       ],
       "examples": [
-        "dws sheet filter-view get-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0",
-        "dws sheet filter-view get-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 2"
+        "dws sheet filter-view get-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "查看筛选视图单列条件",
+      "agent_summary": "获取筛选视图指定列的条件详情。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -576,19 +527,17 @@
         "rpc_name": "get_filter_views"
       },
       "use_when": [
-        "已知道 filterViewId，需要查看名称、范围和配置"
+        "已知 filterViewId，需要查看名称/范围/全部条件时"
       ],
       "avoid_when": [
-        "列出所有筛选视图用 sheet filter-view list",
-        "查看列条件用 sheet filter-view list-criteria",
-        "更新筛选视图用 sheet filter-view update"
+        "列目录用 list；列条件清单用 list-criteria；全局筛选用 filter get"
       ],
       "examples": [
         "dws sheet filter-view info --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "查看单个筛选视图详情",
+      "agent_summary": "获取单个筛选视图完整配置（含 criteria）。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -601,19 +550,17 @@
         "rpc_name": "get_filter_views"
       },
       "use_when": [
-        "查看筛选视图下每列筛选条件"
+        "管理条件前需要看当前视图有哪些列条件时"
       ],
       "avoid_when": [
-        "查看单列条件用 sheet filter-view get-criteria",
-        "更新条件用 sheet filter-view update-criteria",
-        "基础筛选条件用 sheet filter get/update"
+        "单列详情用 get-criteria；视图属性用 info"
       ],
       "examples": [
         "dws sheet filter-view list-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "列出筛选视图所有列条件",
+      "agent_summary": "列出筛选视图已设置的全部列条件。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -626,21 +573,18 @@
         "rpc_name": "set_filter_view_criteria"
       },
       "use_when": [
-        "修改筛选视图中某一列的筛选规则"
+        "只要精确配置某一列的 values/condition/color 条件时"
       ],
       "avoid_when": [
-        "更新基础筛选条件用 sheet filter update",
-        "删除筛选视图列条件用 sheet filter-view delete-criteria",
-        "更新视图名称/范围用 sheet filter-view update"
+        "批量多列或改名改范围用 filter-view update；清除该列用 delete-criteria"
       ],
       "examples": [
-        "dws sheet filter-view update-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0 --filter-criteria '{\"filterType\":\"values\",\"visibleValues\":[\"销售部\",\"市场部\"]}'",
-        "dws sheet filter-view update-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 2 --filter-criteria '{\"filterType\":\"condition\",\"conditions\":[{\"operator\":\"greater\",\"value\":\"100\"}]}'"
+        "dws sheet filter-view update-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0 --filter-criteria '{\"filterType\":\"values\",\"visibleValues\":[\"销售部\"]}'"
       ],
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
-      "agent_summary": "更新筛选视图单列条件",
+      "agent_summary": "设置或更新筛选视图的单列条件。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -649,66 +593,45 @@
     },
     "sheet.find_cells": {
       "use_when": [
-        "2. 基本搜索 — 在指定工作表中查找文本",
-        "3. 在指定范围内搜索",
-        "4. 正则搜索（不区分大小写）",
-        "5. 精确匹配整个单元格",
-        "6. 搜索公式文本",
-        "在指定范围内搜索",
-        "基本搜索",
-        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"帮我找一下表格里的XXX",
-        "搜索/查找/找单元格/搜内容/精确搜索/精确匹配/完全匹配/全字匹配；搜索公式",
-        "搜索/查找/找单元格/搜内容/精确搜索/精确匹配/完全匹配/全字匹配；搜索单元格",
-        "搜索/查找/找单元格/搜内容/精确搜索/精确匹配/完全匹配/全字匹配；正则搜索",
-        "搜索/查找/找单元格/搜内容/精确搜索/精确匹配/完全匹配/全字匹配；精确匹配（只匹配完全等于的，不匹配包含的）",
-        "搜索公式文本",
-        "正则表达式搜索（不区分大小写）",
-        "精确匹配整个单元格内容"
+        "要查找包含某文本或公式的单元格位置时，必须用服务端 find"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“在钉钉电子表格的指定工作表中查找匹配指定文本的所有单元格，返回匹配的单元格地址列表。”"
+        "不要用 range read 全量下载后客户端过滤；要替换文本用 replace"
       ],
       "examples": [
-        "dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find \"销售额\"",
-        "dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find \"合计\" --range \"A1:D100\""
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
-    },
-    "sheet.get_all_sheets": {
-      "use_when": [
-        "1. 先查 sheetId",
-        "1. 获取工作表列表",
-        "2. 查看工作表列表 — 提取 sheetId",
-        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"这个表格有哪些工作表",
-        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；extension=axls",
-        "看工作表/有哪些工作表/表格结构；列出工作表"
-      ],
-      "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取全部工作表列表”"
-      ],
-      "examples": [
-        "dws sheet list --node <NODE_ID>",
-        "dws sheet list --node \"https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>\""
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
-    },
-    "sheet.get_cond_format": {
-      "use_when": [
-        "查看工作表已有条件格式规则"
-      ],
-      "avoid_when": [
-        "创建条件格式用 sheet cond-format create",
-        "更新条件格式用 sheet cond-format update",
-        "删除条件格式用 sheet cond-format delete"
-      ],
-      "examples": [
-        "dws sheet cond-format list --node NODE_ID --sheet-id SHEET_ID"
+        "dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find \"销售额\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "查看条件格式规则列表或详情",
+      "agent_summary": "在工作表中搜索单元格（支持精确匹配/正则/搜公式）。"
+    },
+    "sheet.get_all_sheets": {
+      "use_when": [
+        "需要拿到 sheetId/工作表名称，作为后续读写的前置步骤时"
+      ],
+      "avoid_when": [
+        "要看单个工作表行列边界与合并区用 sheet info；读单元格内容用 sheet range read"
+      ],
+      "examples": [
+        "dws sheet list --node <NODE_ID>"
+      ],
+      "interface_mode": "mcp",
+      "availability": "available",
+      "agent_summary": "列出电子表格文档内全部工作表的 ID 与名称。"
+    },
+    "sheet.get_cond_format": {
+      "use_when": [
+        "查看或修改前需要枚举条件格式规则 ID 时"
+      ],
+      "avoid_when": [
+        "创建/更新/删除分别用 cond-format create/update/delete"
+      ],
+      "examples": [
+        "dws sheet cond-format list --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "interface_mode": "mcp",
+      "availability": "available",
+      "agent_summary": "列出工作表条件格式规则。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -717,20 +640,17 @@
     },
     "sheet.get_dropdown_lists": {
       "use_when": [
-        "查看某个范围是否配置了下拉列表"
+        "修改或核对下拉选项前，先读取现有 dataValidations 时"
       ],
       "avoid_when": [
-        "设置下拉列表用 sheet set-dropdown",
-        "删除下拉列表用 sheet delete-dropdown",
-        "读取单元格值用 sheet range read"
+        "设置下拉用 set-dropdown；删除下拉用 delete-dropdown；判空看 hasDropdown"
       ],
       "examples": [
-        "dws sheet get-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\"",
-        "dws sheet get-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1\""
+        "dws sheet get-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "查询单元格下拉列表配置",
+      "agent_summary": "查询指定范围的下拉列表配置。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -739,20 +659,17 @@
     },
     "sheet.get_filter": {
       "use_when": [
-        "查看普通筛选是否存在及范围"
+        "要查看当前全局筛选范围与列条件，或创建前确认是否已存在时"
       ],
       "avoid_when": [
-        "查看筛选视图列表用 sheet filter-view list",
-        "查看筛选视图条件用 sheet filter-view get-criteria",
-        "创建或更新筛选用 sheet filter create/update"
+        "个人筛选视图用 filter-view list/info；不要与 filter-view 混淆"
       ],
       "examples": [
-        "dws sheet filter get --node <NODE_ID> --sheet-id <SHEET_ID>",
-        "dws sheet filter get --node \"https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>\" --sheet-id \"Sheet1\""
+        "dws sheet filter get --node <NODE_ID> --sheet-id <SHEET_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "查看工作表基础筛选信息",
+      "agent_summary": "获取工作表全局筛选信息。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -761,20 +678,17 @@
     },
     "sheet.get_filter_views": {
       "use_when": [
-        "查看有哪些筛选视图"
+        "用户明确说筛选视图，需要枚举 filterViewId/名称/范围时"
       ],
       "avoid_when": [
-        "查看单个筛选视图详情用 sheet filter-view info",
-        "查看列条件用 sheet filter-view list-criteria",
-        "创建/更新筛选视图用 create/update"
+        "全局筛选用 filter get；单视图详情用 filter-view info"
       ],
       "examples": [
-        "dws sheet filter-view list --node <NODE_ID> --sheet-id <SHEET_ID>",
-        "dws sheet filter-view list --node \"https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>\" --sheet-id \"Sheet1\""
+        "dws sheet filter-view list --node <NODE_ID> --sheet-id <SHEET_ID>"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "列出工作表筛选视图",
+      "agent_summary": "列出工作表全部筛选视图概要。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -783,33 +697,31 @@
     },
     "sheet.get_float_image": {
       "use_when": [
-        "查看浮动图片/有哪些浮动图片/浮动图片列表；查看某个浮动图片详情"
+        "已知 float-image-id，需要查看锚点/尺寸/src 时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取钉钉电子表格中指定浮动图片的详细信息。”"
+        "列出全部浮动图用 list-float-images"
       ],
       "examples": [
         "dws sheet get-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取单张浮动图片详情。"
     },
     "sheet.get_range_as_csv": {
       "use_when": [
-        "需要 CSV 文本而非 JSON 二维数组时读取 range"
+        "需要把区域导出为 CSV 文本便于管道处理时"
       ],
       "avoid_when": [
-        "需要 JSON/结构化值用 sheet range read",
-        "写入 CSV 用 sheet csv-put",
-        "写入普通二维数组用 sheet range update"
+        "需要结构化 per-cell（样式/超链接/公式）用 range read；导出整份 xlsx 用 sheet export"
       ],
       "examples": [
-        "dws sheet csv-get --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:E5\"",
-        "dws sheet csv-get --node <NODE_ID>"
+        "dws sheet csv-get --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D20\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "以 CSV 格式读取指定区域数据",
+      "agent_summary": "以 CSV 文本读取指定区域。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -817,18 +729,15 @@
       "reviewed": true
     },
     "sheet.group_dimension": {
-      "agent_summary": "对钉钉表格指定工作表中的连续整行或整列创建分组",
+      "agent_summary": "为连续整行或整列创建分组（可展开/折叠）。",
       "use_when": [
-        "创建行分组/创建列分组/折叠几行/折叠几列/取消行列分组；创建分组",
-        "创建行分组/创建列分组/折叠几行/折叠几列/展开行列分组/取消行列分组；创建分组",
-        "创建行分组/创建列分组/折叠几行/折叠几列/展开行列分组/取消行列分组；创建并折叠"
+        "需要按整行范围如 3:7 或整列如 C:F 创建分组时"
       ],
       "avoid_when": [
-        "不需要对钉钉表格指定工作表中的连续整行或整列创建分组时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "取消分组用 ungroup-dimension；隐藏行列用 update-dimension --hidden；range 不能是 A1:C5 矩形"
       ],
       "examples": [
-        "dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\"",
-        "dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"C:F\" --group-state fold"
+        "dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\""
       ],
       "effect": "write",
       "risk": "medium",
@@ -847,145 +756,128 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "隐藏工作表网格线。",
+      "use_when": [
+        "需要关闭指定工作表的网格线显示时"
+      ],
+      "avoid_when": [
+        "要显示网格线用 sheet show-gridline"
+      ],
+      "examples": [
+        "dws sheet hide-gridline --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ]
     },
     "sheet.info": {
       "use_when": [
-        "2. 查看工作表详情（确认列结构）",
-        "2. 查看工作表详情（行列数、最后非空位置、mergedRanges 等）",
-        "2. 查看工作表详情（行列数、最后非空位置等）",
-        "看工作表/有哪些工作表/表格结构；工作表详情",
-        "读数据/看表格内容；需要查看合并单元格 / 表头合并结构"
+        "需要确认工作表尺寸、nonEmptyRange 或合并结构，以便规划读取范围时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定工作表详情”"
+        "只要工作表列表用 sheet list；读单元格值用 sheet range read"
       ],
       "examples": [
-        "dws sheet info --node <NODE_ID>",
         "dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取指定工作表详情（行列数、非空范围、合并区等）。"
     },
     "sheet.insert_dimension": {
       "use_when": [
-        "2. 在第 3 行之前插入 2 行",
-        "3. 在 A 列之前插入 1 列",
-        "4. 使用工作表前缀指定位置",
-        "使用工作表前缀（忽略 --sheet-id）",
-        "在 A 列之前插入 1 列",
-        "在 AB 列之前插入 3 列",
-        "在第 3 行之前插入 2 行",
-        "插入行/插入列/在某行前插入/在某列前插入；插入行或列",
-        "查看具体命令的完整参数说明"
+        "要在某行号/列字母之前插入若干空行或空列时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉表格指定工作表的指定位置之前（before）插入若干空行或空列。”所述变更时不要使用"
+        "末尾追加空行空列用 add-dimension；末尾追加数据用 append；删除行列用 delete-dimension"
       ],
       "examples": [
-        "dws sheet insert-dimension --help",
         "dws sheet insert-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --position \"3\" --length 2"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "在指定位置之前插入空行或空列。"
     },
     "sheet.list_float_images": {
       "use_when": [
-        "查看浮动图片/有哪些浮动图片/浮动图片列表；列出所有浮动图片"
+        "需要枚举浮动图 ID 以便后续 get/update/delete 时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出钉钉电子表格指定工作表中的所有浮动图片。”"
+        "查单张详情用 get-float-image"
       ],
       "examples": [
         "dws sheet list-float-images --node <NODE_ID> --sheet-id <SHEET_ID>"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "列出工作表全部浮动图片。"
     },
     "sheet.list_pivot_tables": {
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "列出或获取透视表信息。",
+      "use_when": [
+        "需要查看工作表上有哪些透视表或某个透视表详情时"
+      ],
+      "avoid_when": [
+        "创建/更新/删除分别用 pivot-table create/update/delete"
+      ],
+      "examples": [
+        "dws sheet pivot-table list --node NODE_ID --sheet-id SHEET_ID"
+      ]
     },
     "sheet.media_upload": {
       "use_when": [
-        "1. 基本用法: 上传本地文件到表格",
-        "2. 自定义附件显示名称 (--name 指定上传后在表格中显示的名称)",
-        "3. 指定 MIME 类型 (文件扩展名无法推断时)",
-        "上传附件/传文件到表格/上传文件到表格/上传到表格；上传附件",
-        "上传附件/传文件到表格/上传文件到表格/上传到表格；用户指定了上传后的名称",
-        "上传附件到表格",
-        "先上传图片获取 resourceUrl",
-        "提取 nodeId 后:",
-        "浮动图片/悬浮图片/在表格上放一张图/加个浮动的图；创建浮动图片"
+        "需要把本地文件上传为表格资源，或为 create-float-image 准备 src 时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“上传附件到表格”所述变更时不要使用"
+        "要把图片写入单元格内容用 write-image；AI 表格附件用 aitable attachment upload"
       ],
       "examples": [
-        "dws sheet media-upload --node <NODE_ID> --file ./report.pdf",
-        "dws sheet media-upload --node <NODE_ID> --file ./data.bin --name \"数据文件.dat\" --mime-type application/octet-stream"
+        "dws sheet media-upload --node <NODE_ID> --file ./report.pdf"
       ],
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref"
+      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+      "agent_summary": "上传附件到表格并返回 resourceUrl（浮动图片前置步骤）。"
     },
     "sheet.merge_cells": {
       "use_when": [
-        "2. 合并所有单元格（默认 mergeAll）",
-        "3. 按行合并",
-        "4. 按列合并",
-        "使用带工作表前缀的范围（忽略 --sheet-id）",
-        "合并单元格/合并/合并区域/按行合并/按列合并；合并所有单元格",
-        "合并单元格/合并/合并区域/按行合并/按列合并；按列合并",
-        "合并单元格/合并/合并区域/按行合并/按列合并；按行合并",
-        "合并所有单元格（默认）",
-        "按列合并",
-        "按行合并"
+        "需要把一片区域合并为一个或多个合并单元格时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将钉钉电子表格中指定工作表的指定区域内的单元格合并为一个或多个合并区域。”所述变更时不要使用"
+        "取消合并用 unmerge-cells；合并会丢弃非左上角值"
       ],
       "examples": [
-        "dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\"",
-        "dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:C3\" --merge-type mergeRows"
+        "dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "合并指定区域单元格（默认 mergeAll，可按行/列合并）。"
     },
     "sheet.move_dimension": {
       "use_when": [
-        "将 B~C 列移动到 E 列的位置",
-        "将 B~C 列（共 2 列）移动到 D 列的位置",
-        "将第 2 行移动到第 5 行的位置",
-        "将第 2 行移动到第 5 行的位置（索引从 0 开始）",
-        "将第 2~4 行移动到第 1 行之前",
-        "将第 2~4 行（共 3 行）移动到第 1 行的位置（最前面）",
-        "移动行/移动列/调整行顺序/调整列顺序/行列拖拽/把第N行移到第M行；移动行或列"
+        "要调整行/列物理顺序时，使用原子 move-dimension"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉表格的指定工作表中，将指定范围的行或列移动到目标位置。”所述变更时不要使用"
+        "不要用读出再写回模拟移动；移动矩形单元格区域用 range move-to"
       ],
       "examples": [
-        "dws sheet move-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index 1 --end-index 1 --destination-index 4",
-        "dws sheet move-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index 1 --end-index 3 --destination-index 0"
+        "dws sheet move-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index 1 --end-index 1 --destination-index 4"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "移动连续行或列到目标索引（保留格式）。"
     },
     "sheet.range_batch_clear": {
-      "agent_summary": "批量清除多个区域的内容或格式",
+      "agent_summary": "批量清除多个区域（原子事务，需确认后加 --yes）。",
       "use_when": [
-        "一次清除多个 range 的值、格式或全部内容"
+        "需要一次清除多个互不相关的区域，并希望同批提交时"
       ],
       "avoid_when": [
-        "只清除一个区域用 sheet range clear",
-        "删除整张工作表用 sheet delete-sheet",
-        "写入/更新值用 sheet range update"
+        "只清一个区域用 range clear；混有写入/合并等操作用 batch-update"
       ],
       "examples": [
-        "dws sheet range batch-clear --node <NODE_ID> --ranges '[\"Sheet1!A1:B3\",\"Sheet2!C1:D5\"]'",
-        "dws sheet range batch-clear --node <NODE_ID> --ranges '[\"Sheet1!A1:Z1000\"]' --type all"
+        "dws sheet range batch-clear --node NODE_ID --ranges '[\"Sheet1!A1:B3\",\"Sheet2!C1:D5\"]'"
       ],
       "effect": "write",
       "risk": "medium",
@@ -1002,21 +894,18 @@
         "rpc_name": "update_range"
       },
       "use_when": [
-        "一次更新多个 range 的样式或格式"
+        "多个区域样式不同、希望用配置文件一次提交时"
       ],
       "avoid_when": [
-        "只设置一个区域样式用 sheet range set-style",
-        "写入单元格值用 sheet range update",
-        "清空多个区域用 sheet range batch-clear"
+        "单一区域统一样式用 range set-style"
       ],
       "examples": [
-        "dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json",
-        "dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json --continue-on-error"
+        "dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json"
       ],
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "The CLI reads a local batch file and performs multiple sheet/update_range calls with local continue-on-error control; the workflow has no single direct MCP interface.",
-      "agent_summary": "批量设置多个区域的单元格样式或格式",
+      "agent_summary": "按 JSON 配置文件顺序批量设置多个区域样式。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1029,20 +918,17 @@
         "rpc_name": "copy_range"
       },
       "use_when": [
-        "把一个 range 的数据复制到另一个位置"
+        "需要把一块区域原样复制到另一位置（可跨工作表）时"
       ],
       "avoid_when": [
-        "移动并清空源区域用 sheet range move-to",
-        "写入新值用 sheet range update",
-        "只读取源数据用 sheet range read"
+        "移动而不是复制用 range move-to；自动填充序列用 range fill"
       ],
       "examples": [
-        "dws sheet range copy-to --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:C5\" --target-range \"D1\"",
-        "dws sheet range copy-to --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:C5\" --target-range \"A1\" --target-sheet-id \"Sheet2\""
+        "dws sheet range copy-to --node NODE_ID --sheet-id SHEET_ID --source-range \"A1:C5\" --target-range \"E1\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "复制源区域到目标区域",
+      "agent_summary": "将源范围复制到目标位置。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1055,20 +941,17 @@
         "rpc_name": "move_range"
       },
       "use_when": [
-        "把一个 range 移动到目标位置"
+        "需要把区域从源位置挪到目标位置且源处应腾空时"
       ],
       "avoid_when": [
-        "只复制不清空源区域用 sheet range copy-to",
-        "只读取数据用 sheet range read",
-        "清空区域用 sheet range clear"
+        "只需复制保留源用 range copy-to；移动整行/整列用 move-dimension"
       ],
       "examples": [
-        "dws sheet range move-to --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:C5\" --target-range \"D1\"",
-        "dws sheet range move-to --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:C5\" --target-range \"A1\" --target-sheet-id \"Sheet2\""
+        "dws sheet range move-to --node NODE_ID --sheet-id SHEET_ID --source-range \"A1:C5\" --target-range \"E1\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "移动源区域到目标区域并清空源区域",
+      "agent_summary": "将源范围移动到目标位置（需确认后加 --yes）。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "user_required",
@@ -1077,21 +960,18 @@
     },
     "sheet.range_read": {
       "use_when": [
-        "读取某个 range 的数据或值"
+        "需要查看 axls 工作表内容或指定 A1 范围时；大表应限制 range"
       ],
       "avoid_when": [
-        "写入值用 sheet range update",
-        "清空内容/格式用 sheet range clear 或 batch-clear",
-        "读取 CSV 格式用 sheet csv-get"
+        "搜索关键字用 sheet find；纯 CSV 文本导出区域用 sheet csv-get；本地 xlsx 用 doc download；AI 表格记录用 aitable record query"
       ],
       "examples": [
-        "dws sheet range read --node <NODE_ID>",
-        "dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID>"
+        "dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D10\""
       ],
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: the CLI calls sheet/get_cell_infos, which is absent from the pinned MCP metadata snapshot; the incompatible sheet/get_range contract must not be advertised.",
-      "agent_summary": "读取工作表指定区域的单元格值",
+      "agent_summary": "读取工作表指定范围的单元格数据（可取格式化值/原始值/公式）。",
       "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
@@ -1104,20 +984,17 @@
         "rpc_name": "update_range"
       },
       "use_when": [
-        "设置一个 range 的字体、颜色、对齐、数字格式等样式"
+        "需要批量刷样式或数字格式（百分比/货币/日期）时"
       ],
       "avoid_when": [
-        "写入单元格值用 sheet range update",
-        "批量设置多个区域样式用 sheet range batch-set-style",
-        "条件高亮用 sheet cond-format create/update"
+        "写单元格值/公式用 range update；多区域不同样式配置用 range batch-set-style"
       ],
       "examples": [
-        "dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\" --bg-color \"#FFF2CC\" --font-weight bold --h-align center",
-        "dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range \"C1:C5\" --bg-colors-json '[[\"#FF0000\"],[\"#00FF00\"],[\"#0000FF\"],[\"#FFFF00\"],[\"#FF00FF\"]]'"
+        "dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range \"B2:B10\" --number-format \"¥#,##0.00\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "设置单个区域的单元格样式",
+      "agent_summary": "为指定范围统一设置背景、字体、对齐、换行或数字格式。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1126,20 +1003,17 @@
     },
     "sheet.range_update": {
       "use_when": [
-        "向指定 range 写入二维数组值或超链接"
+        "需要写入少量单元格、公式或超链接，且能提供 sheetId 与精确 range 时"
       ],
       "avoid_when": [
-        "只读数据用 sheet range read",
-        "只改样式用 sheet range set-style 或 batch-set-style",
-        "清空区域用 sheet range clear"
+        "大批量纯值写入优先 sheet csv-put；末尾追加行用 append；全局替换文本用 replace；只改样式用 range set-style；清整片区域用 range clear"
       ],
       "examples": [
-        "dws sheet range update --help",
-        "dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B2\" --values '[[{\"type\":\"text\",\"text\":\"姓名\"},{\"type\":\"text\",\"text\":\"分数\"}],[{\"type\":\"text\",\"text\":\"张三\"},{\"type\":\"text\",\"text\":\"90\"}]]'"
+        "dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1\" --values '[[{\"type\":\"text\",\"text\":\"张三\"}]]'"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "写入或更新工作表指定区域的单元格值/超链接",
+      "agent_summary": "更新指定区域单元格（值/公式/超链接等 object 协议）；少量或含公式时使用。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1148,37 +1022,31 @@
     },
     "sheet.replace_all": {
       "use_when": [
-        "替换/查找替换/全局替换/批量替换/把A替换成B/把所有的X改成Y；删除匹配内容",
-        "替换/查找替换/全局替换/批量替换/把A替换成B/把所有的X改成Y；查找替换",
-        "替换/查找替换/全局替换/批量替换/把A替换成B/把所有的X改成Y；正则替换",
-        "替换/查找替换/全局替换/批量替换/把A替换成B/把所有的X改成Y；精确匹配后替换（只替换内容完全等于的单元格）"
+        "要把工作表中匹配文本批量替换为另一文本时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉表格的指定工作表中，全局查找并替换文本内容。”所述变更时不要使用"
+        "不要用 find + range update 组合模拟；只查找不替换用 find"
       ],
       "examples": [
-        "dws sheet replace --node <NODE_ID> --sheet-id <SHEET_ID> --find \"旧文本\" --replacement \"新文本\"",
-        "dws sheet replace --node <NODE_ID> --sheet-id <SHEET_ID> --find \"待处理\" --replacement \"已完成\" --match-entire-cell"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
-    },
-    "sheet.set_dropdown_lists": {
-      "use_when": [
-        "给指定范围配置下拉选项"
-      ],
-      "avoid_when": [
-        "只查询下拉配置用 sheet get-dropdown",
-        "删除下拉配置用 sheet delete-dropdown",
-        "设置条件格式用 sheet cond-format create"
-      ],
-      "examples": [
-        "dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"},{\"value\":\"选项3\"}]'",
-        "dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"B2:B50\" --options '[{\"value\":\"高\",\"color\":\"#ff0000\"},{\"value\":\"中\",\"color\":\"#ffaa00\"},{\"value\":\"低\",\"color\":\"#00ff00\"}]' --multi-select"
+        "dws sheet replace --node <NODE_ID> --sheet-id <SHEET_ID> --find \"旧文本\" --replacement \"新文本\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "设置单元格下拉列表配置",
+      "agent_summary": "全局查找替换文本（服务端原子操作）。"
+    },
+    "sheet.set_dropdown_lists": {
+      "use_when": [
+        "需要给单元格配置可选值下拉约束时"
+      ],
+      "avoid_when": [
+        "查看已有下拉用 get-dropdown；移除下拉用 delete-dropdown"
+      ],
+      "examples": [
+        "dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"}]'"
+      ],
+      "interface_mode": "mcp",
+      "availability": "available",
+      "agent_summary": "为指定范围设置下拉列表（可多选、可带颜色）。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1187,20 +1055,17 @@
     },
     "sheet.set_range_from_csv": {
       "use_when": [
-        "把 CSV 文本导入到 sheet 指定位置"
+        "写入纯值且超过约 5 行/20 格，或数据来自 CSV/表格文本时优先使用"
       ],
       "avoid_when": [
-        "读取 CSV 用 sheet csv-get",
-        "写入 JSON 二维数组用 sheet range update",
-        "只改样式用 sheet range set-style"
+        "需要公式/超链接/富文本用 range update；在末尾追加数据行用 append；覆盖已有数据需 --allow-overwrite"
       ],
       "examples": [
-        "dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 --csv $'name,score\\nAlice,95\\nBob,87'",
-        "dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell B2 --csv @data.csv --allow-overwrite"
+        "dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 --csv @data.csv --allow-overwrite"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "将 CSV 文本写入工作表指定起点",
+      "agent_summary": "将 CSV 纯值写入起始单元格（可自动扩容；大批量纯值首选）。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1215,24 +1080,31 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "显示工作表网格线。",
+      "use_when": [
+        "需要打开指定工作表的网格线显示时"
+      ],
+      "avoid_when": [
+        "要隐藏网格线用 sheet hide-gridline；改冻结或隐藏工作表用 sheet update"
+      ],
+      "examples": [
+        "dws sheet show-gridline --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ]
     },
     "sheet.sort_filter": {
       "use_when": [
-        "在普通筛选范围内设置排序"
+        "已有全局筛选，需要按某列升/降序排列筛选范围内数据时"
       ],
       "avoid_when": [
-        "筛选视图排序/条件请使用 sheet filter-view update",
-        "仅更新筛选条件用 sheet filter update",
-        "读取数据排序结果用 sheet range read"
+        "无筛选取区域排序用 range sort；排序不可撤销"
       ],
       "examples": [
-        "dws sheet filter sort --node <NODE_ID> --sheet-id <SHEET_ID> --column 0 --ascending",
-        "dws sheet filter sort --node <NODE_ID> --sheet-id <SHEET_ID> --column 2 --ascending=false"
+        "dws sheet filter sort --node <NODE_ID> --sheet-id <SHEET_ID> --column 0 --ascending"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "对基础筛选范围内数据排序",
+      "agent_summary": "在全局筛选范围内按列排序（会改物理顺序）。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1241,62 +1113,72 @@
     },
     "sheet.sort_range": {
       "use_when": [
-        "排序/给数据排序/按某列排序/升序/降序；区域排序"
+        "需要按某列对一块矩形区域排序，且不依赖全局筛选时"
       ],
       "avoid_when": [
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear",
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style"
+        "已有全局筛选时按筛选范围排序用 filter sort；不要用读出再写回模拟排序"
       ],
       "examples": [
-        "dws sheet range sort --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D10\" --sort-keys '[{\"column\":\"A\",\"ascending\":true}]'",
-        "dws sheet range sort --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D10\" --sort-keys '[{\"column\":\"A\",\"ascending\":true},{\"column\":\"C\",\"ascending\":false}]' --has-header"
+        "dws sheet range sort --node NODE_ID --sheet-id SHEET_ID --range A1:D10 --sort-keys '[{\"column\":\"A\",\"ascending\":true}]'"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "对指定区域排序（改变物理行序）。"
     },
     "sheet.submit_export_job": {
       "use_when": [
-        "--output 为目录时，自动按下载链接中的文件名保存",
-        "仅导出，返回 downloadUrl（链接有时效性，请尽快下载）",
-        "场景 A：仅获取下载链接（命令内部自动完成提交+轮询，最终返回 downloadUrl）",
-        "场景 B：导出并自动下载为本地文件",
-        "场景 C：下载到目录，自动按链接推断文件名",
-        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；导出表格",
-        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；需要落盘到本地",
-        "导出并自动下载为本地文件",
-        "把这个在线表格导出为 xlsx 文件；在线表格格式转换"
+        "需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“用于将钉钉在线表格导出为 xlsx。”"
+        "禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"
       ],
       "examples": [
-        "dws sheet export --node <NODE_ID>",
-        "dws sheet export --node \"https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>\""
+        "dws sheet export --node <NODE_ID> --output ./report.xlsx"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。"
     },
     "sheet.table_get": {
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "读取结构化 table 区域数据。",
+      "use_when": [
+        "工作表内存在结构化 table，需要按 table 语义读取时"
+      ],
+      "avoid_when": [
+        "普通单元格区域用 range read；AI 表格记录用 aitable record query"
+      ],
+      "examples": [
+        "dws sheet table-get --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ]
     },
     "sheet.table_put": {
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
-    },
-    "sheet.template_apply": {
-      "agent_summary": "使用指定模板创建新表格文档",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "写入一个或多个结构化 table。",
       "use_when": [
-        "使用指定模板创建新表格文档"
+        "需要按结构化 table 协议写入表数据时"
       ],
       "avoid_when": [
-        "不需要使用指定模板创建新表格文档时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "普通区域写入用 range update/csv-put；AI 表格记录写入用 aitable record create"
       ],
       "examples": [
-        "dws sheet template apply --help"
+        "dws sheet table-put --node NODE_ID --sheets '[{\"name\":\"Sheet1\",\"columns\":[\"name\"],\"data\":[[\"Alice\"]]}]'"
+      ]
+    },
+    "sheet.template_apply": {
+      "agent_summary": "应用模板创建新的电子表格文档。",
+      "use_when": [
+        "已有 templateId，需要据此生成新表格文档时"
+      ],
+      "avoid_when": [
+        "空白新建用 sheet create；先搜模板用 search/list"
+      ],
+      "examples": [
+        "dws sheet template apply --template-id <TEMPLATE_ID> --name \"新表格\""
       ],
       "effect": "write",
       "risk": "medium",
@@ -1308,15 +1190,15 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "sheet.template_list": {
-      "agent_summary": "获取当前用户可用的表格模板列表，支持按来源筛选",
+      "agent_summary": "分页列出可用表格模板。",
       "use_when": [
-        "获取当前用户可用的表格模板列表，支持按来源筛选"
+        "浏览可用表格模板以便 apply 时"
       ],
       "avoid_when": [
-        "不需要获取当前用户可用的表格模板列表，支持按来源筛选时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "按关键词搜索用 template search；应用模板建新文档用 template apply"
       ],
       "examples": [
-        "dws sheet template list --help"
+        "dws sheet template list --limit 20"
       ],
       "effect": "read",
       "risk": "low",
@@ -1328,15 +1210,15 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "sheet.template_search": {
-      "agent_summary": "根据关键词搜索表格模板",
+      "agent_summary": "按关键词搜索表格模板。",
       "use_when": [
-        "根据关键词搜索表格模板"
+        "用户说找某个主题的表格模板时"
       ],
       "avoid_when": [
-        "不需要根据关键词搜索表格模板时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "无关键词浏览用 template list；应用用 template apply"
       ],
       "examples": [
-        "dws sheet template search --help"
+        "dws sheet template search --query \"销售\""
       ],
       "effect": "read",
       "risk": "low",
@@ -1348,17 +1230,15 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
     },
     "sheet.ungroup_dimension": {
-      "agent_summary": "取消钉钉表格指定工作表中的连续整行或整列分组",
+      "agent_summary": "取消指定连续行/列分组。",
       "use_when": [
-        "创建行分组/创建列分组/折叠几行/折叠几列/取消行列分组；取消分组",
-        "创建行分组/创建列分组/折叠几行/折叠几列/展开行列分组/取消行列分组；取消分组"
+        "需要解除已有行/列分组时"
       ],
       "avoid_when": [
-        "不需要取消钉钉表格指定工作表中的连续整行或整列分组时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "创建分组用 group-dimension"
       ],
       "examples": [
-        "dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\"",
-        "dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"C:F\""
+        "dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\""
       ],
       "effect": "write",
       "risk": "medium",
@@ -1371,33 +1251,31 @@
     },
     "sheet.unmerge_range": {
       "use_when": [
-        "取消合并/拆分单元格/还原合并；取消合并单元格"
+        "需要拆分已合并区域时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“取消钉钉表格指定工作表中指定范围内的合并单元格。”所述变更时不要使用"
+        "创建合并用 merge-cells"
       ],
       "examples": [
         "dws sheet unmerge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D5\""
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "取消指定范围内的合并单元格。"
     },
     "sheet.update_cond_format": {
       "use_when": [
-        "修改已有条件格式规则"
+        "已知规则 ID，需要调整条件或样式时"
       ],
       "avoid_when": [
-        "新建规则用 sheet cond-format create",
-        "删除规则用 sheet cond-format delete",
-        "静态设置样式用 sheet range set-style"
+        "新建用 create；删除用 delete"
       ],
       "examples": [
-        "dws sheet cond-format update --node <NODE_ID> --sheet-id <SHEET_ID> --rule-id <RULE_ID> --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"90\"}}'",
-        "dws sheet cond-format update --node <NODE_ID> --sheet-id <SHEET_ID> --rule-id <RULE_ID> --cell-style '{\"backgroundColor\":\"#C8E6C9\",\"fontColor\":\"#1B5E20\"}'"
+        "dws sheet cond-format update --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"90\"}}'"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "更新条件格式规则",
+      "agent_summary": "更新已有条件格式规则。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1406,45 +1284,31 @@
     },
     "sheet.update_dimension": {
       "use_when": [
-        "2. 隐藏第 3~4 行",
-        "3. 显示 A~B 列",
-        "4. 设置第 1~5 行行高为 40px",
-        "5. 设置 C 列列宽为 200px 并隐藏",
-        "使用工作表前缀（忽略 --sheet-id）",
-        "显示 A~B 列",
-        "设置 C 列列宽为 200px 并隐藏",
-        "设置第 1~5 行行高为 40px",
-        "隐藏第 3~4 行",
-        "隐藏行/隐藏列/显示行/显示列/设置行高/设置列宽/调整行高/调整列宽/行列属性；同时修改尺寸与显隐",
-        "隐藏行/隐藏列/显示行/显示列/设置行高/设置列宽/调整行高/调整列宽/行列属性；设置行高/列宽",
-        "隐藏行/隐藏列/显示行/显示列/设置行高/设置列宽/调整行高/调整列宽/行列属性；隐藏/显示行或列"
+        "要隐藏/显示行或列，或设置行高/列宽时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量更新钉钉表格指定工作表中连续多行/多列的属性，支持设置显隐状态（hidden）与行高/列宽（pixelSize）。”所述变更时不要使用"
+        "插入/删除行列用 insert/delete-dimension；移动行列用 move-dimension"
       ],
       "examples": [
-        "dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index \"3\" --length 2 --hidden",
-        "dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension COLUMNS --start-index \"A\" --length 2 --hidden=false"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
-    },
-    "sheet.update_filter": {
-      "use_when": [
-        "批量设置普通筛选的筛选条件"
-      ],
-      "avoid_when": [
-        "管理筛选视图条件用 sheet filter-view update-criteria",
-        "仅排序筛选范围用 sheet filter sort",
-        "清除某列筛选条件用 sheet filter clear-criteria"
-      ],
-      "examples": [
-        "dws sheet filter update --node <NODE_ID> --sheet-id <SHEET_ID> --criteria '[{\"column\":0,\"filterType\":\"values\",\"visibleValues\":[\"已完成\",\"进行中\"]},{\"column\":2,\"filterType\":\"condition\",\"conditions\":[{\"operator\":\"greater\",\"value\":\"50\"}]}]'",
-        "dws sheet filter update --node <NODE_ID> --sheet-id <SHEET_ID> --criteria '[{\"column\":1,\"filterType\":\"color\",\"backgroundColor\":\"#FF0000\"}]'"
+        "dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index \"1\" --length 5 --pixel-size 40"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "更新工作表基础筛选条件",
+      "agent_summary": "更新连续行/列的显隐或行高/列宽。"
+    },
+    "sheet.update_filter": {
+      "use_when": [
+        "全局筛选已存在，需要设置或替换若干列条件时"
+      ],
+      "avoid_when": [
+        "尚无筛选时先 create；只清一列用 clear-criteria；筛选视图条件用 filter-view update-criteria"
+      ],
+      "examples": [
+        "dws sheet filter update --node <NODE_ID> --sheet-id <SHEET_ID> --criteria '[{\"column\":0,\"filterType\":\"values\",\"visibleValues\":[\"已完成\"]}]'"
+      ],
+      "interface_mode": "mcp",
+      "availability": "available",
+      "agent_summary": "批量更新全局筛选多列条件。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1453,20 +1317,17 @@
     },
     "sheet.update_filter_view": {
       "use_when": [
-        "修改筛选视图名称、范围或整体配置"
+        "需要改筛选视图名、扩大范围或批量改多列条件时"
       ],
       "avoid_when": [
-        "只改某列筛选条件用 sheet filter-view update-criteria",
-        "创建新筛选视图用 sheet filter-view create",
-        "删除筛选视图用 sheet filter-view delete"
+        "只改单列条件用 update-criteria；删整个视图用 delete"
       ],
       "examples": [
-        "dws sheet filter-view update --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --name \"新名称\"",
-        "dws sheet filter-view update --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --range \"A1:F20\""
+        "dws sheet filter-view update --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --name \"新名称\""
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "agent_summary": "更新筛选视图属性和范围",
+      "agent_summary": "更新筛选视图名称、范围和/或多列条件。",
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
@@ -1475,69 +1336,60 @@
     },
     "sheet.update_float_image": {
       "use_when": [
-        "替换图片（需先 media-upload 新图片获取 resourceUrl）",
-        "移动浮动图片/调整浮动图片大小/修改浮动图片/更新浮动图片；更新浮动图片属性",
-        "移动浮动图片到新位置",
-        "调整尺寸"
+        "需要移动/缩放/替换已有浮动图片时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新钉钉电子表格中指定浮动图片的属性。”所述变更时不要使用"
+        "创建用 create-float-image；删除用 delete-float-image"
       ],
       "examples": [
-        "dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --range C5",
-        "dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --width 600 --height 400"
+        "dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --range C5"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "更新浮动图片锚点、尺寸、偏移或资源路径。"
     },
     "sheet.update_pivot_table": {
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "更新透视表配置。",
+      "use_when": [
+        "已知透视表 ID，需要调整行/列/值字段配置时"
+      ],
+      "avoid_when": [
+        "新建用 create；删除用 delete"
+      ],
+      "examples": [
+        "dws sheet pivot-table update --node NODE_ID --sheet-id SHEET_ID --pivot-table-id PIVOT_TABLE_ID --properties '{\"show_subtotals\":false}'"
+      ]
     },
     "sheet.update_sheet": {
       "use_when": [
-        "修改工作表名称/重命名工作表/移动工作表位置/隐藏工作表/显示工作表/冻结行/冻结列/取消冻结/更新工作表属性；冻结行列",
-        "修改工作表名称/重命名工作表/移动工作表位置/隐藏工作表/显示工作表/冻结行/冻结列/取消冻结/更新工作表属性；取消冻结",
-        "修改工作表名称/重命名工作表/移动工作表位置/隐藏工作表/显示工作表/冻结行/冻结列/取消冻结/更新工作表属性；显示工作表",
-        "修改工作表名称/重命名工作表/移动工作表位置/隐藏工作表/显示工作表/冻结行/冻结列/取消冻结/更新工作表属性；更新工作表属性",
-        "修改工作表名称/重命名工作表/移动工作表位置/隐藏工作表/显示工作表/冻结行/冻结列/取消冻结/更新工作表属性；移动工作表位置",
-        "修改工作表名称/重命名工作表/移动工作表位置/隐藏工作表/显示工作表/冻结行/冻结列/取消冻结/更新工作表属性；重命名工作表",
-        "修改工作表名称/重命名工作表/移动工作表位置/隐藏工作表/显示工作表/冻结行/冻结列/取消冻结/更新工作表属性；隐藏工作表",
-        "取消冻结",
-        "改名 + 调整冻结",
-        "显示工作表",
-        "移动工作表到第一个位置",
-        "隐藏工作表"
+        "要重命名工作表、调整页签顺序、隐藏/显示、冻结行列或改标签颜色时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新钉钉电子表格中指定工作表的属性，包括名称、位置、可见性、冻结行列等。”所述变更时不要使用"
+        "改单元格内容用 range update；删整张工作表用 delete-sheet；复制工作表用 copy"
       ],
       "examples": [
-        "dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --title \"汇总表\" --frozen-row-count 2 --frozen-column-count 1",
-        "dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --hidden=true"
+        "dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --title \"汇总表\" --frozen-row-count 2"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "更新工作表属性：名称、位置、隐藏、标签色、冻结行列。"
     },
     "sheet.write_image": {
       "use_when": [
-        "1. 基本用法: 写入图片到指定单元格",
-        "2. 指定显示尺寸",
-        "3. 自定义图片名称",
-        "写入图片/插入图片/加图片/放图片到单元格/嵌入图片到表格；写入图片",
-        "写入图片/插入图片/加图片/放图片到单元格/嵌入图片到表格；用户指定了图片尺寸",
-        "提取 nodeId 后:"
+        "需要把图片嵌进某个单元格时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉表格的指定单元格中插入图片。”所述变更时不要使用"
+        "悬浮在单元格上的浮动图用 create-float-image；禁止用 range update 写图片"
       ],
       "examples": [
-        "dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:A1 --file ./chart.png",
-        "dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range B2:B2 --file ./logo.png --width 200 --height 100"
+        "dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:A1 --file ./chart.png"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "上传图片并写入指定单元格（占单元格内容）。"
     }
   },
   "products": {

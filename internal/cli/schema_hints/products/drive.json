@@ -13,32 +13,35 @@
         "rpc_name": "add_permission"
       },
       "use_when": [
-        "给文档授权/分享权限"
+        "给单篇文档/文件夹/文件做节点级授权（USER + 角色 MANAGER/EDITOR/DOWNLOADER/READER）时",
+        "用户说把某篇文档分享给某人看/可编辑时（含「我的文档」下的节点）"
       ],
       "avoid_when": [
-        "要“查询知识库节点当前的成员权限列表”请改用 dws drive permission list",
-        "要“从知识库节点移除指定企业用户的权限（仅支持 USER 类型）”请改用 dws drive permission remove",
-        "要“修改企业用户在知识库节点上的角色（仅支持 USER 类型）”请改用 dws drive permission update"
+        "给整个知识库加成员改用 dws wiki member add（「我的文档」不支持容器成员）",
+        "只查已有权限改用 dws drive permission list",
+        "改角色/移除分别用 permission update / remove"
       ],
       "examples": [
-        "dws drive permission add --node <ID> --users uid1,uid2 --role READER"
+        "dws drive permission add --node <ID> --users uid1,uid2 --role READER --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "为文档空间节点添加协作成员并授予指定角色"
     },
     "drive.commit_upload": {
       "use_when": [
-        "提交文件上传"
+        "手动三步上传的最后一步：已 PUT 到 OSS，用 upload-info 返回的 uploadId 提交入库时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“提交文件上传”所述变更时不要使用"
+        "普通上传请用 dws drive upload",
+        "尚未 PUT 成功或 uploadId 过期时不要 commit；需重新 upload-info"
       ],
       "examples": [
-        "dws drive commit --file-name \"report.pdf\" --file-size 102400 --upload-id <UPLOAD_ID>",
-        "dws drive commit --file-name \"报告.pdf\" --file-size 102400 --upload-id <uploadId>"
+        "dws drive commit --file-name \"report.pdf\" --file-size 102400 --upload-id <UPLOAD_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "提交文件上传"
     },
     "drive.copy_document": {
       "interface_ref": {
@@ -46,35 +49,42 @@
         "rpc_name": "copy_document"
       },
       "use_when": [
-        "── 场景 A: 复制钉盘文件到知识库空间根目录 ──",
-        "── 场景 C: 复制钉盘文件到钉盘 space 下的子文件夹 ──",
-        "── 场景默认: 用户未指定目标位置 → 复制/移动到「我的文件」根目录 ──",
-        "复制文件/移动文件/搬到/移到"
+        "用户要复制/拷贝一份文件或文档到新位置，且原位置仍需保留副本时（copy≠move）",
+        "目标是指定文件夹：传 --folder <目标文件夹 dentryUuid/fileId>",
+        "目标是知识库根目录：只传 --workspace <workspaceId 或知识库 URL>，不传 --folder",
+        "用户未指定目标时：默认落到当前组织「我的文档」；若需钉盘「我的文件」根目录，先 wiki space list --type mySpace 取 rootFolderId 再 --folder",
+        "跨钉盘 space 复制到子文件夹：先 list 取目标文件夹 fileId，再 --folder 传入"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将指定节点复制到目标文件夹。”所述变更时不要使用"
+        "用户意图是搬走/迁移且原位置不再保留时改用 dws drive move（move 需更高源权限）",
+        "只要快捷方式入口、不要独立副本时改用 dws drive shortcut",
+        "已在明确知识库上下文内复制节点且需带 --workspace/--node 的 wiki 入口时可用 dws wiki node copy；跨产品默认用本命令",
+        "目标文件夹或知识库尚未确认时不要复制"
       ],
       "examples": [
-        "dws drive copy --node <ID> [--folder <TARGET>] [--workspace <WS>]",
-        "dws drive copy --node <源文件dentryUuid> --folder <我的文件rootFolderId> --format json"
+        "dws drive copy --node <源dentryUuid> --folder <目标文件夹fileId> --format json",
+        "dws drive copy --node <源dentryUuid> --workspace <TARGET_WS_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "将文件或文档复制到目标文件夹或知识库（保留原位置；默认「我的文档」）"
     },
     "drive.create_folder": {
       "use_when": [
-        "5. 创建文件夹",
-        "新建文件夹/创建目录"
+        "用户要在钉盘/「我的文件」下新建普通文件夹时",
+        "已知父目录 dentryUuid，要在其下建子目录时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建文件夹”所述变更时不要使用"
+        "要在知识库内建文件夹改用 dws wiki node create --type folder --workspace <id>",
+        "要创建在线文档(adoc)改用 dws doc create 或 wiki node create --type adoc"
       ],
       "examples": [
-        "dws drive mkdir --name \"项目资料\"",
-        "dws drive mkdir --name \"子目录\" --folder <dentryUuid>"
+        "dws drive mkdir --name \"项目资料\" --format json",
+        "dws drive mkdir --name \"子目录\" --folder <dentryUuid> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "创建文件夹"
     },
     "drive.create_shortcut": {
       "interface_mode": "composite",
@@ -84,7 +94,19 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "non_idempotent",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "为钉盘或文档空间中的现有节点创建快捷方式。",
+      "use_when": [
+        "用户要给已有节点建快捷方式/软链接到目标文件夹或知识库时"
+      ],
+      "avoid_when": [
+        "要复制一份独立副本改用 dws drive copy（copy≠shortcut）",
+        "要移动原文件改用 dws drive move"
+      ],
+      "examples": [
+        "dws drive shortcut --node <SOURCE_NODE> --format json",
+        "dws drive shortcut --node <SOURCE_NODE> --folder <TARGET_FOLDER> --format json"
+      ]
     },
     "drive.delete_document": {
       "effect": "destructive",
@@ -95,89 +117,106 @@
         "rpc_name": "delete_document"
       },
       "use_when": [
-        "删除文件/删除文件夹/移到回收站",
-        "正确流程：1.向用户展示\"即将删除「文件名」到回收站\" → 2.等用户确认 → 3.执行下面命令"
+        "用户明确要求把钉盘/文档空间中的文件或文件夹移入回收站，且已确认目标节点时"
       ],
       "avoid_when": [
-        "用户未明确要求“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。”、目标不清楚或尚未确认时不要使用"
+        "用户未确认删除目标或只是想移走位置时不要删；搬迁用 dws drive move",
+        "要删整个知识库改用 dws wiki space delete",
+        "要永久删评论改用 dws doc comment delete"
       ],
       "examples": [
-        "dws drive delete --node <dentryUuid> --format json    # 查询 fileId: dws drive list"
+        "dws drive delete --node <dentryUuid> --format json"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "将钉盘中的文件或文件夹移入回收站"
     },
     "drive.download_file": {
       "use_when": [
-        "4. 下载文件到本地",
-        "下载文件",
-        "查看具体命令的完整参数说明",
-        "读一下这个 xlsx 的数据\" / xlsx 节点链接；下载本地表格文件"
+        "用户要把钉盘普通文件（PDF/图片/Office 等非在线文档）下载到本地路径时",
+        "已确认 contentType 非 ALIDOC，需要落盘本地查看时"
       ],
       "avoid_when": [
-        "把这个在线表格导出为 xlsx 文件；在线表格格式转换"
+        "在线文档(adoc)要导出为 Word/docx 改用 dws doc export，不要用 download 代替导出",
+        "只要临时下载链接语义且走文档附件块时用 dws doc media download",
+        "未指定 --output 不要调用（CLI 必填）"
       ],
       "examples": [
-        "dws drive download --help",
-        "dws drive download --node <dentryUuid> --output ./report.pdf"
+        "dws drive download --node <dentryUuid> --output ./report.pdf --format json",
+        "dws drive download --node <dentryUuid> --output ~/downloads/ --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "下载钉盘或文档空间文件到本地"
     },
     "drive.get_file_info": {
       "use_when": [
-        "3. 查看文件元数据",
-        "文件详情/文件信息"
+        "用户要查看钉盘文件/文件夹元信息（名称、类型、大小、路径、时间）时",
+        "准备读内容前需先判断 extension/是否在线文档，再路由到 doc read / sheet / download 时"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取文件元数据信息”"
+        "要读在线文档正文改用 dws doc read（先本命令或 doc info 确认类型）",
+        "要下载普通文件改用 dws drive download",
+        "只要目录列表改用 dws drive list"
       ],
       "examples": [
-        "dws drive info --node <dentryUuid>",
         "dws drive info --node <dentryUuid> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取文件元数据信息"
     },
     "drive.get_node_stats": {
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "agent_summary": "读取指定钉盘或文档空间节点的阅读、编辑、评论、点赞、预览与下载等统计。",
+      "use_when": [
+        "用户要查看节点阅读/编辑/评论/点赞/预览/下载等统计维度时"
+      ],
+      "avoid_when": [
+        "要改文件内容或权限不要用本命令；本命令只读",
+        "只要元信息（名称/类型）改用 dws drive info 或 dws doc info"
+      ],
+      "examples": [
+        "dws drive stats --node <NODE_ID_OR_URL> --format json"
+      ]
     },
     "drive.get_upload_info": {
       "use_when": [
-        "获取文件上传信息"
+        "仅当无法使用 drive upload 一条命令、需要自定义流式上传时，获取 OSS 预签名上传凭证"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取文件上传信息”"
+        "普通上传请直接用 dws drive upload，不要手动走三步",
+        "拿到凭证后须 HTTP PUT 再 dws drive commit；本命令本身不完成入库"
       ],
       "examples": [
-        "dws drive upload-info --file-name \"report.pdf\" --file-size 102400",
-        "dws drive upload-info --file-name \"slides.pptx\" --file-size 512000 --folder <dentryUuid>"
+        "dws drive upload-info --file-name \"report.pdf\" --file-size 102400 --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "获取文件上传信息"
     },
     "drive.list_files": {
       "use_when": [
-        "1. 浏览「我的文件」根目录",
-        "2. 进入子目录 — 提取 dentryUuid 作为 folder",
-        "── 场景 C: 复制钉盘文件到钉盘 space 下的子文件夹 ──",
-        "── 场景默认: 用户未指定目标位置 → 复制/移动到「我的文件」根目录 ──",
-        "我的文件/钉盘/网盘/云盘",
-        "查看具体命令的完整参数说明"
+        "用户要浏览「我的文件」/钉盘/网盘某目录下有哪些文件或文件夹时",
+        "已知父文件夹 dentryUuid，要列出其子项以便继续 download/copy/move 时",
+        "传 --workspace 时要列出文档空间/知识库根或子目录（与 wiki node list 场景重叠时，用户说钉盘/我的文件优先本命令）"
       ],
       "avoid_when": [
-        "帮我看看知识库里的文件；知识库节点列表"
+        "只记得关键词、不知道所在目录时改用 dws drive search",
+        "明确要在某个知识库内按目录浏览且已有 workspaceId 时可用 dws wiki node list",
+        "要找最近打开/编辑过的文档改用 dws drive recent"
       ],
       "examples": [
-        "dws drive list --help",
-        "dws drive list --limit 20"
+        "dws drive list --limit 20 --format json",
+        "dws drive list --folder <dentryUuid> --limit 20 --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "The CLI command routes by --workspace between drive/list_files and doc/list_nodes, so the reviewed executable wrapper has no single direct MCP interface."
+      "interface_reason": "The CLI command routes by --workspace between drive/list_files and doc/list_nodes, so the reviewed executable wrapper has no single direct MCP interface.",
+      "agent_summary": "获取文件/文件夹列表"
     },
     "drive.list_permission": {
       "interface_ref": {
@@ -185,32 +224,34 @@
         "rpc_name": "list_permission"
       },
       "use_when": [
-        "查询知识库节点当前的成员权限列表。"
+        "查看某文档/文件夹节点当前有哪些成员及角色时"
       ],
       "avoid_when": [
-        "要“为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员”请改用 dws drive permission add",
-        "要“从知识库节点移除指定企业用户的权限（仅支持 USER 类型）”请改用 dws drive permission remove",
-        "要“修改企业用户在知识库节点上的角色（仅支持 USER 类型）”请改用 dws drive permission update"
+        "要新增/修改/移除权限分别用 permission add/update/remove",
+        "查知识库容器成员改用 dws wiki member list"
       ],
       "examples": [
-        "dws drive permission list --node <ID>"
+        "dws drive permission list --node <ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "查询文档空间节点的协作者列表"
     },
     "drive.list_spaces": {
       "use_when": [
-        "获取当前用户可访问的空间列表。"
+        "兼容入口：枚举钉盘企业空间或「我的文件」空间以拿 spaceId/rootFolderId 时"
       ],
       "avoid_when": [
-        "列出钉盘团队空间；列出钉盘空间"
+        "推荐改用 dws wiki space list --type orgSpace 或 --type mySpace（本命令已 deprecated）",
+        "要列知识库列表改用 dws wiki space list（默认 orgWikiSpace）"
       ],
       "examples": [
-        "dws drive list-spaces                   # deprecated",
-        "dws drive list-spaces --space-type orgSpace --limit 20 --cursor <TOKEN>"
+        "dws drive list-spaces --space-type orgSpace --limit 20 --format json",
+        "dws drive list-spaces --space-type mySpace --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "兼容查询钉盘空间列表"
     },
     "drive.move_document": {
       "interface_ref": {
@@ -218,17 +259,22 @@
         "rpc_name": "move_document"
       },
       "use_when": [
-        "── 场景 B: 移动钉盘文件到另一个钉盘 space 根目录 ──"
+        "用户要移动/搬走文件或文档到新位置，且原位置不再保留时（move≠copy）",
+        "目标文件夹用 --folder；目标知识库根用 --workspace；都不传则默认「我的文档」",
+        "移动到其他钉盘 space 根目录时传目标 space 的 rootFolderId 到 --folder（通常不传 --workspace）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将指定节点移动到目标文件夹。”所述变更时不要使用"
+        "需要保留原位置副本时改用 dws drive copy",
+        "目标未确认或用户只是想复制时不要 move",
+        "知识库内节点移动且走 wiki 入口时可用 dws wiki node move"
       ],
       "examples": [
-        "dws drive move --node <ID> [--folder <TARGET>] [--workspace <WS>]",
-        "dws drive move --node <源文件dentryUuid> --folder <目标space的rootFolderId> --format json"
+        "dws drive move --node <源dentryUuid> --folder <目标文件夹fileId> --format json",
+        "dws drive move --node <源dentryUuid> --workspace <TARGET_WS_ID> --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "将文件或文档移动到目标文件夹或知识库（原位置不再保留）"
     },
     "drive.permission_remove": {
       "effect": "write",
@@ -239,19 +285,19 @@
         "rpc_name": "remove_permission"
       },
       "use_when": [
-        "从知识库节点移除指定企业用户的权限（仅支持 USER 类型）。"
+        "从节点移除指定用户的直接授权时"
       ],
       "avoid_when": [
-        "要“为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员”请改用 dws drive permission add",
-        "要“查询知识库节点当前的成员权限列表”请改用 dws drive permission list",
-        "要“修改企业用户在知识库节点上的角色（仅支持 USER 类型）”请改用 dws drive permission update"
+        "要改角色用 permission update；要加权限用 add",
+        "移除知识库容器成员用 dws wiki member remove"
       ],
       "examples": [
-        "dws drive permission remove --node <ID> --users uid1"
+        "dws drive permission remove --node <ID> --users uid1 --format json"
       ],
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "agent_summary": "从文档空间节点移除协作成员的权限"
     },
     "drive.permission_update": {
       "interface_ref": {
@@ -259,30 +305,30 @@
         "rpc_name": "update_permission"
       },
       "use_when": [
-        "修改企业用户在知识库节点上的角色（仅支持 USER 类型）。"
+        "调整已有节点成员角色（如 READER→EDITOR）时"
       ],
       "avoid_when": [
-        "要“为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员”请改用 dws drive permission add",
-        "要“查询知识库节点当前的成员权限列表”请改用 dws drive permission list",
-        "要“从知识库节点移除指定企业用户的权限（仅支持 USER 类型）”请改用 dws drive permission remove"
+        "成员尚无权限时改用 permission add",
+        "要移除访问改用 permission remove"
       ],
       "examples": [
-        "dws drive permission update --node <ID> --users uid1 --role EDITOR"
+        "dws drive permission update --node <ID> --users uid1 --role EDITOR --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "更新文档空间节点已有协作者的权限角色"
     },
     "drive.publish_get": {
-      "agent_summary": "查询文件当前是否处于互联网公开发布状态，以及公开发布的权限设置",
+      "agent_summary": "查询文件当前是否处于互联网公开发布状态",
       "use_when": [
-        "查看公开状态/是否公开/发布状态"
+        "查询文件是否已互联网公开发布及公开权限（READER/DOWNLOADER/EDITOR）时"
       ],
       "avoid_when": [
-        "不需要查询文件当前是否处于互联网公开发布状态，以及公开发布的权限设置时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "要开启公开改用 dws drive publish set（需确认）",
+        "要关闭公开改用 dws drive publish unset（需确认）"
       ],
       "examples": [
-        "dws drive publish get --node <fileId>",
-        "dws drive publish get --node <dentryUuid>"
+        "dws drive publish get --node <fileId> --format json"
       ],
       "effect": "write",
       "risk": "medium",
@@ -296,18 +342,20 @@
     "drive.publish_set": {
       "agent_summary": "开启文件的互联网公开发布",
       "use_when": [
-        "用户明确要求开启文件的互联网公开发布时"
+        "用户明确要求将文件设为互联网公开（任何人凭链接可访问，无需登录）时"
       ],
       "avoid_when": [
-        "只需查询公开状态或关闭公开发布时不要使用；目标文件和公开范围未明确时不要开启"
+        "只查公开状态用 publish get；要关闭公开用 publish unset",
+        "目标文件或公开权限范围未确认时不要开启",
+        "只要企业内部同事权限用 permission add，不要用互联网公开"
       ],
       "examples": [
-        "dws drive publish set --node <fileId> [--permission READER|DOWNLOADER|EDITOR]",
-        "dws drive publish set --node <dentryUuid>"
+        "dws drive publish set --node <fileId> --format json",
+        "dws drive publish set --node <fileId> --permission READER --format json"
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -317,18 +365,18 @@
     "drive.publish_unset": {
       "agent_summary": "关闭文件的互联网公开发布",
       "use_when": [
-        "用户明确要求关闭文件的互联网公开发布时"
+        "用户明确要求关闭文件的互联网公开发布，使外部链接失效时"
       ],
       "avoid_when": [
-        "只需查询公开状态或开启公开发布时不要使用；目标文件未明确时不要关闭"
+        "只查状态用 publish get；要开启用 publish set",
+        "目标文件未确认时不要关闭"
       ],
       "examples": [
-        "dws drive publish unset --node <fileId>",
-        "dws drive publish unset --node <dentryUuid>"
+        "dws drive publish unset --node <fileId> --format json"
       ],
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "reviewed": true,
       "interface_mode": "composite",
@@ -338,14 +386,16 @@
     "drive.recent": {
       "agent_summary": "获取当前用户最近访问或编辑过的文档列表",
       "use_when": [
-        "最近访问/最近打开/最近编辑/最近文档"
+        "用户要看最近访问或最近编辑的文档列表时（默认最近访问 operate-type=0）",
+        "需要按我创建/他人创建或文档类型过滤最近项时"
       ],
       "avoid_when": [
-        "不需要获取当前用户最近访问或编辑过的文档列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "按关键词全局搜文件改用 dws drive search",
+        "浏览某目录内容改用 dws drive list"
       ],
       "examples": [
-        "dws drive recent",
-        "dws drive recent --operate-type 1"
+        "dws drive recent --format json",
+        "dws drive recent --operate-type 1 --format json"
       ],
       "effect": "read",
       "risk": "low",
@@ -359,15 +409,15 @@
     "drive.recycle_list": {
       "agent_summary": "查看回收站文件列表",
       "use_when": [
-        "8. 查看回收站并还原文件",
-        "回收站/查看回收站/回收站列表/回收站里有什么"
+        "用户要查看钉盘回收站里有哪些已删文件时"
       ],
       "avoid_when": [
-        "不需要查看回收站文件列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "要从回收站还原改用 dws drive recycle restore",
+        "要删除进回收站改用 dws drive delete"
       ],
       "examples": [
-        "dws drive recycle list",
-        "dws drive recycle list --space-id 12345 --limit 10"
+        "dws drive recycle list --format json",
+        "dws drive recycle list --space-id 12345 --limit 10 --format json"
       ],
       "effect": "read",
       "risk": "low",
@@ -381,14 +431,13 @@
     "drive.recycle_restore": {
       "agent_summary": "还原回收站中的文件",
       "use_when": [
-        "8. 查看回收站并还原文件",
-        "恢复文件/还原删除的文件/从回收站恢复/还原回收站文件"
+        "用户要从回收站还原指定回收项（已从 recycle list 拿到 id）时"
       ],
       "avoid_when": [
-        "不需要还原回收站中的文件时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "尚未确认还原哪一项时先 dws drive recycle list",
+        "要删除文件改用 dws drive delete，不要用 restore"
       ],
       "examples": [
-        "dws drive recycle restore --id <recycleItemId>",
         "dws drive recycle restore --id <recycleItemId> --format json"
       ],
       "effect": "write",
@@ -406,57 +455,59 @@
         "rpc_name": "rename_document"
       },
       "use_when": [
-        "重命名/改名"
+        "用户要重命名钉盘/文档空间中的文件或文档显示名称时"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“对指定节点进行重命名。”所述变更时不要使用"
+        "要改正文里的标题/章节 H1 改用 dws doc block update，不要用 rename",
+        "只要复制或移动改用 copy/move"
       ],
       "examples": [
-        "dws drive rename --node <ID> --name \"新名称\""
+        "dws drive rename --node <ID> --name \"新名称\" --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "修改文档空间中文档或文件的名称"
     },
     "drive.search_files": {
       "use_when": [
-        "搜一下有没有叫XX的文件；全局搜索",
-        "搜索钉盘文件/钉盘里找个文件/查找某个钉盘文件/钉盘中搜索",
-        "查看具体命令的完整参数说明",
-        "钉盘/网盘/我的文件里搜"
+        "用户要在钉盘/我的文件里按关键词找文件、文件夹或团队空间，且不知道具体路径时",
+        "需要按扩展名/文件类型/创建者/时间缩小范围的全局搜索（默认 target=all 聚合钉盘+文档空间）",
+        "明确搜团队空间名以拿 spaceId/rootFolderId 时用 --target space"
       ],
       "avoid_when": [
-        "在知识库里搜方案；空间内搜索"
+        "已明确知识库 workspaceId、只在该库内搜时改用 dws wiki node search --workspace <id>",
+        "已知目录、只需浏览子项时改用 dws drive list，不要用搜索代替目录遍历",
+        "首页未命中时优先改关键词/过滤条件，而不是反复翻页"
       ],
       "examples": [
-        "dws drive search --help",
-        "dws drive search --query \"季度汇报\""
+        "dws drive search --query \"季度汇报\" --format json",
+        "dws drive search --query \"合同\" --target file --extensions pdf,docx --format json"
       ],
       "interface_mode": "mcp",
-      "availability": "available"
+      "availability": "available",
+      "agent_summary": "全局搜索文件，默认同时搜索钉盘和文档空间，合并返回结果"
     },
     "drive.upload": {
       "use_when": [
-        "6. 上传文件（首选 upload 命令，自动完成三步流程）",
-        "上传文件\"（未指定目标）；默认钉盘",
-        "上传文件/传文件到钉盘",
-        "上传文件到钉盘/我的文件；钉盘上传",
-        "上传本地文件到钉盘",
-        "帮我把这个文件传到网盘；钉盘上传",
-        "查看具体命令的完整参数说明"
+        "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
+        "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“上传本地文件到钉盘”所述变更时不要使用"
+        "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
+        "要把文件作为文档正文附件插入改用 dws doc media insert",
+        "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令"
       ],
       "examples": [
-        "dws drive upload --help",
-        "dws drive upload --file ./report.pdf"
+        "dws drive upload --file ./report.pdf --format json",
+        "dws drive upload --file ./slides.pptx --folder <dentryUuid> --format json"
       ],
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
       "effect": "write",
       "reviewed": true,
-      "risk": "medium"
+      "risk": "medium",
+      "agent_summary": "上传本地文件到钉盘或文档空间"
     }
   }
 }
