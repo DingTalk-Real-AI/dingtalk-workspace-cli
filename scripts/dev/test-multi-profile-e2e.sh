@@ -10,6 +10,9 @@
 
 set -euo pipefail
 
+echo "[FAIL] intentional CI pipeline probe: Multi Profile E2E must fail" >&2
+exit 97
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN_GO_TESTS=1
 VERBOSE=0
