@@ -17,7 +17,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Fixed
 
-- **`dev connect` forwards complex message payloads** — messages such as forwarded chat records (`chatRecord`) are no longer discarded when they do not match the CLI's built-in text, image, or file extractors; their message type and raw JSON payload are passed to the backend model for interpretation.
+- **`dev connect` forwards complex message payloads and recoverable attachments** — messages such as forwarded chat records (`chatRecord`) are no longer discarded when they do not match the CLI's built-in text, image, or file extractors; their message type and raw JSON payload are passed to every Stream-bridge backend, while nested pictures, audio, video, and files that retain a download locator are downloaded completely. Original bytes use each backend's native attachment path where available (OpenCode file parts, Gemini inline/Files API, Codex local images, Qoder attachments) or a narrowly allowed read-only local path for CLI/custom agents. Entries degraded by DingTalk to locator-free `unknownMsgType` remain visible in the raw payload instead of being misrepresented as readable files.
 - **Cross-platform auth regression coverage** — dedicated macOS CI now runs the Darwin-only auth/keychain regression suite with race detection, Windows CI builds and tests the native DPAPI path, and recovery guidance prefers safe migration or per-profile cleanup over destructive global reset.
 
 ## [1.0.51] - 2026-07-10

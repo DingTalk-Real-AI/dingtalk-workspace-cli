@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,7 +100,15 @@ func (f *opencodeForwarder) forward(ctx context.Context, convID, text string) (s
 	return f.forwardStream(ctx, convID, text, nil)
 }
 
+func (f *opencodeForwarder) forwardWithAttachments(ctx context.Context, convID, text string, attachments []connectMediaAttachment) (string, error) {
+	return f.forwardStreamWithAttachments(ctx, convID, text, attachments, nil)
+}
+
 func (f *opencodeForwarder) forwardStream(ctx context.Context, convID, text string, _ func(string)) (string, error) {
+	return f.forwardStreamWithAttachments(ctx, convID, text, nil, nil)
+}
+
+func (f *opencodeForwarder) forwardStreamWithAttachments(ctx context.Context, convID, text string, attachments []connectMediaAttachment, _ func(string)) (string, error) {
 	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
@@ -107,15 +116,15 @@ func (f *opencodeForwarder) forwardStream(ctx context.Context, convID, text stri
 	if err != nil {
 		return "", err
 	}
-	reply, err := f.forwardWithClient(ctx, client, convID, text)
+	reply, err := f.forwardWithClient(ctx, client, convID, text, attachments)
 	if errors.Is(err, errOpencodeSessionMissing) && f.sessions != nil {
 		f.sessions.reset(convID)
-		reply, err = f.forwardWithClient(ctx, client, convID, text)
+		reply, err = f.forwardWithClient(ctx, client, convID, text, attachments)
 	}
 	return reply, err
 }
 
-func (f *opencodeForwarder) forwardWithClient(ctx context.Context, client *opencodeHTTPClient, convID, text string) (string, error) {
+func (f *opencodeForwarder) forwardWithClient(ctx context.Context, client *opencodeHTTPClient, convID, text string, attachments []connectMediaAttachment) (string, error) {
 	sessionID := ""
 	if f.sessions != nil {
 		sessionID = f.sessions.id(convID)
@@ -130,7 +139,7 @@ func (f *opencodeForwarder) forwardWithClient(ctx context.Context, client *openc
 			f.sessions.set(convID, sessionID)
 		}
 	}
-	reply, err := client.sendMessage(ctx, sessionID, text, f.model)
+	reply, err := client.sendMessageWithAttachments(ctx, sessionID, text, f.model, attachments)
 	if err != nil {
 		return "", err
 	}
@@ -459,9 +468,27 @@ func (c *opencodeHTTPClient) deleteSession(ctx context.Context, sessionID string
 	return nil
 }
 
-func (c *opencodeHTTPClient) sendMessage(ctx context.Context, sessionID, text, model string) (string, error) {
+func (c *opencodeHTTPClient) sendMessageWithAttachments(ctx context.Context, sessionID, text, model string, attachments []connectMediaAttachment) (string, error) {
+	parts := []map[string]any{{"type": "text", "text": text}}
+	for _, attachment := range attachments {
+		path := strings.TrimSpace(attachment.LocalPath)
+		if path == "" {
+			continue
+		}
+		fileURL := (&url.URL{Scheme: "file", Path: path}).String()
+		name := strings.TrimSpace(attachment.FileName)
+		if name == "" {
+			name = filepath.Base(path)
+		}
+		parts = append(parts, map[string]any{
+			"type":     "file",
+			"url":      fileURL,
+			"filename": name,
+			"mime":     connectAttachmentMIME(path),
+		})
+	}
 	body := map[string]any{
-		"parts": []map[string]any{{"type": "text", "text": text}},
+		"parts": parts,
 	}
 	if m := opencodeModelRef(model); m != nil {
 		body["model"] = m
