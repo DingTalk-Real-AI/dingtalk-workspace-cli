@@ -187,7 +187,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	for _, want := range []string{
 		"class DingtalkWorkspaceCliLocal < Formula",
 		"resource \"skills\" do",
-		"DingTalk Workspace CLI",
+		"Install locally built DingTalk workspace CLI artifacts for verification",
 	} {
 		if !strings.Contains(formulaText, want) {
 			t.Fatalf("formula missing %q:\n%s", want, formulaText)
@@ -202,6 +202,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	releaseFormulaText := string(releaseFormulaData)
 	for _, want := range []string{
 		"class DingtalkWorkspaceCli < Formula",
+		`desc "Automate DingTalk workspace tasks from the terminal"`,
 		`version "0.0.0"`,
 		"on_macos do",
 		"on_linux do",
@@ -252,6 +253,11 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	if strings.Contains(releaseFormulaText, "Dir.home") {
 		t.Fatalf("release formula must not mutate the user's home directory:\n%s", releaseFormulaText)
 	}
+	for _, forbidden := range []string{`require "fileutils"`, "FileUtils.", "__DESCRIPTION__"} {
+		if strings.Contains(releaseFormulaText, forbidden) {
+			t.Fatalf("release formula contains forbidden text %q:\n%s", forbidden, releaseFormulaText)
+		}
+	}
 
 	// Verify checksums.txt was updated to include skills zip
 	checksumsData, err := os.ReadFile(filepath.Join(distDir, "checksums.txt"))
@@ -299,7 +305,7 @@ func TestCheckedInHomebrewFormulaIsStableAndSideEffectFree(t *testing.T) {
 			t.Errorf("checked-in Homebrew formula is missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"-beta.", "Dir.home", "def post_install"} {
+	for _, forbidden := range []string{"-beta.", "Dir.home", "def post_install", `require "fileutils"`, "FileUtils."} {
 		if strings.Contains(formula, forbidden) {
 			t.Errorf("checked-in Homebrew formula contains forbidden text %q", forbidden)
 		}
@@ -317,6 +323,7 @@ func TestCheckedInHomebrewBetaFormulaIsSeparateAndKegOnly(t *testing.T) {
 	formula := string(data)
 	for _, required := range []string{
 		"class DingtalkWorkspaceCliBeta < Formula",
+		`desc "Automate DingTalk workspace tasks from the terminal (beta channel)"`,
 		`version "1.0.52-beta.4"`,
 		`keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"`,
 		"releases/download/v1.0.52-beta.4/dws-darwin-amd64.tar.gz",
@@ -330,7 +337,7 @@ func TestCheckedInHomebrewBetaFormulaIsSeparateAndKegOnly(t *testing.T) {
 			t.Errorf("checked-in Homebrew beta formula is missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"Dir.home", "def post_install"} {
+	for _, forbidden := range []string{"Dir.home", "def post_install", `require "fileutils"`, "FileUtils."} {
 		if strings.Contains(formula, forbidden) {
 			t.Errorf("checked-in Homebrew beta formula contains forbidden text %q", forbidden)
 		}
@@ -371,6 +378,7 @@ func TestPostGoreleaserBuildsVersionedBetaFormula(t *testing.T) {
 	formula := string(data)
 	for _, required := range []string{
 		"class DingtalkWorkspaceCliBeta < Formula",
+		`desc "Automate DingTalk workspace tasks from the terminal (beta channel)"`,
 		`version "1.2.3-beta.4"`,
 		`keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"`,
 		"This beta is keg-only",
@@ -381,6 +389,11 @@ func TestPostGoreleaserBuildsVersionedBetaFormula(t *testing.T) {
 	}
 	if strings.Contains(formula, "__") {
 		t.Fatalf("generated beta formula contains an unresolved placeholder:\n%s", formula)
+	}
+	for _, forbidden := range []string{`require "fileutils"`, "FileUtils."} {
+		if strings.Contains(formula, forbidden) {
+			t.Fatalf("generated beta formula contains forbidden text %q:\n%s", forbidden, formula)
+		}
 	}
 }
 

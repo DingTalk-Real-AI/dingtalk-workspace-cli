@@ -140,9 +140,14 @@ render_homebrew_release_formula() {
   keg_only_line="$9"
   channel_caveat="${10}"
   output_path="${11}"
+  description="Automate DingTalk workspace tasks from the terminal"
+  if [ "$class_name" = "DingtalkWorkspaceCliBeta" ]; then
+    description="$description (beta channel)"
+  fi
 
   sed \
     -e "s|__CLASS_NAME__|$class_name|g" \
+    -e "s|__DESCRIPTION__|$description|g" \
     -e "s|__VERSION__|$version|g" \
     -e "s|__DARWIN_AMD64_URL__|$release_url_base/dws-darwin-amd64.tar.gz|g" \
     -e "s|__DARWIN_AMD64_SHA256__|$darwin_amd64_sha|g" \

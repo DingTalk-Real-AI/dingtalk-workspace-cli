@@ -1,5 +1,5 @@
 class __CLASS_NAME__ < Formula
-  desc "DingTalk Workspace CLI"
+  desc "Install locally built DingTalk workspace CLI artifacts for verification"
   homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
   url "__ARCHIVE_URL__"
   sha256 "__ARCHIVE_SHA256__"
@@ -12,8 +12,6 @@ __KEG_ONLY_LINE__
   end
 
   def install
-    require "fileutils"
-
     root = Dir["dws-*"].find { |entry| File.directory?(entry) } || "."
     binary = File.join(root, "dws")
     raise "binary not found: #{binary}" unless File.exist?(binary)
@@ -28,7 +26,7 @@ __KEG_ONLY_LINE__
     skill_dest = pkgshare/"skills/dws"
     skill_dest.mkpath
     resource("skills").stage do
-      FileUtils.cp_r(Dir["*"], skill_dest)
+      cp_r(Dir["*"], skill_dest)
     end
   end
 
