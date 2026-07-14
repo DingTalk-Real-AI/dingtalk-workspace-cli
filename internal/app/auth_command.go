@@ -965,13 +965,16 @@ func newAuthResetCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
-			isolated := authpkg.ResolveAuthStore(configDir).Isolated()
+			// A generated ID exists only after explicit Auth Instance opt-in,
+			// including when the legacy-backed default is currently selected.
+			instanceScoped := authpkg.ResolveAuthStore(configDir).InstanceID != ""
 			if err := authpkg.DeleteAllTokenData(configDir); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to reset token data: %v", err))
 			}
-			// The legacy-backed default keeps the online reset contract. Isolated
-			// instances clear only their own auth data and preserve shared app config.
-			if !isolated {
+			// Before opt-in, preserve the online full-reset contract exactly. After
+			// opt-in, every instance (including default) resets only its own auth
+			// state so one instance cannot remove configuration used by another.
+			if !instanceScoped {
 				_ = os.Remove(filepath.Join(configDir, "mcp_url"))
 				_ = os.Remove(filepath.Join(configDir, "token"))
 				_ = authpkg.DeleteAppConfig(configDir)

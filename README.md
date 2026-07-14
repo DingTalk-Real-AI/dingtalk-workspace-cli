@@ -266,7 +266,7 @@ env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --yes --form
 DWS_DISABLE_KEYCHAIN=1 dws auth status --format json
 ```
 
-The migration validates every selected auth ciphertext before writing, ignores unrelated application secrets, and can be rerun after an interrupted commit. If validation identifies genuinely damaged ciphertext, remove only the affected profile with `dws auth logout --profile <name|corpId>`, then log in again. Use `dws auth reset` only when you intend to discard every local profile.
+The migration validates every selected auth ciphertext before writing, ignores unrelated application secrets, and can be rerun after an interrupted commit. If validation identifies genuinely damaged ciphertext, remove only the affected profile with `dws auth logout --profile <name|corpId>`, then log in again. Use `dws auth reset` only when you intend to discard every local profile in the current auth instance (or every local profile before Auth Instance opt-in).
 
 </details>
 
@@ -286,6 +286,8 @@ dws auth logout --user-id <userId>          # log out one organization in the cu
 An auth instance is only an isolated login-state storage location, not an account or permanent person identity. The same instance may be re-logged as the same or a different user and may contain several organization profiles. Use `dws auth use` to switch instances; use `dws profile switch` to switch organizations inside the current instance. The optional alias is a display selector; persisted credentials are isolated by a generated instance ID.
 
 Until an isolated instance is explicitly created, DWS performs no registry write or migration: the config directory, Keychain service, login behavior, and reset behavior remain unchanged. Portable `auth export`, `auth import`, and `auth migrate-keychain` currently require switching back to the `default` compatibility instance.
+
+After explicit opt-in, `auth reset` is scoped to the current instance—including `default`—so it never removes another instance's login state or shared application configuration.
 
 </details>
 

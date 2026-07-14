@@ -228,6 +228,54 @@ func TestAuthInstanceIsLoginSlotAndAllowsReplacingIdentity(t *testing.T) {
 	}
 }
 
+func TestDeleteAllTokenDataOnlyClearsActiveInstance(t *testing.T) {
+	base := t.TempDir()
+	DeactivateAuthStore(base)
+	t.Cleanup(func() { DeactivateAuthStore(base) })
+
+	txA, err := BeginNewInstance(base, "instance-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupAuthServiceForTest(t, txA.Store().KeychainService)
+	if err := SaveTokenData(base, testAccountToken("same-corp", "user-a", "access-a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := txA.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	txB, err := BeginNewInstance(base, "instance-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupAuthServiceForTest(t, txB.Store().KeychainService)
+	if err := SaveTokenData(base, testAccountToken("same-corp", "user-b", "access-b")); err != nil {
+		t.Fatal(err)
+	}
+	if err := txB.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := UseAuthInstance(base, txA.Instance().ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteAllTokenData(base); err != nil {
+		t.Fatal(err)
+	}
+	if TokenDataExistsKeychainForCorpIDAt(base, "same-corp") {
+		t.Fatal("reset retained the active instance token")
+	}
+
+	if _, err := UseAuthInstance(base, txB.Instance().ID); err != nil {
+		t.Fatal(err)
+	}
+	data, err := LoadTokenDataForProfile(base, "same-corp")
+	if err != nil || data.UserID != "user-b" || data.AccessToken != "access-b" {
+		t.Fatalf("reset of instance-a changed instance-b: token=%#v err=%v", data, err)
+	}
+}
+
 func TestRollbackDoesNotPublishFailedLogin(t *testing.T) {
 	base := t.TempDir()
 	DeactivateAuthStore(base)

@@ -232,7 +232,7 @@ func TestAuthInstanceLogoutByUserIDOnlyTouchesCurrentInstance(t *testing.T) {
 	}
 }
 
-func TestAuthInstanceIsolatedPortableGuardsAndResetPreservesSharedAppConfig(t *testing.T) {
+func TestAuthInstanceScopedResetPreservesOtherInstancesAndSharedAppConfig(t *testing.T) {
 	configDir := setupAuthInstanceCommandTest(t)
 	if err := authpkg.SaveAppConfig(configDir, &authpkg.AppConfig{ClientID: "shared-client"}); err != nil {
 		t.Fatalf("SaveAppConfig() error = %v", err)
@@ -294,7 +294,40 @@ func TestAuthInstanceIsolatedPortableGuardsAndResetPreservesSharedAppConfig(t *t
 	if err != nil || legacy.AccessToken != "token-default" {
 		t.Fatalf("isolated reset changed legacy token: token=%#v err=%v", legacy, err)
 	}
+	if _, err := authpkg.UseAuthInstance(configDir, "personal"); err != nil {
+		t.Fatal(err)
+	}
+	if err := authpkg.SaveTokenData(configDir, authAccountTestToken("corp-personal", "user-personal", "token-personal-restored")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authpkg.UseAuthInstance(configDir, "default"); err != nil {
+		t.Fatal(err)
+	}
 
+	out, err = executeAuthInstanceCommand(t, "auth", "reset")
+	if err != nil {
+		t.Fatalf("default instance reset error = %v\noutput:\n%s", err, out)
+	}
+	shared, err = authpkg.LoadAppConfig(configDir)
+	if err != nil || shared == nil || shared.ClientID != "shared-client" {
+		t.Fatalf("shared app config after default instance reset = %#v, %v", shared, err)
+	}
+	for _, name := range []string{"mcp_url", "token"} {
+		if _, err := os.Stat(filepath.Join(configDir, name)); err != nil {
+			t.Fatalf("default instance reset removed shared %s: %v", name, err)
+		}
+	}
+	if authpkg.TokenDataExistsKeychainForCorpIDAt(configDir, "corp-default") {
+		t.Fatal("default instance reset retained its own user token")
+	}
+	out, err = executeAuthInstanceCommand(t, "auth", "use", "personal")
+	if err != nil {
+		t.Fatalf("auth use personal after default reset error = %v\noutput:\n%s", err, out)
+	}
+	personal, err := authpkg.LoadTokenDataForProfile(configDir, "corp-personal")
+	if err != nil || personal.AccessToken != "token-personal-restored" {
+		t.Fatalf("default reset changed personal instance: token=%#v err=%v", personal, err)
+	}
 }
 
 func TestAuthInstanceLegacyResetKeepsHistoricalFullResetBeforeOptIn(t *testing.T) {
