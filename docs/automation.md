@@ -70,8 +70,9 @@ allow fine-grained personal access tokens to target this repository, so use a
 classic personal access token owned by a maintainer or release-bot account with
 only the `public_repo` scope. Do not reuse a broad developer token.
 
-Store the token as the `HOMEBREW_PR_TOKEN` repository Actions secret, set an
-expiry, and rotate it before it expires. The Release workflow uses this
+Store the non-expiring token as the `HOMEBREW_PR_TOKEN` repository Actions
+secret. Replace it immediately if it is exposed, its owner loses repository
+access, or the release-bot ownership changes. The Release workflow uses this
 dedicated token only to push an `automation/homebrew-*` branch and open the
 stable or beta Formula PR. It does not push Formula changes directly to `main`.
 No maintainer environment variable is required when creating a tag. Using the
