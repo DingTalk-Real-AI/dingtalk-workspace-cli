@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate update-interface-baseline reset-interface-baseline schema-compatibility update-schema-baseline skill-command-integrity cli-smoke mock-mcp-smoke package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate update-interface-baseline reset-interface-baseline schema-compatibility update-schema-baseline skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -10,17 +10,21 @@ help:
 	@printf "  make test          - Run the Go test suite\n"
 	@printf "  make lint          - Run formatting checks and golangci-lint when available\n"
 	@printf "  make fmt           - Format Go source files\n"
-	@printf "  make policy        - Run open-source asset and command-surface checks\n"
+	@printf "  make policy        - Run open-source asset and Schema registry checks\n"
 	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
 	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
 	@printf "  make coverage-gate BASE_REF=<ref> - Enforce overall non-regression and changed-code coverage\n"
 	@printf "  make update-interface-baseline - Add new CLI contracts without removing history\n"
 	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
-	@printf "  make schema-compatibility - Check schema list remains backwards compatible\n"
+	@printf "  make schema-compatibility - Check the complete Schema contract remains backwards compatible\n"
 	@printf "  make update-schema-baseline - Add new schema contracts without removing history\n"
 	@printf "  make skill-command-integrity - Check dws commands referenced by skills exist\n"
 	@printf "  make cli-smoke     - Verify help for every public top-level command\n"
 	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
+	@printf "  make test-schema-agent-examples - Contract-check all Agent examples and dry-run the eligible subset\n"
+	@printf "  make generate-schema - Regenerate embedded Agent metadata and the release Catalog\n"
+	@printf "  make generate-schema-agent-metadata - Regenerate versioned Agent metadata\n"
+	@printf "  make generate-schema-catalog - Regenerate the embedded release Catalog\n"
 	@printf "  make package       - Build all release artifacts locally (goreleaser snapshot)\n"
 	@printf "  make release       - Build and publish a release via goreleaser\n"
 	@printf "  make publish-homebrew-formula - Push dist/homebrew/dingtalk-workspace-cli.rb to a tap repo\n"
@@ -42,7 +46,12 @@ fmt:
 
 policy:
 	@./scripts/policy/check-open-source-assets.sh
+	@./scripts/policy/check-schema-command-registry.sh
 	@./scripts/policy/check-command-surface.sh --strict
+	@./scripts/policy/check-generated-drift.sh
+	@./scripts/policy/check-schema-catalog.sh
+	@./scripts/policy/check-schema-binary.sh
+	@$(MAKE) test-schema-agent-examples
 
 edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
@@ -76,6 +85,44 @@ cli-smoke:
 
 mock-mcp-smoke:
 	$(GO) test -v -count=1 -run '^(TestHTTPClientEndToEnd|TestStdioClientEndToEnd)$$' ./internal/transport
+
+test-schema-agent-examples:
+	DWS_AGENT_EXAMPLES_DRY_RUN=1 $(GO) test -v -count=1 ./internal/app -run '^TestManualAgentExamplesDryRun$$'
+
+generate-schema:
+	@set -e; \
+	registry_guard=$$(mktemp); \
+	metadata_guard=$$(mktemp -d); \
+	selection_guard=$$(mktemp -d); \
+	trap 'rm -rf "$$registry_guard" "$$metadata_guard" "$$selection_guard"' EXIT HUP INT TERM; \
+	cp internal/cli/schema_command_registry.json "$$registry_guard"; \
+	cp -R internal/cli/schema_hints/metadata/. "$$metadata_guard/"; \
+	cp -R internal/cli/schema_hints/selection/. "$$selection_guard/"; \
+	$(GO) generate ./internal/cli; \
+	cmp -s internal/cli/schema_command_registry.json "$$registry_guard" || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry.json' >&2; \
+		exit 1; \
+	}; \
+	diff -qr internal/cli/schema_hints/metadata "$$metadata_guard" >/dev/null || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/metadata' >&2; \
+		exit 1; \
+	}; \
+	diff -qr internal/cli/schema_hints/selection "$$selection_guard" >/dev/null || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/selection' >&2; \
+		exit 1; \
+	}
+
+generate-schema-agent-metadata:
+	$(GO) run ./internal/generator/cmd_schema_agent_metadata \
+		-root . \
+		-registry internal/cli/schema_command_registry.json \
+		-output-dir internal/cli/schema_agent_metadata \
+		-audit-output internal/cli/schema_agent_metadata_audit.json
+
+generate-schema-catalog:
+	$(GO) run -a ./internal/generator/cmd_schema_catalog \
+		-root . \
+		-output internal/cli/schema_catalog.json
 
 package:
 	@./scripts/dev/build-all.sh

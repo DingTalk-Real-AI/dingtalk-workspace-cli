@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "aitable-view-summary-review-v1",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source"
+  },
+  "tools": {
+    "aitable.view_get_aggregate": {
+      "agent_summary": "查询视图的聚合统计（汇总行）",
+      "reviewed": true
+    },
+    "aitable.view_get_card": {
+      "agent_summary": "查询视图的卡片视图样式",
+      "reviewed": true
+    },
+    "aitable.view_get_field_widths": {
+      "agent_summary": "查询视图的各列列宽",
+      "reviewed": true
+    },
+    "aitable.view_get_fill_color_rule": {
+      "agent_summary": "查询视图的条件填色规则",
+      "reviewed": true
+    },
+    "aitable.view_get_filter": {
+      "agent_summary": "查询视图的筛选条件",
+      "reviewed": true
+    },
+    "aitable.view_get_group": {
+      "agent_summary": "查询视图的分组",
+      "reviewed": true
+    },
+    "aitable.view_get_sort": {
+      "agent_summary": "查询视图的排序规则",
+      "reviewed": true
+    },
+    "aitable.view_get_timebar": {
+      "agent_summary": "查询视图的时间条（甘特/时间轴）",
+      "reviewed": true
+    },
+    "aitable.view_get_visible_fields": {
+      "agent_summary": "查询视图的可见字段及顺序",
+      "reviewed": true
+    },
+    "aitable.view_update_aggregate": {
+      "agent_summary": "更新视图的聚合统计（汇总行）",
+      "reviewed": true
+    },
+    "aitable.view_update_card": {
+      "agent_summary": "更新视图的卡片视图样式",
+      "reviewed": true
+    },
+    "aitable.view_update_field_widths": {
+      "agent_summary": "更新视图的各列列宽",
+      "reviewed": true
+    },
+    "aitable.view_update_filter": {
+      "agent_summary": "更新视图的筛选条件",
+      "reviewed": true
+    },
+    "aitable.view_update_group": {
+      "agent_summary": "更新视图的分组",
+      "reviewed": true
+    },
+    "aitable.view_update_name": {
+      "agent_summary": "重命名视图（修改视图名称）",
+      "reviewed": true
+    },
+    "aitable.view_update_sort": {
+      "agent_summary": "更新视图的排序规则",
+      "reviewed": true
+    },
+    "aitable.view_update_timebar": {
+      "agent_summary": "更新视图的时间条（甘特/时间轴）",
+      "reviewed": true
+    },
+    "aitable.view_update_visible_fields": {
+      "agent_summary": "更新视图的可见字段及顺序",
+      "reviewed": true
+    }
+  }
+}

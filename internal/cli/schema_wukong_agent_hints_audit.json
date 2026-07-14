@@ -1,0 +1,954 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "imported",
+    "name": "dws-wukong-envelope",
+    "repository": "dws-wukong",
+    "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
+    "channel": "prod",
+    "source_hash": "sha256:62d219f6115eeb6029c437965c4bcdd626e6320f53bf9d123a10e6638a286489"
+  },
+  "coverage": {
+    "source_products": 31,
+    "matched_products": 17,
+    "source_tools": 279,
+    "eligible_tools": 245,
+    "matched_tools": 147,
+    "unmatched_tools": 98
+  },
+  "skipped": [
+    {
+      "product_id": "bot",
+      "rpc_name": "add_robot_to_group",
+      "source": "dws-wukong-discovery.bot.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "bot",
+      "rpc_name": "batch_recall_robot_users_msg",
+      "source": "dws-wukong-discovery.bot.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "bot",
+      "rpc_name": "batch_send_robot_msg_to_users",
+      "source": "dws-wukong-discovery.bot.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "bot",
+      "rpc_name": "recall_robot_group_message",
+      "source": "dws-wukong-discovery.bot.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "bot",
+      "rpc_name": "search_my_robots",
+      "source": "dws-wukong-discovery.bot.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "bot",
+      "rpc_name": "send_message_by_custom_robot",
+      "source": "dws-wukong-discovery.bot.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "bot",
+      "rpc_name": "send_robot_group_message",
+      "source": "dws-wukong-discovery.bot.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "chat",
+      "rpc_name": "batch_recall_robot_users_msg",
+      "source": "dws-wukong-discovery.chat.prod.json",
+      "reason": "hidden"
+    },
+    {
+      "product_id": "chat",
+      "rpc_name": "batch_send_robot_msg_to_users",
+      "source": "dws-wukong-discovery.chat.prod.json",
+      "reason": "hidden"
+    },
+    {
+      "product_id": "chat",
+      "rpc_name": "list_individual_chat_message",
+      "source": "dws-wukong-discovery.chat.prod.json",
+      "reason": "hidden"
+    },
+    {
+      "product_id": "chat",
+      "rpc_name": "send_direct_message_as_user",
+      "source": "dws-wukong-discovery.chat.prod.json",
+      "reason": "hidden"
+    },
+    {
+      "product_id": "credit-bid",
+      "rpc_name": "ep_dossier_bidding_query",
+      "source": "dws-wukong-discovery.credit-bid.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-contact",
+      "rpc_name": "ep_contactinfo_ext_query",
+      "source": "dws-wukong-discovery.credit-contact.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-equity",
+      "rpc_name": "ep_dossier_invest_query",
+      "source": "dws-wukong-discovery.credit-equity.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-equity",
+      "rpc_name": "ep_dossier_shareholder_query",
+      "source": "dws-wukong-discovery.credit-equity.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-ip",
+      "rpc_name": "ep_dossier_copyright_query",
+      "source": "dws-wukong-discovery.credit-ip.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-ip",
+      "rpc_name": "ep_dossier_icpregistration_query",
+      "source": "dws-wukong-discovery.credit-ip.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-ip",
+      "rpc_name": "ep_dossier_patent_query",
+      "source": "dws-wukong-discovery.credit-ip.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-ip",
+      "rpc_name": "ep_dossier_trademark_query",
+      "source": "dws-wukong-discovery.credit-ip.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_adminpenalty_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_consum_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_courtnotice_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_dishonest_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_equitypledge_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_execute_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_finalcase_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_legalassist_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_litigation_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_owetax_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_taxviolation_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "credit-risk",
+      "rpc_name": "ep_dossier_verdict_query",
+      "source": "dws-wukong-discovery.credit-risk.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "doc-comment",
+      "rpc_name": "create_comment",
+      "source": "dws-wukong-discovery.doc-comment.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "doc-comment",
+      "rpc_name": "list_comments",
+      "source": "dws-wukong-discovery.doc-comment.prod.json",
+      "reason": "missing_cli_name"
+    },
+    {
+      "product_id": "doc-comment",
+      "rpc_name": "reply_comment",
+      "source": "dws-wukong-discovery.doc-comment.prod.json",
+      "reason": "missing_cli_name"
+    }
+  ],
+  "unmatched": [
+    {
+      "product_id": "aiapp",
+      "rpc_name": "create_ai_app",
+      "cli_path": "aiapp create",
+      "source": "dws-wukong-discovery.aiapp.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aiapp",
+      "rpc_name": "modify_ai_app",
+      "cli_path": "aiapp modify",
+      "source": "dws-wukong-discovery.aiapp.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aiapp",
+      "rpc_name": "query_ai_app",
+      "cli_path": "aiapp query",
+      "source": "dws-wukong-discovery.aiapp.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aidesign",
+      "rpc_name": "edit",
+      "cli_path": "aidesign edit",
+      "source": "dws-wukong-discovery.aidesign.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aidesign",
+      "rpc_name": "generate",
+      "cli_path": "aidesign generate",
+      "source": "dws-wukong-discovery.aidesign.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aidesign",
+      "rpc_name": "generate_with_image",
+      "cli_path": "aidesign generate-with-image",
+      "source": "dws-wukong-discovery.aidesign.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aidesign",
+      "rpc_name": "generate_with_template",
+      "cli_path": "aidesign generate-with-template",
+      "source": "dws-wukong-discovery.aidesign.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aidesign",
+      "rpc_name": "isolate",
+      "cli_path": "aidesign isolate",
+      "source": "dws-wukong-discovery.aidesign.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aidesign",
+      "rpc_name": "upscale",
+      "cli_path": "aidesign upscale",
+      "source": "dws-wukong-discovery.aidesign.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "aitable",
+      "rpc_name": "get_views",
+      "cli_path": "aitable view get",
+      "source": "dws-wukong-discovery.aitable.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "aitable base get",
+        "aitable chart get",
+        "aitable chart share get"
+      ]
+    },
+    {
+      "product_id": "aitable",
+      "rpc_name": "update_view",
+      "cli_path": "aitable view update",
+      "source": "dws-wukong-discovery.aitable.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "product_id": "blackboard",
+      "rpc_name": "create_blackboard",
+      "cli_path": "blackboard create",
+      "source": "dws-wukong-discovery.blackboard.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "blackboard",
+      "rpc_name": "list_user_blackboards",
+      "cli_path": "blackboard list",
+      "source": "dws-wukong-discovery.blackboard.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "conference",
+      "rpc_name": "create_meeting_reservation",
+      "cli_path": "conference meeting create",
+      "source": "dws-wukong-discovery.conference.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "contact",
+      "rpc_name": "search_label_by_name",
+      "cli_path": "contact label get",
+      "source": "dws-wukong-discovery.contact.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "contact user get",
+        "contact user profile get"
+      ]
+    },
+    {
+      "product_id": "contact",
+      "rpc_name": "get_org_labels",
+      "cli_path": "contact label list",
+      "source": "dws-wukong-discovery.contact.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "contact",
+      "rpc_name": "get_label_members_by_labelId",
+      "cli_path": "contact label list-members",
+      "source": "dws-wukong-discovery.contact.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "contact dept list-members"
+      ]
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_annualreport_query",
+      "cli_path": "credit annual",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_bidding_query",
+      "cli_path": "credit bidding",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_branch_query",
+      "cli_path": "credit branch",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_certificate_query",
+      "cli_path": "credit cert-info",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_reginfochange_query",
+      "cli_path": "credit change",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_invest_query",
+      "cli_path": "credit equity invest",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_shareholder_query",
+      "cli_path": "credit equity shareholder",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_basicinfo_query",
+      "cli_path": "credit info",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_copyright_query",
+      "cli_path": "credit ip copyright",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_icpregistration_query",
+      "cli_path": "credit ip icp",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_patent_query",
+      "cli_path": "credit ip patent",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_trademark_query",
+      "cli_path": "credit ip trademark",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_contactinfo_ext_query",
+      "cli_path": "credit kp",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_license_query",
+      "cli_path": "credit license",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_member_query",
+      "cli_path": "credit member",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_legalassist_query",
+      "cli_path": "credit risk assist",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_consum_query",
+      "cli_path": "credit risk consum",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_courtnotice_query",
+      "cli_path": "credit risk court",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_dishonest_query",
+      "cli_path": "credit risk dishonest",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_execute_query",
+      "cli_path": "credit risk execute",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_finalcase_query",
+      "cli_path": "credit risk finalcase",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_litigation_query",
+      "cli_path": "credit risk litigation",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_owetax_query",
+      "cli_path": "credit risk owetax",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_adminpenalty_query",
+      "cli_path": "credit risk penalty",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_equitypledge_query",
+      "cli_path": "credit risk pledge",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_taxviolation_query",
+      "cli_path": "credit risk taxviolation",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_dossier_verdict_query",
+      "cli_path": "credit risk verdict",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "credit",
+      "rpc_name": "ep_info_search_query",
+      "cli_path": "credit search",
+      "source": "dws-wukong-discovery.credit-ep.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "docparse",
+      "rpc_name": "parse_pdf_to_markdown",
+      "cli_path": "docparse convert",
+      "source": "dws-wukong-discovery.docparse.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "drive",
+      "rpc_name": "get_recent_list",
+      "cli_path": "drive recent",
+      "source": "dws-wukong-discovery.drive.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "page_query_enterprise_account",
+      "cli_path": "finance account list",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "create_bank_trade_detail",
+      "cli_path": "finance bank create",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_bank_trade_detail",
+      "cli_path": "finance bank query",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "search_category",
+      "cli_path": "finance category search",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "save_company",
+      "cli_path": "finance company save",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "search_company",
+      "cli_path": "finance company search",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "update_company",
+      "cli_path": "finance company update",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_customer_by_name",
+      "cli_path": "finance customer get",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "page_query_customer_list",
+      "cli_path": "finance customer list",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "save_customer",
+      "cli_path": "finance customer save",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_digital_account",
+      "cli_path": "finance digital-invoice account",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "login_digital_invoice",
+      "cli_path": "finance digital-invoice do-login",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_invoice_login_status",
+      "cli_path": "finance digital-invoice do-login-status",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "get_face_qr_code",
+      "cli_path": "finance digital-invoice face-qr",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "get_face_auth_status",
+      "cli_path": "finance digital-invoice face-status",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "get_invoice_file",
+      "cli_path": "finance digital-invoice file",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "intelligent_goods_code",
+      "cli_path": "finance digital-invoice goods-code",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "issue_digital_invoice",
+      "cli_path": "finance digital-invoice issue",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_invoice_skill_version",
+      "cli_path": "finance digital-invoice skill-version",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "upload_invoice_sms_code",
+      "cli_path": "finance digital-invoice sms-code",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "intelligent_title",
+      "cli_path": "finance digital-invoice title",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "skill_query_invoice_issue_result",
+      "cli_path": "finance invoice issue-result",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "recommend_category_form_invoice",
+      "cli_path": "finance invoice recommend-category",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "skill_upload_invoice",
+      "cli_path": "finance invoice upload",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "get_fund_journal_by_day",
+      "cli_path": "finance journal daily",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "get_fund_journal_detail_url",
+      "cli_path": "finance journal detail-url",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "list_receiptor_account",
+      "cli_path": "finance payment account-list",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_receiptor_management_url",
+      "cli_path": "finance payment account-url",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_cashier_url",
+      "cli_path": "finance payment cashier-url",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "create_payment_order",
+      "cli_path": "finance payment create",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_wait_orders",
+      "cli_path": "finance payment list",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "query_payer_account_list",
+      "cli_path": "finance payment payer-list",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "skill_generate_receipt",
+      "cli_path": "finance receipt create",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "create_collection_receipt",
+      "cli_path": "finance receipt create-collection",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "search_supplier",
+      "cli_path": "finance supplier search",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "get_voucher_entries_approval",
+      "cli_path": "finance voucher entries",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "finance",
+      "rpc_name": "get_voucher_by_approval_no",
+      "cli_path": "finance voucher generate",
+      "source": "dws-wukong-discovery.finance.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "law",
+      "rpc_name": "case-search",
+      "cli_path": "law case",
+      "source": "dws-wukong-discovery.law.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "law",
+      "rpc_name": "legal-consult",
+      "cli_path": "law consult",
+      "source": "dws-wukong-discovery.law.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "law",
+      "rpc_name": "law-search",
+      "cli_path": "law search",
+      "source": "dws-wukong-discovery.law.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "create_mail_tag",
+      "cli_path": "mail tag create",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "mail contact create",
+        "mail draft create",
+        "mail folder create"
+      ]
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "delete_mail_tag",
+      "cli_path": "mail tag delete",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "mail folder delete",
+        "mail template delete"
+      ]
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "update_mail_tag",
+      "cli_path": "mail tag update",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "mail contact update",
+        "mail draft update",
+        "mail folder update"
+      ]
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "mail_thread_batch_trash",
+      "cli_path": "mail thread batch-trash",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "mail_thread_batch_update",
+      "cli_path": "mail thread batch-update",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "mail_thread_list",
+      "cli_path": "mail thread list",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "mail attachment list",
+        "mail contact list",
+        "mail folder list"
+      ]
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "mail_thread_trash",
+      "cli_path": "mail thread trash",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "mail",
+      "rpc_name": "mail_thread_update",
+      "cli_path": "mail thread update",
+      "source": "dws-wukong-discovery.mail.prod.json",
+      "reason": "not_in_public_command_surface",
+      "candidates": [
+        "mail contact update",
+        "mail draft update",
+        "mail folder update"
+      ]
+    },
+    {
+      "product_id": "oa",
+      "rpc_name": "oa_ding_user",
+      "cli_path": "oa approval ding-info",
+      "source": "dws-wukong-discovery.oa.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "oa",
+      "rpc_name": "revert_task",
+      "cli_path": "oa approval revert-task",
+      "source": "dws-wukong-discovery.oa.prod.json",
+      "reason": "not_in_public_command_surface"
+    },
+    {
+      "product_id": "oa",
+      "rpc_name": "search_form",
+      "cli_path": "oa approval search-forms",
+      "source": "dws-wukong-discovery.oa.prod.json",
+      "reason": "not_in_public_command_surface"
+    }
+  ]
+}

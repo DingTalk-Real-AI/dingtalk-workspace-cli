@@ -81,6 +81,8 @@ dws sheet filter-view --help
 | `sheet new` | 新建工作表 |
 | `sheet update` | 更新工作表属性（标题/位置/隐藏/冻结） |
 | `sheet copy` | 复制工作表 |
+| `sheet show-gridline` | 显示工作表网格线 |
+| `sheet hide-gridline` | 隐藏工作表网格线 |
 | `sheet range read` | 读取工作表数据（别名: range get） |
 | `sheet range update` | 更新指定区域内容（值/公式/超链接） |
 | `sheet range clear` | 清除区域（值/格式/全部） |
@@ -91,11 +93,17 @@ dws sheet filter-view --help
 | `sheet range batch-clear` | 批量清除多个区域（原子事务） |
 | `sheet batch-update` | 批量执行多个写操作（原子事务） |
 | `sheet csv-get` | 以 CSV 格式读取区域数据 |
+| `sheet table-get` | 读取结构化 table 数据（别名: table-read） |
 | `sheet range set-style` | 设置单元格样式 |
 | `sheet range batch-set-style` | 按配置文件批量设置样式 |
 | `sheet find` | 搜索单元格内容 |
 | `sheet append` | 在末尾追加数据行 |
 | `sheet csv-put` | 将 CSV 数据写入指定位置（纯值，自动扩容） |
+| `sheet table-put` | 写入一个或多个结构化 table（别名: table-write） |
+| `sheet pivot-table list` | 列出透视表或获取指定透视表详情 |
+| `sheet pivot-table create` | 创建原生透视表 |
+| `sheet pivot-table update` | 更新透视表配置 |
+| `sheet pivot-table delete` | 删除透视表（不可逆，删除前必须确认） |
 | `sheet delete-sheet` | 删除工作表（不可逆，删除前必须确认） |
 | `sheet replace` | 全局查找替换文本 |
 | `sheet merge-cells` | 合并单元格 |
@@ -153,9 +161,10 @@ dws sheet filter-view --help
 
 | 主题 | 子文档 | 覆盖命令 |
 |------|--------|---------|
-| 表格与工作表管理 | [sheet/sheet-workbook.md](./sheet/sheet-workbook.md) | create / list / info / new / update / copy / delete-sheet |
-| 写入数据 | [sheet/sheet-write-data.md](./sheet/sheet-write-data.md) | range update（对象协议详解）/ append / csv-put |
-| 读取数据 | [sheet/sheet-read-data.md](./sheet/sheet-read-data.md) | range read / csv-get |
+| 表格与工作表管理 | [sheet/sheet-workbook.md](./sheet/sheet-workbook.md) | create / list / info / new / update / copy / show-gridline / hide-gridline / delete-sheet |
+| 透视表 | [sheet/sheet-pivot-table.md](./sheet/sheet-pivot-table.md) | pivot-table list / create / update / delete |
+| 写入数据 | [sheet/sheet-write-data.md](./sheet/sheet-write-data.md) | table-put / range update（对象协议详解）/ append / csv-put |
+| 读取数据 | [sheet/sheet-read-data.md](./sheet/sheet-read-data.md) | table-get / range read / csv-get |
 | 区域操作 | [sheet/sheet-range-operations.md](./sheet/sheet-range-operations.md) | range clear / sort / fill / copy-to / move-to |
 | 批量操作 | [sheet/sheet-batch-operations.md](./sheet/sheet-batch-operations.md) | range batch-clear / batch-update |
 | 行列操作 | [sheet/sheet-dimension-operations.md](./sheet/sheet-dimension-operations.md) | insert / delete / update / move / add-dimension / group-dimension / ungroup-dimension |

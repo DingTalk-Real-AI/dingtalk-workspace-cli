@@ -338,6 +338,22 @@ Flags:
       --mention string      被 @ 的用户 uid 列表，逗号分隔
 ```
 
+### 更新文档评论
+```text
+Usage:
+  dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content <CONTENT> [--mention uid1,uid2]
+```
+
+`commentKey` 从 `comment list/create/create-inline` 返回中获取。只有显式传入 `--mention` 时才更新被 @ 用户列表。
+
+### 删除文档评论
+```text
+Usage:
+  dws doc comment delete --node <DOC_ID> --comment-key <COMMENT_KEY> --yes
+```
+
+删除评论不可恢复，必须先获得用户明确确认，再添加全局 `--yes`。
+
 ### 文件内容获取路由规则
 
 > 当用户请求"分析/查看/读取某个文件内容"时，**必须先调用 `dws doc info` 获取文件元数据**，再根据返回的 `contentType` 和 `extension` 字段选择对应链路：
@@ -893,18 +909,24 @@ dws doc comment create --node <DOC_ID> --content "这里需要补充数据来源
 #    再将 userId 传入 --mention
 dws doc comment create --node <DOC_ID> --content "请确认这部分内容" --mention <userId1>,<userId2> --format json
 
-# 4. 回复某条评论（commentKey 从 list 或 create 返回中获取）
+# 4. 更新某条评论（可选 --mention）
+dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已按最新数据修正" --format json
+
+# 5. 删除某条评论（不可恢复，必须先确认）
+dws doc comment delete --node <DOC_ID> --comment-key <COMMENT_KEY> --yes --format json
+
+# 6. 回复某条评论（commentKey 从 list 或 create 返回中获取）
 dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已修改" --format json
 
-# 5. 用表情回复评论
+# 7. 用表情回复评论
 dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "比心" --emoji --format json
 
-# 6. 创建划词评论（针对文档中某段选中文本）
+# 8. 创建划词评论（针对文档中某段选中文本）
 #    先获取块列表: dws doc block list --node <DOC_ID> --format json → 提取 blockId 和文本内容
 #    确定选中文本在块内的起始偏移量 (start) 和结束偏移量 (end)
 dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 0 --end 10 --content "这里需要修改" --format json
 
-# 7. 创建划词评论并附带引用原文 + @ 相关人
+# 9. 创建划词评论并附带引用原文 + @ 相关人
 dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 5 --end 20 --content "请确认这部分" --selected-text "被选中的原文内容" --mention <userId1>,<userId2> --format json
 
 # ── 工作流 10: 导出在线文档为 docx ──
@@ -926,10 +948,10 @@ dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
 | `import` | `nodeId` / `documentUrl` / `documentName` / `documentType`；中断时提取 `taskId` | 后续 read / info / sheet 操作；中断后用 `doc import get --task-id` |
 | `drive mkdir`（原 `doc folder create`，已弃用） | `nodeId` | create 的 --folder |
 | `block list` | `blockId` | block insert 的 --ref-block, block update/delete 的 --block-id |
-| `comment list` | `commentList[].commentKey` | comment reply 的 --comment-key |
-| `comment create` / `comment create-inline` | `commentKey` | comment reply 的 --comment-key |
+| `comment list` | `commentList[].commentKey` | comment reply/update/delete 的 --comment-key |
+| `comment create` / `comment create-inline` | `commentKey` | comment reply/update/delete 的 --comment-key |
 | `block list` | `blockId` + 文本内容 | comment create-inline 的 --block-id 及 --start/--end 计算 |
-| `contact user search` | `userId` | comment create / create-inline / reply 的 --mention |
+| `contact user search` | `userId` | comment create / create-inline / reply / update 的 --mention |
 | `wiki node create`（原 `doc file create`，已弃用） | `nodeId` | 后续 read / update / block 操作的 --node（仅 adoc 支持 read/update，axls/amind 等类型用各自产品的命令） |
 | `copy` / `move` | 新 `nodeId`（copy）或原 nodeId（move） | 后续 read / info 等的 --node |
 

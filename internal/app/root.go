@@ -24,7 +24,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -39,7 +38,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
@@ -66,6 +64,8 @@ func Execute() (exitCode int) {
 	timing := NewTimingCollector()
 	defer func() {
 		StopAllStdioClients() // Ensure child processes are terminated on exit
+		CloseAuditSink()      // Drain async audit forwards on all exit paths,
+		// including command errors where Cobra skips PersistentPostRunE.
 		timing.PrintIfEnabled()
 		timing.WriteReportIfEnabled(RawVersion(), SanitizeCommand(os.Args))
 	}()
@@ -335,6 +335,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 			StopAllStdioClients()
+			CloseAuditSink()
 			CloseFileLogger()
 			return closeOutputSink(cmd)
 		},
@@ -357,6 +358,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		newConfigCommand(),
 		newDoctorCommand(),
 		newEventCommand(),
+		newAuditCommand(),
 		newCompletionCommand(root),
 		newRecoveryCommand(rootCtx, loader, flags),
 		newUpgradeCommand(),
@@ -385,7 +387,6 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		fn(root, caller)
 		deduplicateCommands(root)
 	}
-
 	hideNonDirectRuntimeCommands(root)
 	configureRootHelp(root)
 	// Set custom flag error handler for better UX
@@ -539,7 +540,7 @@ func newVersionCommand() *cobra.Command {
 }
 
 func newSchemaCommand(loader cli.CatalogLoader) *cobra.Command {
-	return cli.NewSchemaCommand(loader, newHelperToolFetcher())
+	return cli.NewSchemaCommand(loader)
 }
 
 // buildMCPCommandFn is a test seam for newMCPCommand.
@@ -560,10 +561,12 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 	staticCommands := map[string]bool{
 		"auth":       true,
 		"api":        true,
+		"audit":      true,
 		"cache":      true,
 		"config":     true,
 		"dev":        true,
 		"doctor":     true,
+		"event":      true,
 		"completion": true,
 		"skill":      true,
 		"plugin":     true,
@@ -594,9 +597,9 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 // not override. This protects core CLI functionality from being hijacked
 // by a malicious or misconfigured plugin.
 var reservedCommands = map[string]bool{
-	"auth": true, "api": true, "login": true, "logout": true,
+	"auth": true, "api": true, "audit": true, "login": true, "logout": true,
 	"plugin": true, "profile": true, "skill": true, "cache": true,
-	"config": true, "doctor": true, "completion": true,
+	"config": true, "doctor": true, "event": true, "completion": true,
 	"recovery": true, "upgrade": true, "version": true,
 	"schema": true, "mcp": true, "help": true,
 }
@@ -666,43 +669,6 @@ func deduplicateCommands(root *cobra.Command) {
 	for _, dup := range dups {
 		root.RemoveCommand(dup)
 	}
-}
-
-// pluginColdTimeouts holds the cold-path discovery budget for plugin MCP
-// servers. Timeouts only apply to the *first* discovery for a given
-// plugin/server; subsequent startups take the warm cache path and bypass
-// the network entirely.
-type pluginColdTimeouts struct {
-	httpNoAuth time.Duration
-	httpAuth   time.Duration
-	stdio      time.Duration
-}
-
-// resolvePluginColdTimeouts returns the cold-discovery budget for plugin MCP
-// servers, applying the DWS_PLUGIN_COLD_TIMEOUT override when set. Defaults
-// are tuned so healthy cross-region HTTP endpoints succeed on a cold start
-// and Python/Node-based stdio plugins have headroom for interpreter load,
-// while an unreachable host still surrenders in bounded time.
-func resolvePluginColdTimeouts() pluginColdTimeouts {
-	t := pluginColdTimeouts{
-		httpNoAuth: 1 * time.Second,
-		httpAuth:   1500 * time.Millisecond,
-		stdio:      2 * time.Second,
-	}
-	raw := strings.TrimSpace(os.Getenv(cli.PluginColdTimeoutEnv))
-	if raw == "" {
-		return t
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		slog.Warn("plugin: ignoring invalid DWS_PLUGIN_COLD_TIMEOUT",
-			"value", raw, "error", err)
-		return t
-	}
-	t.httpNoAuth = d
-	t.httpAuth = d
-	t.stdio = d
-	return t
 }
 
 func configureOutputSink(cmd *cobra.Command) error {
@@ -799,11 +765,10 @@ func CloseFileLogger() {
 	}
 }
 
-// loadPlugins scans plugin directories, injects their MCP servers into
-// the dynamic server registry, and registers their pipeline hooks.
-// This runs before legacy command construction so that plugin servers
-// are available for EnvironmentLoader.Load().
-func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
+// loadPlugins registers versioned plugin manifests, stdio clients, hooks, and
+// skills. It deliberately does not initialize MCP transports or call
+// tools/list while constructing the command tree.
+func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
 	// 0a. Inject plugin config values from settings.json as environment
@@ -833,94 +798,19 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 
 	allPlugins := append(userPlugins, devPlugins...)
 
-	// 3. Discover tools from streamable-http servers and build CLI commands.
-	//    Third-party servers with auth headers are discovered in parallel
-	//    to avoid sequential 10s timeouts when multiple remote servers exist.
-	var pluginCmds []*cobra.Command
-	tc := transport.NewClient(nil)
-
-	// Collect all server descriptors and register auth first (fast, no I/O).
-	type pluginServer struct {
-		plugin *plugin.Plugin
-		srv    mcptypes.ServerDescriptor
-	}
-	var httpServers []pluginServer
-
+	// 3. Register HTTP descriptors and authentication from the manifest.
 	for _, p := range allPlugins {
 		for _, srv := range p.ToServerDescriptors() {
-			AppendDynamicServer(srv)
-
-			if len(srv.AuthHeaders) > 0 {
-				registerPluginAuthFromHeaders(srv)
-			}
-
-			if srv.HasCLIMeta {
-				httpServers = append(httpServers, pluginServer{plugin: p, srv: srv})
-			}
+			registerPluginHTTPServer(srv)
 		}
 	}
 
-	// Collect all stdio clients up front so HTTP + stdio discovery can run
-	// concurrently — the slowest plugin (typically an unreachable HTTP
-	// endpoint hitting its dial timeout) dominates the parallel wall-clock,
-	// not the sum of every plugin's cold timeout.
-	type stdioEntry struct {
-		plugin *plugin.Plugin
-		sc     plugin.StdioServerClient
-	}
-	var stdioEntries []stdioEntry
+	// 4. Register stdio descriptors and unstarted clients. The subprocess is
+	// started and initialized only when a command is actually executed.
 	for _, p := range allPlugins {
 		for _, sc := range p.StdioClients(userCtx) {
-			// Use background context so the subprocess lives for the CLI
-			// process lifetime (not killed by a short timeout).
-			if err := sc.Client.Start(context.Background()); err != nil {
-				slog.Warn("plugin: failed to start stdio server",
-					"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
-				continue
-			}
-			stdioEntries = append(stdioEntries, stdioEntry{plugin: p, sc: sc})
+			registerStdioServerFromManifest(p, sc)
 		}
-	}
-
-	coldTimeouts := resolvePluginColdTimeouts()
-
-	// Phase A: stdio overlay-first registration (synchronous, no I/O).
-	// Plugins whose overlay.json declares ToolOverrides register their
-	// server descriptor up-front from manifest metadata alone.
-	var legacyStdioEntries []stdioEntry
-	for _, e := range stdioEntries {
-		_, _, ok := registerStdioServerFromOverlay(e.plugin, e.sc, runner)
-		if !ok {
-			legacyStdioEntries = append(legacyStdioEntries, e)
-			continue
-		}
-	}
-
-	// Phase B: fan out discovery in parallel.
-	httpResults := make([][]*cobra.Command, len(httpServers))
-	legacyStdioResults := make([][]*cobra.Command, len(legacyStdioEntries))
-	var wg sync.WaitGroup
-	for i, ps := range httpServers {
-		wg.Add(1)
-		go func(idx int, ps pluginServer) {
-			defer wg.Done()
-			httpResults[idx] = registerHTTPServer(ps.plugin, ps.srv, tc, runner, coldTimeouts)
-		}(i, ps)
-	}
-	// legacy stdio: discovery-first (commands depend on tool list).
-	for i, e := range legacyStdioEntries {
-		wg.Add(1)
-		go func(idx int, e stdioEntry) {
-			defer wg.Done()
-			legacyStdioResults[idx] = registerStdioServer(e.plugin, e.sc, runner, coldTimeouts)
-		}(i, e)
-	}
-	wg.Wait()
-	for _, cmds := range httpResults {
-		pluginCmds = append(pluginCmds, cmds...)
-	}
-	for _, cmds := range legacyStdioResults {
-		pluginCmds = append(pluginCmds, cmds...)
 	}
 
 	// 5. Register plugin hooks into pipeline engine
@@ -951,89 +841,14 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 		)
 	}
 
-	return pluginCmds
-}
-
-// registerHTTPServer discovers tools from a streamable-http MCP server and
-// registers the server. Dynamic command building has been removed; this now
-// simply registers the server descriptor for direct runtime dispatch.
-func registerHTTPServer(p *plugin.Plugin, srv mcptypes.ServerDescriptor, tc *transport.Client, runner executor.Runner, timeouts pluginColdTimeouts) []*cobra.Command {
-	tools := discoverHTTPTools(p, srv, tc, timeouts)
-	return buildHTTPCommandsFromTools(srv, tools, runner)
-}
-
-// discoverHTTPTools performs the blocking Initialize + ListTools handshake
-// for an HTTP MCP server and returns the discovered tools. Returns nil on
-// any transport/protocol error; errors are logged at Debug level.
-func discoverHTTPTools(p *plugin.Plugin, srv mcptypes.ServerDescriptor, tc *transport.Client, timeouts pluginColdTimeouts) []transport.ToolDescriptor {
-	// Cold-path budget. An unreachable endpoint will burn the full window
-	// via the TCP dial timeout; a healthy localhost/third-party endpoint
-	// typically responds in <200 ms. Third-party servers with auth get a
-	// slightly larger window to accommodate TLS + auth RTT. Operators with
-	// cross-region endpoints can relax the window via DWS_PLUGIN_COLD_TIMEOUT.
-	// TODO(remove-discovery): plugin discovery currently has no warm cache, so
-	// unreachable endpoints still pay this timeout during command startup.
-	timeout := timeouts.httpNoAuth
-	if len(srv.AuthHeaders) > 0 {
-		timeout = timeouts.httpAuth
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	discoveryClient := tc
-	if len(srv.AuthHeaders) > 0 {
-		discoveryClient = buildPluginAuthClient(tc, srv)
-	}
-
-	if _, err := discoveryClient.Initialize(ctx, srv.Endpoint); err != nil {
-		slog.Debug("plugin: http server offline, skipping tool discovery",
-			"plugin", p.Manifest.Name, "server", srv.Key)
-		return nil
-	}
-
-	toolsResult, err := discoveryClient.ListTools(ctx, srv.Endpoint)
-	if err != nil {
-		slog.Debug("plugin: http ListTools failed",
-			"plugin", p.Manifest.Name, "server", srv.Key, "error", err)
-		return nil
-	}
-	return toolsResult.Tools
-}
-
-// buildHTTPCommandsFromTools registers the server for direct runtime
-// dispatch. Dynamic command tree building has been removed.
-func buildHTTPCommandsFromTools(srv mcptypes.ServerDescriptor, tools []transport.ToolDescriptor, runner executor.Runner) []*cobra.Command {
-	_ = srv
-	_ = tools
-	_ = runner
-	// Dynamic command building from compat.BuildDynamicCommands has been removed.
 	return nil
 }
 
-// buildPluginAuthClient creates a transport.Client copy with the plugin's
-// Bearer token and trusted domains injected. This allows third-party MCP
-// servers that require independent authentication to be discovered at startup.
-func buildPluginAuthClient(base *transport.Client, srv mcptypes.ServerDescriptor) *transport.Client {
-	authToken := ""
-	extraHeaders := make(map[string]string)
-	for key, value := range srv.AuthHeaders {
-		if strings.EqualFold(key, "Authorization") {
-			authToken = strings.TrimPrefix(value, "Bearer ")
-			authToken = strings.TrimSpace(authToken)
-		} else {
-			extraHeaders[key] = value
-		}
+func registerPluginHTTPServer(srv mcptypes.ServerDescriptor) {
+	AppendDynamicServer(srv)
+	if len(srv.AuthHeaders) > 0 {
+		registerPluginAuthFromHeaders(srv)
 	}
-	if authToken == "" {
-		return base
-	}
-	client := base.WithAuth(authToken, extraHeaders)
-	// Trust the endpoint's hostname so the token is actually sent.
-	if parsed, err := url.Parse(srv.Endpoint); err == nil {
-		host := parsed.Hostname()
-		client.TrustedDomains = []string{host, "*." + host}
-	}
-	return client
 }
 
 // registerPluginAuthFromHeaders extracts authentication credentials from
@@ -1068,84 +883,6 @@ func registerPluginAuthFromHeaders(srv mcptypes.ServerDescriptor) {
 		ExtraHeaders:   extraHeaders,
 		TrustedDomains: trustedDomains,
 	})
-}
-
-// registerStdioServer initializes a stdio MCP server, discovers its tools,
-// and registers the StdioClient for runtime dispatch.
-func registerStdioServer(p *plugin.Plugin, sc plugin.StdioServerClient, runner executor.Runner, timeouts pluginColdTimeouts) []*cobra.Command {
-	tools := discoverStdioTools(p, sc, timeouts)
-	return buildStdioCommands(p, sc, tools, runner)
-}
-
-// discoverStdioTools performs the blocking Initialize + ListTools handshake
-// on a stdio MCP subprocess. Returns nil on any error (logged at Debug level).
-// The default 2s budget comfortably accommodates Python/Node runtimes whose
-// interpreter + dependency load dominates the first response. Operators with
-// heavier startup chains can relax further via DWS_PLUGIN_COLD_TIMEOUT.
-//
-// A handshake failure here is an EXPECTED, benign outcome for an optional local
-// plugin: e.g. the conference plugin reports "本地服务未就绪" whenever the
-// DingTalk desktop client isn't running, which is the common case for anyone
-// not actively recording a meeting. Discovery simply yields no tools and the
-// run proceeds — commands that ship toolOverrides still register up-front via
-// registerStdioServerFromOverlay (Phase A), so availability is unaffected.
-//
-// These run during command-tree construction (NewRootCommandWithEngine), which
-// happens BEFORE PersistentPreRunE applies --debug/--verbose via
-// configureLogLevel. So a Warn here printed to stderr on EVERY invocation
-// regardless of flags, polluting output and misleading callers into treating it
-// as the cause of an unrelated command error (e.g. an auth or PARAM_ERROR from a
-// completely different server). Logging at Debug keeps the discovery miss out of
-// normal output; surfacing it would require configuring the log level before the
-// tree is built, which we deliberately avoid this close to release.
-func discoverStdioTools(p *plugin.Plugin, sc plugin.StdioServerClient, timeouts pluginColdTimeouts) []transport.ToolDescriptor {
-	ctx, cancel := context.WithTimeout(context.Background(), timeouts.stdio)
-	defer cancel()
-
-	if _, err := sc.Client.Initialize(ctx); err != nil {
-		slog.Debug("plugin: stdio initialize failed",
-			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
-		return nil
-	}
-	toolsResult, err := sc.Client.ListTools(ctx)
-	if err != nil {
-		slog.Debug("plugin: stdio ListTools failed",
-			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
-		return nil
-	}
-	return toolsResult.Tools
-}
-
-// buildStdioCommands registers the stdio client and server descriptor
-// for direct runtime dispatch. Dynamic command tree building has been removed.
-func buildStdioCommands(p *plugin.Plugin, sc plugin.StdioServerClient, tools []transport.ToolDescriptor, runner executor.Runner) []*cobra.Command {
-	if len(tools) == 0 {
-		slog.Debug("plugin: stdio server has no tools",
-			"plugin", p.Manifest.Name, "server", sc.Key)
-		return nil
-	}
-
-	overlay := resolveStdioOverlay(p, sc)
-
-	descriptor := mcptypes.ServerDescriptor{
-		Key:         sc.Key,
-		DisplayName: p.Manifest.Name + "/" + sc.Key,
-		Description: p.Manifest.Description,
-		Endpoint:    StdioEndpoint(p.Manifest.Name, sc.Key),
-		Source:      "plugin",
-		CLI:         overlay,
-		HasCLIMeta:  true,
-	}
-
-	AppendDynamicServer(descriptor)
-	RegisterStdioClient(p.Manifest.Name+"/"+sc.Key, sc.Client)
-
-	slog.Debug("plugin: stdio server registered",
-		"plugin", p.Manifest.Name, "server", sc.Key,
-		"tools", len(tools))
-
-	_ = runner
-	return nil
 }
 
 // newPipelineEngine creates and configures the pipeline engine with

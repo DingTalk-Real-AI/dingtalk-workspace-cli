@@ -1,0 +1,623 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "attendance-agent-review-v1",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source"
+  },
+  "coverage": {
+    "source_tools": 38,
+    "matched_tools": 38
+  },
+  "tools": {
+    "attendance.adjustment_search": {
+      "agent_summary": "查询补卡规则列表",
+      "use_when": [
+        "需要查看有哪些补卡规则或筛选补卡规则"
+      ],
+      "avoid_when": [
+        "已知道补卡规则ID并要看详情时使用 attendance adjustment get",
+        "查询加班规则时使用 attendance overtime search",
+        "查询员工打卡/考勤记录时使用 attendance record get 或 attendance check record"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.adjustment_get": {
+      "agent_summary": "查询单个补卡规则详情",
+      "use_when": [
+        "已取得补卡规则ID，需要查看规则详情"
+      ],
+      "avoid_when": [
+        "不知道补卡规则ID时先用 attendance adjustment search",
+        "查询加班规则详情时使用 attendance overtime get",
+        "查询补卡审批单记录时使用 attendance approve list"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.overtime_search": {
+      "agent_summary": "查询加班规则列表",
+      "use_when": [
+        "需要查看可用加班规则或筛选加班规则"
+      ],
+      "avoid_when": [
+        "已知道加班规则ID并要看详情时使用 attendance overtime get",
+        "查询补卡规则时使用 attendance adjustment search",
+        "查询加班审批单记录时使用 attendance approve list"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.overtime_get": {
+      "agent_summary": "查询单个加班规则详情",
+      "use_when": [
+        "已取得加班规则ID，需要查看规则详情"
+      ],
+      "avoid_when": [
+        "不知道加班规则ID时先用 attendance overtime search",
+        "查询补卡规则详情时使用 attendance adjustment get",
+        "查询员工班次时使用 attendance shift list"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.approve_list": {
+      "agent_summary": "查询考勤相关审批单记录",
+      "use_when": [
+        "查询补卡、加班、请假、出差外出等考勤审批记录"
+      ],
+      "avoid_when": [
+        "需要获取可提交审批的模板/跳转链接时使用 attendance approve templates",
+        "查询实际打卡记录时使用 attendance record get 或 attendance check record",
+        "查询假期余额时使用 attendance vacation balance"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.approve_templates": {
+      "agent_summary": "查询考勤审批模板和提交入口",
+      "use_when": [
+        "用户要发起补卡、请假、加班、外出或出差审批前查询可用模板"
+      ],
+      "avoid_when": [
+        "查看已存在审批单记录时使用 attendance approve list",
+        "查询考勤记录/统计时使用 attendance record get 或 attendance summary",
+        "配置考勤规则时使用 attendance group/globalsetting/class 相关命令"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.batch_get_employee_shifts": {
+      "agent_summary": "批量查询员工班次信息",
+      "use_when": [
+        "按员工和日期范围查询班次/排班班次"
+      ],
+      "avoid_when": [
+        "查询实际排班记录时使用 attendance schedule get",
+        "查询班次定义/班次ID时使用 attendance class search 或 attendance class get",
+        "查询考勤组与规则时使用 attendance rules"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.schedule_get": {
+      "agent_summary": "查询员工排班记录",
+      "use_when": [
+        "查询指定员工在日期范围内的排班记录"
+      ],
+      "avoid_when": [
+        "查询班次定义时使用 attendance class get/search",
+        "批量查询员工班次结果时使用 attendance shift list",
+        "导入或修改排班时使用 attendance schedule import"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.schedule_import": {
+      "agent_summary": "导入排班制考勤组排班记录",
+      "use_when": [
+        "需要批量导入或覆盖排班记录"
+      ],
+      "avoid_when": [
+        "仅查看排班时使用 attendance schedule get 或 attendance shift list",
+        "查询班次定义时使用 attendance class search/get",
+        "不确定 groupId/classId/workDate 时先查询考勤组和班次"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.class_search": {
+      "agent_summary": "查询班次定义列表",
+      "use_when": [
+        "搜索或列出可用班次/班次ID"
+      ],
+      "avoid_when": [
+        "已知道班次ID并要看详情时使用 attendance class get",
+        "查询员工排班记录时使用 attendance schedule get",
+        "创建或修改班次定义时使用 attendance class create/update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.class_get": {
+      "agent_summary": "查询单个班次定义详情",
+      "use_when": [
+        "已取得班次ID，需要查看班次配置"
+      ],
+      "avoid_when": [
+        "不知道班次ID时先用 attendance class search",
+        "查询员工排班记录时使用 attendance schedule get",
+        "修改班次定义时使用 attendance class update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.class_create": {
+      "agent_summary": "创建班次定义",
+      "use_when": [
+        "需要新增一个班次/上下班时间规则"
+      ],
+      "avoid_when": [
+        "查询已有班次时使用 attendance class search/get",
+        "修改已有班次时使用 attendance class update",
+        "导入员工排班时使用 attendance schedule import"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.class_update": {
+      "agent_summary": "更新班次定义",
+      "use_when": [
+        "需要修改已有班次的名称、上下班时间或规则"
+      ],
+      "avoid_when": [
+        "查询班次详情时使用 attendance class get",
+        "创建新班次时使用 attendance class create",
+        "调整员工排班时使用 attendance schedule import"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.group_search": {
+      "agent_summary": "查询考勤组列表",
+      "use_when": [
+        "按权限或条件查看考勤组简要信息"
+      ],
+      "avoid_when": [
+        "已知道考勤组ID并要看详情时使用 attendance group get",
+        "只需要部分字段时使用 attendance group filtered-get",
+        "创建/修改考勤组时使用 attendance group create/update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.group_get": {
+      "agent_summary": "查询考勤组完整详情",
+      "use_when": [
+        "已取得考勤组ID，需要查看完整配置"
+      ],
+      "avoid_when": [
+        "不知道考勤组ID时先用 attendance group search",
+        "只需要成员/地址等子集时使用 attendance group filtered-get",
+        "修改考勤组配置时使用 attendance group update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.group_filtered_get": {
+      "agent_summary": "查询考勤组指定字段子集",
+      "use_when": [
+        "只需要考勤组成员、打卡地址、蓝牙等部分字段，减少返回体积"
+      ],
+      "avoid_when": [
+        "需要完整考勤组配置时使用 attendance group get",
+        "不知道考勤组ID时先用 attendance group search",
+        "需要修改成员时使用 attendance group update-members"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.group_create": {
+      "agent_summary": "创建考勤组",
+      "use_when": [
+        "需要新建一个考勤组并配置规则"
+      ],
+      "avoid_when": [
+        "查询已有考勤组时使用 attendance group search/get",
+        "修改已有考勤组时使用 attendance group update",
+        "仅修改成员时使用 attendance group update-members"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.group_update": {
+      "agent_summary": "更新考勤组配置",
+      "use_when": [
+        "需要修改已有考勤组的规则、班次、位置或范围"
+      ],
+      "avoid_when": [
+        "查询考勤组详情时使用 attendance group get",
+        "只调整成员时使用 attendance group update-members",
+        "创建新考勤组时使用 attendance group create"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.group_update_members": {
+      "agent_summary": "增删考勤组成员",
+      "use_when": [
+        "需要向考勤组添加或移除成员"
+      ],
+      "avoid_when": [
+        "只查询成员信息时使用 attendance group filtered-get 或 group get",
+        "修改考勤组规则配置时使用 attendance group update",
+        "创建新考勤组时使用 attendance group create"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.query_attendance_group_or_rules": {
+      "agent_summary": "查询考勤组与考勤规则",
+      "use_when": [
+        "需要查看当前可见的考勤组和规则概览"
+      ],
+      "avoid_when": [
+        "需要考勤组完整详情时使用 attendance group get",
+        "需要补卡/加班规则时使用 attendance adjustment/overtime search",
+        "需要全局或个人设置时使用 globalsetting/selfsetting get"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.globalsetting_get": {
+      "agent_summary": "查询企业全局考勤设置",
+      "use_when": [
+        "管理员查看企业级打卡提醒、极速打卡等全局设置"
+      ],
+      "avoid_when": [
+        "修改全局设置时使用 attendance globalsetting save",
+        "查看个人设置时使用 attendance selfsetting get",
+        "查看考勤组规则时使用 attendance group get/rules"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.globalsetting_save": {
+      "agent_summary": "更新企业全局考勤设置",
+      "use_when": [
+        "管理员需要修改企业级打卡提醒、极速打卡等全局设置"
+      ],
+      "avoid_when": [
+        "只查看全局设置时使用 attendance globalsetting get",
+        "修改个人设置时使用 attendance selfsetting save",
+        "修改考勤组配置时使用 attendance group update"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.selfsetting_get": {
+      "agent_summary": "查询个人考勤设置",
+      "use_when": [
+        "查看某个员工的个人打卡提醒、极速打卡、结果通知等设置"
+      ],
+      "avoid_when": [
+        "修改个人设置时使用 attendance selfsetting save",
+        "查询企业全局设置时使用 attendance globalsetting get",
+        "查询个人考勤记录时使用 attendance record get"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.selfsetting_save": {
+      "agent_summary": "更新个人考勤设置",
+      "use_when": [
+        "需要修改员工个人打卡提醒、极速打卡或结果通知设置"
+      ],
+      "avoid_when": [
+        "只查看个人设置时使用 attendance selfsetting get",
+        "修改企业全局设置时使用 attendance globalsetting save",
+        "查询考勤记录时使用 attendance record get"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.get_user_attendance_record": {
+      "agent_summary": "查询个人考勤详情",
+      "use_when": [
+        "查询某个员工某天或时间段的考勤明细"
+      ],
+      "avoid_when": [
+        "查询考勤统计汇总时使用 attendance summary",
+        "查询打卡流水/原始打卡记录时使用 attendance check record 或 checkin records",
+        "修改打卡结果时使用 attendance boss-check"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.get_attendance_summary": {
+      "agent_summary": "查询个人考勤统计摘要",
+      "use_when": [
+        "查看员工考勤统计、出勤/异常/请假等摘要"
+      ],
+      "avoid_when": [
+        "查看单条考勤明细时使用 attendance record get",
+        "查看原始打卡记录时使用 attendance check record",
+        "查看排班时使用 attendance schedule get"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.check_record": {
+      "agent_summary": "查询打卡记录",
+      "use_when": [
+        "查询员工打卡流水或打卡记录"
+      ],
+      "avoid_when": [
+        "查询考勤详情时使用 attendance record get",
+        "查询考勤统计摘要时使用 attendance summary",
+        "修改打卡结果时使用 attendance boss-check"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.check_result": {
+      "agent_summary": "查询打卡结果",
+      "use_when": [
+        "查询员工打卡结果或考勤结果"
+      ],
+      "avoid_when": [
+        "查询原始打卡流水时使用 attendance check record",
+        "查询统计摘要时使用 attendance summary",
+        "修改打卡结果时使用 attendance boss-check"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.checkin_records": {
+      "agent_summary": "查询打卡流水记录",
+      "use_when": [
+        "查询员工打卡流水、定位或打卡时间记录"
+      ],
+      "avoid_when": [
+        "查询考勤汇总时使用 attendance summary",
+        "查询班次/排班时使用 attendance shift list 或 schedule get",
+        "修改打卡记录时使用 attendance boss-check"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.boss_check": {
+      "agent_summary": "管理员修正员工打卡结果",
+      "use_when": [
+        "管理员确认需要人工修正员工打卡记录或打卡结果"
+      ],
+      "avoid_when": [
+        "只查询打卡记录时使用 attendance check record/check result",
+        "查询考勤统计时使用 attendance summary",
+        "未获得用户明确确认时不要修改打卡结果"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.report_columns": {
+      "agent_summary": "查询可查看的考勤报表字段",
+      "use_when": [
+        "查看操作者有权限查询的考勤报表字段"
+      ],
+      "avoid_when": [
+        "查询报表数据时使用 attendance report query-data",
+        "查询假期数据时使用 attendance report query-leave",
+        "查询个人考勤明细时使用 attendance record get"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.report_query_data": {
+      "agent_summary": "查询考勤报表数据",
+      "use_when": [
+        "按字段查询考勤报表数据并进行权限过滤"
+      ],
+      "avoid_when": [
+        "查询可用字段时先用 attendance report columns",
+        "查询假期数据时使用 attendance report query-leave",
+        "查询个人单日明细时使用 attendance record get"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.report_query_leave": {
+      "agent_summary": "查询假期报表数据",
+      "use_when": [
+        "查询用户假期/请假相关报表数据"
+      ],
+      "avoid_when": [
+        "查询假期余额时使用 attendance vacation balance",
+        "查询假期余额变更记录时使用 attendance vacation records",
+        "查询通用考勤报表时使用 attendance report query-data"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.vacation_types": {
+      "agent_summary": "查询可用假期类型",
+      "use_when": [
+        "查看当前用户可用的假期规则/假期类型列表"
+      ],
+      "avoid_when": [
+        "查询员工假期余额时使用 attendance vacation balance",
+        "修改假期规则时使用 attendance vacation update-type",
+        "修改假期余额时使用 attendance vacation save-balance"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.vacation_balance": {
+      "agent_summary": "查询员工假期余额",
+      "use_when": [
+        "查询指定员工的年假、调休等假期余额"
+      ],
+      "avoid_when": [
+        "查询假期余额变更明细时使用 attendance vacation records",
+        "查询假期类型时使用 attendance vacation types",
+        "修改余额时使用 attendance vacation save-balance"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.vacation_records": {
+      "agent_summary": "查询假期余额变更记录",
+      "use_when": [
+        "查询员工假期余额的增减流水或变更历史"
+      ],
+      "avoid_when": [
+        "只看当前余额时使用 attendance vacation balance",
+        "查询假期类型时使用 attendance vacation types",
+        "修改余额时使用 attendance vacation save-balance"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "attendance.vacation_save_balance": {
+      "agent_summary": "调整员工假期余额",
+      "use_when": [
+        "管理员需要修改指定员工的假期余额数量"
+      ],
+      "avoid_when": [
+        "只查询余额时使用 attendance vacation balance",
+        "查询变更流水时使用 attendance vacation records",
+        "修改假期类型/规则时使用 attendance vacation update-type"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "attendance.vacation_update_type": {
+      "agent_summary": "更新假期类型规则",
+      "use_when": [
+        "管理员需要修改已有假期规则或假期类型配置"
+      ],
+      "avoid_when": [
+        "只查询假期类型时使用 attendance vacation types",
+        "调整员工假期余额时使用 attendance vacation save-balance",
+        "查询假期报表时使用 attendance report query-leave"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    }
+  }
+}

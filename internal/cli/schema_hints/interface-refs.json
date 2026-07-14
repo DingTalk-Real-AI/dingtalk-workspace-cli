@@ -1,0 +1,432 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "open-source-helper-interface-refs"
+  },
+  "tools": {
+    "aitable.advperm_disable": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "set_advanced_permission"}
+    },
+    "aitable.advperm_enable": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "set_advanced_permission"}
+    },
+    "aitable.advperm_role_create": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "create_role"}
+    },
+    "aitable.advperm_role_delete": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "delete_role"}
+    },
+    "aitable.advperm_role_get": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "get_role"}
+    },
+    "aitable.advperm_role_list": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "list_roles"}
+    },
+    "aitable.advperm_role_update": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "patch_role"}
+    },
+    "aitable.base_copy": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "copy_base"}
+    },
+    "aitable.base_get_primary_doc_id": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_base_primary_doc_id"}
+    },
+    "aitable.base_search": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "search_bases"}
+    },
+    "aitable.create": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "create_base"}
+    },
+    "aitable.dashboard_arrange": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "align_dashboard"}
+    },
+    "aitable.dashboard_create": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "create_dashboard"}
+    },
+    "aitable.dashboard_update": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_dashboard"}
+    },
+    "aitable.field_create": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "create_fields"}
+    },
+    "aitable.field_list": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_fields"}
+    },
+    "aitable.field_search_options": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "search_field_options"}
+    },
+    "aitable.info": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_base"}
+    },
+    "aitable.list": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "list_bases"}
+    },
+    "aitable.record_get": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "query_records"}
+    },
+    "aitable.record_history_list": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "query_record_history"}
+    },
+    "aitable.record_primary_doc_create": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "create_primary_doc"}
+    },
+    "aitable.record_primary_doc_get": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "get_primary_doc"}
+    },
+    "aitable.record_query_empty": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "query_empty_records"}
+    },
+    "aitable.record_share_url": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "get_record_share_url"}
+    },
+    "aitable.record_upsert": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "record_upsert"}
+    },
+    "aitable.search": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "search_bases"}
+    },
+    "aitable.section_create": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "create_section"}
+    },
+    "aitable.section_delete": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "delete_section"}
+    },
+    "aitable.section_list_empty": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "list_empty_sections"}
+    },
+    "aitable.section_list_nodes": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "list_nsheet_nodes"}
+    },
+    "aitable.section_move_node": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "move_nsheet_node"}
+    },
+    "aitable.section_rename": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "rename_section"}
+    },
+    "aitable.section_reorder": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "reorder_section"}
+    },
+    "aitable.table_list": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_tables"}
+    },
+    "aitable.view_duplicate": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "duplicate_view"}
+    },
+    "aitable.view_get_aggregate": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_card": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_field_widths": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_fill_color_rule": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_filter": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_frozen_cols": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "get_frozen_columns_of_view"}
+    },
+    "aitable.view_get_group": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_lock": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "get_view_lock_status"}
+    },
+    "aitable.view_get_row_height": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "get_cell_height_of_view"}
+    },
+    "aitable.view_get_sort": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_timebar": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_get_visible_fields": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_list": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "get_views"}
+    },
+    "aitable.view_lock": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "lock_or_unlock_view"}
+    },
+    "aitable.view_update_aggregate": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_card": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_field_widths": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_fill_color_rule": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "set_view_fill_color_rule"}
+    },
+    "aitable.view_update_filter": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_frozen_cols": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "set_frozen_columns_of_view"}
+    },
+    "aitable.view_update_group": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_name": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_row_height": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "set_cell_height_of_view"}
+    },
+    "aitable.view_update_sort": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_timebar": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.view_update_visible_fields": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "update_view"}
+    },
+    "aitable.workflow_disable": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "disable_workflow"}
+    },
+    "aitable.workflow_enable": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "enable_workflow"}
+    },
+    "aitable.workflow_get": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "get_workflow"}
+    },
+    "aitable.workflow_list": {
+      "interface_ref": {"product_id": "aitable-helper", "rpc_name": "list_workflows"}
+    },
+    "chat.add_robot_to_group": {
+      "interface_ref": {"product_id": "bot", "rpc_name": "add_robot_to_group"}
+    },
+    "chat.create_smart_conv_category": {
+      "interface_ref": {"product_id": "im", "rpc_name": "create_smart_conv_category"}
+    },
+    "chat.create_group_conversation": {
+      "interface_ref": {"product_id": "im", "rpc_name": "create_group_conversation"}
+    },
+    "chat.list_group_bots": {
+      "interface_ref": {"product_id": "bot", "rpc_name": "list_group_bots"}
+    },
+    "chat.remove_robot_in_group": {
+      "interface_ref": {"product_id": "bot", "rpc_name": "remove_robot_in_group"}
+    },
+    "chat.reply_personal_message": {
+      "interface_ref": {"product_id": "chat", "rpc_name": "send_personal_message"}
+    },
+    "chat.search_bots": {
+      "interface_ref": {"product_id": "bot", "rpc_name": "search_bots"}
+    },
+    "chat.search_my_robots": {
+      "interface_ref": {"product_id": "bot", "rpc_name": "search_my_robots"}
+    },
+    "chat.send_message_by_custom_robot": {
+      "interface_ref": {"product_id": "bot", "rpc_name": "send_message_by_custom_robot"}
+    },
+    "chat.send_personal_message": {
+      "interface_ref": {"product_id": "chat", "rpc_name": "send_personal_message"}
+    },
+    "dev.add_dev_app_members": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "add_dev_app_members"}
+    },
+    "dev.apply_dev_app_permissions": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "apply_dev_app_permissions"}
+    },
+    "dev.create_dev_app": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "create_dev_app"}
+    },
+    "dev.create_dev_app_version": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "create_dev_app_version"}
+    },
+    "dev.delete_dev_app": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "delete_dev_app"}
+    },
+    "dev.disable_dev_app": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "disable_dev_app"}
+    },
+    "dev.disable_dev_app_robot": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "disable_dev_app_robot"}
+    },
+    "dev.enable_dev_app": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "enable_dev_app"}
+    },
+    "dev.enable_dev_app_robot": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "enable_dev_app_robot"}
+    },
+    "dev.get_dev_app": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "get_dev_app"}
+    },
+    "dev.get_dev_app_credentials": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "get_dev_app_credentials"}
+    },
+    "dev.get_dev_app_version_detail": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "get_dev_app_version_detail"}
+    },
+    "dev.get_dev_app_version_status": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "get_dev_app_version_status"}
+    },
+    "dev.get_extension_robot_config": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "get_extension_robot_config"}
+    },
+    "dev.get_extension_webapp_config": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "get_extension_webapp_config"}
+    },
+    "dev.list_dev_app": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "list_dev_app"}
+    },
+    "dev.list_dev_app_events": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "list_dev_app_events"}
+    },
+    "dev.list_dev_app_members": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "list_dev_app_members"}
+    },
+    "dev.list_dev_app_permissions": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "list_dev_app_permissions"}
+    },
+    "dev.list_dev_app_versions": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "list_dev_app_versions"}
+    },
+    "dev.publish_dev_app_version": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "publish_dev_app_version"}
+    },
+    "dev.query_robot_create_result": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "query_robot_create_result"}
+    },
+    "dev.remove_dev_app_members": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "remove_dev_app_members"}
+    },
+    "dev.remove_dev_app_permissions": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "remove_dev_app_permissions"}
+    },
+    "dev.search_open_platform_docs_rag": {
+      "interface_ref": {"product_id": "devdoc", "rpc_name": "search_open_platform_docs"}
+    },
+    "dev.set_extension_robot_config": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "set_extension_robot_config"}
+    },
+    "dev.set_extension_webapp_config": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "set_extension_webapp_config"}
+    },
+    "dev.submit_robot_create_task": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "submit_robot_create_task"}
+    },
+    "dev.subscribe_dev_app_events": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "subscribe_dev_app_events"}
+    },
+    "dev.unsubscribe_dev_app_events": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "unsubscribe_dev_app_events"}
+    },
+    "dev.update_dev_app": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "update_dev_app"}
+    },
+    "dev.update_dev_app_security_config": {
+      "interface_ref": {"product_id": "devapp", "rpc_name": "update_dev_app_security_config"}
+    },
+    "doc.create_comment": {
+      "interface_ref": {"product_id": "doc-comment", "rpc_name": "create_comment"}
+    },
+    "doc.create_inline_comment": {
+      "interface_ref": {"product_id": "doc-comment", "rpc_name": "create_inline_comment"}
+    },
+    "doc.list_comments": {
+      "interface_ref": {"product_id": "doc-comment", "rpc_name": "list_comments"}
+    },
+    "doc.reply_comment": {
+      "interface_ref": {"product_id": "doc-comment", "rpc_name": "reply_comment"}
+    },
+    "drive.add_permission": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "add_permission"}
+    },
+    "drive.copy_document": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "copy_document"}
+    },
+    "drive.delete_document": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "delete_document"}
+    },
+    "drive.list_permission": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "list_permission"}
+    },
+    "drive.move_document": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "move_document"}
+    },
+    "drive.permission_remove": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "remove_permission"}
+    },
+    "drive.permission_update": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "update_permission"}
+    },
+    "drive.rename_document": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "rename_document"}
+    },
+    "minutes.record_pause": {
+      "interface_ref": {"product_id": "minutes", "rpc_name": "执行听记指令-发起AI听记录音"}
+    },
+    "minutes.record_resume": {
+      "interface_ref": {"product_id": "minutes", "rpc_name": "执行听记指令-发起AI听记录音"}
+    },
+    "minutes.record_start": {
+      "interface_ref": {"product_id": "minutes", "rpc_name": "执行听记指令-发起AI听记录音"}
+    },
+    "minutes.record_stop": {
+      "interface_ref": {"product_id": "minutes", "rpc_name": "执行听记指令-发起AI听记录音"}
+    },
+    "pat.batch_grant": {
+      "interface_ref": {"product_id": "pat", "rpc_name": "pat.batch_grant"}
+    },
+    "sheet.filter_clear_criteria": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "clear_filter_criteria"}
+    },
+    "sheet.filter_view_delete_criteria": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "clear_filter_view_criteria"}
+    },
+    "sheet.filter_view_get_criteria": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "get_filter_views"}
+    },
+    "sheet.filter_view_info": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "get_filter_views"}
+    },
+    "sheet.filter_view_list_criteria": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "get_filter_views"}
+    },
+    "sheet.filter_view_update_criteria": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "set_filter_view_criteria"}
+    },
+    "sheet.range_batch_set_style": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "update_range"}
+    },
+    "sheet.range_copy_to": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "copy_range"}
+    },
+    "sheet.range_move_to": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "move_range"}
+    },
+    "sheet.range_set_style": {
+      "interface_ref": {"product_id": "sheet", "rpc_name": "update_range"}
+    },
+    "wiki.create_file": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "create_file"}
+    },
+    "wiki.delete_document": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "delete_document"}
+    },
+    "wiki.list_nodes": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "list_nodes"}
+    },
+    "wiki.node_copy": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "copy_document"}
+    },
+    "wiki.node_move": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "move_document"}
+    },
+    "wiki.node_search": {
+      "interface_ref": {"product_id": "doc", "rpc_name": "search_documents"}
+    }
+  }
+}

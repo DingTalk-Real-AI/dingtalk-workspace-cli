@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -214,6 +215,32 @@ func newReportCommand() *cobra.Command {
 		RunE:    withReportDeprecationWarning("created", "outbox list", runReportSent),
 	}
 	addReportSentFlags(createdListCmd)
+
+	// These deprecated leaves wrap the same business handlers with a stderr
+	// warning. Keep the implementation-side equivalence review next to the
+	// command construction; Registry alias review alone cannot prove handlers
+	// do not inject a different request preset.
+	cli.AnnotateRuntimeCompatibilityEquivalence(templateGetCmd, templateDetailCmd, cli.RuntimeCompatibilityEquivalence{
+		ID: "report.template-get-detail-v1", Reason: "The deprecated detail leaf only adds a deprecation warning before the exact template get business handler.", Reviewed: true,
+	})
+	cli.AnnotateRuntimeCompatibilityEquivalence(entrySubmitCmd, createCmd, cli.RuntimeCompatibilityEquivalence{
+		ID: "report.entry-submit-create-v1", Reason: "The deprecated create leaf only adds a deprecation warning before the exact entry submit business handler.", Reviewed: true,
+	})
+	cli.AnnotateRuntimeCompatibilityEquivalence(entryGetCmd, detailCmd, cli.RuntimeCompatibilityEquivalence{
+		ID: "report.entry-get-detail-v1", Reason: "The deprecated detail leaf only adds a deprecation warning before the exact entry get business handler.", Reviewed: true,
+	})
+	cli.AnnotateRuntimeCompatibilityEquivalence(inboxListCmd, listCmd, cli.RuntimeCompatibilityEquivalence{
+		ID: "report.inbox-list-legacy-list-v1", Reason: "The deprecated list leaf only adds a deprecation warning before the exact inbox list business handler.", Reviewed: true,
+	})
+	cli.AnnotateRuntimeCompatibilityEquivalence(entryStatsCmd, statsCmd, cli.RuntimeCompatibilityEquivalence{
+		ID: "report.entry-stats-legacy-stats-v1", Reason: "The deprecated stats leaf only adds a deprecation warning before the exact entry stats business handler.", Reviewed: true,
+	})
+	cli.AnnotateRuntimeCompatibilityEquivalence(outboxListCmd, sendListCmd, cli.RuntimeCompatibilityEquivalence{
+		ID: "report.outbox-list-legacy-spellings-v1", Reason: "The deprecated sent and created leaves only add a deprecation warning before the exact outbox list business handler.", Reviewed: true,
+	})
+	cli.AnnotateRuntimeCompatibilityEquivalence(outboxListCmd, createdListCmd, cli.RuntimeCompatibilityEquivalence{
+		ID: "report.outbox-list-legacy-spellings-v1", Reason: "The deprecated sent and created leaves only add a deprecation warning before the exact outbox list business handler.", Reviewed: true,
+	})
 
 	root.AddCommand(
 		// 新命令（资源.动词二段式）
@@ -426,8 +453,8 @@ func addReportStatsFlags(cmd *cobra.Command) {
 func addReportListFlags(cmd *cobra.Command) {
 	cmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
 	cmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
-	cmd.Flags().Int("cursor", 0, "分页游标，首次传 0 (必填, 默认 0)")
-	cmd.Flags().Int("size", 20, "每页条数，最大 20 (必填, 默认 20)")
+	cmd.Flags().Int("cursor", 0, "分页游标（默认 0，翻页传返回的 cursor）")
+	cmd.Flags().Int("size", 20, "每页条数（默认 20，最大 20）")
 	cmd.Flags().Int("limit", 0, "--size 的别名")
 	_ = cmd.Flags().MarkHidden("limit")
 	// 发送人过滤（来自 develop 分支 feature/select_report_staff）

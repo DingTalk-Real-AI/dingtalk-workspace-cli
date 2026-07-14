@@ -1,6 +1,6 @@
 ---
 name: dws-shared
-description: dws 多 skill 模式的公共参考——认证、全局参数、多组织 / --profile 规则、安全底线。所有 dingtalk-* 子 skill 执行前先读本 skill。命令前缀：dws。
+description: dws 多 skill 模式的公共参考——认证、全局参数、Schema 命令发现、多组织 / --profile 规则、安全底线。所有 dingtalk-* 子 skill 执行前先读本 skill。命令前缀：dws。
 cli_version: ">=1.0.40"
 metadata:
   category: productivity
@@ -14,7 +14,7 @@ metadata:
 
 > 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。
 
-每个 dingtalk-* 子 skill 都把本 skill 列为 PREREQUISITE：执行任何产品命令前先读这里的认证、全局参数与多组织规则。`dws` 必须在 PATH 上。
+每个 dingtalk-* 子 skill 都把本 skill 列为 PREREQUISITE：执行任何产品命令前先读这里的认证、全局参数、Schema 命令发现与多组织规则。`dws` 必须在 PATH 上。
 
 ## 认证
 - `dws auth login`（新登一个组织即新增 profile）；`--device` 无头 / SSH 登录；`--recommend` 无交互批量授权
@@ -24,7 +24,28 @@ metadata:
 ## 全局参数
 - 所有命令加 `--format json` 取可解析输出
 - 全局 `--profile <名称|corpId>`：单次指定本命令用哪个组织，一次性、不改默认组织
-- 危险 / 写 / 删操作执行前先向用户确认
+- 以 leaf Schema 的 `confirmation` 为准：`user_required` 才先确认并在同意后加 `--yes`；`not_required` 不得仅因 `effect=write` 自行升级确认要求
+
+## 命令发现：Schema + --help
+
+选择命令、读取参数映射/组合约束与安全语义时，优先渐进查询当前二进制内嵌的 leaf Schema；真正组装参数前，用 `--help` 确认 Cobra 当前接受的 flags：
+
+```bash
+dws schema                                      # 产品概览
+dws schema calendar                             # 产品工具列表
+dws schema "calendar event"                     # 命令分组
+dws schema "calendar event create" --compact    # 完整 leaf 契约
+```
+
+`--all` 会导出全部工具的完整 leaf，输出很大。仅在用户明确要求全量导出，或执行 CI、Catalog 审计、参数防丢 baseline 时使用 `dws schema --all --format json`；普通业务任务必须渐进查询，不得把全量结果注入上下文。完整 baseline 不得使用会裁剪 provenance 的 `--all --compact`。
+
+| 要确认的信息 | 事实源 |
+|-------------|--------|
+| 命令是否存在、Cobra 接受哪些 flags | `dws <cli_path> --help` |
+| Agent 选命令、参数映射/约束、risk/confirmation | `dws schema "<cli_path>"` |
+| 钉钉中的文档、日程、消息等业务数据 | 真正执行对应的 `read` / `search` / `list` 命令 |
+
+Schema 与 Help 冲突属于契约漂移：参数只用 Help 接受的 flags，并报告漂移；安全语义冲突时采用更保守的确认方式。Schema 只描述命令契约，不能替代业务查询。
 
 ## 多组织 / --profile（关键规则）
 dws 可同时登录多个钉钉组织，一个 profile = 一个已登录组织（corp）。当前 profile 决定本次命令用哪个组织的身份（corpId / userId 自动注入）。

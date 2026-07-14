@@ -250,7 +250,7 @@ name 不能包含 / \ ? * [ ] : 等特殊字符，最长 100 字符。`,
 约束：
   - 不能删除隐藏的工作表（需先取消隐藏再删除）
   - 不能删除最后一个可见工作表（至少保留一个可见工作表）`,
-		Example: `  dws sheet delete-sheet --node NODE_ID --sheet-id SHEET_ID`,
+		Example: `  dws sheet delete-sheet --node NODE_ID --sheet-id SHEET_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return callMCPTool("delete_sheet", map[string]any{
 				"nodeId":  mustGetFlag(cmd, "node"),
@@ -261,5 +261,33 @@ name 不能包含 / \ ? * [ ] : 等特殊字符，最长 100 字符。`,
 	deleteSheetCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	deleteSheetCmd.Flags().String("sheet-id", "", "要删除的工作表 ID 或名称 (必填)")
 
-	return []*cobra.Command{createCmd, listCmd, infoCmd, newCmd, updateSheetCmd, copySheetCmd, deleteSheetCmd}
+	showGridlineCmd := newGridlineVisibilityCmd("show-gridline", "显示工作表网格线", "visible")
+	hideGridlineCmd := newGridlineVisibilityCmd("hide-gridline", "隐藏工作表网格线", "hidden")
+
+	return []*cobra.Command{createCmd, listCmd, infoCmd, newCmd, updateSheetCmd, copySheetCmd, deleteSheetCmd, showGridlineCmd, hideGridlineCmd}
+}
+
+func newGridlineVisibilityCmd(use, short, visibility string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     use,
+		Short:   short,
+		Example: fmt.Sprintf("  dws sheet %s --node NODE_ID --sheet-id SHEET_ID", use),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "file-id", "node-id", "doc-id")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlags(cmd, "sheet-id"); err != nil {
+				return err
+			}
+			return callMCPTool("set_gridline_visibility", map[string]any{
+				"nodeId":     nodeID,
+				"sheetId":    mustGetFlag(cmd, "sheet-id"),
+				"visibility": visibility,
+			})
+		},
+	}
+	cmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
+	cmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
+	return cmd
 }

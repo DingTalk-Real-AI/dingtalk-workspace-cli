@@ -559,6 +559,32 @@ func confirmDelete(resourceType, resourceName string) bool {
 	return false
 }
 
+// confirmDangerousAction confirms a high-impact action whose semantics are
+// not deletion. Keeping this separate from confirmDelete prevents enable,
+// disable, or publication operations from being described as deletes.
+func confirmDangerousAction(cmd *cobra.Command, action, resourceName string) bool {
+	if cmd == nil {
+		return false
+	}
+	if yes, err := cmd.Flags().GetBool("yes"); err == nil && yes {
+		return true
+	}
+
+	output := cmd.ErrOrStderr()
+	fmt.Fprintf(output, "About to %s: %s\n", action, resourceName)
+	fmt.Fprint(output, "Confirm action? (yes/no): ")
+
+	reader := bufio.NewReader(cmd.InOrStdin())
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	if answer == "yes" || answer == "y" {
+		return true
+	}
+
+	fmt.Fprintln(output, "Operation cancelled")
+	return false
+}
+
 // toCamelCase converts a kebab-case string to camelCase.
 // Examples: "base-id" -> "baseId", "open-dingtalk-id" -> "openDingtalkId"
 func toCamelCase(kebab string) string {

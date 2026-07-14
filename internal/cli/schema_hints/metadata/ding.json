@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/ding",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "ding.recall_ding_message": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "ding.send_ding_message": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

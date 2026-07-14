@@ -163,9 +163,9 @@ func TestRun_StdoutNDJSON(t *testing.T) {
 		}
 	}
 
-	// Stderr should have the connected-to-bus banner.
-	if !strings.Contains(stderr.String(), "connected bus pid=") {
-		t.Errorf("stderr missing connected banner:\n%s", stderr.String())
+	// Stderr should carry the standardized ready marker.
+	if !strings.Contains(stderr.String(), "[event] ready ") {
+		t.Errorf("stderr missing ready marker:\n%s", stderr.String())
 	}
 }
 
@@ -307,5 +307,158 @@ func TestRun_MultipleConsumersOneBus(t *testing.T) {
 		if len(lines) != 2 {
 			t.Errorf("consumer %d: got %d lines, want 2:\n%s", i, len(lines), buf.String())
 		}
+	}
+}
+
+// --- AI subprocess contract tests (event-subprocess-contract.md) ---
+
+// T1a/T1b: the ready marker carries event_key and precedes the first
+// stdout event.
+func TestRun_ReadyMarkerContract(t *testing.T) {
+	skipOnWindows(t)
+	dir, sock, cancel, runDone, trigger := bringUpBus(t, []dwsevent.RawEvent{
+		{EventID: "1", EventType: "im.message.receive_v1", Data: `{}`},
+	})
+	defer func() { cancel(); <-runDone }()
+	go func() { time.Sleep(150 * time.Millisecond); close(trigger) }()
+
+	var stdout, stderr bytes.Buffer
+	ctx, cc := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cc()
+	if err := Run(ctx, Config{
+		WorkDir: dir, IPCEndpoint: sock, ClientID: "ding_test",
+		Stdout: &stdout, Stderr: &stderr,
+		EventKey: "im.message.receive_v1", MaxEvents: 1,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// T1a: ready line with event_key.
+	if !strings.Contains(stderr.String(), "[event] ready event_key=im.message.receive_v1") {
+		t.Errorf("missing ready marker with event_key:\n%s", stderr.String())
+	}
+	// T1b: ready is on stderr, the event is on stdout — the ready line is
+	// emitted before Deliver writes the first stdout line. Assert stdout
+	// got exactly the event and stderr got ready before exited.
+	rIdx := strings.Index(stderr.String(), "[event] ready")
+	xIdx := strings.Index(stderr.String(), "[event] exited")
+	if rIdx < 0 || xIdx < 0 || rIdx > xIdx {
+		t.Errorf("ready must precede exited:\n%s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "im.message.receive_v1") {
+		t.Errorf("stdout missing the event:\n%s", stdout.String())
+	}
+}
+
+// T3a: --max-events exit → reason=limit.
+func TestRun_ExitReasonLimit(t *testing.T) {
+	skipOnWindows(t)
+	dir, sock, cancel, runDone, trigger := bringUpBus(t, []dwsevent.RawEvent{
+		{EventID: "1", EventType: "im.message.receive_v1", Data: `{}`},
+	})
+	defer func() { cancel(); <-runDone }()
+	go func() { time.Sleep(150 * time.Millisecond); close(trigger) }()
+
+	var stdout, stderr bytes.Buffer
+	ctx, cc := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cc()
+	if err := Run(ctx, Config{
+		WorkDir: dir, IPCEndpoint: sock, ClientID: "ding_test",
+		Stdout: &stdout, Stderr: &stderr, MaxEvents: 1,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "reason: limit") {
+		t.Errorf("expected reason: limit:\n%s", stderr.String())
+	}
+}
+
+// T3b: --duration deadline with no events → reason=timeout, exit clean.
+func TestRun_ExitReasonTimeout(t *testing.T) {
+	skipOnWindows(t)
+	// Bring up bus but never trigger emission → consume blocks until the
+	// duration deadline fires.
+	dir, sock, cancel, runDone, _ := bringUpBus(t, nil)
+	defer func() { cancel(); <-runDone }()
+
+	var stdout, stderr bytes.Buffer
+	ctx, cc := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cc()
+	if err := Run(ctx, Config{
+		WorkDir: dir, IPCEndpoint: sock, ClientID: "ding_test",
+		Stdout: &stdout, Stderr: &stderr, Duration: 300 * time.Millisecond,
+	}); err != nil {
+		t.Fatalf("Run should exit clean on duration: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "reason: timeout") {
+		t.Errorf("expected reason: timeout:\n%s", stderr.String())
+	}
+}
+
+// T3c: parent ctx cancel (signal) → reason=signal.
+func TestRun_ExitReasonSignal(t *testing.T) {
+	skipOnWindows(t)
+	dir, sock, cancel, runDone, _ := bringUpBus(t, nil)
+	defer func() { cancel(); <-runDone }()
+
+	var stdout, stderr bytes.Buffer
+	ctx, cc := context.WithCancel(context.Background())
+	go func() { time.Sleep(250 * time.Millisecond); cc() }()
+	if err := Run(ctx, Config{
+		WorkDir: dir, IPCEndpoint: sock, ClientID: "ding_test",
+		Stdout: &stdout, Stderr: &stderr,
+	}); err != nil {
+		t.Fatalf("Run should exit clean on signal: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "reason: signal") {
+		t.Errorf("expected reason: signal:\n%s", stderr.String())
+	}
+}
+
+// T2c: closing stdin triggers a graceful shutdown (reason=signal), with no
+// --max-events / --duration set.
+func TestRun_StdinEOFShutsDown(t *testing.T) {
+	skipOnWindows(t)
+	dir, sock, cancel, runDone, _ := bringUpBus(t, nil)
+	defer func() { cancel(); <-runDone }()
+
+	pr, pw := io.Pipe()
+	go func() { time.Sleep(250 * time.Millisecond); _ = pw.Close() }() // EOF
+
+	var stdout, stderr bytes.Buffer
+	ctx, cc := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cc()
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, Config{
+			WorkDir: dir, IPCEndpoint: sock, ClientID: "ding_test",
+			Stdout: &stdout, Stderr: &stderr, Stdin: pr,
+		})
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run should exit clean on stdin EOF: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not exit after stdin EOF")
+	}
+	if !strings.Contains(stderr.String(), "reason: signal") {
+		t.Errorf("expected reason: signal on stdin EOF:\n%s", stderr.String())
+	}
+}
+
+// T3d: a startup failure returns non-nil and emits NO `exited` line (the
+// cobra layer prints an Error: line instead).
+func TestRun_FailureHasNoExitedLine(t *testing.T) {
+	skipOnWindows(t)
+	var stderr bytes.Buffer
+	// Missing WorkDir/IPCEndpoint/ClientID → immediate config error, before
+	// the exit-reason machinery is armed.
+	err := Run(context.Background(), Config{Stderr: &stderr})
+	if err == nil {
+		t.Fatal("expected error for missing required config")
+	}
+	if strings.Contains(stderr.String(), "[event] exited") {
+		t.Errorf("failure must not print an exited line:\n%s", stderr.String())
 	}
 }

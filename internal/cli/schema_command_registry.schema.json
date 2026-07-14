@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/internal/cli/schema_command_registry.schema.json",
+  "title": "DWS Reviewed Command Registry",
+  "description": "Human-reviewed source of stable Schema command identity and navigation. Generators validate this file and derive downstream assets from it; they must never rewrite it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "products"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./schema_command_registry.schema.json",
+      "description": "Relative editor contract. Keep this value unchanged so agents can validate the registry without network access."
+    },
+    "version": {
+      "const": 1,
+      "description": "CommandRegistry source format version."
+    },
+    "products": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Reviewed product partitions. Go validation additionally rejects duplicate product ids, canonical identities, primary paths, and aliases.",
+      "items": {
+        "$ref": "#/$defs/product"
+      }
+    }
+  },
+  "$defs": {
+    "productId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+      "description": "Stable Schema product id."
+    },
+    "cliPath": {
+      "type": "string",
+      "pattern": "^(?!dws(?:\\s|$))(?!.*(?:^|\\s)--)(?!.*[*?\\[\\]])[A-Za-z0-9][A-Za-z0-9._:-]*(?: [A-Za-z0-9][A-Za-z0-9._:-]*)*$",
+      "description": "Exact Cobra command path without the leading 'dws', flags, wildcard characters, or surrounding/repeated whitespace."
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "tools"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/productId"
+        },
+        "tools": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/commandSpec"
+          }
+        }
+      }
+    },
+    "commandSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonical_path",
+        "cli_path"
+      ],
+      "properties": {
+        "canonical_path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*\\.[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "description": "Stable product.tool identity. Its product prefix must equal the containing product id; Go validation enforces that cross-field constraint."
+        },
+        "source_product_id": {
+          "$ref": "#/$defs/productId",
+          "description": "Optional implementation product id when it differs from the canonical product. Omission means the containing product id."
+        },
+        "cli_path": {
+          "$ref": "#/$defs/cliPath",
+          "description": "Reviewed primary CLI path stored as CommandSpec.PrimaryCLIPath. It must bind exactly to one runnable Cobra leaf."
+        },
+        "aliases": {
+          "type": "array",
+          "uniqueItems": true,
+          "default": [],
+          "description": "Reviewed compatibility paths for the same identity. An alias cannot equal the primary path or collide with any other command path.",
+          "items": {
+            "$ref": "#/$defs/cliPath"
+          }
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "public",
+            "compat",
+            "internal"
+          ],
+          "default": "public",
+          "description": "Reviewed exposure. Omission is normalized to public. public enters the Agent Schema; compat/internal remain explicit registry entries but are not public delivery tools."
+        }
+      }
+    }
+  }
+}

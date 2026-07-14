@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/aisearch",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "aisearch.enterprise_person_search": {
+      "agent_summary": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选",
+      "use_when": [
+        "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+        "需要把维度词映射到 --dimension，关键词只保留目标实体"
+      ],
+      "avoid_when": [
+        "已有 userId 只需详情时用 contact user get",
+        "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+        "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
+      ],
+      "examples": [
+        "dws aisearch person --keyword \"张三\" --dimension name --format json",
+        "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws aisearch person --help",
+        "skills/mono/references/products/aisearch.md",
+        "internal/cli/schema_command_registry.json#aisearch.enterprise_person_search",
+        "live-dws-schema:aisearch.enterprise_person_search"
+      ]
+    },
+    "aisearch.search_enterprise": {
+      "agent_summary": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）",
+      "use_when": [
+        "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+        "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
+      ],
+      "avoid_when": [
+        "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+        "企业找人时用 aisearch person",
+        "已知具体资源 ID 要读写时改用对应产品命令"
+      ],
+      "examples": [
+        "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
+        "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws aisearch enterprise --help",
+        "skills/mono/references/products/aisearch.md",
+        "internal/cli/schema_command_registry.json#aisearch.search_enterprise",
+        "live-dws-schema:aisearch.search_enterprise"
+      ]
+    },
+    "aisearch.search_enterprise_behavior": {
+      "agent_summary": "搜索发送/创建/分享/编辑/接收等明确行为记录",
+      "use_when": [
+        "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
+      ],
+      "avoid_when": [
+        "只按主题找内容本身时用 aisearch enterprise",
+        "没有行为动作词时不要选用本工具"
+      ],
+      "examples": [
+        "dws aisearch behavior --types mail --behavior-type send --direction \"我->汐峰\" --format json",
+        "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws aisearch behavior --help",
+        "skills/mono/references/products/aisearch.md",
+        "internal/cli/schema_command_registry.json#aisearch.search_enterprise_behavior",
+        "live-dws-schema:aisearch.search_enterprise_behavior"
+      ]
+    }
+  },
+  "products": {
+    "aisearch": {
+      "agent_summary": "企业内智能搜人、搜知识内容与搜行为记录",
+      "use_when": [
+        "语义找人、按主题搜企业知识，或追溯发送/创建/分享等行为"
+      ],
+      "avoid_when": [
+        "已有明确资源 ID 要读写时改用对应产品；普通 OAuth 登录不用 aisearch"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "skills/mono/references/products/aisearch.md",
+        "CommandRegistry:product=aisearch",
+        "Skill:skills/mono/references/products/aisearch.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

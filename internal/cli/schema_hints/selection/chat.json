@@ -1,0 +1,1519 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/chat",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "chat.add_custom_group_role": {
+      "agent_summary": "在群聊中创建自定义角色",
+      "use_when": [
+        "需要新增可分配给群成员的业务角色时"
+      ],
+      "avoid_when": [
+        "设置系统管理员角色时使用 chat group set-admin"
+      ],
+      "examples": [
+        "dws chat group-role add --group <openConversationId> --name \"值班负责人\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.add_custom_group_role",
+        "cobra-help:dws chat group-role add",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.add_emoji_reaction": {
+      "agent_summary": "给指定消息添加表情回应",
+      "use_when": [
+        "需要对已有消息添加一个 emoji reaction 时"
+      ],
+      "avoid_when": [
+        "发送文本消息或文字表情时不要使用"
+      ],
+      "examples": [
+        "dws chat message add-emoji --conversation-id <openConversationId> --msg-id <openMessageId> --emoji \"赞\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.add_emoji_reaction",
+        "cobra-help:dws chat message add-emoji",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.add_group_member": {
+      "agent_summary": "向指定群聊添加成员",
+      "use_when": [
+        "已知群 ID 和成员 ID，需要邀请成员入群时"
+      ],
+      "avoid_when": [
+        "添加机器人时使用 chat group members add-bot"
+      ],
+      "examples": [
+        "dws chat group members add --id <openConversationId> --users userId1,userId2"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.add_group_member",
+        "cobra-help:dws chat group members add",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.add_message_favorite": {
+      "agent_summary": "将指定会话中的一条消息加入当前用户的收藏。",
+      "use_when": [
+        "用户明确要收藏一条已知消息，且已取得消息 ID 与所属会话 ID 时。"
+      ],
+      "avoid_when": [
+        "需要给消息添加表情、置顶消息或发送新消息时不要使用；本命令只修改当前用户的收藏状态。"
+      ],
+      "examples": [
+        "dws chat message add-favorite --open-message-id MSG_ID --open-conversation-id CONVERSATION_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增的真实 Cobra leaf、消息收藏实现和 chat 产品参考补齐 reviewed Agent 选择语义；不改变执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.add_message_favorite",
+        "cobra-help:dws chat message add-favorite --help",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.add_robot_to_group": {
+      "agent_summary": "把企业机器人拉进我有管理权限的群",
+      "use_when": [
+        "需要把已有企业机器人加入指定群"
+      ],
+      "avoid_when": [
+        "添加普通成员时使用 chat group members add",
+        "移除群内机器人时使用 chat group members remove-bot"
+      ],
+      "examples": [
+        "dws chat group members add-bot --robot-code <robot-code> --id <openconversation_id>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.add_robot_to_group",
+        "cobra-help:dws chat group members add-bot",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:bot.add_robot_to_group"
+      ]
+    },
+    "chat.add_text_emotion": {
+      "agent_summary": "给指定消息添加已定义的文字表情",
+      "use_when": [
+        "已有文字表情定义并要附加到消息时"
+      ],
+      "avoid_when": [
+        "需要先创建文字表情资源时使用 chat message create-text-emotion"
+      ],
+      "examples": [
+        "dws chat message add-text-emotion --conversation-id <openConversationId> --msg-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.add_text_emotion",
+        "cobra-help:dws chat message add-text-emotion",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.combine_forward_messages": {
+      "agent_summary": "把多条消息合并转发到目标会话",
+      "use_when": [
+        "需要保留多条源消息并作为合集转发时"
+      ],
+      "avoid_when": [
+        "只转发单条消息时使用 chat message forward"
+      ],
+      "examples": [
+        "dws chat message combine-forward --src-conversation-id <srcConversationId> --msg-ids <id1>,<id2> --dest-conversation-id <destConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.combine_forward_messages",
+        "cobra-help:dws chat message combine-forward",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.create_and_send_card": {
+      "agent_summary": "创建并向群聊或单聊发送互动卡片",
+      "use_when": [
+        "需要卡片式交互且已准备接收会话或用户时"
+      ],
+      "avoid_when": [
+        "只发送普通文本时使用 send 或 send-by-bot"
+      ],
+      "examples": [
+        "dws chat message send-card --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.create_and_send_card",
+        "cobra-help:dws chat message send-card",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.create_group_conversation": {
+      "agent_summary": "创建群聊并可指定群名与初始成员",
+      "use_when": [
+        "需要新建内部/外部群或话题圈，并带上初始成员",
+        "用户明确要建群且已给出群名与成员标识"
+      ],
+      "avoid_when": [
+        "已有群只需加人时使用 chat group members add",
+        "只是搜索已有群时使用 chat search"
+      ],
+      "examples": [
+        "dws chat group create --name \"Q1 项目冲刺群\" --users userId1,userId2,userId3"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.create_group_conversation",
+        "cobra-help:dws chat group create",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:chat.create_group_conversation"
+      ]
+    },
+    "chat.create_smart_conv_category": {
+      "agent_summary": "按名称、成员或关键词创建智能会话分组",
+      "use_when": [
+        "需要自动归集符合条件的会话时"
+      ],
+      "avoid_when": [
+        "只需查看现有分组或手工管理会话时不要使用"
+      ],
+      "examples": [
+        "dws chat category create-smart --name \"项目群\" --keywords \"项目,交付\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.create_smart_conv_category",
+        "cobra-help:dws chat category create-smart",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.create_text_emotion": {
+      "agent_summary": "创建可用于消息回应的文字表情",
+      "use_when": [
+        "需要定义新的文字表情资源时"
+      ],
+      "avoid_when": [
+        "已有 emotionId 并要回应消息时使用 chat message add-text-emotion"
+      ],
+      "examples": [
+        "dws chat message create-text-emotion --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.create_text_emotion",
+        "cobra-help:dws chat message create-text-emotion",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.dismiss_group": {
+      "agent_summary": "永久解散指定群聊（不可恢复，仅群主）",
+      "use_when": [
+        "群主明确要求永久解散整个群，而不是自己退出",
+        "已确认 openConversationId，且用户接受群与历史消息一并消失"
+      ],
+      "avoid_when": [
+        "当前用户只想自己离开群时使用 chat group quit",
+        "仍需保留群供他人继续使用时不要解散",
+        "目标群未确认或用户未明确同意不可恢复后果时不要执行"
+      ],
+      "examples": [
+        "dws chat group dismiss --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.dismiss_group",
+        "cobra-help:dws chat group dismiss",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:chat.dismiss_group",
+        "helper:internal/helpers/chat.go#dismiss --yes"
+      ]
+    },
+    "chat.download_media": {
+      "agent_summary": "下载消息中的媒体资源到本地",
+      "use_when": [
+        "已知消息、会话和资源 ID，需要保存媒体文件时"
+      ],
+      "avoid_when": [
+        "只查看文本消息内容时使用对应消息查询命令"
+      ],
+      "examples": [
+        "dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ."
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.download_media",
+        "cobra-help:dws chat message download-media",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.forward_message": {
+      "agent_summary": "把一条已有消息转发到另一个会话",
+      "use_when": [
+        "已知源消息与源、目标会话 ID 时"
+      ],
+      "avoid_when": [
+        "合并转发多条消息时使用 chat message combine-forward"
+      ],
+      "examples": [
+        "dws chat message forward --src-conversation-id <srcConversationId> --msg-id <openMessageId> --dest-conversation-id <destConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.forward_message",
+        "cobra-help:dws chat message forward",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.forward_topic": {
+      "agent_summary": "把一个话题消息转发到目标会话",
+      "use_when": [
+        "需要转发话题圈中的主题及上下文时"
+      ],
+      "avoid_when": [
+        "普通单条消息转发使用 chat message forward"
+      ],
+      "examples": [
+        "dws chat message forward-topic --src-msg-id <openMessageId> --src-conversation-id <srcConversationId> --src-thread-id <threadId> --dest-conversation-id <destConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.forward_topic",
+        "cobra-help:dws chat message forward-topic",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.get_conv_info_by_group_id": {
+      "agent_summary": "把数字群号解析为群聊信息",
+      "use_when": [
+        "用户只提供数字群号且需要 openConversationId 时"
+      ],
+      "avoid_when": [
+        "已经持有 openConversationId 时直接使用目标命令"
+      ],
+      "examples": [
+        "dws chat group get-by-group-id --group-id 12345678"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.get_conv_info_by_group_id",
+        "cobra-help:dws chat group get-by-group-id",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.get_conversation_info": {
+      "agent_summary": "获取群聊或单聊会话的详细信息",
+      "use_when": [
+        "已知群 ID 或用户标识并需要解析会话详情时"
+      ],
+      "avoid_when": [
+        "按群名查找会话时使用 chat search"
+      ],
+      "examples": [
+        "dws chat conversation-info --group <openConversationId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.get_conversation_info",
+        "cobra-help:dws chat conversation-info",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.get_group_invite_url": {
+      "agent_summary": "获取指定群聊的邀请链接",
+      "use_when": [
+        "需要生成群邀请链接或设置有效期时"
+      ],
+      "avoid_when": [
+        "需要直接添加已知成员时使用 chat group members add"
+      ],
+      "examples": [
+        "dws chat group invite-url --group <openConversationId> --expires-seconds 86400"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.get_group_invite_url",
+        "cobra-help:dws chat group invite-url",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_conversation_message_v2": {
+      "agent_summary": "分页读取指定群聊或单聊的消息",
+      "use_when": [
+        "用户明确指定某个会话并要查看其消息记录时"
+      ],
+      "avoid_when": [
+        "跨全部会话按时间查询时使用 chat message list-all"
+      ],
+      "examples": [
+        "dws chat message list --group <openConversationId> --time \"2026-07-01 00:00:00\" --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_conversation_message_v2",
+        "cobra-help:dws chat message list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_conversations_by_category": {
+      "agent_summary": "列出指定会话分组中的会话",
+      "use_when": [
+        "已知分组 ID 并需要查看其中会话时"
+      ],
+      "avoid_when": [
+        "只需列出分组本身时使用 chat category list"
+      ],
+      "examples": [
+        "dws chat category list-conversations --category-id 123"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_conversations_by_category",
+        "cobra-help:dws chat category list-conversations",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_custom_group_roles": {
+      "agent_summary": "列出群聊中的自定义角色",
+      "use_when": [
+        "需要取得角色 ID 或查看角色定义时"
+      ],
+      "avoid_when": [
+        "查询某个成员已分配角色时使用 chat group-role query-user"
+      ],
+      "examples": [
+        "dws chat group-role list --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_custom_group_roles",
+        "cobra-help:dws chat group-role list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_group_bots": {
+      "agent_summary": "列出群内机器人",
+      "use_when": [
+        "需要查看某群已安装哪些机器人或提取 openBotId"
+      ],
+      "avoid_when": [
+        "搜索企业内机器人目录时使用 chat bot find"
+      ],
+      "examples": [
+        "dws chat group bots --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_group_bots",
+        "cobra-help:dws chat group bots",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:bot.list_group_bots"
+      ]
+    },
+    "chat.list_individual_chat_message": {
+      "agent_summary": "读取与指定用户的单聊消息记录",
+      "use_when": [
+        "用户明确要求查看和某人的一对一聊天时"
+      ],
+      "avoid_when": [
+        "跨群聊按发送者查询时使用 chat message list-by-sender"
+      ],
+      "examples": [
+        "dws chat message list-direct --user <userId> --time \"2026-07-01 00:00:00\" --direction newer --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_individual_chat_message",
+        "cobra-help:dws chat message list-direct",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_message_favorites": {
+      "agent_summary": "分页查询当前用户收藏的消息列表。",
+      "use_when": [
+        "需要查看当前用户已经收藏的消息，或使用 nextCursor 继续翻页时。"
+      ],
+      "avoid_when": [
+        "需要搜索普通聊天记录、置顶消息或修改收藏状态时不要使用。"
+      ],
+      "examples": [
+        "dws chat message list-favorites --cursor 0 --size 20"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增的真实 Cobra leaf、数字游标分页契约和 chat 产品参考补齐 reviewed Agent 选择语义与示例。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_message_favorites",
+        "cobra-help:dws chat message list-favorites --help",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_messages_by_ids": {
+      "agent_summary": "按消息 ID 批量获取消息详情",
+      "use_when": [
+        "已经持有一组 msgId 并需要精确取回消息时"
+      ],
+      "avoid_when": [
+        "只有关键词或时间范围时使用 search 或 list 命令"
+      ],
+      "examples": [
+        "dws chat message list-by-ids --msg-ids msgId1,msgId2"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_messages_by_ids",
+        "cobra-help:dws chat message list-by-ids",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_owned_or_admin_groups": {
+      "agent_summary": "列出当前用户创建或管理的群聊",
+      "use_when": [
+        "需要按群主或管理员角色盘点群聊时"
+      ],
+      "avoid_when": [
+        "按名称搜索任意可见群时使用 chat search"
+      ],
+      "examples": [
+        "dws chat group list-my-groups --role OWNER --limit 100"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_owned_or_admin_groups",
+        "cobra-help:dws chat group list-my-groups",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_pin_messages": {
+      "agent_summary": "列出指定会话中的置顶消息",
+      "use_when": [
+        "需要查看群聊当前置顶的消息时"
+      ],
+      "avoid_when": [
+        "设置或取消置顶时使用 set-pin-msg 或 unset-pin-msg"
+      ],
+      "examples": [
+        "dws chat message list-pin-msg --open-conversation-id <openConversationId> --size 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_pin_messages",
+        "cobra-help:dws chat message list-pin-msg",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_special_focus_messages": {
+      "agent_summary": "列出当前用户特别关注的消息",
+      "use_when": [
+        "需要查看特别关注或重点消息列表时"
+      ],
+      "avoid_when": [
+        "普通未读消息或提及消息使用对应专用命令"
+      ],
+      "examples": [
+        "dws chat message list-focused --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_special_focus_messages",
+        "cobra-help:dws chat message list-focused",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_top_conversations": {
+      "agent_summary": "列出当前用户置顶的会话",
+      "use_when": [
+        "需要查看现有置顶会话清单时"
+      ],
+      "avoid_when": [
+        "设置或取消某个会话置顶时使用 chat set-top"
+      ],
+      "examples": [
+        "dws chat list-top-conversations --limit 100"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_top_conversations",
+        "cobra-help:dws chat list-top-conversations",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_topic_replies": {
+      "agent_summary": "分页读取指定话题的回复",
+      "use_when": [
+        "已知话题 ID 并需要查看回复串时"
+      ],
+      "avoid_when": [
+        "读取普通会话消息时使用 chat message list"
+      ],
+      "examples": [
+        "dws chat message list-topic-replies --group <openConversationId> --topic-id <topicId> --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_topic_replies",
+        "cobra-help:dws chat message list-topic-replies",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.list_user_define_conv_categories": {
+      "agent_summary": "列出当前用户的自定义会话分组",
+      "use_when": [
+        "需要取得分组 ID 或浏览分组配置时"
+      ],
+      "avoid_when": [
+        "需要查看某个分组内会话时使用 chat category list-conversations"
+      ],
+      "examples": [
+        "dws chat category list"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.list_user_define_conv_categories",
+        "cobra-help:dws chat category list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.query_custom_user_roles": {
+      "agent_summary": "查询指定群成员的自定义角色",
+      "use_when": [
+        "需要核对某个成员在群内的业务角色时"
+      ],
+      "avoid_when": [
+        "列出全部角色定义时使用 chat group-role list"
+      ],
+      "examples": [
+        "dws chat group-role query-user --group <openConversationId> --user <userId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.query_custom_user_roles",
+        "cobra-help:dws chat group-role query-user",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.query_message_send_status": {
+      "agent_summary": "查询异步消息发送任务的状态",
+      "use_when": [
+        "发送命令返回 openTaskId 后需要确认投递结果时"
+      ],
+      "avoid_when": [
+        "没有 openTaskId 或只需查消息内容时不要使用"
+      ],
+      "examples": [
+        "dws chat message query-send-status --open-task-id <openTaskId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.query_message_send_status",
+        "cobra-help:dws chat message query-send-status",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.query_msg_read_status": {
+      "agent_summary": "查询指定消息的已读状态和人员",
+      "use_when": [
+        "已知会话 ID 与消息 ID，需要核对阅读情况时"
+      ],
+      "avoid_when": [
+        "查看哪些会话未读时使用 chat message list-unread-conversations"
+      ],
+      "examples": [
+        "dws chat message read-status --conversation-id <openConversationId> --message-id <openMessageId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.query_msg_read_status",
+        "cobra-help:dws chat message read-status",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.quit_group": {
+      "agent_summary": "当前用户退出群聊，群本身保留",
+      "use_when": [
+        "用户只要自己离开某个群，不需要解散群"
+      ],
+      "avoid_when": [
+        "需要永久解散整个群时使用 chat group dismiss",
+        "需要踢出其他成员时使用 chat group members remove"
+      ],
+      "examples": [
+        "dws chat group quit --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.quit_group",
+        "cobra-help:dws chat group quit",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:chat.quit_group"
+      ]
+    },
+    "chat.recall_message": {
+      "agent_summary": "撤回当前用户已发送的单条消息",
+      "use_when": [
+        "已知会话与消息 ID，需要撤回自己发出的那条消息"
+      ],
+      "avoid_when": [
+        "撤回机器人消息时使用 chat message recall-by-bot",
+        "消息 ID 未确认时先用消息查询/搜索拿到 openMessageId"
+      ],
+      "examples": [
+        "dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.recall_message",
+        "cobra-help:dws chat message recall",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:chat.recall_message"
+      ]
+    },
+    "chat.recall_robot_message": {
+      "agent_summary": "撤回指定机器人发送的消息",
+      "use_when": [
+        "持有 robotCode 和发送结果 key，需要撤回机器人消息时"
+      ],
+      "avoid_when": [
+        "个人身份消息撤回使用 chat message recall"
+      ],
+      "examples": [
+        "dws chat message recall-by-bot --robot-code <robotCode> --group <openConversationId> --keys <processQueryKey>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.recall_robot_message",
+        "cobra-help:dws chat message recall-by-bot",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.remove_custom_group_role": {
+      "agent_summary": "删除群聊中的自定义角色",
+      "use_when": [
+        "明确要移除整个自定义角色定义时"
+      ],
+      "avoid_when": [
+        "只取消某个成员的角色时使用 chat group-role remove-user"
+      ],
+      "examples": [
+        "dws chat group-role remove --group <openConversationId> --role-id <openRoleId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.remove_custom_group_role",
+        "cobra-help:dws chat group-role remove",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.remove_custom_user_roles": {
+      "agent_summary": "取消指定成员的一个或多个自定义角色",
+      "use_when": [
+        "需要保留角色定义但解除成员角色时"
+      ],
+      "avoid_when": [
+        "删除角色定义本身时使用 chat group-role remove"
+      ],
+      "examples": [
+        "dws chat group-role remove-user --group <openConversationId> --user <userId> --role-ids roleId1,roleId2"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.remove_custom_user_roles",
+        "cobra-help:dws chat group-role remove-user",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.remove_emoji_reaction": {
+      "agent_summary": "移除指定消息上的表情回应",
+      "use_when": [
+        "需要取消此前添加的 emoji reaction 时"
+      ],
+      "avoid_when": [
+        "移除文字表情时使用 chat message remove-text-emotion"
+      ],
+      "examples": [
+        "dws chat message remove-emoji --conversation-id <openConversationId> --msg-id <openMessageId> --emoji \"赞\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.remove_emoji_reaction",
+        "cobra-help:dws chat message remove-emoji",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.remove_group_member": {
+      "agent_summary": "从指定群聊移除成员",
+      "use_when": [
+        "群管理员明确要移除一个或多个普通成员时"
+      ],
+      "avoid_when": [
+        "移除机器人时使用 chat group members remove-bot"
+      ],
+      "examples": [
+        "dws chat group members remove --id <openConversationId> --users userId1,userId2"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.remove_group_member",
+        "cobra-help:dws chat group members remove",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.remove_message_favorite": {
+      "agent_summary": "取消当前用户对指定消息的收藏标记，不删除原消息。",
+      "use_when": [
+        "用户明确要从个人收藏中移除一条已知消息时。"
+      ],
+      "avoid_when": [
+        "需要撤回或删除原消息、移除表情回应或取消消息置顶时不要使用。"
+      ],
+      "examples": [
+        "dws chat message remove-favorite --open-message-id MSG_ID --open-conversation-id CONVERSATION_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增的真实 Cobra leaf、取消收藏实现和 chat 产品参考补齐 reviewed Agent 选择语义；明确其不会删除原消息。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.remove_message_favorite",
+        "cobra-help:dws chat message remove-favorite --help",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.remove_robot_in_group": {
+      "agent_summary": "从群内移除指定机器人",
+      "use_when": [
+        "需要把某个机器人踢出指定群"
+      ],
+      "avoid_when": [
+        "移除普通成员时使用 chat group members remove",
+        "解散整个群时使用 chat group dismiss"
+      ],
+      "examples": [
+        "dws chat group members remove-bot --id <openConversationId> --bot-id <openBotId>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.remove_robot_in_group",
+        "cobra-help:dws chat group members remove-bot",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:bot.remove_robot_in_group"
+      ]
+    },
+    "chat.remove_text_emotion": {
+      "agent_summary": "移除指定消息上的文字表情回应",
+      "use_when": [
+        "需要取消已添加的文字表情时"
+      ],
+      "avoid_when": [
+        "移除普通 emoji reaction 时使用 chat message remove-emoji"
+      ],
+      "examples": [
+        "dws chat message remove-text-emotion --conversation-id <openConversationId> --msg-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.remove_text_emotion",
+        "cobra-help:dws chat message remove-text-emotion",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.reply_personal_message": {
+      "agent_summary": "引用指定消息发送个人回复",
+      "use_when": [
+        "用户要针对某条已有消息进行引用回复时"
+      ],
+      "avoid_when": [
+        "无需引用上下文的普通消息使用 chat message send"
+      ],
+      "examples": [
+        "dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text \"收到\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.reply_personal_message",
+        "cobra-help:dws chat message reply",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.search_at_me_message": {
+      "agent_summary": "查询指定时间范围内提及当前用户的消息",
+      "use_when": [
+        "需要找出 @我的消息和待关注事项时"
+      ],
+      "avoid_when": [
+        "查询全部消息时使用 chat message list-all"
+      ],
+      "examples": [
+        "dws chat message list-mentions --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-02T00:00:00+08:00\" --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_at_me_message",
+        "cobra-help:dws chat message list-mentions",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.search_bots": {
+      "agent_summary": "按关键词搜索企业机器人并拿到 openDingTalkId",
+      "use_when": [
+        "要找可用机器人并提取 openDingTalkId（例如后续单聊机器人）"
+      ],
+      "avoid_when": [
+        "只查我创建的机器人时使用 chat bot search",
+        "已有 robot-code 直接发消息时不要先搜"
+      ],
+      "examples": [
+        "dws chat bot find --query \"日报\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_bots",
+        "cobra-help:dws chat bot find",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:bot.search_bots",
+        "interface_ref:bot.search_bots"
+      ]
+    },
+    "chat.search_common_groups": {
+      "agent_summary": "查询指定人员共同所在的群聊",
+      "use_when": [
+        "需要找两人或多人共同群聊时"
+      ],
+      "avoid_when": [
+        "按群名称搜索时使用 chat search"
+      ],
+      "examples": [
+        "dws chat search-common --nicks \"张三,李四\" --match-mode all --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_common_groups",
+        "cobra-help:dws chat search-common",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.search_groups": {
+      "agent_summary": "按关键词搜索群聊并拿到 openConversationId",
+      "use_when": [
+        "只知道群名关键词，需要定位群并提取 openConversationId"
+      ],
+      "avoid_when": [
+        "已有群号时用 chat group get-by-group-id",
+        "查我创建/管理的群用 chat group list-my-groups",
+        "查与某人的共同群用 chat search-common"
+      ],
+      "examples": [
+        "dws chat search --query \"项目冲刺\"",
+        "dws chat search --query \"项目冲刺\" --limit 20 --cursor 0"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_groups",
+        "cobra-help:dws chat search",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:chat.search_groups"
+      ]
+    },
+    "chat.search_messages": {
+      "agent_summary": "按时间、关键词、发送者、@ 或会话等多维度搜索消息",
+      "use_when": [
+        "需要组合时间范围、关键词、发送者、@我/@某人、指定会话等条件搜消息"
+      ],
+      "avoid_when": [
+        "只需按关键词在会话里搜时优先评估 chat message search",
+        "只需拉取某会话时间线时使用 chat message list",
+        "只需某人发给我的消息时使用 chat message list-by-sender"
+      ],
+      "examples": [
+        "dws chat message search-advanced --query \"周报\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_messages",
+        "cobra-help:dws chat message search-advanced",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:chat.search_messages"
+      ]
+    },
+    "chat.search_messages_by_keyword": {
+      "agent_summary": "按关键词和时间范围搜索消息",
+      "use_when": [
+        "需要用关键词查找消息且过滤条件较简单时"
+      ],
+      "avoid_when": [
+        "需要多会话、发送者或 @维度组合时使用 search-advanced"
+      ],
+      "examples": [
+        "dws chat message search --query \"发布计划\" --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-10T00:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_messages_by_keyword",
+        "cobra-help:dws chat message search",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.search_messages_by_sender": {
+      "agent_summary": "按发送者和时间范围查询消息",
+      "use_when": [
+        "需要查某人发送过的消息且不限定单聊时"
+      ],
+      "avoid_when": [
+        "明确查询与某人的单聊记录时使用 chat message list-direct"
+      ],
+      "examples": [
+        "dws chat message list-by-sender --sender-user-id <userId> --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-02T00:00:00+08:00\" --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_messages_by_sender",
+        "cobra-help:dws chat message list-by-sender",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.search_messages_by_time_range": {
+      "agent_summary": "按时间范围查询当前用户的跨会话消息",
+      "use_when": [
+        "需要汇总一段时间内所有可见会话消息时"
+      ],
+      "avoid_when": [
+        "已指定单个会话时优先使用 chat message list"
+      ],
+      "examples": [
+        "dws chat message list-all --start \"2026-07-01 00:00:00\" --end \"2026-07-02 00:00:00\" --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_messages_by_time_range",
+        "cobra-help:dws chat message list-all",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.search_my_robots": {
+      "agent_summary": "搜索我创建的企业机器人并提取 robot-code",
+      "use_when": [
+        "需要我自己创建的机器人及其 robot-code"
+      ],
+      "avoid_when": [
+        "搜索全部可用企业机器人时使用 chat bot find"
+      ],
+      "examples": [
+        "dws chat bot search --page 1 --size 10 --name \"日报\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.search_my_robots",
+        "cobra-help:dws chat bot search",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:bot.search_my_robots"
+      ]
+    },
+    "chat.send_message_by_custom_robot": {
+      "agent_summary": "用自定义机器人 Webhook 向群发送消息",
+      "use_when": [
+        "已有自定义机器人 webhook token，需要向群发告警或通知"
+      ],
+      "avoid_when": [
+        "使用企业机器人 robot-code 发消息时用 chat message send-by-bot",
+        "以个人身份发消息时用 chat message send"
+      ],
+      "examples": [
+        "dws chat message send-by-webhook --token <webhook-token> --title \"告警\" --text \"CPU 超 90%\" --at-all"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.send_message_by_custom_robot",
+        "cobra-help:dws chat message send-by-webhook",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md",
+        "live-dws-schema:bot.send_message_by_custom_robot"
+      ]
+    },
+    "chat.send_personal_message": {
+      "agent_summary": "以当前用户身份发送群聊或单聊消息",
+      "use_when": [
+        "用户明确要以个人身份发送文本或媒体消息时"
+      ],
+      "avoid_when": [
+        "机器人身份或 Webhook 发送应使用对应命令"
+      ],
+      "examples": [
+        "dws chat message send --group <openConversationId> \"项目已更新\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.send_personal_message",
+        "cobra-help:dws chat message send",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.send_robot_message": {
+      "agent_summary": "以应用机器人身份发送群消息或批量单聊",
+      "use_when": [
+        "已有 robotCode 且需要机器人身份投递消息时"
+      ],
+      "avoid_when": [
+        "个人身份发送或自定义 Webhook 告警不要使用"
+      ],
+      "examples": [
+        "dws chat message send-by-bot --robot-code <robotCode> --group <openConversationId> --title \"日报\" --text \"今日进展\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.send_robot_message",
+        "cobra-help:dws chat message send-by-bot",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.set_custom_user_roles": {
+      "agent_summary": "为指定群成员设置自定义角色",
+      "use_when": [
+        "需要把一个或多个已有角色分配给成员时"
+      ],
+      "avoid_when": [
+        "创建新角色定义时使用 chat group-role add"
+      ],
+      "examples": [
+        "dws chat group-role set-user --group <openConversationId> --user <userId> --role-ids roleId1,roleId2"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.set_custom_user_roles",
+        "cobra-help:dws chat group-role set-user",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.set_group_member_mute_list": {
+      "agent_summary": "禁言或解除禁言指定群成员",
+      "use_when": [
+        "需要按成员设置禁言时长或解除禁言时"
+      ],
+      "avoid_when": [
+        "需要全员禁言时使用 chat group-mute"
+      ],
+      "examples": [
+        "dws chat group-mute-member --group <openConversationId> --users userId1,userId2 --mute-time 3600000"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.set_group_member_mute_list",
+        "cobra-help:dws chat group-mute-member",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.set_group_mute": {
+      "agent_summary": "开启或关闭群聊全员禁言",
+      "use_when": [
+        "需要控制整个群的发言权限时"
+      ],
+      "avoid_when": [
+        "只禁言指定成员时使用 chat group-mute-member"
+      ],
+      "examples": [
+        "dws chat group-mute --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.set_group_mute",
+        "cobra-help:dws chat group-mute",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.set_pin_message": {
+      "agent_summary": "把指定消息设为会话置顶消息",
+      "use_when": [
+        "需要在会话中置顶一条已知消息时"
+      ],
+      "avoid_when": [
+        "取消置顶使用 chat message unset-pin-msg"
+      ],
+      "examples": [
+        "dws chat message set-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.set_pin_message",
+        "cobra-help:dws chat message set-pin-msg",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.set_top_conversation": {
+      "agent_summary": "设置或取消指定会话置顶",
+      "use_when": [
+        "需要改变某个会话在列表中的置顶状态时"
+      ],
+      "avoid_when": [
+        "只查看置顶清单时使用 chat list-top-conversations"
+      ],
+      "examples": [
+        "dws chat set-top --conversation-id <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.set_top_conversation",
+        "cobra-help:dws chat set-top",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.transfer_group_owner": {
+      "agent_summary": "把群主身份转让给指定群成员",
+      "use_when": [
+        "现群主明确指定新群主时"
+      ],
+      "avoid_when": [
+        "只是授予管理员权限时使用 chat group set-admin"
+      ],
+      "examples": [
+        "dws chat group transfer-owner --group <openConversationId> --new-owner <openDingTalkId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.transfer_group_owner",
+        "cobra-help:dws chat group transfer-owner",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.unread_message_conversation_list": {
+      "agent_summary": "列出当前用户存在未读消息的会话",
+      "use_when": [
+        "需要定位哪些会话还有未读内容时"
+      ],
+      "avoid_when": [
+        "查询某条消息的已读人员时使用 chat message read-status"
+      ],
+      "examples": [
+        "dws chat message list-unread-conversations --count 50"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.unread_message_conversation_list",
+        "cobra-help:dws chat message list-unread-conversations",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.unset_pin_message": {
+      "agent_summary": "取消指定消息的会话置顶",
+      "use_when": [
+        "需要移除一条已知置顶消息时"
+      ],
+      "avoid_when": [
+        "新增置顶使用 chat message set-pin-msg"
+      ],
+      "examples": [
+        "dws chat message unset-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.unset_pin_message",
+        "cobra-help:dws chat message unset-pin-msg",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_conv_member_roles": {
+      "agent_summary": "设置或取消群管理员角色",
+      "use_when": [
+        "需要变更指定成员的群管理员身份时"
+      ],
+      "avoid_when": [
+        "自定义业务角色应使用 chat group-role 系列命令"
+      ],
+      "examples": [
+        "dws chat group set-admin --group <openConversationId> --users userId1,userId2"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_conv_member_roles",
+        "cobra-help:dws chat group set-admin",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_custom_group_role": {
+      "agent_summary": "更新群聊自定义角色的名称",
+      "use_when": [
+        "已知角色 ID 并需要重命名该角色时"
+      ],
+      "avoid_when": [
+        "需要变更成员角色分配时使用 set-user 或 remove-user"
+      ],
+      "examples": [
+        "dws chat group-role update --group <openConversationId> --role-id <openRoleId> --name \"新名称\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_custom_group_role",
+        "cobra-help:dws chat group-role update",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_group_icon": {
+      "agent_summary": "使用真实媒体 ID 更新群头像",
+      "use_when": [
+        "已有上传后的头像 mediaId 并要修改群头像时"
+      ],
+      "avoid_when": [
+        "没有真实可用 mediaId 时先完成媒体上传"
+      ],
+      "examples": [
+        "dws chat group update-icon --group <openConversationId> --icon-media-id @mediaId"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_group_icon",
+        "cobra-help:dws chat group update-icon",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_group_name": {
+      "agent_summary": "修改指定群聊的名称",
+      "use_when": [
+        "需要给已有群聊重命名时"
+      ],
+      "avoid_when": [
+        "只修改个人可见备注时不要使用群名称更新"
+      ],
+      "examples": [
+        "dws chat group rename --id <openConversationId> --name \"新群名\""
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_group_name",
+        "cobra-help:dws chat group rename",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_group_settings": {
+      "agent_summary": "更新指定群聊的一项设置开关",
+      "use_when": [
+        "需要调整 searchable、入群验证或群权限等设置时"
+      ],
+      "avoid_when": [
+        "全员禁言和成员禁言使用专门的 mute 命令"
+      ],
+      "examples": [
+        "dws chat group update-settings --group <openConversationId> --setting-key searchable --status 1"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_group_settings",
+        "cobra-help:dws chat group update-settings",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_notification_off": {
+      "agent_summary": "开启或关闭指定会话的免打扰",
+      "use_when": [
+        "用户明确要静音或恢复某个会话通知时"
+      ],
+      "avoid_when": [
+        "群成员禁言属于发言权限，应使用 group-mute 命令"
+      ],
+      "examples": [
+        "dws chat mute --conversation-id <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_notification_off",
+        "cobra-help:dws chat mute",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_show_history_msg_option": {
+      "agent_summary": "设置新成员可见的群历史消息范围",
+      "use_when": [
+        "需要调整新成员入群后的历史消息可见性时"
+      ],
+      "avoid_when": [
+        "普通消息查询或群设置的其他开关不要使用"
+      ],
+      "examples": [
+        "dws chat group set-history --group <openConversationId> --option RECENT_100"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_show_history_msg_option",
+        "cobra-help:dws chat group set-history",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat.update_streaming_card": {
+      "agent_summary": "更新已发送流式卡片的内容和状态",
+      "use_when": [
+        "已有 bizId 并需要追加内容或结束流式输出时"
+      ],
+      "avoid_when": [
+        "创建新卡片时使用 chat message send-card"
+      ],
+      "examples": [
+        "dws chat message update-card --biz-id <bizId> --content \"处理完成\" --flow-status 2"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.update_streaming_card",
+        "cobra-help:dws chat message update-card",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    }
+  },
+  "products": {
+    "chat": {
+      "agent_summary": "管理钉钉会话、群聊、群成员、机器人、消息检索与发送",
+      "use_when": [
+        "请求涉及群聊管理、聊天记录、消息发送、会话设置或群机器人"
+      ],
+      "avoid_when": [
+        "邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "skills/mono/references/products/chat.md",
+        "CommandRegistry:product=chat",
+        "Skill:skills/mono/references/products/chat.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

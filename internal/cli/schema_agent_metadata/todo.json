@@ -1,0 +1,4528 @@
+{
+  "product_id": "todo",
+  "tools": {
+    "todo comment add": {
+      "agent_summary": "给待办添加评论",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要删除评论时改用 dws todo comment delete",
+        "要列出评论时改用 dws todo comment list"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo comment add --task-id \u003ctaskId\u003e --content \"评论内容\"",
+        "dws todo comment add --task-id \u003ctaskId\u003e --content \"已开始处理\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "给待办添加评论",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "给待办添加评论",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要删除评论时改用 dws todo comment delete",
+            "要列出评论时改用 dws todo comment list"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要删除评论时改用 dws todo comment delete",
+                "要列出评论时改用 dws todo comment list"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo comment add --task-id \u003ctaskId\u003e --content \"评论内容\"",
+            "dws todo comment add --task-id \u003ctaskId\u003e --content \"已开始处理\" --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo comment add --task-id \u003ctaskId\u003e --content \"评论内容\"",
+                "dws todo comment add --task-id \u003ctaskId\u003e --content \"已开始处理\" --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.add_todo_comment",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_comment.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.add_todo_comment",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要给待办新增一条评论文本时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要给待办新增一条评论文本时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "add_todo_comment"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_todo_comment",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo comment add",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_comment",
+        "live-dws-schema:todo.add_todo_comment",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_todo_comment"
+      ],
+      "use_when": [
+        "已知 taskId，需要给待办新增一条评论文本时"
+      ]
+    },
+    "todo comment delete": {
+      "agent_summary": "删除待办评论",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "用户未明确删除，或 taskId/commentId 不确定时不要执行",
+        "要新增评论时改用 dws todo comment add；要列出评论时改用 dws todo comment list"
+      ],
+      "confirmation": "user_required",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "删除待办评论",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "删除待办评论",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "用户未明确删除，或 taskId/commentId 不确定时不要执行",
+            "要新增评论时改用 dws todo comment add；要列出评论时改用 dws todo comment list"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "用户未明确删除，或 taskId/commentId 不确定时不要执行",
+                "要新增评论时改用 dws todo comment add；要列出评论时改用 dws todo comment list"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "destructive",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "destructive",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.delete_todo_comment",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo_comment.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.delete_todo_comment",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "high",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求删除指定待办下的某条评论时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求删除指定待办下的某条评论时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "delete_todo_comment"
+      },
+      "reviewed": true,
+      "risk": "high",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.delete_todo_comment",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo comment delete",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo_comment",
+        "live-dws-schema:todo.delete_todo_comment",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.delete_todo_comment"
+      ],
+      "use_when": [
+        "用户明确要求删除指定待办下的某条评论时"
+      ]
+    },
+    "todo comment list": {
+      "agent_summary": "获取待办评论列表",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要新增评论时改用 dws todo comment add",
+        "要删除评论时改用 dws todo comment delete"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo comment list --task-id \u003ctaskId\u003e",
+        "dws todo comment list --task-id \u003ctaskId\u003e --page 1 --size 20"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取待办评论列表",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取待办评论列表",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.list_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要新增评论时改用 dws todo comment add",
+            "要删除评论时改用 dws todo comment delete"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要新增评论时改用 dws todo comment add",
+                "要删除评论时改用 dws todo comment delete"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo comment list --task-id \u003ctaskId\u003e",
+            "dws todo comment list --task-id \u003ctaskId\u003e --page 1 --size 20"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo comment list --task-id \u003ctaskId\u003e",
+                "dws todo comment list --task-id \u003ctaskId\u003e --page 1 --size 20"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.list_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.list_todo_comment",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.list_todo_comment.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.list_todo_comment",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.list_todo_comment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要分页查看该待办评论时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要分页查看该待办评论时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "list_todo_comment"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.list_todo_comment",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo comment list",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.list_todo_comment",
+        "live-dws-schema:todo.list_todo_comment",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.list_todo_comment"
+      ],
+      "use_when": [
+        "已知 taskId，需要分页查看该待办评论时"
+      ]
+    },
+    "todo task add-attachment": {
+      "agent_summary": "上传待办附件",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "待办尚未确认存在或仅试探调用时不要上传（会真实写附件）",
+        "要添加执行人/参与人/提醒时改用对应 add 命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf",
+        "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "上传待办附件",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "上传待办附件",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "待办尚未确认存在或仅试探调用时不要上传（会真实写附件）",
+            "要添加执行人/参与人/提醒时改用对应 add 命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "待办尚未确认存在或仅试探调用时不要上传（会真实写附件）",
+                "要添加执行人/参与人/提醒时改用对应 add 命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf",
+            "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf",
+                "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.add_todo_attachment",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.add_todo_attachment",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId 且待办已确认存在，需要上传本地文件为待办附件时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId 且待办已确认存在，需要上传本地文件为待办附件时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "add_todo_attachment"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_todo_attachment",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task add-attachment",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment",
+        "live-dws-schema:todo.add_todo_attachment",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_todo_attachment"
+      ],
+      "use_when": [
+        "已知 taskId 且待办已确认存在，需要上传本地文件为待办附件时"
+      ]
+    },
+    "todo task add-executor": {
+      "agent_summary": "添加待办执行人",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要添加参与人时改用 dws todo task add-participant",
+        "要上传附件时改用 dws todo task add-attachment",
+        "待办或执行人未确认时不要添加"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task add-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task add-executor --task-id \u003ctaskId\u003e --executors userId1,userId2 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "添加待办执行人",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "添加待办执行人",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_executors.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要添加参与人时改用 dws todo task add-participant",
+            "要上传附件时改用 dws todo task add-attachment",
+            "待办或执行人未确认时不要添加"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要添加参与人时改用 dws todo task add-participant",
+                "要上传附件时改用 dws todo task add-attachment",
+                "待办或执行人未确认时不要添加"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task add-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+            "dws todo task add-executor --task-id \u003ctaskId\u003e --executors userId1,userId2 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task add-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+                "dws todo task add-executor --task-id \u003ctaskId\u003e --executors userId1,userId2 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_executors.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.add_task_executors",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_executors.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.add_task_executors",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_executors.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要为待办追加执行人（userId 列表）时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要为待办追加执行人（userId 列表）时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "add_task_executors"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_task_executors",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task add-executor",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_executors",
+        "live-dws-schema:todo.add_task_executors",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_task_executors"
+      ],
+      "use_when": [
+        "已知 taskId，需要为待办追加执行人（userId 列表）时"
+      ]
+    },
+    "todo task add-participant": {
+      "agent_summary": "添加待办参与人",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要添加执行人时改用 dws todo task add-executor",
+        "要上传附件时改用 dws todo task add-attachment",
+        "待办或参与人未确认时不要添加"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task add-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task add-participant --task-id \u003ctaskId\u003e --participants userId1,userId2 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "添加待办参与人",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "添加待办参与人",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_participants.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要添加执行人时改用 dws todo task add-executor",
+            "要上传附件时改用 dws todo task add-attachment",
+            "待办或参与人未确认时不要添加"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要添加执行人时改用 dws todo task add-executor",
+                "要上传附件时改用 dws todo task add-attachment",
+                "待办或参与人未确认时不要添加"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task add-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+            "dws todo task add-participant --task-id \u003ctaskId\u003e --participants userId1,userId2 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task add-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+                "dws todo task add-participant --task-id \u003ctaskId\u003e --participants userId1,userId2 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_participants.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.add_task_participants",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_participants.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.add_task_participants",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_participants.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要为待办追加参与人（userId 列表）时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要为待办追加参与人（userId 列表）时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "add_task_participants"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_task_participants",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task add-participant",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_participants",
+        "live-dws-schema:todo.add_task_participants",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_task_participants"
+      ],
+      "use_when": [
+        "已知 taskId，需要为待办追加参与人（userId 列表）时"
+      ]
+    },
+    "todo task add-reminder": {
+      "agent_summary": "添加待办提醒",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要重置/清除提醒规则时改用 dws todo task reset-reminder",
+        "提醒时间与目标待办未确认时不要添加"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30",
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "添加待办提醒",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "添加待办提醒",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_reminder.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要重置/清除提醒规则时改用 dws todo task reset-reminder",
+            "提醒时间与目标待办未确认时不要添加"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要重置/清除提醒规则时改用 dws todo task reset-reminder",
+                "提醒时间与目标待办未确认时不要添加"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30",
+            "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\""
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30",
+                "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\""
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_reminder.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.add_todo_reminder",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_reminder.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.add_todo_reminder",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_reminder.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要按截止时间偏移或自定义时间戳添加提醒时（dueTime 模式要求待办已有截止时间）"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要按截止时间偏移或自定义时间戳添加提醒时（dueTime 模式要求待办已有截止时间）"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "add_todo_reminder"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_todo_reminder",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task add-reminder",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_reminder",
+        "live-dws-schema:todo.add_todo_reminder",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_todo_reminder"
+      ],
+      "use_when": [
+        "已知 taskId，需要按截止时间偏移或自定义时间戳添加提醒时（dueTime 模式要求待办已有截止时间）"
+      ]
+    },
+    "todo task create": {
+      "agent_summary": "创建个人待办",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "只需查询已有待办时改用 dws todo task list",
+        "要创建子待办时改用 dws todo task create-sub；标题或执行人未确认时不要创建"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task create --title \"修复线上Bug\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+        "dws todo task create --title \"每日站会\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\" --recurrence \"DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "创建个人待办",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "创建个人待办",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需查询已有待办时改用 dws todo task list",
+            "要创建子待办时改用 dws todo task create-sub；标题或执行人未确认时不要创建"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "只需查询已有待办时改用 dws todo task list",
+                "要创建子待办时改用 dws todo task create-sub；标题或执行人未确认时不要创建"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task create --title \"修复线上Bug\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+            "dws todo task create --title \"每日站会\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\" --recurrence \"DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1\""
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task create --title \"修复线上Bug\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+                "dws todo task create --title \"每日站会\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\" --recurrence \"DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1\""
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.create_personal_todo",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.create_personal_todo",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "todo.create_personal_todo",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要在当前组织创建个人待办（标题与执行人必填；可选截止时间、优先级、按天循环）时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要在当前组织创建个人待办（标题与执行人必填；可选截止时间、优先级、按天循环）时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "create_personal_todo"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.create_personal_todo",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task create",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.create_personal_todo",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_todo",
+        "live-dws-schema:todo.create_personal_todo",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.create_personal_todo",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.create_personal_todo"
+      ],
+      "use_when": [
+        "需要在当前组织创建个人待办（标题与执行人必填；可选截止时间、优先级、按天循环）时"
+      ]
+    },
+    "todo task create-sub": {
+      "agent_summary": "创建个人子待办",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "只需创建顶层待办时改用 dws todo task create",
+        "父待办不是本人创建或 parentId 未确认时不要创建；子待办不支持独立循环规则"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "创建个人子待办",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "创建个人子待办",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_sub_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需创建顶层待办时改用 dws todo task create",
+            "父待办不是本人创建或 parentId 未确认时不要创建；子待办不支持独立循环规则"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "只需创建顶层待办时改用 dws todo task create",
+                "父待办不是本人创建或 parentId 未确认时不要创建；子待办不支持独立循环规则"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+            "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\""
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+                "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\""
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_sub_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.create_personal_sub_todo",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_sub_todo.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.create_personal_sub_todo",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_sub_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "父待办由本人创建且已确认 parentId，需要创建子待办（标题、执行人、可选截止时间/优先级）时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "父待办由本人创建且已确认 parentId，需要创建子待办（标题、执行人、可选截止时间/优先级）时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "create_personal_sub_todo"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.create_personal_sub_todo",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task create-sub",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_sub_todo",
+        "live-dws-schema:todo.create_personal_sub_todo",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.create_personal_sub_todo"
+      ],
+      "use_when": [
+        "父待办由本人创建且已确认 parentId，需要创建子待办（标题、执行人、可选截止时间/优先级）时"
+      ]
+    },
+    "todo task delete": {
+      "agent_summary": "删除待办",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "用户未明确删除、目标 taskId 不确定或仍需保留任务记录时不要执行",
+        "只需标记完成时改用 dws todo task done"
+      ],
+      "confirmation": "user_required",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo task delete --task-id \u003ctaskId\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "删除待办",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "删除待办",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "用户未明确删除、目标 taskId 不确定或仍需保留任务记录时不要执行",
+            "只需标记完成时改用 dws todo task done"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "用户未明确删除、目标 taskId 不确定或仍需保留任务记录时不要执行",
+                "只需标记完成时改用 dws todo task done"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": false
+            },
+            {
+              "value": "user_required",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "effect": {
+          "value": "destructive",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "destructive",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "destructive",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task delete --task-id \u003ctaskId\u003e"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task delete --task-id \u003ctaskId\u003e"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.delete_todo",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.delete_todo",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "todo.delete_todo",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "high",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": false
+            },
+            {
+              "value": "high",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求删除指定待办（所有执行者侧一并删除）时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求删除指定待办（所有执行者侧一并删除）时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "delete_todo"
+      },
+      "reviewed": true,
+      "risk": "high",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.delete_todo",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task delete",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.delete_todo",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo",
+        "live-dws-schema:todo.delete_todo",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.delete_todo",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.delete_todo"
+      ],
+      "use_when": [
+        "用户明确要求删除指定待办（所有执行者侧一并删除）时"
+      ]
+    },
+    "todo task done": {
+      "agent_summary": "修改执行者的待办完成状态",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要改标题/截止时间/优先级时改用 dws todo task update",
+        "执行人、目标待办或期望状态未确认时不要修改"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task done --task-id \u003ctaskId\u003e --status true",
+        "dws todo task done --task-id \u003ctaskId\u003e --status false"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "修改执行者的待办完成状态",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "修改执行者的待办完成状态",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_done_status.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要改标题/截止时间/优先级时改用 dws todo task update",
+            "执行人、目标待办或期望状态未确认时不要修改"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要改标题/截止时间/优先级时改用 dws todo task update",
+                "执行人、目标待办或期望状态未确认时不要修改"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task done --task-id \u003ctaskId\u003e --status true",
+            "dws todo task done --task-id \u003ctaskId\u003e --status false"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task done --task-id \u003ctaskId\u003e --status true",
+                "dws todo task done --task-id \u003ctaskId\u003e --status false"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_done_status.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.update_todo_done_status",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.update_todo_done_status",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "todo.update_todo_done_status",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_done_status.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要把执行者侧完成状态设为已完成或未完成时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要把执行者侧完成状态设为已完成或未完成时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "update_todo_done_status"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.update_todo_done_status",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task done",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_done_status",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_done_status",
+        "live-dws-schema:todo.update_todo_done_status",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.update_todo_done_status",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.update_todo_done_status"
+      ],
+      "use_when": [
+        "已知 taskId，需要把执行者侧完成状态设为已完成或未完成时"
+      ]
+    },
+    "todo task get": {
+      "agent_summary": "查询待办详情",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "需要按条件查多个待办时改用 dws todo task list",
+        "需要修改待办时改用 update/done/delete 等写命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task get --task-id \u003ctaskId\u003e",
+        "dws todo task get --task-id \u003ctaskId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询待办详情",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "查询待办详情",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_todo_detail.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要按条件查多个待办时改用 dws todo task list",
+            "需要修改待办时改用 update/done/delete 等写命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要按条件查多个待办时改用 dws todo task list",
+                "需要修改待办时改用 update/done/delete 等写命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task get --task-id \u003ctaskId\u003e",
+            "dws todo task get --task-id \u003ctaskId\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task get --task-id \u003ctaskId\u003e",
+                "dws todo task get --task-id \u003ctaskId\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_todo_detail.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.get_todo_detail",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.get_todo_detail",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "todo.get_todo_detail",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_todo_detail.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，且调用者是创建者或执行者，需要查看单条待办详情时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，且调用者是创建者或执行者，需要查看单条待办详情时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "get_todo_detail"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.get_todo_detail",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task get",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.get_todo_detail",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.get_todo_detail",
+        "live-dws-schema:todo.get_todo_detail",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.get_todo_detail",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.get_todo_detail"
+      ],
+      "use_when": [
+        "已知 taskId，且调用者是创建者或执行者，需要查看单条待办详情时"
+      ]
+    },
+    "todo task list": {
+      "agent_summary": "查询当前组织个人待办列表",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "已知 taskId 需要完整单条详情时改用 dws todo task get"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task list --page 1 --size 20 --status false",
+        "dws todo task list --page 1 --size 20 --status false --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询当前组织个人待办列表",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "查询当前组织个人待办列表",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "已知 taskId 需要完整单条详情时改用 dws todo task get"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId 需要完整单条详情时改用 dws todo task get"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task list --page 1 --size 20 --status false",
+            "dws todo task list --page 1 --size 20 --status false --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task list --page 1 --size 20 --status false",
+                "dws todo task list --page 1 --size 20 --status false --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.get_user_todos_in_current_org",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.get_user_todos_in_current_org",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "get_user_todos_in_current_org"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.get_user_todos_in_current_org",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task list",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org",
+        "live-dws-schema:todo.get_user_todos_in_current_org",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.get_user_todos_in_current_org"
+      ],
+      "use_when": [
+        "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+      ]
+    },
+    "todo task remove-executor": {
+      "agent_summary": "移除待办执行人",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要添加执行人时改用 dws todo task add-executor",
+        "待办或执行人未确认时不要移除"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors userId1 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "移除待办执行人",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "移除待办执行人",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_executors.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要添加执行人时改用 dws todo task add-executor",
+            "待办或执行人未确认时不要移除"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要添加执行人时改用 dws todo task add-executor",
+                "待办或执行人未确认时不要移除"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+            "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors userId1 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+                "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors userId1 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_executors.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.remove_task_executors",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_executors.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.remove_task_executors",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_executors.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求从待办移除指定执行人时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求从待办移除指定执行人时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "remove_task_executors"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.remove_task_executors",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task remove-executor",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_executors",
+        "live-dws-schema:todo.remove_task_executors",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.remove_task_executors"
+      ],
+      "use_when": [
+        "用户明确要求从待办移除指定执行人时"
+      ]
+    },
+    "todo task remove-participant": {
+      "agent_summary": "移除待办参与人",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要添加参与人时改用 dws todo task add-participant",
+        "待办或参与人未确认时不要移除"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants userId1 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "移除待办参与人",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "移除待办参与人",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_participants.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要添加参与人时改用 dws todo task add-participant",
+            "待办或参与人未确认时不要移除"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要添加参与人时改用 dws todo task add-participant",
+                "待办或参与人未确认时不要移除"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+            "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants userId1 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+                "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants userId1 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_participants.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.remove_task_participants",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_participants.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.remove_task_participants",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_participants.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求从待办移除指定参与人时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求从待办移除指定参与人时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "remove_task_participants"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.remove_task_participants",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task remove-participant",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_participants",
+        "live-dws-schema:todo.remove_task_participants",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.remove_task_participants"
+      ],
+      "use_when": [
+        "用户明确要求从待办移除指定参与人时"
+      ]
+    },
+    "todo task reset-reminder": {
+      "agent_summary": "重置待办提醒",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "只需追加一条提醒时改用 dws todo task add-reminder",
+        "新规则与目标待办未确认时不要重置"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task reset-reminder --task-id \u003ctaskId\u003e",
+        "dws todo task reset-reminder --task-id \u003ctaskId\u003e --reminder-rules '[{\"dueDateOffset\":-30,\"baseTime\":\"dueTime\"},{\"reminderTimeStamp\":\"2026-03-10T18:00:00+08:00\",\"baseTime\":\"customTime\"}]'"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "重置待办提醒",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "重置待办提醒",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.reset_todo_reminder.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需追加一条提醒时改用 dws todo task add-reminder",
+            "新规则与目标待办未确认时不要重置"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "只需追加一条提醒时改用 dws todo task add-reminder",
+                "新规则与目标待办未确认时不要重置"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task reset-reminder --task-id \u003ctaskId\u003e",
+            "dws todo task reset-reminder --task-id \u003ctaskId\u003e --reminder-rules '[{\"dueDateOffset\":-30,\"baseTime\":\"dueTime\"},{\"reminderTimeStamp\":\"2026-03-10T18:00:00+08:00\",\"baseTime\":\"customTime\"}]'"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task reset-reminder --task-id \u003ctaskId\u003e",
+                "dws todo task reset-reminder --task-id \u003ctaskId\u003e --reminder-rules '[{\"dueDateOffset\":-30,\"baseTime\":\"dueTime\"},{\"reminderTimeStamp\":\"2026-03-10T18:00:00+08:00\",\"baseTime\":\"customTime\"}]'"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.reset_todo_reminder.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.reset_todo_reminder",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.reset_todo_reminder.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.reset_todo_reminder",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.reset_todo_reminder.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要清除或整体替换待办提醒规则时（可不传 reminder-rules 以清除）"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要清除或整体替换待办提醒规则时（可不传 reminder-rules 以清除）"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "reset_todo_reminder"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.reset_todo_reminder",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task reset-reminder",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.reset_todo_reminder",
+        "live-dws-schema:todo.reset_todo_reminder",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.reset_todo_reminder"
+      ],
+      "use_when": [
+        "需要清除或整体替换待办提醒规则时（可不传 reminder-rules 以清除）"
+      ]
+    },
+    "todo task update": {
+      "agent_summary": "修改整个待办任务",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "只需改执行者完成状态时优先 dws todo task done",
+        "目标任务与待改字段未确认时不要更新"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\"",
+        "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "修改整个待办任务",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "修改整个待办任务",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_task.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需改执行者完成状态时优先 dws todo task done",
+            "目标任务与待改字段未确认时不要更新"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "只需改执行者完成状态时优先 dws todo task done",
+                "目标任务与待改字段未确认时不要更新"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\"",
+            "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\""
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\"",
+                "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\""
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_task.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "todo.update_todo_task",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "todo.update_todo_task",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "todo.update_todo_task",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_task.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要修改待办标题、截止时间、优先级或完成标记等字段时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要修改待办标题、截止时间、优先级或完成标记等字段时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "update_todo_task"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.update_todo_task",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task update",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_task",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "internal/cli/schema_mcp_metadata.json#tools.todo.update_todo_task",
+        "live-dws-schema:todo.update_todo_task",
+        "skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.update_todo_task",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.update_todo_task"
+      ],
+      "use_when": [
+        "已知 taskId，需要修改待办标题、截止时间、优先级或完成标记等字段时"
+      ]
+    }
+  }
+}

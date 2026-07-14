@@ -30,6 +30,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
@@ -135,6 +136,13 @@ func newEventSchemaCommand() *cobra.Command {
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
 	hideEventInternalFlags(cmd, "as")
+	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
+		Name:        "event_key",
+		Type:        "string",
+		Description: "要查询 payload 字段定义的个人事件码",
+		Required:    true,
+		Index:       0,
+	})
 	return cmd
 }
 
@@ -204,6 +212,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 			Compact:        opts.Common.Compact,
 			MaxEvents:      opts.Common.MaxEvents,
 			Duration:       opts.Common.Duration,
+			EventKey:       opts.EventKey,
 			Format:         normalised,
 			OutputDir:      opts.Common.OutputDir,
 			Routes:         routes,
@@ -239,7 +248,14 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		_ = client.DeleteSubscription(context.Background(), sub.SubscribeID)
 		_ = personal.RemoveRunStates(workDir, []string{sub.SubscribeID})
 	}
-	if opts.Ephemeral {
+	// Ownership-based cleanup (AI-subprocess contract, aligned with
+	// lark-cli): a subscription this run CREATED is unsubscribed on exit
+	// (any exit — SIGTERM / stdin-EOF / limit / timeout / error), so nothing
+	// leaks server-side. A subscription REUSED via --subscribe-id is left
+	// intact — the caller owns its lifecycle. --ephemeral forces cleanup
+	// either way.
+	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
+	if opts.Ephemeral || selfCreated {
 		defer cleanup()
 	}
 
@@ -251,6 +267,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		Compact:        opts.Common.Compact,
 		MaxEvents:      opts.Common.MaxEvents,
 		Duration:       opts.Common.Duration,
+		EventKey:       eventKey,
 		Format:         normalised,
 		OutputDir:      opts.Common.OutputDir,
 		Routes:         routes,
@@ -259,6 +276,11 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		Quiet:          opts.Common.Quiet,
 		Foreground:     opts.Common.Foreground,
 		Force:          opts.Common.Force,
+	}
+	// Arm the stdin-EOF shutdown watcher only for a pipe-style, unbounded
+	// run (see shouldWatchStdinEOF).
+	if shouldWatchStdinEOF(opts.Common.MaxEvents, opts.Common.Duration) {
+		cfg.Stdin = c.InOrStdin()
 	}
 	applyPersonalConsumeFilters(&cfg, opts, sub.SubscribeID, eventKey)
 	if opts.DebugRawEvents && !opts.Common.Quiet {
@@ -755,6 +777,16 @@ func personalBusSpawnArgs(identity personal.Identity, ticketMode, ticketURL stri
 	args := []string{
 		"--source-kind", string(dwsevent.SourceKindPersonalStream),
 		"--stream-source-id", identity.SourceID,
+	}
+	// Forward the organization so the detached _bus child resolves
+	// credentials for the SAME profile the parent used. Without this the
+	// child falls back to the default profile's token slot and fails to
+	// authenticate the personal stream for a non-default `--profile`
+	// (symptom: "bus child reported startup failure on ready pipe", no
+	// bus.log). --profile accepts a corpId; the root pre-parses it into the
+	// runtime profile before the _bus handler resolves the identity.
+	if cid := strings.TrimSpace(identity.CorpID); cid != "" {
+		args = append(args, "--profile", cid)
 	}
 	if strings.TrimSpace(ticketMode) != "" {
 		args = append(args, "--stream-ticket-mode", ticketMode)

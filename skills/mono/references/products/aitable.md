@@ -287,7 +287,7 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 
 ```bash
 # 第一步：创建任务（按 scope 传必要参数）
-dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --format excel --timeout-ms 1000
+dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --export-format excel --timeout-ms 1000 --format json
 
 # 第二步：拿 taskId 继续轮询，直到返回 downloadUrl
 dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000

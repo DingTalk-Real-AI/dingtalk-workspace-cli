@@ -1,0 +1,4008 @@
+{
+  "product_id": "oa",
+  "tools": {
+    "oa approval approve": {
+      "agent_summary": "同意审批",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "实例或 taskId 未确认时不要同意；先用 list-pending / tasks 取 ID",
+        "要拒绝时改用 dws oa approval reject；要撤销自己发起的单时改用 revoke"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e",
+        "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "同意审批",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "同意审批",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.approve_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "实例或 taskId 未确认时不要同意；先用 list-pending / tasks 取 ID",
+            "要拒绝时改用 dws oa approval reject；要撤销自己发起的单时改用 revoke"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "实例或 taskId 未确认时不要同意；先用 list-pending / tasks 取 ID",
+                "要拒绝时改用 dws oa approval reject；要撤销自己发起的单时改用 revoke"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e",
+            "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e",
+                "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.approve_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.approve_processInstance",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.approve_processInstance",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.approve_processInstance",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.approve_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processInstanceId 与待办 taskId，用户明确要求同意该审批任务时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processInstanceId 与待办 taskId，用户明确要求同意该审批任务时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "approve_processInstance"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.approve_processInstance",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval approve",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.approve_processInstance",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.approve_processInstance",
+        "live-dws-schema:oa.approve_processInstance",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.approve_processInstance",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.approve_processInstance"
+      ],
+      "use_when": [
+        "已知 processInstanceId 与待办 taskId，用户明确要求同意该审批任务时"
+      ]
+    },
+    "oa approval detail": {
+      "agent_summary": "获取指定审批实例的详情信息",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "需要操作历史而非表单详情时改用 dws oa approval records",
+        "该命令不会同意/拒绝/撤销"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e",
+        "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取指定审批实例的详情信息",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取指定审批实例的详情信息",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_detail.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要操作历史而非表单详情时改用 dws oa approval records",
+            "该命令不会同意/拒绝/撤销"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要操作历史而非表单详情时改用 dws oa approval records",
+                "该命令不会同意/拒绝/撤销"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e",
+            "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e",
+                "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_detail.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.get_processInstance_detail",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.get_processInstance_detail",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.get_processInstance_detail",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_detail.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processInstanceId，需要查看表单内容与当前状态详情时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processInstanceId，需要查看表单内容与当前状态详情时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_processInstance_detail"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.get_processInstance_detail",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval detail",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_detail",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_detail",
+        "live-dws-schema:oa.get_processInstance_detail",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.get_processInstance_detail",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.get_processInstance_detail"
+      ],
+      "use_when": [
+        "已知 processInstanceId，需要查看表单内容与当前状态详情时"
+      ]
+    },
+    "oa approval list-cc": {
+      "agent_summary": "获取抄送用户的列表",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "要看待处理或自己发起的审批时不要使用",
+        "该命令只列抄送实例，不执行审批动作"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+        "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取抄送用户的列表",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取抄送用户的列表",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要看待处理或自己发起的审批时不要使用",
+            "该命令只列抄送实例，不执行审批动作"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要看待处理或自己发起的审批时不要使用",
+                "该命令只列抄送实例，不执行审批动作"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+            "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+                "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.get_noticed_instances",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.get_noticed_instances",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看抄送给当前用户的审批单列表时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看抄送给当前用户的审批单列表时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_noticed_instances"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.get_noticed_instances",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval list-cc",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances",
+        "live-dws-schema:oa.get_noticed_instances",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.get_noticed_instances"
+      ],
+      "use_when": [
+        "需要查看抄送给当前用户的审批单列表时"
+      ]
+    },
+    "oa approval list-executed": {
+      "agent_summary": "获取员工已处理任务列表",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "要看待处理单时改用 dws oa approval list-pending",
+        "要看自己发起或抄送时改用 list-submitted / list-cc"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+        "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取员工已处理任务列表",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取员工已处理任务列表",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要看待处理单时改用 dws oa approval list-pending",
+            "要看自己发起或抄送时改用 list-submitted / list-cc"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要看待处理单时改用 dws oa approval list-pending",
+                "要看自己发起或抄送时改用 list-submitted / list-cc"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+            "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+                "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.get_done_tasks",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.get_done_tasks",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看当前用户已经处理过的审批单列表时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看当前用户已经处理过的审批单列表时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_done_tasks"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.get_done_tasks",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval list-executed",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks",
+        "live-dws-schema:oa.get_done_tasks",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.get_done_tasks"
+      ],
+      "use_when": [
+        "需要查看当前用户已经处理过的审批单列表时"
+      ]
+    },
+    "oa approval list-forms": {
+      "agent_summary": "获取当前用户可见的审批表单列表",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "需要实例、任务或操作记录时不要使用；该命令只列可见模板"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval list-forms --cursor 0 --limit 100",
+        "dws oa approval list-forms --cursor 0 --limit 100 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取当前用户可见的审批表单列表",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取当前用户可见的审批表单列表",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_user_visible_process.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要实例、任务或操作记录时不要使用；该命令只列可见模板"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要实例、任务或操作记录时不要使用；该命令只列可见模板"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval list-forms --cursor 0 --limit 100",
+            "dws oa approval list-forms --cursor 0 --limit 100 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval list-forms --cursor 0 --limit 100",
+                "dws oa approval list-forms --cursor 0 --limit 100 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_user_visible_process.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.list_user_visible_process",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.list_user_visible_process",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.list_user_visible_process",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_user_visible_process.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要列出可见审批模板并取得 processCode 时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要列出可见审批模板并取得 processCode 时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_user_visible_process"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.list_user_visible_process",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval list-forms",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_user_visible_process",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.list_user_visible_process",
+        "live-dws-schema:oa.list_user_visible_process",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.list_user_visible_process",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.list_user_visible_process"
+      ],
+      "use_when": [
+        "需要列出可见审批模板并取得 processCode 时"
+      ]
+    },
+    "oa approval list-initiated": {
+      "agent_summary": "查询当前用户已发起的审批实例列表",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "不知道 processCode 时先用 dws oa approval list-forms",
+        "要撤销实例时先确认 instanceId 再改用 revoke"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20",
+        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询当前用户已发起的审批实例列表",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "查询当前用户已发起的审批实例列表",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_initiated_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "不知道 processCode 时先用 dws oa approval list-forms",
+            "要撤销实例时先确认 instanceId 再改用 revoke"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "不知道 processCode 时先用 dws oa approval list-forms",
+                "要撤销实例时先确认 instanceId 再改用 revoke"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20",
+            "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20",
+                "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_initiated_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.list_initiated_instances",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.list_initiated_instances",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.list_initiated_instances",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_initiated_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_initiated_instances"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.list_initiated_instances",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval list-initiated",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_initiated_instances",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.list_initiated_instances",
+        "live-dws-schema:oa.list_initiated_instances",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.list_initiated_instances",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.list_initiated_instances"
+      ],
+      "use_when": [
+        "已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"
+      ]
+    },
+    "oa approval list-pending": {
+      "agent_summary": "查询当前用户待处理的审批单列表",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "已知实例只要 taskId 时改用 dws oa approval tasks",
+        "不要用本命令执行同意/拒绝"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
+        "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询当前用户待处理的审批单列表",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "查询当前用户待处理的审批单列表",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_approvals.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "已知实例只要 taskId 时改用 dws oa approval tasks",
+            "不要用本命令执行同意/拒绝"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知实例只要 taskId 时改用 dws oa approval tasks",
+                "不要用本命令执行同意/拒绝"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
+            "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
+                "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_approvals.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.list_pending_approvals",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.list_pending_approvals",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.list_pending_approvals",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_approvals.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_pending_approvals"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.list_pending_approvals",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval list-pending",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_approvals",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_approvals",
+        "live-dws-schema:oa.list_pending_approvals",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.list_pending_approvals",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.list_pending_approvals"
+      ],
+      "use_when": [
+        "需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"
+      ]
+    },
+    "oa approval list-submitted": {
+      "agent_summary": "获取已提交实例列表",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "要按 processCode 与时间窗列已发起实例时也可对照 list-initiated",
+        "要处理待办时改用 list-pending / tasks"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+        "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取已提交实例列表",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取已提交实例列表",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要按 processCode 与时间窗列已发起实例时也可对照 list-initiated",
+            "要处理待办时改用 list-pending / tasks"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要按 processCode 与时间窗列已发起实例时也可对照 list-initiated",
+                "要处理待办时改用 list-pending / tasks"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+            "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
+                "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.get_submitted_instances",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.get_submitted_instances",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看当前用户已提交/发起相关的审批单列表时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看当前用户已提交/发起相关的审批单列表时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_submitted_instances"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.get_submitted_instances",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval list-submitted",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances",
+        "live-dws-schema:oa.get_submitted_instances",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.get_submitted_instances"
+      ],
+      "use_when": [
+        "需要查看当前用户已提交/发起相关的审批单列表时"
+      ]
+    },
+    "oa approval oa-cc-noticer": {
+      "agent_summary": "抄送审批人",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "只需查看抄送列表时改用 dws oa approval list-cc",
+        "实例与抄送人未确认时不要添加"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"68674200835816\"",
+        "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"userId1,userId2\" --operator-id \"123123\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "抄送审批人",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "抄送审批人",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需查看抄送列表时改用 dws oa approval list-cc",
+            "实例与抄送人未确认时不要添加"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "只需查看抄送列表时改用 dws oa approval list-cc",
+                "实例与抄送人未确认时不要添加"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"68674200835816\"",
+            "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"userId1,userId2\" --operator-id \"123123\""
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"68674200835816\"",
+                "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"userId1,userId2\" --operator-id \"123123\""
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.oa_cc_noticer",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.oa_cc_noticer",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processInstanceId，需要为审批实例追加抄送人时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processInstanceId，需要为审批实例追加抄送人时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "oa_cc_noticer"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.oa_cc_noticer",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval oa-cc-noticer",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer",
+        "live-dws-schema:oa.oa_cc_noticer",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.oa_cc_noticer"
+      ],
+      "use_when": [
+        "已知 processInstanceId，需要为审批实例追加抄送人时"
+      ]
+    },
+    "oa approval oa-comments": {
+      "agent_summary": "用户添加审批评论",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "只需同意/拒绝/转交时改用对应写命令",
+        "评论内容或实例未确认时不要添加"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\"",
+        "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "用户添加审批评论",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "用户添加审批评论",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需同意/拒绝/转交时改用对应写命令",
+            "评论内容或实例未确认时不要添加"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "只需同意/拒绝/转交时改用对应写命令",
+                "评论内容或实例未确认时不要添加"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\"",
+            "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\" --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\"",
+                "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\" --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.dingflow_comments",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.dingflow_comments",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processInstanceId，需要为审批实例添加评论文本时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processInstanceId，需要为审批实例添加评论文本时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "dingflow_comments"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.dingflow_comments",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval oa-comments",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments",
+        "live-dws-schema:oa.dingflow_comments",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.dingflow_comments"
+      ],
+      "use_when": [
+        "已知 processInstanceId，需要为审批实例添加评论文本时"
+      ]
+    },
+    "oa approval records": {
+      "agent_summary": "获取审批操作记录",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "需要当前表单详情时改用 dws oa approval detail",
+        "该命令只读历史，不处理审批"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval records --instance-id \u003cprocessInstanceId\u003e",
+        "dws oa approval records --instance-id \u003cprocessInstanceId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取审批操作记录",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取审批操作记录",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_records.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要当前表单详情时改用 dws oa approval detail",
+            "该命令只读历史，不处理审批"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要当前表单详情时改用 dws oa approval detail",
+                "该命令只读历史，不处理审批"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval records --instance-id \u003cprocessInstanceId\u003e",
+            "dws oa approval records --instance-id \u003cprocessInstanceId\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval records --instance-id \u003cprocessInstanceId\u003e",
+                "dws oa approval records --instance-id \u003cprocessInstanceId\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_records.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.get_processInstance_records",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.get_processInstance_records",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.get_processInstance_records",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_records.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processInstanceId，需要查看谁做了什么审批操作及结果时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processInstanceId，需要查看谁做了什么审批操作及结果时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_processInstance_records"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.get_processInstance_records",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval records",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_records",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_records",
+        "live-dws-schema:oa.get_processInstance_records",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.get_processInstance_records",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.get_processInstance_records"
+      ],
+      "use_when": [
+        "已知 processInstanceId，需要查看谁做了什么审批操作及结果时"
+      ]
+    },
+    "oa approval redirect-task": {
+      "agent_summary": "转交审批任务",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "任务、接收人或转交意图未确认时不要转交",
+        "要自己处理时改用 approve/reject"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e",
+        "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e --remark \"请帮忙处理\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "转交审批任务",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "转交审批任务",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "任务、接收人或转交意图未确认时不要转交",
+            "要自己处理时改用 approve/reject"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "任务、接收人或转交意图未确认时不要转交",
+                "要自己处理时改用 approve/reject"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e",
+            "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e --remark \"请帮忙处理\""
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e",
+                "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e --remark \"请帮忙处理\""
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.redirect_task",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task.interface_ref",
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.redirect_task",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": true
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId 与接收人 toActionerId，用户明确要求转交审批任务时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId 与接收人 toActionerId，用户明确要求转交审批任务时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "redirect_task"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.redirect_task",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval redirect-task",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task",
+        "live-dws-schema:oa.redirect_task",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.redirect_task"
+      ],
+      "use_when": [
+        "已知 taskId 与接收人 toActionerId，用户明确要求转交审批任务时"
+      ]
+    },
+    "oa approval reject": {
+      "agent_summary": "拒绝审批",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "要同意时改用 dws oa approval approve",
+        "实例、taskId 或拒绝原因未确认时不要拒绝"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不同意\"",
+        "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不符合要求\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "拒绝审批",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "拒绝审批",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.reject_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要同意时改用 dws oa approval approve",
+            "实例、taskId 或拒绝原因未确认时不要拒绝"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要同意时改用 dws oa approval approve",
+                "实例、taskId 或拒绝原因未确认时不要拒绝"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "user_required",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "destructive",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不同意\"",
+            "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不符合要求\" --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不同意\"",
+                "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不符合要求\" --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.reject_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.reject_processInstance",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.reject_processInstance",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.reject_processInstance",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.reject_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "high",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processInstanceId 与 taskId，用户明确要求拒绝/驳回该审批任务时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processInstanceId 与 taskId，用户明确要求拒绝/驳回该审批任务时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "reject_processInstance"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.reject_processInstance",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval reject",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.reject_processInstance",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.reject_processInstance",
+        "live-dws-schema:oa.reject_processInstance",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.reject_processInstance",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.reject_processInstance"
+      ],
+      "use_when": [
+        "已知 processInstanceId 与 taskId，用户明确要求拒绝/驳回该审批任务时"
+      ]
+    },
+    "oa approval revoke": {
+      "agent_summary": "撤销当前用户已发起的审批实例",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "不是自己发起的单或 instanceId 未确认时不要撤销",
+        "要拒绝别人的待办时改用 reject，不要用 revoke"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws oa approval revoke --instance-id \u003cinstance-id\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "撤销当前用户已发起的审批实例",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "撤销当前用户已发起的审批实例",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.revoke_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "不是自己发起的单或 instanceId 未确认时不要撤销",
+            "要拒绝别人的待办时改用 reject，不要用 revoke"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "不是自己发起的单或 instanceId 未确认时不要撤销",
+                "要拒绝别人的待办时改用 reject，不要用 revoke"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": false
+            },
+            {
+              "value": "user_required",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval revoke --instance-id \u003cinstance-id\u003e"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval revoke --instance-id \u003cinstance-id\u003e"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.revoke_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.revoke_processInstance",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.revoke_processInstance",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.revoke_processInstance",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.revoke_processInstance.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "high",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": false
+            },
+            {
+              "value": "high",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求撤销自己已发起的审批实例，且 processInstanceId 已确认时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求撤销自己已发起的审批实例，且 processInstanceId 已确认时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "revoke_processInstance"
+      },
+      "reviewed": true,
+      "risk": "high",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.revoke_processInstance",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval revoke",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.revoke_processInstance",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.revoke_processInstance",
+        "live-dws-schema:oa.revoke_processInstance",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.revoke_processInstance",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.revoke_processInstance"
+      ],
+      "use_when": [
+        "用户明确要求撤销自己已发起的审批实例，且 processInstanceId 已确认时"
+      ]
+    },
+    "oa approval tasks": {
+      "agent_summary": "查询待我审批的任务Id",
+      "agent_summary_source": "dws-agent-selection/oa",
+      "availability": "available",
+      "avoid_when": [
+        "还不知道实例列表时先用 dws oa approval list-pending",
+        "本命令只取 taskId，不执行审批"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e",
+        "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询待我审批的任务Id",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "查询待我审批的任务Id",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_tasks.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "还不知道实例列表时先用 dws oa approval list-pending",
+            "本命令只取 taskId，不执行审批"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "还不知道实例列表时先用 dws oa approval list-pending",
+                "本命令只取 taskId，不执行审批"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e",
+            "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e",
+                "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_tasks.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "oa.list_pending_tasks",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "oa.list_pending_tasks",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "oa.list_pending_tasks",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_tasks.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 processInstanceId，需要取得当前用户待办 taskId 以便同意或拒绝时"
+          ],
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 processInstanceId，需要取得当前用户待办 taskId 以便同意或拒绝时"
+              ],
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_pending_tasks"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=oa.list_pending_tasks",
+        "Skill:skills/mono/references/products/oa.md",
+        "cobra-help:dws oa approval tasks",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_tasks",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
+        "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_tasks",
+        "live-dws-schema:oa.list_pending_tasks",
+        "skills/mono/references/products/oa.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#oa.list_pending_tasks",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#oa.list_pending_tasks"
+      ],
+      "use_when": [
+        "已知 processInstanceId，需要取得当前用户待办 taskId 以便同意或拒绝时"
+      ]
+    }
+  }
+}

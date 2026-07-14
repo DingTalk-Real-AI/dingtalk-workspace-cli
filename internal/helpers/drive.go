@@ -256,7 +256,7 @@ func newDriveCommand() *cobra.Command {
 	driveCmd := &cobra.Command{
 		Use:   "drive",
 		Short: "钉盘文件管理",
-		Long:  `钉盘：列出文件/文件夹、获取元数据、下载链接、创建文件夹、获取上传信息、提交上传。`,
+		Long:  `钉盘：列出文件/文件夹、获取元数据和统计信息、创建快捷方式、下载、上传及管理文件。`,
 		RunE:  groupRunE,
 	}
 
@@ -872,6 +872,56 @@ func newDriveCommand() *cobra.Command {
 	driveRenameCmd.Flags().String("node", "", "文档/文件 ID 或 URL (必填)")
 	driveRenameCmd.Flags().String("name", "", "新名称 (必填)")
 
+	driveStatsCmd := &cobra.Command{
+		Use:   "stats",
+		Short: "获取节点统计信息",
+		Long: `获取指定节点的统计数据，包括阅读人数、阅读次数、编辑次数、评论数、点赞数、预览次数和下载次数等。
+
+不同文件类型返回的统计维度可能不同。--node 支持节点 ID 或文档 URL。`,
+		Example: `  dws drive stats --node <dentryUuid>
+  dws drive stats --node https://alidocs.dingtalk.com/i/nodes/<dentryUuid>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			return callMCPToolOnServer("drive", "get_node_stats", map[string]any{"nodeId": nodeID})
+		},
+	}
+	driveStatsCmd.Flags().String("node", "", "节点 ID 或文档 URL (必填)")
+
+	driveShortcutCmd := &cobra.Command{
+		Use:   "shortcut",
+		Short: "为节点创建快捷方式",
+		Long: `为指定源节点创建快捷方式，并放置到目标文件夹或知识库。
+
+通过 --node 指定源节点。--folder 和 --workspace 均为可选；都不传时由服务端选择默认位置。
+若同时指定，--folder 是目标文件夹，--workspace 用于指定其所属知识库。`,
+		Example: `  dws drive shortcut --node <dentryUuid>
+  dws drive shortcut --node <dentryUuid> --folder <targetFolderId>
+  dws drive shortcut --node <dentryUuid> --workspace <workspaceId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"nodeId": nodeID}
+			if v := docFolderFlag(cmd); v != "" {
+				if err := validateDocFolderID(v); err != nil {
+					return err
+				}
+				toolArgs["targetFolderId"] = v
+			}
+			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
+				toolArgs["workspaceId"] = v
+			}
+			return callMCPToolOnServer("drive", "create_shortcut", toolArgs)
+		},
+	}
+	driveShortcutCmd.Flags().String("node", "", "源节点 ID 或文档 URL (必填)")
+	driveShortcutCmd.Flags().String("folder", "", "目标文件夹 nodeId (可选)")
+	driveShortcutCmd.Flags().String("workspace", "", "目标知识库 ID (可选)")
+
 	// ── drive permission (文档节点权限管理) ──
 	drivePermissionCmd := &cobra.Command{
 		Use:     "permission",
@@ -1041,7 +1091,7 @@ func newDriveCommand() *cobra.Command {
 
 	// --node 隐藏别名（保持与迁移前 doc 命令一致）
 	driveNodeAliasCmds := []*cobra.Command{
-		driveCopyCmd, driveMoveCmd, driveRenameCmd,
+		driveCopyCmd, driveMoveCmd, driveRenameCmd, driveStatsCmd, driveShortcutCmd,
 	}
 	for _, c := range driveNodeAliasCmds {
 		c.Flags().String("url", "", "")
@@ -1165,7 +1215,7 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !confirmDelete("互联网公开设置", nodeID) {
+			if !confirmDangerousAction(cmd, "enable internet publishing", nodeID) {
 				return nil
 			}
 			toolArgs := map[string]any{
@@ -1193,7 +1243,7 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !confirmDelete("互联网公开关闭", nodeID) {
+			if !confirmDangerousAction(cmd, "disable internet publishing", nodeID) {
 				return nil
 			}
 			return callMCPTool("set_file_publish", map[string]any{
@@ -1240,7 +1290,7 @@ func newDriveCommand() *cobra.Command {
 	for _, cmd := range []*cobra.Command{
 		driveListCmd, driveListSpacesCmd, driveInfoCmd, driveDownloadCmd,
 		driveMkdirCmd, driveUploadInfoCmd, driveCommitCmd, driveUploadCmd, driveDeleteCmd,
-		driveSearchCmd, driveCopyCmd, driveMoveCmd, driveRenameCmd,
+		driveSearchCmd, driveCopyCmd, driveMoveCmd, driveRenameCmd, driveStatsCmd, driveShortcutCmd,
 		driveFolderCreateCmd,
 	} {
 		RegisterCrossProductAliases(cmd)
@@ -1326,6 +1376,8 @@ func newDriveCommand() *cobra.Command {
 		driveCopyCmd,
 		driveMoveCmd,
 		driveRenameCmd,
+		driveStatsCmd,
+		driveShortcutCmd,
 		drivePermissionCmd,
 		drivePublishCmd,
 		recycleCmd,

@@ -71,9 +71,9 @@ The installer ships skills in one of two layouts. CLI commands (`dws aitable ...
 | Mode | What gets installed | Best for |
 |------|----------------------|----------|
 | **mono** (stable, default) | One `dws` skill covering all products | Cross-product workflows; single entry point |
-| **multi** 🧪 **EXPERIMENTAL** | 22 per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+| **multi** 🧪 **EXPERIMENTAL** | Per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
 
-> 🧪 **`multi` is currently EXPERIMENTAL / preview.** 22 product-scoped skills all pass the dispatch verifier, but interface, naming and cross-skill references may change in future releases. For production / shared environments, prefer `mono`. File issues if you hit problems.
+> 🧪 **`multi` is currently EXPERIMENTAL / preview.** All product-scoped skills pass the dispatch verifier, but interface, naming and cross-skill references may change in future releases. For production / shared environments, prefer `mono`. File issues if you hit problems.
 
 How to pick:
 
@@ -323,25 +323,35 @@ dws contact user get-self --jq '.result[0].orgEmployeeModel | {name: .orgUserNam
 
 ### Command Help and Schema
 
-Product commands are compiled into the binary in static endpoint mode. Use `--help` and the bundled Agent Skills as the source of truth; `dws schema` is retained for helper-only schemas such as `dev.*`.
+Use Cobra help and Schema for different parts of the command contract:
+
+- `dws <path> --help` is the source of truth for whether a command exists and which flags the binary accepts.
+- `dws schema "<path>"` is the Agent contract for command selection, parameter mappings and constraints, risk, and confirmation semantics.
+- If Help and Schema disagree, treat it as contract drift: pass only flags accepted by Cobra and use the more conservative safety semantics.
+- Schema describes commands; it does not read or search DingTalk business data. Execute the real product command after discovery.
 
 ```bash
-# Inspect the current compiled command surface
+# Confirm that the command exists and inspect accepted flags
 dws aitable record query --help
 
-# Helper-only schema introspection
-dws schema "dev app create"
+# Discover within a product, then inspect the selected leaf contract
+dws schema aitable
+dws schema "aitable record query"
 
-# Construct the call
+# Execute the real business query
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 ```
 
+`dws schema --all` exports the complete contract for tooling, CI, audits, and compatibility baselines. Agents should prefer product/group discovery followed by a leaf query to avoid loading the full Catalog into context.
+
 ### Agent Skills
 
-The repo ships a complete Agent Skill system under `skills/`, now organized into two layouts:
+The repo ships a complete Agent Skill system under `skills/`, organized into two layouts:
 
 - `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), recommended default.
-- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 22 products in total), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ...), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
+
+Shared reviewed inputs for Schema generation live separately under `internal/cli/schema_hints/`. They are not Agent Skills and are excluded from binaries and release skill bundles.
 
 After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
 
@@ -551,12 +561,13 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocati
 </details>
 
 <details>
-<summary><strong>Schema Introspection</strong> — helper-only schemas in static endpoint mode</summary>
+<summary><strong>Schema Introspection</strong> — Agent command discovery and execution contracts</summary>
 
 ```bash
-dws schema                                              # static endpoint mode note
-dws schema "dev app create"                             # view helper-only schema
-dws schema "dev app create" --jq '.tool.required'        # view required fields
+dws schema aitable                                      # discover product commands
+dws schema "aitable record query"                       # view the selected leaf contract
+dws schema "aitable record query" --jq '.tool.required' # view required fields
+dws schema --all                                        # full export for CI/audit/baselines
 ```
 
 </details>

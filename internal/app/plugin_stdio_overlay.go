@@ -19,10 +19,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
-	"github.com/spf13/cobra"
 )
 
 // resolveStdioOverlay resolves the CLIOverlay for a stdio plugin server
@@ -73,25 +71,11 @@ func resolveStdioOverlay(p *plugin.Plugin, sc plugin.StdioServerClient) mcptypes
 	return overlay
 }
 
-// registerStdioServerFromOverlay builds cobra commands for a stdio plugin
-// server using only its manifest + overlay.json.
-//
-// Returns (cmds, descriptor, true) when the overlay carries toolOverrides,
-// otherwise (nil, zero, false) so the caller can fall back to discovery-first
-// registration (legacy path).
-//
-// Dynamic command building has been removed; this now simply registers the
-// server descriptor and returns nil commands.
-func registerStdioServerFromOverlay(
-	p *plugin.Plugin,
-	sc plugin.StdioServerClient,
-	runner executor.Runner,
-) ([]*cobra.Command, mcptypes.ServerDescriptor, bool) {
+// registerStdioServerFromManifest registers an endpoint descriptor and an
+// unstarted client from versioned plugin metadata. Tool discovery is not part
+// of command-tree construction; execution starts and initializes the client.
+func registerStdioServerFromManifest(p *plugin.Plugin, sc plugin.StdioServerClient) mcptypes.ServerDescriptor {
 	overlay := resolveStdioOverlay(p, sc)
-	if len(overlay.ToolOverrides) == 0 {
-		return nil, mcptypes.ServerDescriptor{}, false
-	}
-
 	descriptor := mcptypes.ServerDescriptor{
 		Key:         sc.Key,
 		DisplayName: p.Manifest.Name + "/" + sc.Key,
@@ -105,11 +89,8 @@ func registerStdioServerFromOverlay(
 	AppendDynamicServer(descriptor)
 	RegisterStdioClient(p.Manifest.Name+"/"+sc.Key, sc.Client)
 
-	slog.Debug("plugin: stdio server registered from overlay",
+	slog.Debug("plugin: stdio server registered from manifest",
 		"plugin", p.Manifest.Name, "server", sc.Key,
 		"toolOverrides", len(overlay.ToolOverrides))
-
-	// Dynamic command tree building has been removed.
-	_ = runner
-	return nil, descriptor, true
+	return descriptor
 }

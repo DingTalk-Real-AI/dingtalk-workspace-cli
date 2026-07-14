@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -411,6 +412,19 @@ agentCode 配置:
 	chmodCmd.Flags().StringArrayVar(&domainFlags, "domain", nil, "产品域/产品编码，可重复；按产品 scope 模板批量授权；执行授权需 --yes")
 	chmodCmd.Flags().StringSliceVar(&domainsFlag, "domains", nil, "产品域/产品编码列表，逗号分隔；执行批量授权需 --yes")
 	chmodCmd.Flags().BoolVar(&recommend, "recommend", false, "使用推荐 scope 集合批量授权；执行授权需 --yes")
+	cli.AttachRuntimeSchema(chmodCmd, "pat", "batch_grant", "hardcoded:pat")
+	cli.AnnotateRuntimeFlagEnum(chmodCmd, "grant-type", "once", "session", "permanent")
+	cli.AnnotateRuntimeConstraints(chmodCmd, cli.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"scope", "product", "products", "domain", "domains", "recommend"}},
+	})
+	cli.AnnotateRuntimePositionals(chmodCmd, cli.RuntimeSchemaPositional{
+		Name:        "scope",
+		Type:        "array",
+		Description: "权限 scope，格式为 <product>.<entity>:<permission>；可重复",
+		Required:    false,
+		Variadic:    true,
+		Index:       0,
+	})
 
 	return chmodCmd
 }

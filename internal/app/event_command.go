@@ -30,6 +30,8 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
@@ -101,7 +103,10 @@ func newEventConsumeCommand() *cobra.Command {
   raw             仅 SDK 原始 payload，无外层封装
   compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）
 
-默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接。
+默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加
+--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用
+SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览、确认后加
+--yes，绝不要 kill -9。
 --event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费
 通常不需要设置。`,
 		Args:              cobra.MaximumNArgs(1),
@@ -214,6 +219,11 @@ func newEventConsumeCommand() *cobra.Command {
 				DryRun:         dryRun,
 				SpawnExtraArgs: streamOpts.spawnArgs(),
 			}
+			// Arm the stdin-EOF shutdown watcher only for a pipe-style,
+			// unbounded run (see shouldWatchStdinEOF).
+			if shouldWatchStdinEOF(maxEvents, duration) {
+				cfg.Stdin = c.InOrStdin()
+			}
 
 			// Step 5: validation (flag-only rules).
 			if err := consume.ValidateConfig(cfg); err != nil {
@@ -260,7 +270,7 @@ func newEventConsumeCommand() *cobra.Command {
 	f.BoolVar(&dryRun, "dry-run", false,
 		"仅打印解析后的配置，不连接 bus / 云端")
 	f.BoolVar(&foreground, "foreground", false,
-		"不 fork daemon，当前进程跑 bus (systemd/k8s/launchd 友好)")
+		"当前进程直接跑 bus 服务、不 fork、不打印事件（给 systemd/k8s 托管用）；读事件不要用它")
 	f.StringVar(&personalOpts.SubscribeID, "subscribe-id", "",
 		"个人事件订阅 ID；传入后复用已有订阅")
 	f.StringVar(&personalOpts.Rule, "rule", "",
@@ -274,7 +284,10 @@ func newEventConsumeCommand() *cobra.Command {
 	f.DurationVar(&personalOpts.TTL, "ttl", 0,
 		"个人订阅 TTL (Go duration，如 24h；0 表示不过期)")
 	f.BoolVar(&personalOpts.Ephemeral, "ephemeral", false,
-		"consume 退出时自动取消个人订阅")
+		"强制退出时取消个人订阅。默认已按归属清理：本次新建的订阅退出即取消，"+
+			"用 --subscribe-id 复用的订阅保留。优雅停可用 SIGTERM、关闭 stdin，"+
+			"或从外部先用 dws event stop <subscribe_id> --dry-run 预览、确认后加 --yes（会一并退订）；"+
+			"请勿 kill -9（会跳过退订、泄漏服务端订阅）")
 	f.StringVar(&personalOpts.UserID, "user", "",
 		"个人单聊对端 userId")
 	f.StringVar(&personalOpts.GroupID, "group", "",
@@ -290,6 +303,13 @@ func newEventConsumeCommand() *cobra.Command {
 	f.StringVar(&streamOpts.TicketURL, "stream-ticket-url", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_URL")),
 		"个人 Stream 取票 URL；默认由 MCP base URL 派生")
 	hideEventInternalFlags(cmd, "as")
+	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
+		Name:        "event_key",
+		Type:        "string",
+		Description: "要消费的个人事件码；省略时仅适用于显式配置其它事件来源的兼容模式",
+		Required:    false,
+		Index:       0,
+	})
 	return cmd
 }
 
@@ -457,7 +477,13 @@ func newEventBusCommand() *cobra.Command {
 			readyPipe := busctl.ReadyFDFromEnv()
 			failEarly := func(err error) error {
 				if readyPipe != nil {
+					// 'E' signals failure; the trailing text lets the parent
+					// (busctl.waitReady) surface the real startup error to the
+					// user instead of an opaque "startup failure on ready pipe".
 					_, _ = readyPipe.Write([]byte{'E'})
+					if err != nil {
+						_, _ = io.WriteString(readyPipe, err.Error())
+					}
 					_ = readyPipe.Close()
 				}
 				return err
@@ -969,6 +995,19 @@ func newEventStopCommand() *cobra.Command {
 			}
 			if as == "user" {
 				opts.SubscribeID = firstArg(args)
+				hasSubscribeID := strings.TrimSpace(opts.SubscribeID) != ""
+				if hasSubscribeID && opts.All {
+					return fmt.Errorf("event stop --as user: subscribe_id and --all are mutually exclusive")
+				}
+				if !hasSubscribeID && !opts.All {
+					return fmt.Errorf("event stop --as user: subscribe_id is required unless --all is set")
+				}
+				if eventStopDryRun(c) {
+					return writeEventStopDryRun(c, as, opts)
+				}
+				if !eventStopConfirmed(c) {
+					return eventStopConfirmationRequired("event stop 会取消个人事件订阅并停止本地消费")
+				}
 				return runPersonalEventStop(c, opts)
 			}
 			if err := rejectChangedFlags(c, "user", "all", "personal-event-base-url", "stream-source-id"); err != nil {
@@ -976,6 +1015,12 @@ func newEventStopCommand() *cobra.Command {
 			}
 			if len(args) > 0 {
 				return fmt.Errorf("event stop: subscribe_id is only supported with --as user")
+			}
+			if eventStopDryRun(c) {
+				return writeEventStopDryRun(c, as, opts)
+			}
+			if !eventStopConfirmed(c) {
+				return eventStopConfirmationRequired("event stop 会停止事件消费")
 			}
 			configDir := defaultConfigDir()
 			clientID, _, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
@@ -1002,7 +1047,48 @@ func newEventStopCommand() *cobra.Command {
 		"个人事件 sourceId；开源版默认 open，可由 edition 覆盖")
 	cmd.Flags().BoolVar(&opts.All, "all", false, "取消当前身份下本地记录的所有个人订阅")
 	hideEventInternalFlags(cmd, "as")
+	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
+		Name:        "subscribe_id",
+		Type:        "string",
+		Description: "要取消的个人事件订阅 ID；与 --all 二选一",
+		Required:    false,
+		Index:       0,
+	})
 	return cmd
+}
+
+func eventStopDryRun(cmd *cobra.Command) bool {
+	value, _ := cmd.Flags().GetBool("dry-run")
+	return value
+}
+
+func eventStopConfirmed(cmd *cobra.Command) bool {
+	value, _ := cmd.Flags().GetBool("yes")
+	return value
+}
+
+func eventStopConfirmationRequired(action string) error {
+	return apperrors.NewValidation(
+		action+"；请先使用 --dry-run 预览，确认后加 --yes 执行",
+		apperrors.WithReason("confirmation_required"),
+		apperrors.WithHint("先以相同参数加 --dry-run 预览；获得用户确认后改用 --yes 执行"),
+		apperrors.WithActions("使用 --dry-run 生成预览", "获得用户确认后使用 --yes 执行"),
+	)
+}
+
+func writeEventStopDryRun(cmd *cobra.Command, identity string, opts personalStopOptions) error {
+	payload := map[string]any{
+		"dry_run":  true,
+		"action":   "event.stop",
+		"identity": strings.TrimSpace(identity),
+		"all":      opts.All,
+	}
+	if subscribeID := strings.TrimSpace(opts.SubscribeID); subscribeID != "" {
+		payload["subscribe_id"] = subscribeID
+	}
+	encoder := json.NewEncoder(cmd.OutOrStdout())
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(payload)
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1091,6 +1177,26 @@ func firstArg(args []string) string {
 		return ""
 	}
 	return args[0]
+}
+
+// shouldWatchStdinEOF gates the stdin-EOF shutdown watcher (AI-subprocess
+// contract). It arms only for a parent-controlled, pipe-style stdin on an
+// unbounded run:
+//   - bounded runs (--max-events / --duration) already have their own
+//     lifecycle, so stdin is irrelevant;
+//   - char devices (an interactive TTY, or /dev/null) are excluded, so a
+//     terminal Ctrl-D and the common `< /dev/null` launch do NOT trigger a
+//     surprise shutdown. Only a pipe / regular file — an stdin a parent
+//     holds and can close to stop us — arms the watcher.
+func shouldWatchStdinEOF(maxEvents int, duration time.Duration) bool {
+	if maxEvents > 0 || duration > 0 {
+		return false
+	}
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice == 0
 }
 
 // eventTypesWithDefault picks the catch-all list from registry when the

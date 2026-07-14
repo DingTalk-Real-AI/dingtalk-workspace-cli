@@ -9,7 +9,7 @@ cli_version: ">=1.0.15"
 通过 `dws` 命令管理钉钉产品能力。
 
 
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。`--help` 决定 Cobra 实际接受的 flags；对应 leaf Schema 决定 Agent 选择、参数映射/约束和安全确认语义。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 ## 严格禁止 (NEVER DO)
 - 不要使用 dws 命令以外的方式操作（禁止 curl、HTTP API、浏览器）
@@ -34,7 +34,7 @@ cli_version: ">=1.0.15"
 | `aitable`         | AI表格：Base/数据表/字段/记录/视图/附件/图表/仪表盘/导入导出/模板搜索            | [aitable.md](./references/products/aitable.md)                 |
 | `attendance`      | 考勤：打卡结果/打卡流水/考勤组查询/考勤规则/汇总统计/假期类型/假期余额（P0 已落地，部分管理类命令仍属 P1） | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
-| `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/消息发送(文本/Markdown/图片/文件)/拉取消息/@我/特别关注/机器人群发/单聊/撤回/转发/引用回复/Webhook/机器人搜索     | [chat.md](./references/products/chat.md)                       |
+| `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/消息发送(文本/Markdown/图片/文件)/拉取消息/消息收藏/@我/特别关注/机器人群发/单聊/撤回/转发/引用回复/Webhook/机器人搜索 | [chat.md](./references/products/chat.md)                       |
 | `contact`         | 通讯录：用户查询(当前用户/搜索/详情/手机号)/花名册档案(学历/家庭/银行卡/合同)/离职员工查询(姓名/时间范围/部门)/部门查询(搜索/详情/子部门/成员)/角色查询(主管/管理员/财务/HR 等 label)/特别关注列表              | [contact.md](./references/products/contact.md)                 |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
@@ -42,6 +42,7 @@ cli_version: ">=1.0.15"
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载                        | [drive.md](./references/products/drive.md)                     |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
+| `pat`             | PAT 行为授权：浏览器策略/scope 预览/一次性、会话或永久授权                    | [pat.md](./references/products/pat.md)                         |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
 | `mail`            | 邮箱：邮箱地址查询/邮件搜索(KQL)/邮件详情/发送邮件                        | [mail.md](./references/products/mail.md)                       |
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
@@ -66,6 +67,7 @@ cli_version: ">=1.0.15"
 用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
 用户提到"审批/请假/报销/出差/加班/同意/拒绝/撤销审批" → `oa`
+用户提到"PAT 授权/行为权限/scope 授权/批量授权/一次性授权/会话授权/永久授权/授权浏览器策略" → `pat`
 用户提到"日志/日报/周报/日志统计/写日报/提交周报/发日志/填日志" → `report`
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
@@ -123,27 +125,96 @@ Step 3 → 加 --yes 执行命令
 3. 精准产品映射：在完成前两步，意图已经清晰后，参考产品总览和意图判断决策树 来选择产品。
 4. 充分阅读产品参考文件，通过编写代码或直接调用指令实现用户意图。
 
-## 命令发现（flag / 参数以 binary 为准）
+## 命令发现（Schema 渐进查询 + --help 互为补充）
 
-产品参考文档（`references/products/*.md`）里的 flag 列表是**便于理解用途的参考**，不是权威契约。参数名称、默认值、必填约束以当前二进制编译出的 Cobra 命令为准，**`--help` 是产品命令调用的事实源**：
+### Schema 渐进查询（Agent 选命令首选）
+
+`dws schema` 内嵌当前二进制公开命令面的结构化契约。**Agent 选择命令、读取参数映射/约束和安全语义时必须优先渐进查询 leaf Schema**；真正组装执行参数前，用 `--help` 确认当前 Cobra 接受的 flags：
+
+稳定 command identity、主 CLI path 和 alias 已在构建时由 reviewed registry 与真实 Cobra tree 精确绑定。Agent 不应读取 Catalog 文件、native annotation 或其他生成 JSON 来重新推断命令；所有运行时查询都以当前二进制交付的 Schema 投影为准。
 
 ```bash
-# 人读视图：看 Usage / Example / Flags
-dws <command-path> --help
-# 例：dws calendar event list --help
+# 第 1 层：产品概览（~4.5KB，列出全部产品 + 工具数 + 用途摘要）
+dws schema
 
-# helper-only schema 查询（如 dev.*），普通产品命令不要依赖 schema 推断参数
-dws schema "dev app create"
-# 注：--jq 对 schema 输出无效（不过滤，仍返回完整对象）；schema 结构里必填标在
-# .parameters.<字段>.required，没有 .tool 键。要看必填字段自行读 .parameters 即可。
+# 第 2 层：产品级（列出该产品下全部工具的 cli_path + description + effect/risk）
+dws schema calendar
+
+# 第 3 层：分组级（按命令分组列出工具摘要）
+dws schema "calendar event"
+
+# 第 4 层：完整 leaf（参数契约：type/required/description/constraints/examples）
+dws schema "calendar event create"
+
+# --compact：当前支持；去除 provenance/debug 字段，仅保留 Agent 选参所需
+dws schema "calendar event create" --compact
+
+# --all：导出所有工具的完整 leaf Schema，仅用于 CI / 审计 / 参数 baseline
+dws schema --all --format json
 ```
 
-**何时用哪条路径：**
-- 只需看某个命令怎么调用 → `dws <cmd> --help`
-- 构造 `--params` / `--json` 时不确定字段类型、必填、别名 → 先看 `dws <cmd> --help`，helper-only 命令再看 `dws schema`
-- 参考文档和 `--help` 冲突时 → **以 `--help` 为准**，文档视为过期
+**`--all` 使用边界（强制）**：`--all` 会返回每个工具的完整参数、约束和安全语义，输出体积很大。仅在用户明确要求全量导出，或执行 CI、Catalog 审计、参数防丢 baseline 时使用。普通业务任务严禁使用 `--all` 做命令发现，也不要把全量结果直接注入 Agent 上下文；必须按“产品概览 → 产品/分组 → leaf”渐进查询。完整兼容性 baseline 必须使用未裁剪的 `schema --all`；`schema --all --compact` 会移除 provenance 和接口映射字段，不得作为完整 baseline。
 
-`dws schema` 在静态端点模式下只保留 helper-only 子树；普通产品命令和 flag 不再通过远程 schema 动态发现。写/删操作须先向用户确认再加 `--yes`。
+同一个工具的 leaf 查询与 `--all` 条目是同一份 `ToolSpec` 契约的投影，参数、安全和接口语义必须一致。Alias 查询只改变路径视图；不得根据 alias 重写或补猜参数。若观察到内容差异，应作为契约漂移报告，而不是选择其中一份继续执行。
+
+**--compact 模式**去掉的字段：`agent_metadata_source`、`agent_source_refs`、`agent_summary_source`、`effect_source`、`metadata_source`、`interface_ref`、`interface_description`、`property`、`primary_cli_path`、`parameter_count` 等 provenance/debug 字段。保留的字段：`cli_path`、`canonical_path`、`description`、`effect`、`risk`、`confirmation`、`interface_mode`、`availability`、`interface_reason`、`parameters`（含 `type`/`required`/`description`/`default`/`enum`）、`constraints`、`examples`、`use_when`、`avoid_when`。
+
+`--compact` 是 Schema 展示能力。当前版本支持；若兼容旧二进制时收到 `unknown_flag: --compact`，仅去掉 `--compact` 重跑同一个 Schema 查询。不要因此判定 leaf 不存在，也不要改用 Schema 查询业务数据。
+
+### Schema 字段速查
+
+```jsonc
+// leaf 级输出（dws schema "calendar event create" --compact）
+{
+  "cli_path": "calendar event create",
+  "canonical_path": "calendar.create_calendar_event",
+  "description": "创建新的日程...",
+  "effect": "write",           // read | write | destructive
+  "risk": "medium",            // low | medium | high
+  "confirmation": "not_required", // not_required | user_required
+  "interface_mode": "mcp",     // mcp | local | composite
+  "availability": "available", // available | unavailable
+  "interface_reason": "",
+  "parameters": {
+    "title": { "type": "string", "required": true, "description": "..." },
+    "start": { "type": "string", "required": true, "format": "date-time" }
+    // ...
+  },
+  "constraints": { "require_together": [["recurrence-type", "recurrence-interval", "recurrence-range-type"]] },
+  "examples": ["dws calendar event create --title ..."]
+}
+```
+
+- `confirmation=user_required` → 必须先向用户确认再加 `--yes`；不要根据 `effect` 或 `risk` 的值自行重写最终 confirmation winner
+- `availability=unavailable` → 不执行该工具；向用户说明 `interface_reason`。`interface_mode` 只描述实现机制，不能覆盖 availability
+- `parameters.<flag>.required=true` → Agent 应提供该参数；Cobra 是否硬拒绝以 `--help`/实际命令契约为准
+- `parameters.<flag>.cli_required=true` → Cobra 将该 flag 标记为硬必填
+- `constraints.require_together` → 列出的 flag 必须同时提供
+
+### Schema、Help 与业务数据的边界
+
+| 信息 | 事实源 |
+|------|--------|
+| 命令是否存在、当前 Cobra 接受哪些 flags | `dws <cli_path> --help` |
+| Agent 选择、参数映射/required/组合约束、risk/confirmation | `dws schema "<cli_path>"`（按需加 `--compact`） |
+| 人类可读用法 | `dws <cli_path> --help` |
+| 钉钉中的文档、文件、日程、消息等实际数据 | 真正执行对应的 `read` / `search` / `list` 命令 |
+
+Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段随意拼接：
+
+- 执行参数只使用 Cobra/Help 接受的 flags，并把漂移报告出来。
+- 安全语义冲突时不能选择更宽松行为；先采用更保守的确认方式，无法确认安全执行方式时停止并报告。
+- leaf Schema 是已经按来源 precedence 解析后的契约；不要根据值的“严格程度”自行改写 winner。只有发现它与 Help/实际执行契约冲突时，才进入上述安全降级。
+
+`dws schema` 只查询命令契约，不搜索钉钉文档或业务数据。完成命令发现后，必须继续执行真实命令，例如 `dws doc read`、`dws drive search`；不要把 Schema 查询结果当成业务查询结果。
+
+### Helper-only 与本地 Cobra 命令
+
+`dev.*` 包含 helper-only 执行面，其中远端 helper 未进入 pinned metadata 时标记为 `composite`，不能伪装成 `local`。`event list` / `event schema` 读取内置目录和 payload 定义，属于 `local`；`event consume` / `event status` / `event stop` 同时编排远端个人订阅控制面与本地 bus/consume，属于 `composite`。实现来源不同，不改变统一查询边界：进入全局 `dws schema` 的命令必须先进入 reviewed CommandRegistry，并由同一 `ToolSpec` 投影到 leaf、产品/分组、`--all` 与 Catalog。不得在查询时重新调用 MCP `tools/list`，也不得把 Cobra 临时合成结果作为第二条 Schema 数据路径。
+
+事件需要区分两种 Schema：`dws event schema <event_key>` 查询事件 payload 字段；`dws schema "event consume"` 查询 CLI 命令参数。前者是真实业务命令，后者只读取最终内嵌 SchemaRegistry；不能相互替代。
+
+`source` 表示最终命令 identity 的来源，不表示运行时 backing；helper/local/MCP 实现机制读取 `interface_mode`、`availability` 和 provenance，不要假定 `dev.*` 必然是 `source=mcp:<server>`，也不要假定本地命令必然是 `source=cobra`。
 
 ## 错误处理
 1. 遇到错误，加 `--verbose` 重试一次
@@ -156,7 +227,7 @@ dws schema "dev app create"
 
 ## 详细参考 (按需读取)
 
-- [references/products/](./references/products/) — 各产品命令详细参考（flag 细节以 `--help` / `dws schema` 为准）
+- [references/products/](./references/products/) — 各产品命令详细参考（Cobra 接受的 flag 以 `--help` 为准，Agent 映射/约束/安全语义以 leaf Schema 为准）
 - [references/intent-guide.md](./references/intent-guide.md) — 意图路由指南（易混淆场景对照）
 - [references/url-patterns.md](./references/url-patterns.md) — URL 格式规范 + alidocs URL 分流决策与类型探测流程（含钉盘 `document/edit|preview?dentryKey=` 链接）
 - [references/global-reference.md](./references/global-reference.md) — 全局标志、认证、输出格式
@@ -166,6 +237,7 @@ dws schema "dev app create"
 - [scripts/](./scripts/) — 各产品批量/复合操作脚本（AI表格批量导入导出、AI应用创建轮询、日历、机器人消息、通讯录、考勤、日志、待办、文档创建并写入、钉盘目录树等）
 - [references/products/aitable/](./references/products/aitable/) — AI表格细分章节（单元格值/字段属性/公式/筛选排序/导入导出/仪表盘/记录增删改查/错误恢复/最佳实践）
 - [references/products/aitable-record-ops.md](./references/products/aitable-record-ops.md) — AI表格记录操作专项说明
+- [references/products/pat.md](./references/products/pat.md) — PAT 浏览器策略、行为 scope 预览与授权安全要求
 - [references/capability-limits.md](./references/capability-limits.md) — 已知能力限制（doc/aitable/chat/minutes，遇到时直接告知用户不支持）
 - [references/best_practices/](./references/best_practices/) — 全场景 recipe 行动指南（11 个编号场景 + lite 速查）
   - [01-messaging.md](./references/best_practices/01-messaging.md) — 消息沟通

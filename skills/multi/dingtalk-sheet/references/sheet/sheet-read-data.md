@@ -3,6 +3,7 @@
 ## 使用场景
 
 用户说"读数据/看表格内容":
+- 需要列名、二维数据、dtype 和 number format，或准备与 `table-put` 配套处理 → `table-get`
 - 快速查看纯值数据、批量处理、大表分批读 → `csv-get`（token 消耗低，防爆保护）
 - 需要结构化信息（值+样式+数据验证+富文本+单元格级超链接）、查看公式或原始值 → `range read`
 - 需要查看合并单元格 / 表头合并结构 → `sheet info`，读取返回的 `mergedRanges`；不要在 `csv-get` 或 `range read` 里找合并信息
@@ -11,6 +12,7 @@
 
 | 读取目的 | 推荐命令 | 说明 |
 |---------|---------|------|
+| DataFrame 风格结构化读取 | `table-get` | 返回 columns / data / dtypes / formats，可与 table-put 配套 |
 | 快速查看纯值、数据分析、大表分批读取 | `csv-get` | CSV 格式，token 消耗约为 JSON 的 1/3，内置 maxChars 防爆 |
 | 查看数据验证配置（下拉/复选框） | `range read` | 返回 per-cell 结构，含 dataValidation |
 | 查看单元格样式（背景色/字体/对齐等） | `range read` | 返回 per-cell 结构，含 cellStyles（仅显式设置的样式） |
@@ -20,6 +22,23 @@
 | 查看合并单元格范围 | `sheet info` | 返回 `mergedRanges`，这是工作表结构信息，不属于单元格值读取 |
 
 ## 命令详细参考
+
+### 读取结构化 table 数据
+```
+Usage:
+  dws sheet table-get [flags]     # 别名: dws sheet table-read
+Example:
+  dws sheet table-get --node <NODE_ID>
+  dws sheet table-get --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D20"
+  dws sheet table-get --node <NODE_ID> --sheet-id <SHEET_ID> --no-header
+Flags:
+      --node string       表格文档 ID 或 URL (必填)
+      --sheet-id string   工作表 ID 或名称
+      --range string      读取范围，A1 表示法；可带 sheet 前缀
+      --no-header         首行不作为表头，自动生成 col1/col2/...
+```
+
+`table-get` 面向结构化数据处理，返回 `columns`、二维 `data`、`dtypes` 和可用时的 `formats`。未传 `--sheet-id` / `--range` 时由服务端读取目标文档中的 table 数据；大表仍应通过 `--range` 限定范围。需要单元格样式、公式、数据验证或富文本细节时，继续使用 `range read`。
 
 ### 以 CSV 格式读取工作表数据（推荐）
 ```

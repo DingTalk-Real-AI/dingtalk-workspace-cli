@@ -36,7 +36,7 @@ var (
 	// --foreground, --force would silently produce two daemons writing
 	// to the same socket — refuse upfront.
 	ErrForceRequiresForeground = &ValidationError{
-		Msg: "--force is only meaningful with --foreground (in daemon mode it would produce multiple bus instances; cloud events would be randomly split across connections). To restart the bus: dws event stop && dws event consume",
+		Msg: "--force is only meaningful with --foreground (in daemon mode it would produce multiple bus instances; cloud events would be randomly split across connections). To restart the bus: preview dws event stop --all --dry-run, confirm with dws event stop --all --yes, then run dws event consume",
 	}
 
 	// ErrJSONFormatRequiresBounded is the plan §3.1 contract: --format

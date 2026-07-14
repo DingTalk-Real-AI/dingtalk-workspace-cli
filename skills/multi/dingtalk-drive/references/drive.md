@@ -15,6 +15,8 @@ dws drive list --help
 dws drive search --help
 dws drive upload --help
 dws drive download --help
+dws drive stats --help
+dws drive shortcut --help
 ```
 
 规则：
@@ -155,6 +157,28 @@ Flags:
       --node string       节点 ID (dentryUuid) (必填)
       --space-id string   节点所属空间 ID (可选)
 ```
+
+### 获取节点统计信息
+
+```text
+Usage:
+  dws drive stats --node <NODE_ID_OR_URL>
+```
+
+返回节点可用的阅读、编辑、评论、点赞、预览或下载等统计维度；不同文件类型返回字段可能不同。本命令只读。
+
+### 创建节点快捷方式
+
+```text
+Usage:
+  dws drive shortcut --node <SOURCE_NODE> [--folder <TARGET_FOLDER>] [--workspace <WORKSPACE_ID>]
+Example:
+  dws drive shortcut --node <SOURCE_NODE>
+  dws drive shortcut --node <SOURCE_NODE> --folder <TARGET_FOLDER>
+  dws drive shortcut --node <SOURCE_NODE> --workspace <WORKSPACE_ID>
+```
+
+`--folder` 和 `--workspace` 均可省略，此时由服务端选择默认位置。创建后应通过 `drive list` 回读目标位置。
 
 ### 文件内容获取路由规则
 
@@ -312,6 +336,8 @@ Flags:
 用户说"钉盘空间/团队文件/有哪些空间/空间列表/团队文件列表" → `wiki space list --type orgSpace`（`drive list-spaces` 已 deprecated）
 用户说"搜索钉盘文件/钉盘里找个文件/查找某个钉盘文件/钉盘中搜索" → `search`
 用户说"文件详情/文件信息" → `info`
+用户说"文件阅读量/编辑量/评论数/下载数/节点统计" → `stats`
+用户说"给文件创建快捷方式/放一个链接到目标文件夹" → `shortcut`
 用户说"下载文件" → `download` 指定 `--output` 保存到本地
 用户说"新建文件夹/创建目录" → `mkdir`（钉盘空间）/ `wiki node create --type folder`（文档空间）
 用户说"上传文件/传文件到钉盘" → `upload`（首选此命令，自动完成三步流程）
@@ -492,7 +518,7 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `list` | **`fileId`**（UUID 格式，注意：不是 `dentryId`） | info / download / delete 的 --node；list / mkdir 的 --folder；`drive copy/move` 的 --node 或 --folder |
+| `list` | **`fileId`**（UUID 格式，注意：不是 `dentryId`） | info / stats / shortcut / download / delete 的 --node；list / mkdir 的 --folder；`drive copy/move/shortcut` 的 --node 或 --folder |
 | `list` | `spaceId` | info / download / mkdir / upload 的 --space-id |
 | `list` | `nextCursor` | 下次 list 的 --cursor |
 | `list-spaces` / `wiki space list` | `rootFolderId` | `drive copy/move` 的 --folder（复制/移动到钉盘 space 根目录时） |
@@ -520,6 +546,7 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 - `--file-name` 必须包含扩展名（如 `report.pdf`）
 - `download` 需要指定 `--output`，CLI 会把文件保存到本地路径或目录
 - 文件名规则：头尾不能有空格；不能含 `*`、`"`、`<`、`>`、`|`、制表符；不能以 `.` 结尾
+- `shortcut` 会创建新节点，执行后必须通过 `drive list` 回读确认目标位置；`stats` 为只读命令
 
 ## 自动化脚本
 

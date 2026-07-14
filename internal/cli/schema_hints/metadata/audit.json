@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/audit",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "audit.export": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
+      "runtime_gate": "none",
+      "reviewed": true,
+      "review_reason": "Local audit log export from #555; no remote RPC."
+    },
+    "audit.tail": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
+      "runtime_gate": "none",
+      "reviewed": true,
+      "review_reason": "Local audit log tail from #555; no remote RPC."
+    },
+    "audit.verify": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
+      "runtime_gate": "none",
+      "reviewed": true,
+      "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+    }
+  }
+}

@@ -1,0 +1,913 @@
+{
+  "version": 1,
+  "format": "dws-agent-hint-index",
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-hints",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source"
+  },
+  "metadata": {
+    "aisearch": "metadata/aisearch.json",
+    "aitable": "metadata/aitable.json",
+    "attendance": "metadata/attendance.json",
+    "audit": "metadata/audit.json",
+    "calendar": "metadata/calendar.json",
+    "chat": "metadata/chat.json",
+    "contact": "metadata/contact.json",
+    "dev": "metadata/dev.json",
+    "devdoc": "metadata/devdoc.json",
+    "ding": "metadata/ding.json",
+    "doc": "metadata/doc.json",
+    "drive": "metadata/drive.json",
+    "event": "metadata/event.json",
+    "live": "metadata/live.json",
+    "mail": "metadata/mail.json",
+    "minutes": "metadata/minutes.json",
+    "oa": "metadata/oa.json",
+    "pat": "metadata/pat.json",
+    "report": "metadata/report.json",
+    "sheet": "metadata/sheet.json",
+    "todo": "metadata/todo.json",
+    "wiki": "metadata/wiki.json"
+  },
+  "selection": {
+    "aisearch": "selection/aisearch.json",
+    "aitable": "selection/aitable.json",
+    "attendance": "selection/attendance.json",
+    "audit": "selection/audit.json",
+    "calendar": "selection/calendar.json",
+    "chat": "selection/chat.json",
+    "contact": "selection/contact.json",
+    "dev": "selection/dev.json",
+    "devdoc": "selection/devdoc.json",
+    "ding": "selection/ding.json",
+    "doc": "selection/doc.json",
+    "drive": "selection/drive.json",
+    "event": "selection/event.json",
+    "live": "selection/live.json",
+    "mail": "selection/mail.json",
+    "minutes": "selection/minutes.json",
+    "oa": "selection/oa.json",
+    "pat": "selection/pat.json",
+    "report": "selection/report.json",
+    "sheet": "selection/sheet.json",
+    "todo": "selection/todo.json",
+    "wiki": "selection/wiki.json"
+  },
+  "reference_review": {
+    "agoal contract detail": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal contract fields": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal contract list": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal contract update": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal obj-template create-or-update": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal obj-template list": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal report list-statistics": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal report submit-detail": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal scorecard detail": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal scorecard entity-detail": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal scorecard update": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal strategy detail": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal strategy list": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal strategy update": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal user objectives": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "agoal user rules": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "aisearch contact": {
+      "status": "alias",
+      "target": "aisearch person",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "aitable form create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form field hide": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form field list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form field update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form questions create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form share get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form share update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable form update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "aitable view update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance adjustment get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance adjustment search": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance approve": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance approve list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance approve templates": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance boss-check": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance check record": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance check result": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance checkin records": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance class create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance class get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance class search": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance class update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance globalsetting get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance globalsetting save": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance group create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance group filtered-get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance group get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance group search": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance group update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance group update-members": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance overtime get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance overtime search": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance read_file": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance report columns": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance report query-data": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance report query-leave": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance schedule get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance schedule import": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance selfsetting get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance selfsetting save": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance vacation balance": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance vacation records": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance vacation save-balance": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance vacation types": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "attendance vacation update-type": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "calendar acl add": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "calendar acl delete": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "calendar book update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat category add-conv": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat category create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat category create-smart": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat category delete": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat category remove-conv": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat category rename": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat clear-all-red-point": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat clear-messages": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat clear-red-point": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat data-auth cross-org": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group audit-join-validation": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group list-all": {
+      "status": "alias",
+      "target": "chat group list-my-groups",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "chat group list-join-validations": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group members": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "chat group members list-by-ids": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group notice create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group notice create/edit/get/list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group notice edit": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group notice get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group notice list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group share-invite": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group update-alias": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat group update-nick": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat hide": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat list-all-conversations": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat mark-read": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat mark-unread": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat media upload": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat message list-emotion-replies": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat message set-top-msg": {
+      "status": "alias",
+      "target": "chat message set-pin-msg",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "chat message unset-top-msg": {
+      "status": "alias",
+      "target": "chat message unset-pin-msg",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "chat mute-at-all": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat mute-red-envelope": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "chat text translate": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "contact label get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "contact label list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "contact label list-members": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "contact user current": {
+      "status": "alias",
+      "target": "contact user get-self",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "contact user me": {
+      "status": "alias",
+      "target": "contact user get-self",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "contact user self": {
+      "status": "alias",
+      "target": "contact user get-self",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "contact user whoami": {
+      "status": "alias",
+      "target": "contact user get-self",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "dev connect": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "ding message list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "ding message recall-personal": {
+      "status": "alias",
+      "target": "ding message recall",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "ding message receiver-status": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "ding message send-by-message": {
+      "status": "alias",
+      "target": "ding message send",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "ding message send-personal": {
+      "status": "alias",
+      "target": "ding message send",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "doc aitable base create": {
+      "status": "alias",
+      "target": "aitable base create",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc block": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "doc copy + doc rename + doc block update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "doc drive download": {
+      "status": "alias",
+      "target": "drive download",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc drive list": {
+      "status": "alias",
+      "target": "drive list",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc drive mkdir": {
+      "status": "alias",
+      "target": "drive mkdir",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc drive search": {
+      "status": "alias",
+      "target": "drive search",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc export": {
+      "status": "alias",
+      "target": "doc export get",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc import": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "doc import get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "doc permission": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "doc read + doc create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "doc sheet create": {
+      "status": "alias",
+      "target": "sheet create",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc wiki member add": {
+      "status": "alias",
+      "target": "wiki member add",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "doc wiki node create": {
+      "status": "alias",
+      "target": "wiki node create",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "drive": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "drive publish get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "drive publish set": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "drive publish unset": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "drive recent": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "drive recycle list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "drive recycle restore": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "drive wiki space list": {
+      "status": "alias",
+      "target": "wiki space list",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "event consume user_im_message_receive_at -f ndjson": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "event consume user_im_message_receive_group": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "event consume user_im_message_receive_o2o": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "event schema user_im_message_receive_at": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "event schema user_im_message_receive_group": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "event schema user_im_message_receive_o2o": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "event status": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "event stop": {
+      "status": "out_of_surface",
+      "reason": "该产品不在当前 21 产品公开命令面中"
+    },
+    "mail aisearch person": {
+      "status": "alias",
+      "target": "aisearch person",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "mail allow-list add": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail allow-list list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail allow-list list/add/remove": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail allow-list remove": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail auto-reply get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail auto-reply update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail block-list add": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail block-list list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail block-list list/add/remove": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail block-list remove": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail internetMessageId": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail mailbox profile": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail message batch-get": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail message batch-update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail message verify": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail rule adjust": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail rule create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail rule delete": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail rule list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail rule update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail search": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail sent-message recall": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail sent-message recall-detail": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail tag create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail tag delete": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail tag update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail thread batch-trash": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail thread batch-update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail thread list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail thread trash": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "mail thread update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "minutes": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "oa approval": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "oa approval append-task": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "oa approval ding-info": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "oa approval revert-activities": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "oa approval revert-task": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "oa approval search-forms": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "sheet batch-update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet chart create": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet chart delete": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet chart list": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet chart update": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet doc download": {
+      "status": "alias",
+      "target": "doc download",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "sheet filter-view": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "sheet formulaCondition": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet group-dimension": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet range": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "sheet range batch-clear": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "sheet range get": {
+      "status": "alias",
+      "target": "sheet range read",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "sheet ungroup-dimension": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "todo task list-attachment": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "todo task list-sub": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "todo task remove-attachment": {
+      "status": "stale",
+      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+    },
+    "wiki": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "wiki drive search": {
+      "status": "alias",
+      "target": "drive search",
+      "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
+    },
+    "wiki member": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "wiki node": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    },
+    "wiki space": {
+      "status": "group",
+      "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
+    }
+  }
+}

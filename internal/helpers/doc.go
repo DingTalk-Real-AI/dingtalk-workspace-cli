@@ -701,7 +701,7 @@ func buildNodeTransferRunE(mcpToolName string) func(cmd *cobra.Command, args []s
 }
 
 func docFolderFlag(cmd *cobra.Command, extraAliases ...string) string {
-	aliases := append([]string{"parent-id", "parent-folder", "parent-folder-id"}, extraAliases...)
+	aliases := append([]string{"parent-id", "parent-folder", "parent-node-id", "parent-folder-id"}, extraAliases...)
 	return flagOrFallback(cmd, "folder", aliases...)
 }
 
@@ -795,7 +795,7 @@ func newDocCommand() *cobra.Command {
   dws doc create                        创建文档
   dws doc update                        更新文档内容
   dws doc block [list|insert|update|delete]  块级编辑
-  dws doc comment [list|create|delete]  文档评论管理
+  dws doc comment [list|create|reply|update|delete|create-inline]  文档评论管理
   dws doc export                        导出在线文档 (支持 docx / markdown / pdf，自动完成提交→轮询→下载)
   dws doc export get                    查询导出任务结果 (手动兜底)
   dws doc import                        导入本地文件为在线文档 (支持 docx / xlsx / md 等)
@@ -1951,6 +1951,67 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	commentReplyCmd.Flags().Bool("emoji", false, "设为 true 时作为表情贴图回复 (默认 false)")
 	commentReplyCmd.Flags().String("mention", "", "被 @ 的用户 uid 列表，逗号分隔")
 
+	commentUpdateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "更新文档评论",
+		Long: `更新指定文档中的一条评论。
+
+--comment-key 为待更新评论的唯一标识，可从 comment list、create 或 create-inline 的返回结果中获取。
+可通过 --mention 指定更新后评论中被 @ 的用户 uid 列表。`,
+		Example: `  dws doc comment update --node DOC_ID --comment-key COMMENT_KEY --content "已按最新数据修正"
+  dws doc comment update --node DOC_ID --comment-key COMMENT_KEY --content "请确认" --mention uid1,uid2`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlags(cmd, "comment-key", "content"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"nodeId":     nodeID,
+				"commentKey": mustGetFlag(cmd, "comment-key"),
+				"content":    mustGetFlag(cmd, "content"),
+			}
+			if v, _ := cmd.Flags().GetString("mention"); v != "" {
+				toolArgs["mentionedUserIds"] = parseCommentMentionIds(v)
+			}
+			return callMCPToolOnServer("doc-comment", "update_comment", toolArgs)
+		},
+	}
+	commentUpdateCmd.Flags().String("node", "", "目标文档的标识，支持传入 URL 或 ID (必填)")
+	commentUpdateCmd.Flags().String("comment-key", "", "待更新评论的 commentKey，可从 list/create/create-inline 结果获取 (必填)")
+	commentUpdateCmd.Flags().String("content", "", "更新后的评论文字内容，纯文本 (必填)")
+	commentUpdateCmd.Flags().String("mention", "", "被 @ 的用户 uid 列表，逗号分隔")
+
+	commentDeleteCmd := &cobra.Command{
+		Use:   "delete",
+		Short: "删除文档评论",
+		Long: `删除指定文档中的一条评论。
+
+这是不可恢复的危险操作。执行前需要交互确认，或在用户已明确同意后传入全局 --yes 跳过确认。`,
+		Example: `  dws doc comment delete --node DOC_ID --comment-key COMMENT_KEY --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlags(cmd, "comment-key"); err != nil {
+				return err
+			}
+			commentKey := mustGetFlag(cmd, "comment-key")
+			if !confirmDangerousAction(cmd, "delete 文档评论", commentKey) {
+				return nil
+			}
+			return callMCPToolOnServer("doc-comment", "delete_comment", map[string]any{
+				"nodeId":     nodeID,
+				"commentKey": commentKey,
+			})
+		},
+	}
+	commentDeleteCmd.Flags().String("node", "", "目标文档的标识，支持传入 URL 或 ID (必填)")
+	commentDeleteCmd.Flags().String("comment-key", "", "待删除评论的 commentKey，可从 list/create/create-inline 结果获取 (必填)")
+
 	commentCreateInlineCmd := &cobra.Command{
 		Use:   "create-inline",
 		Short: "创建划词评论",
@@ -2006,7 +2067,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	commentCreateInlineCmd.Flags().String("mention", "", "被 @ 的用户 uid 列表，逗号分隔")
 
 	// comment 子命令的 --node 隐藏别名
-	commentNodeAliasCmds := []*cobra.Command{commentListCmd, commentCreateCmd, commentReplyCmd, commentCreateInlineCmd}
+	commentNodeAliasCmds := []*cobra.Command{commentListCmd, commentCreateCmd, commentReplyCmd, commentUpdateCmd, commentDeleteCmd, commentCreateInlineCmd}
 	for _, c := range commentNodeAliasCmds {
 		c.Flags().String("url", "", "--node 的别名")
 		c.Flags().String("id", "", "--node 的别名")
@@ -2020,7 +2081,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		_ = c.Flags().MarkHidden("file-id")
 	}
 
-	commentCmd.AddCommand(commentListCmd, commentCreateCmd, commentReplyCmd, commentCreateInlineCmd)
+	commentCmd.AddCommand(commentListCmd, commentCreateCmd, commentReplyCmd, commentUpdateCmd, commentDeleteCmd, commentCreateInlineCmd)
 
 	// ── permission (文档协作权限) ────────────────────────────
 	permissionCmd := &cobra.Command{
@@ -2744,7 +2805,7 @@ CLI 内部自动完成全部流程:
 			if !exists {
 				return fmt.Errorf("文档版本 %d 不存在，已停止回滚；请先执行 dws doc version list --node %s --format json 获取可回滚版本", version, nodeID)
 			}
-			if !confirmDelete("文档版本回滚", nodeID) {
+			if !confirmDangerousAction(cmd, fmt.Sprintf("revert document to version %d", version), nodeID) {
 				return nil
 			}
 			return callMCPToolOnServer("doc", "revert_doc_version", map[string]any{

@@ -16,6 +16,7 @@ cd "$ROOT"
 # Verify that all expected top-level commands exist in the built binary
 if command -v go >/dev/null 2>&1; then
   BIN_PATH="/tmp/dws-surface-check"
+  trap 'rm -f "$BIN_PATH"' EXIT HUP INT TERM
   go build -ldflags="-s -w" -o "$BIN_PATH" ./cmd 2>/dev/null || { echo "build failed";  exit 1; }
 
   # These utility commands are stable across the current open-source CLI shape.
@@ -28,7 +29,11 @@ if command -v go >/dev/null 2>&1; then
       missing=$((missing + 1))
     fi
   done
+
+  # Full Schema canonical/primary/alias delivery is exercised once by
+  # check-schema-binary.sh. Keep this check focused on the basic command tree.
   rm -f "$BIN_PATH"
+  trap - EXIT HUP INT TERM
 
   if [ "$STRICT" -eq 1 ] && [ "$missing" -gt 0 ]; then
     printf 'command surface check: %d missing commands\n' "$missing" >&2

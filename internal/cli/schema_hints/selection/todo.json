@@ -1,0 +1,424 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/todo",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "todo.add_task_executors": {
+      "agent_summary": "添加待办执行人",
+      "use_when": [
+        "已知 taskId，需要为待办追加执行人（userId 列表）时"
+      ],
+      "avoid_when": [
+        "要添加参与人时改用 dws todo task add-participant",
+        "要上传附件时改用 dws todo task add-attachment",
+        "待办或执行人未确认时不要添加"
+      ],
+      "examples": [
+        "dws todo task add-executor --task-id <taskId> --executors <USER_ID_1>,<USER_ID_2>",
+        "dws todo task add-executor --task-id <taskId> --executors userId1,userId2 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_task_executors",
+        "cobra-help:dws todo task add-executor",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_task_executors",
+        "live-dws-schema:todo.add_task_executors"
+      ]
+    },
+    "todo.add_task_participants": {
+      "agent_summary": "添加待办参与人",
+      "use_when": [
+        "已知 taskId，需要为待办追加参与人（userId 列表）时"
+      ],
+      "avoid_when": [
+        "要添加执行人时改用 dws todo task add-executor",
+        "要上传附件时改用 dws todo task add-attachment",
+        "待办或参与人未确认时不要添加"
+      ],
+      "examples": [
+        "dws todo task add-participant --task-id <taskId> --participants <USER_ID_1>,<USER_ID_2>",
+        "dws todo task add-participant --task-id <taskId> --participants userId1,userId2 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_task_participants",
+        "cobra-help:dws todo task add-participant",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_task_participants",
+        "live-dws-schema:todo.add_task_participants"
+      ]
+    },
+    "todo.add_todo_attachment": {
+      "agent_summary": "上传待办附件",
+      "use_when": [
+        "已知 taskId 且待办已确认存在，需要上传本地文件为待办附件时"
+      ],
+      "avoid_when": [
+        "待办尚未确认存在或仅试探调用时不要上传（会真实写附件）",
+        "要添加执行人/参与人/提醒时改用对应 add 命令"
+      ],
+      "examples": [
+        "dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf",
+        "dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_todo_attachment",
+        "cobra-help:dws todo task add-attachment",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_todo_attachment",
+        "live-dws-schema:todo.add_todo_attachment"
+      ]
+    },
+    "todo.add_todo_comment": {
+      "agent_summary": "给待办添加评论",
+      "use_when": [
+        "已知 taskId，需要给待办新增一条评论文本时"
+      ],
+      "avoid_when": [
+        "要删除评论时改用 dws todo comment delete",
+        "要列出评论时改用 dws todo comment list"
+      ],
+      "examples": [
+        "dws todo comment add --task-id <taskId> --content \"评论内容\"",
+        "dws todo comment add --task-id <taskId> --content \"已开始处理\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_todo_comment",
+        "cobra-help:dws todo comment add",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_todo_comment",
+        "live-dws-schema:todo.add_todo_comment"
+      ]
+    },
+    "todo.add_todo_reminder": {
+      "agent_summary": "添加待办提醒",
+      "use_when": [
+        "已知 taskId，需要按截止时间偏移或自定义时间戳添加提醒时（dueTime 模式要求待办已有截止时间）"
+      ],
+      "avoid_when": [
+        "要重置/清除提醒规则时改用 dws todo task reset-reminder",
+        "提醒时间与目标待办未确认时不要添加"
+      ],
+      "examples": [
+        "dws todo task add-reminder --task-id <taskId> --base-time dueTime --due-date-offset -30",
+        "dws todo task add-reminder --task-id <taskId> --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.add_todo_reminder",
+        "cobra-help:dws todo task add-reminder",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_todo_reminder",
+        "live-dws-schema:todo.add_todo_reminder"
+      ]
+    },
+    "todo.create_personal_sub_todo": {
+      "agent_summary": "创建个人子待办",
+      "use_when": [
+        "父待办由本人创建且已确认 parentId，需要创建子待办（标题、执行人、可选截止时间/优先级）时"
+      ],
+      "avoid_when": [
+        "只需创建顶层待办时改用 dws todo task create",
+        "父待办不是本人创建或 parentId 未确认时不要创建；子待办不支持独立循环规则"
+      ],
+      "examples": [
+        "dws todo task create-sub --parent-id <PARENT_TASK_ID> --title \"子任务标题\" --executors <USER_ID_1>,<USER_ID_2> --priority 40",
+        "dws todo task create-sub --parent-id <PARENT_TASK_ID> --title \"子任务标题\" --executors <USER_ID> --due \"2026-03-20T10:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.create_personal_sub_todo",
+        "cobra-help:dws todo task create-sub",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.create_personal_sub_todo",
+        "live-dws-schema:todo.create_personal_sub_todo"
+      ]
+    },
+    "todo.create_personal_todo": {
+      "agent_summary": "创建个人待办",
+      "use_when": [
+        "需要在当前组织创建个人待办（标题与执行人必填；可选截止时间、优先级、按天循环）时"
+      ],
+      "avoid_when": [
+        "只需查询已有待办时改用 dws todo task list",
+        "要创建子待办时改用 dws todo task create-sub；标题或执行人未确认时不要创建"
+      ],
+      "examples": [
+        "dws todo task create --title \"修复线上Bug\" --executors <USER_ID_1>,<USER_ID_2> --priority 40",
+        "dws todo task create --title \"每日站会\" --executors <USER_ID> --due \"2026-03-20T10:00:00+08:00\" --recurrence \"DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.create_personal_todo",
+        "cobra-help:dws todo task create",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.create_personal_todo",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.create_personal_todo",
+        "live-dws-schema:todo.create_personal_todo"
+      ]
+    },
+    "todo.delete_todo": {
+      "agent_summary": "删除待办",
+      "use_when": [
+        "用户明确要求删除指定待办（所有执行者侧一并删除）时"
+      ],
+      "avoid_when": [
+        "用户未明确删除、目标 taskId 不确定或仍需保留任务记录时不要执行",
+        "只需标记完成时改用 dws todo task done"
+      ],
+      "examples": [
+        "dws todo task delete --task-id <taskId>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.delete_todo",
+        "cobra-help:dws todo task delete",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.delete_todo",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.delete_todo",
+        "live-dws-schema:todo.delete_todo"
+      ]
+    },
+    "todo.delete_todo_comment": {
+      "agent_summary": "删除待办评论",
+      "use_when": [
+        "用户明确要求删除指定待办下的某条评论时"
+      ],
+      "avoid_when": [
+        "用户未明确删除，或 taskId/commentId 不确定时不要执行",
+        "要新增评论时改用 dws todo comment add；要列出评论时改用 dws todo comment list"
+      ],
+      "examples": [
+        "dws todo comment delete --task-id <taskId> --comment-id <commentId>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.delete_todo_comment",
+        "cobra-help:dws todo comment delete",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.delete_todo_comment",
+        "live-dws-schema:todo.delete_todo_comment"
+      ]
+    },
+    "todo.get_todo_detail": {
+      "agent_summary": "查询待办详情",
+      "use_when": [
+        "已知 taskId，且调用者是创建者或执行者，需要查看单条待办详情时"
+      ],
+      "avoid_when": [
+        "需要按条件查多个待办时改用 dws todo task list",
+        "需要修改待办时改用 update/done/delete 等写命令"
+      ],
+      "examples": [
+        "dws todo task get --task-id <taskId>",
+        "dws todo task get --task-id <taskId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.get_todo_detail",
+        "cobra-help:dws todo task get",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.get_todo_detail",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.get_todo_detail",
+        "live-dws-schema:todo.get_todo_detail"
+      ]
+    },
+    "todo.get_user_todos_in_current_org": {
+      "agent_summary": "查询当前组织个人待办列表",
+      "use_when": [
+        "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+      ],
+      "avoid_when": [
+        "已知 taskId 需要完整单条详情时改用 dws todo task get"
+      ],
+      "examples": [
+        "dws todo task list --page 1 --size 20 --status false",
+        "dws todo task list --page 1 --size 20 --status false --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.get_user_todos_in_current_org",
+        "cobra-help:dws todo task list",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.get_user_todos_in_current_org",
+        "live-dws-schema:todo.get_user_todos_in_current_org"
+      ]
+    },
+    "todo.list_todo_comment": {
+      "agent_summary": "获取待办评论列表",
+      "use_when": [
+        "已知 taskId，需要分页查看该待办评论时"
+      ],
+      "avoid_when": [
+        "要新增评论时改用 dws todo comment add",
+        "要删除评论时改用 dws todo comment delete"
+      ],
+      "examples": [
+        "dws todo comment list --task-id <taskId>",
+        "dws todo comment list --task-id <taskId> --page 1 --size 20"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.list_todo_comment",
+        "cobra-help:dws todo comment list",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.list_todo_comment",
+        "live-dws-schema:todo.list_todo_comment"
+      ]
+    },
+    "todo.remove_task_executors": {
+      "agent_summary": "移除待办执行人",
+      "use_when": [
+        "用户明确要求从待办移除指定执行人时"
+      ],
+      "avoid_when": [
+        "要添加执行人时改用 dws todo task add-executor",
+        "待办或执行人未确认时不要移除"
+      ],
+      "examples": [
+        "dws todo task remove-executor --task-id <taskId> --executors <USER_ID_1>,<USER_ID_2>",
+        "dws todo task remove-executor --task-id <taskId> --executors userId1 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.remove_task_executors",
+        "cobra-help:dws todo task remove-executor",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.remove_task_executors",
+        "live-dws-schema:todo.remove_task_executors"
+      ]
+    },
+    "todo.remove_task_participants": {
+      "agent_summary": "移除待办参与人",
+      "use_when": [
+        "用户明确要求从待办移除指定参与人时"
+      ],
+      "avoid_when": [
+        "要添加参与人时改用 dws todo task add-participant",
+        "待办或参与人未确认时不要移除"
+      ],
+      "examples": [
+        "dws todo task remove-participant --task-id <taskId> --participants <USER_ID_1>,<USER_ID_2>",
+        "dws todo task remove-participant --task-id <taskId> --participants userId1 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.remove_task_participants",
+        "cobra-help:dws todo task remove-participant",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.remove_task_participants",
+        "live-dws-schema:todo.remove_task_participants"
+      ]
+    },
+    "todo.reset_todo_reminder": {
+      "agent_summary": "重置待办提醒",
+      "use_when": [
+        "需要清除或整体替换待办提醒规则时（可不传 reminder-rules 以清除）"
+      ],
+      "avoid_when": [
+        "只需追加一条提醒时改用 dws todo task add-reminder",
+        "新规则与目标待办未确认时不要重置"
+      ],
+      "examples": [
+        "dws todo task reset-reminder --task-id <taskId>",
+        "dws todo task reset-reminder --task-id <taskId> --reminder-rules '[{\"dueDateOffset\":-30,\"baseTime\":\"dueTime\"},{\"reminderTimeStamp\":\"2026-03-10T18:00:00+08:00\",\"baseTime\":\"customTime\"}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.reset_todo_reminder",
+        "cobra-help:dws todo task reset-reminder",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.reset_todo_reminder",
+        "live-dws-schema:todo.reset_todo_reminder"
+      ]
+    },
+    "todo.update_todo_done_status": {
+      "agent_summary": "修改执行者的待办完成状态",
+      "use_when": [
+        "已知 taskId，需要把执行者侧完成状态设为已完成或未完成时"
+      ],
+      "avoid_when": [
+        "要改标题/截止时间/优先级时改用 dws todo task update",
+        "执行人、目标待办或期望状态未确认时不要修改"
+      ],
+      "examples": [
+        "dws todo task done --task-id <taskId> --status true",
+        "dws todo task done --task-id <taskId> --status false"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.update_todo_done_status",
+        "cobra-help:dws todo task done",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.update_todo_done_status",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.update_todo_done_status",
+        "live-dws-schema:todo.update_todo_done_status"
+      ]
+    },
+    "todo.update_todo_task": {
+      "agent_summary": "修改整个待办任务",
+      "use_when": [
+        "已知 taskId，需要修改待办标题、截止时间、优先级或完成标记等字段时"
+      ],
+      "avoid_when": [
+        "只需改执行者完成状态时优先 dws todo task done",
+        "目标任务与待改字段未确认时不要更新"
+      ],
+      "examples": [
+        "dws todo task update --task-id <taskId> --title \"新标题\"",
+        "dws todo task update --task-id <taskId> --priority 40 --due \"2026-03-10T18:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.update_todo_task",
+        "cobra-help:dws todo task update",
+        "Skill:skills/mono/references/products/todo.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#todo.update_todo_task",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.update_todo_task",
+        "live-dws-schema:todo.update_todo_task"
+      ]
+    }
+  },
+  "products": {
+    "todo": {
+      "agent_summary": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+      "use_when": [
+        "查询、创建或更新个人待办及其协作信息时"
+      ],
+      "avoid_when": [
+        "不要用于 OA 审批流转、工作日志提交或日历日程管理"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 CommandRegistry 命令分区与对应产品 Skill 审阅产品级选择边界。",
+      "source_refs": [
+        "CommandRegistry:product=todo",
+        "Skill:skills/mono/references/products/todo.md"
+      ]
+    }
+  }
+}

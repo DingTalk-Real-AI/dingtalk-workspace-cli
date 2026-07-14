@@ -491,9 +491,9 @@ func newOaCommand() *cobra.Command {
 	approvalListInitiatedCmd.Flags().String("max-results", "20", "每页大小，最大 20")
 	approvalListInitiatedCmd.Flags().Lookup("max-results").Hidden = true
 	approvalTasksCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
-	approvalListFormsCmd.Flags().String("cursor", "0", "分页游标，首次传 0 (必填)")
-	approvalListFormsCmd.Flags().String("limit", "100", "每页大小，最大 100 (必填)")
-	approvalListFormsCmd.Flags().String("size", "100", "每页大小，最大 100 (必填)")
+	approvalListFormsCmd.Flags().String("cursor", "0", "分页游标（默认 0，翻页传返回的 cursor）")
+	approvalListFormsCmd.Flags().String("limit", "100", "每页大小（默认 100，最大 100）")
+	approvalListFormsCmd.Flags().String("size", "100", "每页大小（默认 100，最大 100）")
 	approvalListFormsCmd.Flags().Lookup("size").Hidden = true
 	approvalSearchFormsCmd.Flags().String("query", "", "关键字（匹配 processCode 或表单名称）(必填)")
 	approvalDingInfoCmd.Flags().String("task-id", "", "审批任务 ID (必填)")

@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/pat",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "pat.batch_grant": {
+      "agent_summary": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+      "use_when": [
+        "命令提示缺少行为授权，需要按产品或 scope 批量授权",
+        "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+      ],
+      "avoid_when": [
+        "普通 OAuth 登录用 auth，不要用 pat",
+        "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+        "只要改本地浏览器打开策略时用 pat browser-policy"
+      ],
+      "examples": [
+        "dws pat chmod --products calendar,aitable --grant-type session --session-id <SESSION_ID> --dry-run --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=pat.batch_grant",
+        "cobra-help:dws pat chmod",
+        "Skill:skills/mono/references/products/pat.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#pat.batch_grant",
+        "internal/cli/schema_command_registry.json#pat.batch_grant",
+        "skills/mono/references/products/pat.md",
+        "live-dws-schema:pat.batch_grant#FAILED",
+        "pinned-mcp:pat.batch_grant",
+        "helper:internal/pat/chmod.go#typed_yes"
+      ]
+    },
+    "pat.browser_policy": {
+      "agent_summary": "配置 PAT 授权流程是否允许打开本地浏览器",
+      "use_when": [
+        "需要允许或禁止某 Agent 在 PAT 授权时打开浏览器"
+      ],
+      "avoid_when": [
+        "需要授予产品 scope 时用 pat chmod，而不是改浏览器策略"
+      ],
+      "examples": [
+        "dws pat browser-policy --enabled --format json",
+        "dws pat browser-policy --enabled=false --agentCode <AGENT_CODE> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=pat.browser_policy",
+        "cobra-help:dws pat browser-policy",
+        "Skill:skills/mono/references/products/pat.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#pat.browser_policy",
+        "internal/cli/schema_command_registry.json#pat.browser_policy",
+        "skills/mono/references/products/pat.md",
+        "live-dws-schema:pat.browser_policy#FAILED"
+      ]
+    }
+  },
+  "products": {
+    "pat": {
+      "agent_summary": "管理 Agent 的 PAT 行为授权与本地浏览器策略",
+      "use_when": [
+        "缺少行为授权需要预览/授予 scope，或配置授权是否打开浏览器"
+      ],
+      "avoid_when": [
+        "普通登录用 auth；不要与开放平台应用权限或具体业务写操作混用"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:product=pat",
+        "Skill:skills/mono/references/products/pat.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

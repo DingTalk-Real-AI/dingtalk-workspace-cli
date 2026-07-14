@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -1020,17 +1021,6 @@ func firstStringField(data map[string]any, keys ...string) string {
 	return ""
 }
 
-func printMCPText(text string) error {
-	if deps.Caller.Format() == "json" {
-		var parsed any
-		if err := json.Unmarshal([]byte(text), &parsed); err == nil {
-			return deps.Out.PrintJSONUnescaped(parsed)
-		}
-	}
-	deps.Out.PrintRaw(text)
-	return nil
-}
-
 // ──────────────────────────────────────────────────────────
 // dws chat — 会话 / 群聊 / 消息
 // ──────────────────────────────────────────────────────────
@@ -1040,7 +1030,7 @@ func newChatCommand() *cobra.Command {
 		Use:     "chat",
 		Aliases: []string{"im"},
 		Short:   "群聊 / 消息 / 机器人",
-		Long:    `管理钉钉会话与群聊：创建群、搜索群、查看群成员、添加机器人到群、修改群名称、拉取会话消息、发送群消息、机器人消息与 Webhook。`,
+		Long:    `管理钉钉会话与群聊：创建群、搜索群、查看群成员、添加机器人到群、修改群名称、拉取/发送/收藏会话消息、机器人消息与 Webhook。`,
 		RunE:    groupRunE,
 	}
 
@@ -1326,7 +1316,12 @@ func newChatCommand() *cobra.Command {
 
 	// ── message 子命令 ────────────────────────────────────────
 
-	chatMessageCmd := &cobra.Command{Use: "message", Short: "会话消息管理", RunE: groupRunE}
+	chatMessageCmd := &cobra.Command{
+		Use:   "message",
+		Short: "会话消息管理",
+		Long:  `管理会话消息，包括拉取、发送、搜索、转发、钉住、收藏和撤回消息。`,
+		RunE:  groupRunE,
+	}
 
 	chatMessageListCmd := &cobra.Command{
 		Use:   "list",
@@ -2468,6 +2463,20 @@ func newChatCommand() *cobra.Command {
 	_ = chatMessageSendCmd.Flags().MarkHidden("file-size")
 	chatMessageSendCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
 	chatMessageSendCmd.Flags().String("uuid", "", "幂等 UUID，相同 uuid 在 24h 内不会重复发送（可选）")
+	cli.AttachRuntimeSchema(chatMessageSendCmd, "chat", "send_personal_message", "hardcoded:chat")
+	cli.AnnotateRuntimeConstraints(chatMessageSendCmd, cli.RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"group", "user", "open-dingtalk-id"}},
+		RequireOneOf:      [][]string{{"group", "user", "open-dingtalk-id"}},
+	})
+	cli.AnnotateRuntimePositionals(chatMessageSendCmd, cli.RuntimeSchemaPositional{
+		Name:        "content",
+		Type:        "string",
+		Description: "消息内容（也可使用 --text；富媒体消息可省略）",
+		Required:    false,
+		Index:       0,
+	})
+	cli.AnnotateRuntimeFlagEnum(chatMessageSendCmd, "msg-type", "image", "file", "audio", "video")
+	cli.AnnotateRuntimeFlagFormat(chatMessageSendCmd, "file-path", "file-path")
 
 	chatMessageSendByBotCmd.Flags().String("robot-code", "", "机器人 Code (必填)")
 	_ = chatMessageSendByBotCmd.MarkFlagRequired("robot-code")
@@ -2518,7 +2527,7 @@ func newChatCommand() *cobra.Command {
 	_ = chatMessageListAllCmd.MarkFlagRequired("start")
 	chatMessageListAllCmd.Flags().String("end", "", "结束时间，格式: yyyy-MM-dd HH:mm:ss (必填)")
 	_ = chatMessageListAllCmd.MarkFlagRequired("end")
-	chatMessageListAllCmd.Flags().Int("limit", 50, "每页返回数量 (必填，默认 50)")
+	chatMessageListAllCmd.Flags().Int("limit", 50, "每页返回数量（默认 50）")
 	chatMessageListAllCmd.Flags().Int("size", 0, "--limit 的旧版别名")
 	_ = chatMessageListAllCmd.Flags().MarkHidden("size")
 	chatMessageListAllCmd.Flags().String("cursor", "0", "分页游标（首页传 \"0\"，后续从响应中获取）")
@@ -3525,6 +3534,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	_ = chatMessageReplyCmd.MarkFlagRequired("text")
 	chatMessageReplyCmd.Flags().String("uuid", "", "幂等键（可选）")
 	chatMessageReplyCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
+	cli.AttachRuntimeSchema(chatMessageReplyCmd, "chat", "reply_personal_message", "hardcoded:chat")
 
 	// ── message forward: 转发单条消息 ────────────────────────
 
@@ -3645,7 +3655,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			// 服务端 set_group_member_mute_list 的 uids（staffId）入参存在缺陷：
 			// 即使传了 uids 仍返回 "uids is required"，而 openDingTalkIds 路径正常。
 			// 与 message send 一致：先把 userId 解析为 openDingTalkId；解析失败再降级透传 uids。
-			if len(userIDs) > 0 {
+			// Resolving userId to openDingTalkId is a remote preflight. A dry-run
+			// must preserve the supplied uids in its preview without calling MCP.
+			if len(userIDs) > 0 && !deps.Caller.DryRun() {
 				if resolved, err := resolveOpenDingTalkIDs(cmd.Context(), userIDs); err == nil {
 					openDingTalkIDs = append(openDingTalkIDs, resolved...)
 					userIDs = nil
@@ -4045,12 +4057,20 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatGroupDismissCmd := &cobra.Command{
 		Use:   "dismiss",
 		Short: "解散群聊",
-		Long:  `解散指定群聊。该操作不可逆，需要群主权限。`,
-		Example: `  dws chat group dismiss --group <openConversationId>
+		Long:  `解散指定群聊。该操作不可逆，需要群主权限；必须先获得用户确认，再追加 --yes 执行。`,
+		Example: `  dws chat group dismiss --group <openConversationId> --yes
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "group"); err != nil {
 				return err
+			}
+			if !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"解散群聊不可逆；获得用户确认后加 --yes 执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认目标群聊及影响范围；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认目标群聊", "获得用户确认后使用 --yes 执行"),
+				)
 			}
 			return callMCPToolOnServer("im", "dismiss_group", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
@@ -4244,6 +4264,80 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageListPinCmd.Flags().String("cursor", "", "分页游标（首次不传，翻页时传上次返回的 nextCursor）")
 	chatMessageListPinCmd.Flags().Int("size", 0, "一次拉取的消息数量（默认 20，最大 100）")
 
+	// ── message favorites: 收藏/取消收藏/查询收藏消息 ──────────
+
+	chatMessageAddFavoriteCmd := &cobra.Command{
+		Use:   "add-favorite",
+		Short: "收藏指定消息",
+		Long: `收藏指定消息。消息 ID 和会话 ID 可从 chat message list 等消息查询命令的返回结果中获取。
+
+该操作会修改当前用户的消息收藏状态。`,
+		Example: `  dws chat message add-favorite --open-message-id <openMessageId> --open-conversation-id <openConversationId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "open-message-id", "open-conversation-id"); err != nil {
+				return err
+			}
+			return callMCPToolOnServer("im", "add_message_favorite", map[string]any{
+				"openMessageId":      mustGetFlag(cmd, "open-message-id"),
+				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
+			})
+		},
+	}
+	chatMessageAddFavoriteCmd.Flags().String("open-message-id", "", "消息 openMessageId (必填)")
+	_ = chatMessageAddFavoriteCmd.MarkFlagRequired("open-message-id")
+	chatMessageAddFavoriteCmd.Flags().String("open-conversation-id", "", "消息所在会话的 openConversationId (必填，支持群聊/单聊)")
+	_ = chatMessageAddFavoriteCmd.MarkFlagRequired("open-conversation-id")
+
+	chatMessageRemoveFavoriteCmd := &cobra.Command{
+		Use:   "remove-favorite",
+		Short: "取消收藏指定消息",
+		Long: `取消收藏指定消息。消息 ID 和会话 ID 可从 chat message list 等消息查询命令的返回结果中获取。
+
+该操作只移除当前用户的收藏标记，不会删除原消息。`,
+		Example: `  dws chat message remove-favorite --open-message-id <openMessageId> --open-conversation-id <openConversationId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "open-message-id", "open-conversation-id"); err != nil {
+				return err
+			}
+			return callMCPToolOnServer("im", "remove_message_favorite", map[string]any{
+				"openMessageId":      mustGetFlag(cmd, "open-message-id"),
+				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
+			})
+		},
+	}
+	chatMessageRemoveFavoriteCmd.Flags().String("open-message-id", "", "消息 openMessageId (必填)")
+	_ = chatMessageRemoveFavoriteCmd.MarkFlagRequired("open-message-id")
+	chatMessageRemoveFavoriteCmd.Flags().String("open-conversation-id", "", "消息所在会话的 openConversationId (必填，支持群聊/单聊)")
+	_ = chatMessageRemoveFavoriteCmd.MarkFlagRequired("open-conversation-id")
+
+	chatMessageListFavoritesCmd := &cobra.Command{
+		Use:   "list-favorites",
+		Short: "查询收藏的消息列表",
+		Long: `查询当前用户收藏的消息列表，支持数字游标分页。
+
+首次请求可省略分页参数，CLI 会按 Open 服务契约传 cursor=0、size="20"。
+返回 hasMore=true 时，将 nextCursor 作为下一次的 --cursor。`,
+		Example: `  dws chat message list-favorites
+  dws chat message list-favorites --size 50
+  dws chat message list-favorites --cursor 20 --size 20`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cursor, _ := cmd.Flags().GetInt64("cursor")
+			if cursor < 0 {
+				return apperrors.NewValidation("--cursor must be greater than or equal to 0")
+			}
+			size, _ := cmd.Flags().GetInt("size")
+			if size < 1 || size > 100 {
+				return apperrors.NewValidation("--size must be between 1 and 100")
+			}
+			return callMCPToolOnServer("im", "list_message_favorites", map[string]any{
+				"cursor": cursor,
+				"size":   strconv.Itoa(size),
+			})
+		},
+	}
+	chatMessageListFavoritesCmd.Flags().Int64("cursor", 0, "数字分页游标（默认 0；翻页时传上次返回的 nextCursor）")
+	chatMessageListFavoritesCmd.Flags().Int("size", 20, "一次拉取的收藏数量（默认 20，范围 1-100）")
+
 	// ── group list-my-groups: 拉取我创建/管理的群 ──────────────
 
 	chatGroupListMyGroupsCmd := &cobra.Command{
@@ -4258,6 +4352,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{}
 			if v, _ := cmd.Flags().GetString("role"); v != "" {
+				if v != "OWNER" && v != "ADMIN" {
+					return apperrors.NewValidation("--role must be one of OWNER or ADMIN")
+				}
 				toolArgs["roleFilter"] = v
 			}
 			if v, _ := cmd.Flags().GetInt("limit"); v > 0 {
@@ -4956,7 +5053,6 @@ status 可选值:
 	_ = chatCategoryCreateSmartCmd.MarkFlagRequired("name")
 	chatCategoryCreateSmartCmd.Flags().String("keywords", "", "群名称关键词列表，逗号分隔（可选）")
 	chatCategoryCreateSmartCmd.Flags().String("members", "", "群内成员 openDingTalkId 列表，逗号分隔（可选）")
-
 	chatMessageListEmotionRepliesCmd := &cobra.Command{
 		Use:   "list-emotion-replies",
 		Short: "批量拉取消息的表情回复和文字回复",
@@ -5019,7 +5115,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatGroupMembersCmd.AddCommand(chatGroupMembersRemoveBotCmd, chatGroupMembersListByIdsCmd)
 	chatBotCmd.AddCommand(chatBotFindCmd)
 	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)
-	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
+	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageAddFavoriteCmd, chatMessageRemoveFavoriteCmd, chatMessageListFavoritesCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
 	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd)
 

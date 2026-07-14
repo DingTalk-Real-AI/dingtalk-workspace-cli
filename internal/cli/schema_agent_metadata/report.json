@@ -1,0 +1,1866 @@
+{
+  "product_id": "report",
+  "tools": {
+    "report entry get": {
+      "agent_summary": "获取指定一篇日志的详情信息",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "要提交新日志时改用 dws report entry submit",
+        "要看已读/评论统计时改用 dws report entry stats"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry get --report-id \u003creportId\u003e --format json",
+        "dws report entry get --report-id \u003creportId\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取指定一篇日志的详情信息",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取指定一篇日志的详情信息",
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要提交新日志时改用 dws report entry submit",
+            "要看已读/评论统计时改用 dws report entry stats"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要提交新日志时改用 dws report entry submit",
+                "要看已读/评论统计时改用 dws report entry stats"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws report entry get --report-id \u003creportId\u003e --format json",
+            "dws report entry get --report-id \u003creportId\u003e"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws report entry get --report-id \u003creportId\u003e --format json",
+                "dws report entry get --report-id \u003creportId\u003e"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "report.get_report_entry_details",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "report.get_report_entry_details",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "report.get_report_entry_details",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_entry_details"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=report.get_report_entry_details",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report entry get",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_entry_details",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details",
+        "live-dws-schema:report.get_report_entry_details",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_report_entry_details",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_report_entry_details"
+      ],
+      "use_when": [
+        "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
+      ]
+    },
+    "report entry stats": {
+      "agent_summary": "获取指定日志的统计数据",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "要读正文时改用 dws report entry get",
+        "要提交新日志时改用 dws report entry submit"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry stats --report-id \u003creportId\u003e",
+        "dws report entry stats --report-id \u003creportId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取指定日志的统计数据",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取指定日志的统计数据",
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要读正文时改用 dws report entry get",
+            "要提交新日志时改用 dws report entry submit"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要读正文时改用 dws report entry get",
+                "要提交新日志时改用 dws report entry submit"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws report entry stats --report-id \u003creportId\u003e",
+            "dws report entry stats --report-id \u003creportId\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws report entry stats --report-id \u003creportId\u003e",
+                "dws report entry stats --report-id \u003creportId\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "report.get_report_statistics_by_id",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "report.get_report_statistics_by_id",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "report.get_report_statistics_by_id",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_statistics_by_id"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=report.get_report_statistics_by_id",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report entry stats",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_statistics_by_id",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id",
+        "live-dws-schema:report.get_report_statistics_by_id",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_report_statistics_by_id",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_report_statistics_by_id"
+      ],
+      "use_when": [
+        "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
+      ]
+    },
+    "report entry submit": {
+      "agent_summary": "按模版提交一份新日报",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "尚未读取模板字段时先用 dws report template list / template get",
+        "只需查看已有日志正文时改用 dws report entry get"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+        "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按模版提交一份新日报",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "按模版提交一份新日报",
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report."
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.create_report.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚未读取模板字段时先用 dws report template list / template get",
+            "只需查看已有日志正文时改用 dws report entry get"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "尚未读取模板字段时先用 dws report template list / template get",
+                "只需查看已有日志正文时改用 dws report entry get"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+            "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+                "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report."
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.create_report.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "report.create_report",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "report.create_report",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "report.create_report",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.create_report.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "create_report"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=report.create_report",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report entry submit",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.create_report",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.create_report",
+        "live-dws-schema:report.create_report",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.create_report",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.create_report"
+      ],
+      "use_when": [
+        "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+      ]
+    },
+    "report inbox list": {
+      "agent_summary": "查询当前人收到的日志列表",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "要看自己发出的日志时改用 dws report outbox list",
+        "已知 reportId 要看正文时改用 dws report entry get"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询当前人收到的日志列表",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "查询当前人收到的日志列表",
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要看自己发出的日志时改用 dws report outbox list",
+            "已知 reportId 要看正文时改用 dws report entry get"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要看自己发出的日志时改用 dws report outbox list",
+                "已知 reportId 要看正文时改用 dws report entry get"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "report.get_received_report_list",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "report.get_received_report_list",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "report.get_received_report_list",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_received_report_list"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=report.get_received_report_list",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report inbox list",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_received_report_list",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list",
+        "live-dws-schema:report.get_received_report_list",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_received_report_list",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_received_report_list"
+      ],
+      "use_when": [
+        "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
+      ]
+    },
+    "report outbox list": {
+      "agent_summary": "查询当前人创建的日志详情列表",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "要看收到的日志时改用 dws report inbox list",
+        "已知 reportId 要完整正文时改用 dws report entry get"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report outbox list --cursor 0 --size 20 --format json",
+        "dws report outbox list --cursor 0 --size 20"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询当前人创建的日志详情列表",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "查询当前人创建的日志详情列表",
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要看收到的日志时改用 dws report inbox list",
+            "已知 reportId 要完整正文时改用 dws report entry get"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "要看收到的日志时改用 dws report inbox list",
+                "已知 reportId 要完整正文时改用 dws report entry get"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws report outbox list --cursor 0 --size 20 --format json",
+            "dws report outbox list --cursor 0 --size 20"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws report outbox list --cursor 0 --size 20 --format json",
+                "dws report outbox list --cursor 0 --size 20"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "report.get_send_report_list",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "report.get_send_report_list",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "report.get_send_report_list",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_send_report_list"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=report.get_send_report_list",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report outbox list",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_send_report_list",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list",
+        "live-dws-schema:report.get_send_report_list",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_send_report_list",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_send_report_list"
+      ],
+      "use_when": [
+        "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
+      ]
+    },
+    "report template get": {
+      "agent_summary": "按名称获取日志模版字段定义",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "不知道有哪些模版时先用 dws report template list"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report template get --name \u003ctemplateName\u003e",
+        "dws report template get --name \"日报\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按名称获取日志模版字段定义",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "按名称获取日志模版字段定义",
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "不知道有哪些模版时先用 dws report template list"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "不知道有哪些模版时先用 dws report template list"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws report template get --name \u003ctemplateName\u003e",
+            "dws report template get --name \"日报\" --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws report template get --name \u003ctemplateName\u003e",
+                "dws report template get --name \"日报\" --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "report.get_template_details_by_name",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "report.get_template_details_by_name",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "report.get_template_details_by_name",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知模版名称，提交前需要读取字段名称、类型与排序时"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知模版名称，提交前需要读取字段名称、类型与排序时"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_template_details_by_name"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=report.get_template_details_by_name",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report template get",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_template_details_by_name",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name",
+        "live-dws-schema:report.get_template_details_by_name",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_template_details_by_name",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_template_details_by_name"
+      ],
+      "use_when": [
+        "已知模版名称，提交前需要读取字段名称、类型与排序时"
+      ]
+    },
+    "report template list": {
+      "agent_summary": "获取当前员工可使用的日志模版列表",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "已知模版名称需要字段定义时改用 dws report template get"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report template list",
+        "dws report template list --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取当前员工可使用的日志模版列表",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": "获取当前员工可使用的日志模版列表",
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "已知模版名称需要字段定义时改用 dws report template get"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "已知模版名称需要字段定义时改用 dws report template get"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws report template list",
+            "dws report template list --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "dws report template list",
+                "dws report template list --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "report.get_available_report_templates",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "report.get_available_report_templates",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "report.get_available_report_templates",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "提交日志前需要列出可用模版名称与 templateId 时"
+          ],
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "candidates": [
+            {
+              "value": [
+                "提交日志前需要列出可用模版名称与 templateId 时"
+              ],
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_available_report_templates"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=report.get_available_report_templates",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report template list",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_available_report_templates",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates",
+        "live-dws-schema:report.get_available_report_templates",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_available_report_templates",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_available_report_templates"
+      ],
+      "use_when": [
+        "提交日志前需要列出可用模版名称与 templateId 时"
+      ]
+    }
+  }
+}

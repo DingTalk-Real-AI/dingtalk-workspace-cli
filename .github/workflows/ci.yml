@@ -58,7 +58,15 @@ jobs:
         run: make build
 
       - name: Test with Race Detection
-        run: go test -v -race -count=1 -timeout=5m ./cmd/... ./internal/...
+        # The registry-first final-delivery gate validates all public commands
+        # and the complete generated Catalog under the race detector. Keep the
+        # package timeout aligned with the macOS race job so the Linux runner's
+        # five-minute default does not expire while that gate is still making
+        # progress.
+        run: go test -v -race -count=1 -timeout=10m ./cmd/... ./internal/...
+
+      - name: Test release scripts
+        run: go test -v -count=1 -timeout=5m ./test/scripts
 
   test-darwin:
     name: Test (macOS auth/keychain)

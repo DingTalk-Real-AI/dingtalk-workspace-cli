@@ -209,7 +209,7 @@ floatImageId 可通过 list-float-images 获取。`,
 
 操作不可恢复，删除后图片将从工作表中移除。
 floatImageId 可通过 list-float-images 获取。`,
-		Example: `  dws sheet delete-float-image --node NODE_ID --sheet-id SHEET_ID --float-image-id FI_ID`,
+		Example: `  dws sheet delete-float-image --node NODE_ID --sheet-id SHEET_ID --float-image-id FI_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return callMCPTool("delete_float_image", map[string]any{
 				"nodeId":       mustGetFlag(cmd, "node"),

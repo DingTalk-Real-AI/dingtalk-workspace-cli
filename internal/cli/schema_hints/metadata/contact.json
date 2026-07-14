@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/contact",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "contact.get_authorized_emp_rosterInfo": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "fields": {
+          "required": false
+        },
+        "staff-id": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope.",
+      "cli_path": "contact user profile get",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "contact.get_current_user_profile": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.get_dept_info_by_dept_id": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.get_dept_members_by_deptId": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.get_sub_depts_by_dept_id": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.get_user_info_by_user_ids": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.list_authorized_roster_fields": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.list_my_followings": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.query_dismission_employee_list": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.search_contact_by_key_word": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.search_dept_by_keyword": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "contact.search_user_by_mobile": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

@@ -3,6 +3,7 @@
 ## 使用场景
 
 用户说"写数据/填表/更新单元格/写入公式":
+- 从 DataFrame/结构化对象一次写入一个或多个工作表 → `table-put`
 - 更新数据 → `range update`
 - 【强制】`--sheet-id` 必填：即使是单工作表也不能省略，不要参照 `range read` 的默认行为；未知时先执行 `dws sheet list --node <NODE_ID> --format json` 获取 `sheetId`，禁止凭空臆测为 `Sheet1`、`sheet1`、`0`、`default` 等
 - 注意：如果用户的目的是替换文本、移动行列、追加空行空列、清空区域、排序、填充、复制区域或移动区域，请勿使用 `range update`，必须使用对应的专用命令（`replace`/`move-dimension`/`add-dimension`/`range clear`/`range sort`/`range fill`/`range copy-to`/`range move-to`）
@@ -16,22 +17,37 @@
 - 与 `range update` 的区别：`csv-put` 接受 CSV 文本直接写入，无需手动构造二维 JSON 数组；适合大批量纯值写入
 - 与 `append` 的区别：`csv-put` 写入指定位置（--start-cell），`append` 在末尾追加
 
-**三种写入命令能力对比**：
+**四种写入命令能力对比**：
 
-| 能力 | `range update` | `append` | `csv-put` |
-|------|---------------|----------|-----------|
-| 公式（`=` 开头） | 支持 | 不支持 | 不支持（当文本） |
-| 单元格级超链接（`hyperlink`） | 支持 | 不支持 | 不支持 |
-| 富文本（片段链接/附件/图片） | 支持 | 不支持 | 不支持 |
-| richText 片段样式（bold/color） | 支持 | 不支持 | 不支持 |
-| `cellStyles`（背景色/字号/对齐等 cell-level 样式） | 支持 | 不支持 | 不支持 |
-| `{}` 跳过（保留原值） | 支持 | 不适用 | 不适用 |
-| `dataValidation`（下拉/复选框） | 支持 | 不支持 | 不支持 |
-| 原始值（纯数字/字符串） | 支持 | 支持 | 支持 |
-| 自动定位末尾 | 不支持 | 支持 | 不支持 |
-| 自动扩容行列 | 不支持 | 支持 | 支持 |
+| 能力 | `table-put` | `range update` | `append` | `csv-put` |
+|------|-------------|----------------|----------|-----------|
+| 多工作表结构化写入 | 支持 | 不支持 | 不支持 | 不支持 |
+| columns / dtypes / formats | 支持 | 不支持 | 不支持 | 不支持 |
+| 公式（`=` 开头） | 按 dtype/底层能力 | 支持 | 不支持 | 不支持（当文本） |
+| 单元格级超链接（`hyperlink`） | 不使用此命令 | 支持 | 不支持 | 不支持 |
+| 富文本（片段链接/附件/图片） | 不使用此命令 | 支持 | 不支持 | 不支持 |
+| 原始值（纯数字/字符串） | 支持 | 支持 | 支持 | 支持 |
+| 自动定位末尾 | mode=append | 不支持 | 支持 | 不支持 |
+| 自动扩容行列 | 支持 | 不支持 | 支持 | 支持 |
 
 ## 命令详细参考
+
+### 写入结构化 table 数据
+```
+Usage:
+  dws sheet table-put [flags]     # 别名: dws sheet table-write
+Example:
+  dws sheet table-put --node <NODE_ID> \
+    --sheets '[{"name":"Data","columns":["name","score"],"data":[["Alice",95]],"dtypes":{"score":"float64"}}]'
+
+  dws sheet table-put --node <NODE_ID> --sheets @table.json
+  cat table.json | dws sheet table-put --node <NODE_ID> --sheets -
+Flags:
+      --node string     表格文档 ID 或 URL (必填)
+      --sheets string   sheet table JSON、@文件路径 或 - 表示 stdin (必填)
+```
+
+`--sheets` 接受 JSON 数组、`{"sheets":[...]}` 包装对象或单个 sheet 对象，CLI 会统一转换为非空数组。每个 sheet 至少需要 `columns`，并提供 `sheetId` 或 `name`；`name` 必须非空且少于 31 个字符。写入后必须用 `table-get` 回读验证。`table-get/table-put` 不支持放入 `sheet batch-update`。
 
 ### 更新工作表指定区域内容
 ```

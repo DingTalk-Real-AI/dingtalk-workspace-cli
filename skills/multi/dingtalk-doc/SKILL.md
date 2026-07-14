@@ -12,7 +12,7 @@ metadata:
 
 # 钉钉文档 Skill
 
-> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。22 个 dingtalk-* skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
+> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。全部 dingtalk-* skill 已通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
 
 > **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
 
@@ -47,6 +47,8 @@ metadata:
 | "读文档内容" | `dws doc read --node <nodeId>` |
 | "更新文档内容 / 分块追加" | `dws doc update --node <nodeId> --content "<分块>" --mode append` |
 | "删除块" | `dws doc block delete`（需用户确认） |
+| "更新文档评论" | `dws doc comment update --node <nodeId> --comment-key <key> --content "<内容>"` |
+| "删除文档评论" | `dws doc comment delete --node <nodeId> --comment-key <key> --yes`（需用户确认） |
 
 ## 评测/多步文档短路径
 
@@ -60,7 +62,7 @@ metadata:
 
 ## 危险操作
 
-`block delete` 不可逆，必须确认再加 `--yes`。
+`block delete` 和 `comment delete` 不可逆，必须确认再加 `--yes`。
 
 ## 跨产品协作
 

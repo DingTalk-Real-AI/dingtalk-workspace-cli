@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/mail",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "mail.batch_delete_message": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "mail.batch_delete_user_mail_contacts": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "mail.batch_move_message": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_download_session": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_draft": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_forward_draft": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_mail_folder": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_reply_draft": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_replyall_draft": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_user_mail_contact": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.create_user_message_template": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.delete_mail_folder": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "mail.delete_user_message_template": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "mail.get_email_by_message_id": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.get_thread": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.get_user_message_template": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.list_emails": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "CLI wrapper converts the reviewed folder selection into a KQL query and maps pagination before calling the pinned search_emails RPC; the local transform plus RPC call is not a one-to-one interface contract",
+      "reviewed": true,
+      "parameters": {
+        "limit": {
+          "property": "size"
+        }
+      },
+      "review_reason": "Preserve the reviewed composite wrapper contract: the CLI maps --limit to the search_emails size property after constructing a folder KQL query.",
+      "cli_path": "mail message list",
+      "runtime_gate": "none"
+    },
+    "mail.list_folders": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.list_mail_attachments": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.list_tags": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.list_user_mail_contacts": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.list_user_mailboxes": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.list_user_message_templates": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.search_emails": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.search_mail_users": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "employee-no": {
+          "required": false
+        },
+        "keyword": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed CLI accepts either a fuzzy keyword or an exact employee number, represented by a typed require-one-of constraint rather than two unconditional requirements.",
+      "cli_path": "mail user search",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "mail.send_draft": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.send_email": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.update_draft": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.update_mail_folder": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.update_user_mail_contact": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "mail.update_user_message_template": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "content": {
+          "required": false
+        },
+        "name": {
+          "required": false
+        },
+        "subject": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed patch command accepts any non-empty subset of mutable template fields; a typed require-one-of constraint owns that requirement.",
+      "cli_path": "mail template update",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    }
+  }
+}

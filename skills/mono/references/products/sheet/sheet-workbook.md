@@ -29,6 +29,10 @@
 用户说"删除工作表/移除工作表/删掉这个Sheet":
 - 删除工作表 → `delete-sheet`（不可逆操作，执行前必须向用户确认）
 
+用户说"显示网格线/隐藏网格线/去掉单元格网格":
+- 显示网格线 → `show-gridline`
+- 隐藏网格线 → `hide-gridline`
+
 ## 命令详细参考
 
 ### 创建钉钉表格文档
@@ -164,6 +168,18 @@ Flags:
 删除指定的工作表及其所有数据。约束：
 - 不能删除隐藏的工作表（需先通过 `sheet update --hidden false` 取消隐藏再删除）
 - 不能删除最后一个可见工作表（至少保留一个可见工作表）
+
+### 显示或隐藏网格线
+```
+Usage:
+  dws sheet show-gridline --node <NODE_ID> --sheet-id <SHEET_ID>
+  dws sheet hide-gridline --node <NODE_ID> --sheet-id <SHEET_ID>
+Flags:
+      --node string       表格文档 ID 或 URL (必填)
+      --sheet-id string   工作表 ID 或名称 (必填)
+```
+
+这两个命令只修改指定工作表的网格线显示状态，不修改单元格内容或边框样式。执行后可用同一命令反向恢复。
 
 ## 核心工作流
 

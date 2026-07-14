@@ -6,8 +6,14 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Changed
+
+- **`event consume` AI-subprocess contract** — aligns personal event streaming with the contract an orchestrator can drive without guessing: a fixed stderr ready line `[event] ready event_key=<key> bus_pid=<pid>` (block on it, don't `sleep`); a final `[event] exited — received N event(s) in Xs (reason: limit|timeout|signal|bus_shutdown)` line with exit code 0 on controlled exit and non-zero (no `exited` line) on failure; stdin-EOF as a graceful shutdown signal, armed only for a parent-controlled pipe stdin on an unbounded run (an interactive TTY and `< /dev/null` never trigger it), with a self-explaining diagnostic when it fires; and ownership-based subscription cleanup — a subscription this run created is unsubscribed on any clean exit while a `--subscribe-id`-reused one is left intact (`--ephemeral` still forces cleanup), so `kill -9` is the only way to leak a server-side subscription. Skill docs (mono + `dingtalk-event`) document the contract; design notes in `docs/event-subprocess-contract.md`.
+
 ### Added
 
+- **Stable Agent command catalog** — `dws schema` now ships a deterministic 22-product / 564-tool catalog generated from the executable Cobra tree, with progressive product/group/leaf queries, complete parameter contracts, reviewed command identity and aliases, safety/confirmation metadata, field provenance, and final-delivery completeness/drift gates. The catalog is embedded at build time and does not require runtime MCP `tools/list` discovery.
+- **`dws schema` for registered local commands** — `event consume/list/schema/status/stop` and `audit export/tail/verify` now enter the reviewed `CommandRegistry`, bind to the real Cobra tree at generation time, and ship through the same typed `ToolSpec`/embedded Catalog path as every other public command. `dws schema "event consume"` (or `event.consume`) therefore includes reviewed identity, Agent metadata, local-interface disposition, flags, explicit positionals, constraints, safety, and provenance; `dws schema event`, leaf queries, and `--all` are projections of that single delivered model. Inherited global flags, hidden internal flags, and `_bus` are excluded. Schema queries never synthesize a second live-Cobra view or call MCP discovery.
 - **Safe macOS Keychain → file-DEK migration** — `dws auth migrate-keychain --to file-dek` preflights every legacy/profile auth entry before rewriting, ignores unrelated application secrets, supports side-effect-free `--dry-run`, requires explicit `--yes`, and lets sandboxed and normal processes share an existing login without exposing tokens.
 
 ### Fixed

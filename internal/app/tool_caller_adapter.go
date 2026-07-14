@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -36,6 +37,21 @@ func newToolCallerAdapter(runner executor.Runner, flags *GlobalFlags) edition.To
 
 func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	inv := executor.NewHelperInvocation("overlay."+productID+"."+toolName, productID, toolName, args)
+	// Defense in depth for direct helper callers: global dry-run must never
+	// reach an injected/real Runner, even if a command bypasses the normal
+	// Schema leaf wrapper. EchoRunner produces the same stable dry_run envelope
+	// without catalog, auth, Keychain, endpoint or transport access.
+	if a != nil && a.DryRun() {
+		inv.DryRun = true
+		result, err := (executor.EchoRunner{}).Run(ctx, inv)
+		if err != nil {
+			return nil, err
+		}
+		return convertResult(result), nil
+	}
+	if a == nil || a.runner == nil {
+		return nil, fmt.Errorf("ToolCaller runner is not configured")
+	}
 	result, err := a.runner.Run(ctx, inv)
 	if err != nil {
 		return nil, err
@@ -44,25 +60,25 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 }
 
 func (a *toolCallerAdapter) Format() string {
-	if a.flags != nil {
+	if a != nil && a.flags != nil {
 		return a.flags.Format
 	}
 	return "json"
 }
 
 func (a *toolCallerAdapter) DryRun() bool {
-	return a.flags != nil && a.flags.DryRun
+	return a != nil && a.flags != nil && a.flags.DryRun
 }
 
 func (a *toolCallerAdapter) Fields() string {
-	if a.flags != nil {
+	if a != nil && a.flags != nil {
 		return a.flags.Fields
 	}
 	return ""
 }
 
 func (a *toolCallerAdapter) JQ() string {
-	if a.flags != nil {
+	if a != nil && a.flags != nil {
 		return a.flags.JQ
 	}
 	return ""

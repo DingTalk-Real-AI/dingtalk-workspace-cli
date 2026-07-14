@@ -10,6 +10,9 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"
 PACKAGE_VERSION="${DWS_PACKAGE_VERSION:-}"
 RELEASE_BASE_URL="${DWS_RELEASE_BASE_URL:-}"
+APPLE_CERTIFICATE_P12="${DWS_APPLE_CERTIFICATE_P12:-}"
+APPLE_CERTIFICATE_PASSWORD_FILE="${DWS_APPLE_CERTIFICATE_PASSWORD_FILE:-}"
+REQUIRE_DEVELOPER_ID_SIGNING="${DWS_REQUIRE_DEVELOPER_ID_SIGNING:-false}"
 
 export LANG=C
 export LC_ALL=C
@@ -195,14 +198,47 @@ create_skills_zip() {
   rm -rf "$staging"
 }
 
-# ---------- darwin ad-hoc signing ----------
+# ---------- darwin signing ----------
 #
 # Unsigned arm64 binaries are SIGKILL'd by amfid on Apple Silicon (macOS 11+).
-# We unpack each dws-darwin-*.tar.gz, ad-hoc sign the dws binary, repack
-# deterministically, and rewrite the corresponding line in checksums.txt.
+# Official releases use an Apple Developer ID certificate loaded from GitHub
+# Secrets. Fork/local builds retain ad-hoc signing so they remain runnable.
+# We unpack each dws-darwin-*.tar.gz, sign the dws binary, repack deterministically,
+# and rewrite the corresponding line in checksums.txt.
+
+configure_darwin_signing() {
+  case "$REQUIRE_DEVELOPER_ID_SIGNING" in
+    1|true|yes) require_developer_id=1 ;;
+    0|false|no|"") require_developer_id=0 ;;
+    *) err "invalid DWS_REQUIRE_DEVELOPER_ID_SIGNING value: $REQUIRE_DEVELOPER_ID_SIGNING" ;;
+  esac
+
+  if [ -n "$APPLE_CERTIFICATE_P12" ] || [ -n "$APPLE_CERTIFICATE_PASSWORD_FILE" ]; then
+    [ -n "$APPLE_CERTIFICATE_P12" ] || err "DWS_APPLE_CERTIFICATE_P12 is required when Developer ID signing is configured"
+    [ -n "$APPLE_CERTIFICATE_PASSWORD_FILE" ] || err "DWS_APPLE_CERTIFICATE_PASSWORD_FILE is required when Developer ID signing is configured"
+    [ -f "$APPLE_CERTIFICATE_P12" ] || err "Developer ID P12 file not found: $APPLE_CERTIFICATE_P12"
+    [ -f "$APPLE_CERTIFICATE_PASSWORD_FILE" ] || err "Developer ID password file not found: $APPLE_CERTIFICATE_PASSWORD_FILE"
+    command -v rcodesign >/dev/null 2>&1 || err "rcodesign is required for Developer ID signing"
+    DARWIN_SIGNING_MODE="developer-id"
+    return
+  fi
+
+  if [ "$require_developer_id" -eq 1 ]; then
+    err "Developer ID signing is required but DWS_APPLE_CERTIFICATE_P12 and DWS_APPLE_CERTIFICATE_PASSWORD_FILE are not configured"
+  fi
+  DARWIN_SIGNING_MODE="ad-hoc"
+}
 
 sign_one_darwin_binary() {
   bin="$1"
+  if [ "$DARWIN_SIGNING_MODE" = "developer-id" ]; then
+    rcodesign sign \
+      --p12-file "$APPLE_CERTIFICATE_P12" \
+      --p12-password-file "$APPLE_CERTIFICATE_PASSWORD_FILE" \
+      --for-notarization \
+      "$bin"
+    return
+  fi
   if command -v codesign >/dev/null 2>&1; then
     codesign --force --sign - "$bin"
     return
@@ -272,18 +308,22 @@ sign_darwin_archives() {
 }
 
 write_checksums() {
-  checksum_path="$DIST_DIR/checksums.txt"
-  # Append skills zip checksum to goreleaser's checksums file
+  # Keep this idempotent: workflow retries must not leave duplicate entries.
   if [ -f "$DIST_DIR/dws-skills.zip" ]; then
-    printf '%s  %s\n' "$(sha256_file "$DIST_DIR/dws-skills.zip")" "dws-skills.zip" >> "$checksum_path"
+    update_checksum_entry "dws-skills.zip" "$(sha256_file "$DIST_DIR/dws-skills.zip")"
   fi
 }
 
 # ---------- main ----------
 
 version="$(resolve_version)"
+configure_darwin_signing
 
-say "==> Ad-hoc signing darwin binaries"
+if [ "$DARWIN_SIGNING_MODE" = "developer-id" ]; then
+  say "==> Developer ID signing darwin binaries"
+else
+  say "==> Ad-hoc signing darwin binaries"
+fi
 sign_darwin_archives
 
 say "==> Creating skills zip"

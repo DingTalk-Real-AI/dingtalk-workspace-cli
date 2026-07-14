@@ -143,8 +143,8 @@ func TestMaskValue(t *testing.T) {
 
 func TestCategories(t *testing.T) {
 	cats := Categories()
-	if len(cats) != 7 {
-		t.Fatalf("expected 7 categories, got %d", len(cats))
+	if len(cats) != 8 {
+		t.Fatalf("expected 8 categories, got %d", len(cats))
 	}
 	if cats[0] != CategoryCore {
 		t.Errorf("expected core first, got %s", cats[0])

@@ -19,9 +19,11 @@ package dws
 
 import "embed"
 
-// EmbeddedSkills holds the bundled skills/ tree (mono + multi) compiled into
-// the binary. The `all:` prefix is required so dot/underscore entries — e.g.
-// references/best_practices/_common — are included rather than skipped.
+// EmbeddedSkills holds only the installable mono and multi skill trees compiled
+// into the binary. Build-only inputs such as internal/cli/schema_hints are
+// intentionally excluded. The `all:` prefix is required so dot/underscore
+// entries — e.g. references/best_practices/_common — are included rather than
+// skipped.
 //
-//go:embed all:skills
+//go:embed all:skills/mono all:skills/multi
 var EmbeddedSkills embed.FS

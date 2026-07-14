@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +24,25 @@ func parseBoolFlag(cmd *cobra.Command, name string) (bool, error) {
 		return false, fmt.Errorf("--%s 只接受 true 或 false，got %q", name, raw)
 	}
 	return v, nil
+}
+
+// resolveAitableExportFormat keeps the historical `--format excel` spelling
+// executable without advertising it as the business contract. `--format` is
+// the root output-format flag, so new calls use `--export-format excel
+// --format json`; only non-output values are treated as the legacy export
+// format.
+func resolveAitableExportFormat(cmd *cobra.Command) string {
+	if value, _ := cmd.Flags().GetString("export-format"); strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	legacy, _ := cmd.Flags().GetString("format")
+	legacy = strings.TrimSpace(legacy)
+	switch strings.ToLower(legacy) {
+	case "", "json", "table", "raw", "pretty", "ndjson", "csv":
+		return ""
+	default:
+		return legacy
+	}
 }
 
 // ──────────────────────────────────────────────────────────
@@ -3733,16 +3753,16 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 		Use:   "data",
 		Short: "导出数据",
 		Long: `导出 AI 表格数据的统一入口。
-不传 --task-id 时，根据 --scope / --format 创建新的导出任务，并同步等待结果；
+不传 --task-id 时，根据 --scope / --export-format 创建新的导出任务，并同步等待结果；
 若在等待窗口内完成，则直接返回 downloadUrl 和 fileName。
 传入 --task-id 时，继续等待该任务，不会重新创建。
 
 scope 可选值：all（整个 Base）、table（指定数据表）、view（指定视图）。
-format 可选值：excel、attachment、excel_and_attachment、excel_with_inline_images。`,
-		Example: `  dws aitable export data --base-id BASE_ID --scope all --format excel
-  dws aitable export data --base-id BASE_ID --scope table --table-id TABLE_ID --format excel
-  dws aitable export data --base-id BASE_ID --scope view --table-id TABLE_ID --view-id VIEW_ID --format excel
-  dws aitable export data --base-id BASE_ID --task-id TASK_ID
+export-format 可选值：excel、attachment、excel_and_attachment、excel_with_inline_images。`,
+		Example: `  dws aitable export data --base-id BASE_ID --scope all --export-format excel --format json
+  dws aitable export data --base-id BASE_ID --scope table --table-id TABLE_ID --export-format excel --format json
+  dws aitable export data --base-id BASE_ID --scope view --table-id TABLE_ID --view-id VIEW_ID --export-format excel --format json
+  dws aitable export data --base-id BASE_ID --task-id TASK_ID --format json
   # 查询 baseId: dws aitable base list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
@@ -3752,20 +3772,55 @@ format 可选值：excel、attachment、excel_and_attachment、excel_with_inline
 			toolArgs := map[string]any{
 				"baseId": baseID,
 			}
-			if v, _ := cmd.Flags().GetString("task-id"); v != "" {
-				toolArgs["taskId"] = v
+			taskID, _ := cmd.Flags().GetString("task-id")
+			taskID = strings.TrimSpace(taskID)
+			exportFormat := resolveAitableExportFormat(cmd)
+			if taskID != "" {
+				if exportFormat != "" || cmd.Flags().Changed("scope") || cmd.Flags().Changed("table-id") || cmd.Flags().Changed("view-id") {
+					return fmt.Errorf("--task-id is mutually exclusive with --scope, --export-format, --table-id, and --view-id")
+				}
+				toolArgs["taskId"] = taskID
 			} else {
-				if err := validateRequiredFlags(cmd, "scope", "format"); err != nil {
+				if err := validateRequiredFlags(cmd, "scope"); err != nil {
 					return err
 				}
-				toolArgs["scope"] = mustGetFlag(cmd, "scope")
-				toolArgs["format"] = mustGetFlag(cmd, "format")
-			}
-			if v, _ := cmd.Flags().GetString("table-id"); v != "" {
-				toolArgs["tableId"] = v
-			}
-			if v, _ := cmd.Flags().GetString("view-id"); v != "" {
-				toolArgs["viewId"] = v
+				if exportFormat == "" {
+					return fmt.Errorf("missing required flag(s): --export-format")
+				}
+				scope := strings.ToLower(strings.TrimSpace(mustGetFlag(cmd, "scope")))
+				switch scope {
+				case "all":
+					if cmd.Flags().Changed("table-id") || cmd.Flags().Changed("view-id") {
+						return fmt.Errorf("--scope=all does not accept --table-id or --view-id")
+					}
+				case "table":
+					if err := validateRequiredFlags(cmd, "table-id"); err != nil {
+						return err
+					}
+					if cmd.Flags().Changed("view-id") {
+						return fmt.Errorf("--scope=table does not accept --view-id")
+					}
+				case "view":
+					if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
+						return err
+					}
+				default:
+					return fmt.Errorf("--scope must be one of all, table, or view, got %q", scope)
+				}
+				exportFormat = strings.ToLower(strings.TrimSpace(exportFormat))
+				switch exportFormat {
+				case "excel", "attachment", "excel_and_attachment", "excel_with_inline_images":
+				default:
+					return fmt.Errorf("--export-format must be one of excel, attachment, excel_and_attachment, or excel_with_inline_images, got %q", exportFormat)
+				}
+				toolArgs["scope"] = scope
+				toolArgs["format"] = exportFormat
+				if v, _ := cmd.Flags().GetString("table-id"); v != "" {
+					toolArgs["tableId"] = v
+				}
+				if v, _ := cmd.Flags().GetString("view-id"); v != "" {
+					toolArgs["viewId"] = v
+				}
 			}
 			if v, _ := cmd.Flags().GetInt("timeout-ms"); v > 0 {
 				toolArgs["timeoutMs"] = v
@@ -3814,7 +3869,7 @@ message: "the current user must be a manager (administrator) of this base to man
 				return err
 			}
 			// 先确认 baseID 合法再进入二次确认提示，避免对无效请求弹无意义的确认。
-			if !confirmDelete("高级权限（关闭后所有自定义角色失效）", baseID) {
+			if !commandDryRun(cmd) && !confirmDelete("高级权限（关闭后所有自定义角色失效）", baseID) {
 				return nil
 			}
 			return callAitableHelperTool("set_advanced_permission", map[string]any{
@@ -4485,6 +4540,11 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
   dws aitable record list --base-id BASE_ID --table-id TABLE_ID --record-ids rec1,rec2`,
 		RunE: recordQueryCmd.RunE, // 复用 recordQueryCmd 的执行逻辑
 	}
+	cli.AnnotateRuntimeCompatibilityEquivalence(recordQueryCmd, recordListCmd, cli.RuntimeCompatibilityEquivalence{
+		ID:       "aitable.record-query-list-v1",
+		Reason:   "The compatibility leaf reuses the exact record query handler and flag surface; it only preserves the historical list spelling.",
+		Reviewed: true,
+	})
 	// 复用 recordQueryCmd 的 flags
 	copyFlags(recordQueryCmd, recordListCmd, "base-id", "base", "table-id", "record-ids", "field-ids", "filters", "sort", "query", "keyword", "limit", "cursor", "page-size", "all", "page-limit", "view-id")
 	_ = recordListCmd.Flags().MarkHidden("keyword")
@@ -4767,8 +4827,8 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	// export
 	exportDataCmd.Flags().String("base-id", "", "Base ID (必填)")
 	exportDataCmd.Flags().String("scope", "", "导出范围：all（整个 Base）、table（指定数据表）、view（指定视图）")
-	exportDataCmd.Flags().String("format", "", "导出格式：excel、attachment、excel_and_attachment、excel_with_inline_images")
-	exportDataCmd.Flags().String("task-id", "", "已有导出任务 ID，传入后继续等待（忽略 scope/format/table-id/view-id）")
+	exportDataCmd.Flags().String("export-format", "", "导出格式：excel、attachment、excel_and_attachment、excel_with_inline_images")
+	exportDataCmd.Flags().String("task-id", "", "已有导出任务 ID，传入后继续等待（不要同时提供 scope/export-format/table-id/view-id）")
 	exportDataCmd.Flags().String("table-id", "", "Table ID，scope=table 或 scope=view 时必填")
 	exportDataCmd.Flags().String("view-id", "", "View ID，scope=view 时必填")
 	exportDataCmd.Flags().Int("timeout-ms", 0, "单次等待超时（毫秒），默认 30000，最大 30000")

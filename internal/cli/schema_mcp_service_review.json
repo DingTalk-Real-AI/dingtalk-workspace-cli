@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "snapshot_source_hash": "sha256:17251f74a4f76142457cc0e87251ecb86c1e3bda0cdf2edc02f351589716ecbc",
+  "missing_services": {
+    "notify": {
+      "status": "out_of_surface",
+      "reason": "notify 不属于 reviewed CommandRegistry 的公开命令集合，且没有静态 endpoint 或受审查 RPC 快照；禁止运行时发现或推测映射"
+    }
+  }
+}
