@@ -34,26 +34,40 @@ run_step() {
   fi
 }
 
-# smoke <binary> [expected_version]
-# Runs `dws version` and, when an expected version is supplied, requires the
-# reported version to contain it. An empty expected version means the channel
-# could not resolve an authoritative version and only runs a plain smoke test.
+# smoke <binary> <expected_version>
+# Runs `dws version --format json` and requires an exact version match. Missing
+# package-manager metadata is a channel failure because it cannot prove that the
+# installed binary came from the advertised channel.
 smoke() {
-  binary="$1"
-  expected="${2:-}"
+  local binary="$1"
+  local expected="${2:-}"
+  local version_output
+  local reported
+
   test -x "$binary" || { printf 'binary not executable: %s\n' "$binary" >&2; return 1; }
-  version_output="$("$binary" version 2>&1)" || {
+  if [[ -z "$expected" ]]; then
+    printf 'expected version is empty; cannot verify channel provenance\n' >&2
+    return 1
+  fi
+
+  version_output="$("$binary" version --format json 2>&1)" || {
     printf 'dws version failed for %s\n' "$binary" >&2
     return 1
   }
   printf 'version output: %s\n' "$version_output"
-  if [[ -n "$expected" ]]; then
-    if ! printf '%s' "$version_output" | grep -Fq -- "$expected"; then
-      printf 'version mismatch: expected %s, got: %s\n' "$expected" "$version_output" >&2
-      return 1
-    fi
-  else
-    printf 'warning: no authoritative version to assert against\n' >&2
+  reported="$(
+    printf '%s\n' "$version_output" \
+      | sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"v?([^\"]+)".*/\1/p' \
+      | head -n1
+  )"
+  if [[ -z "$reported" ]]; then
+    printf 'could not parse version from: %s\n' "$version_output" >&2
+    return 1
+  fi
+  expected="${expected#v}"
+  if [[ "$reported" != "$expected" ]]; then
+    printf 'version mismatch: expected %s, got %s\n' "$expected" "$reported" >&2
+    return 1
   fi
   "$binary" --help >/dev/null
 }
