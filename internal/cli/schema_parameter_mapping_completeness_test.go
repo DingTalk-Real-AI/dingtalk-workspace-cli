@@ -81,8 +81,8 @@ func TestEmbeddedCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 			if schemaString(entry["precedence"]) != "reviewed_explicit" {
 				t.Errorf("%s local %s precedence = %q, want reviewed_explicit", canonical, field, schemaString(entry["precedence"]))
 			}
-			if source := schemaString(entry["source"]); !strings.HasSuffix(source, "internal/cli/schema_hints/selection-review.json") {
-				t.Errorf("%s local %s source = %q, want selection-review.json", canonical, field, source)
+			if source := schemaString(entry["source"]); !strings.Contains(source, "internal/cli/schema_hints/metadata/") {
+				t.Errorf("%s local %s source = %q, want metadata/", canonical, field, source)
 			}
 		}
 	}

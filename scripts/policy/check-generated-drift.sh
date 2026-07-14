@@ -11,13 +11,15 @@ cd "$ROOT"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
-# CommandRegistry and Manual Schema/Agent hints are reviewed inputs, never
-# generated artifacts. Keep independent byte-for-byte guards around the
-# ordinary downstream generators.
+# CommandRegistry is a reviewed input, never a generated artifact. Keep an
+# independent byte-for-byte guard around the ordinary downstream generators.
 registry_guard="$tmp/schema_command_registry.json"
-manual_hints_guard="$tmp/schema_manual_hints.json"
 cp internal/cli/schema_command_registry.json "$registry_guard"
-cp internal/cli/schema_manual_hints.json "$manual_hints_guard"
+# Also guard human-authored metadata + selection hint trees.
+metadata_guard="$tmp/metadata-hints"
+selection_guard="$tmp/selection-hints"
+cp -R internal/cli/schema_hints/metadata "$metadata_guard"
+cp -R internal/cli/schema_hints/selection "$selection_guard"
 
 metadata_tmp="$tmp/metadata"
 audit_tmp="$tmp/audit.json"
@@ -57,8 +59,13 @@ if ! cmp -s internal/cli/schema_command_registry.json "$registry_guard"; then
 	exit 1
 fi
 
-if ! cmp -s internal/cli/schema_manual_hints.json "$manual_hints_guard"; then
-	printf '%s\n' 'generation modified reviewed input internal/cli/schema_manual_hints.json' >&2
+if ! diff -qr internal/cli/schema_hints/metadata "$metadata_guard" >/dev/null; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/metadata' >&2
+	exit 1
+fi
+
+if ! diff -qr internal/cli/schema_hints/selection "$selection_guard" >/dev/null; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/selection' >&2
 	exit 1
 fi
 

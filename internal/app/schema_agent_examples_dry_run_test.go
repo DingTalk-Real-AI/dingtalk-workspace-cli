@@ -145,13 +145,9 @@ func manualAgentExampleShouldExerciseDryRun(execution cli.ManualAgentExampleExec
 
 func manualAgentExampleExecutionPlan(t testing.TB) cli.ManualAgentExampleExecutionPlan {
 	t.Helper()
-	data, err := os.ReadFile("../cli/schema_manual_hints.json")
+	hints, err := cli.LoadAgentHintsFromSelectionForValidation(os.DirFS("../cli/schema_hints/selection"))
 	if err != nil {
-		t.Fatalf("read reviewed Manual Agent hints: %v", err)
-	}
-	snapshot, err := cli.DecodeManualSchemaHintSource(data)
-	if err != nil {
-		t.Fatalf("DecodeManualSchemaHintSource() error = %v", err)
+		t.Fatalf("LoadAgentHintsFromSelectionForValidation() error = %v", err)
 	}
 	contractRoot := NewRootCommand()
 	if _, err := cli.ApplyEmbeddedManualSchemaHints(contractRoot); err != nil {
@@ -172,7 +168,7 @@ func manualAgentExampleExecutionPlan(t testing.TB) cli.ManualAgentExampleExecuti
 	if err := cli.ValidateReviewedDryRunCapabilityDelivery(registry); err != nil {
 		t.Fatalf("ValidateReviewedDryRunCapabilityDelivery() error = %v", err)
 	}
-	plan, err := cli.BuildManualAgentExampleExecutionPlan(bound, registry, snapshot.AgentHints)
+	plan, err := cli.BuildManualAgentExampleExecutionPlan(bound, registry, hints)
 	if err != nil {
 		t.Fatalf("BuildManualAgentExampleExecutionPlan() error = %v", err)
 	}

@@ -423,15 +423,16 @@ func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 	}
 }
 
-func TestCalendarAttendeeDeleteSchemaRequiresUserConfirmation(t *testing.T) {
+func TestCalendarAttendeeDeleteSchemaMatchesRuntimeGate(t *testing.T) {
 	root := NewRootCommand()
 	snapshot := schemaContractPayloadForBoundCanonicals(t, root, "calendar.remove_calendar_participant")
 	tool := snapshot.Tools["calendar.remove_calendar_participant"]
-	if got := tool["risk"]; got != "high" {
-		t.Fatalf("calendar attendee delete risk = %#v, want high", got)
+	// Runtime does not gate this path today; Schema confirmation must follow metadata.runtime_gate.
+	if got := tool["confirmation"]; got != "not_required" {
+		t.Fatalf("calendar attendee delete confirmation = %#v, want not_required", got)
 	}
-	if got := tool["confirmation"]; got != "user_required" {
-		t.Fatalf("calendar attendee delete confirmation = %#v, want user_required", got)
+	if got := tool["risk"]; got != "medium" {
+		t.Fatalf("calendar attendee delete risk = %#v, want medium", got)
 	}
 }
 
@@ -439,22 +440,32 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 	wantEffects := map[string]string{
 		"attendance.class_create":  "write",
 		"attendance.class_update":  "write",
-		"doc.delete_comment":       "destructive",
-		"doc.version_revert":       "destructive",
+		"doc.delete_comment":       "write",
+		"doc.version_revert":       "write",
 		"drive.publish_set":        "write",
 		"drive.publish_unset":      "write",
 		"sheet.chart_delete":       "write",
-		"sheet.delete_pivot_table": "destructive",
+		"sheet.delete_pivot_table": "write",
+	}
+	wantRisks := map[string]string{
+		"attendance.class_create":  "medium",
+		"attendance.class_update":  "medium",
+		"doc.delete_comment":       "medium",
+		"doc.version_revert":       "medium",
+		"drive.publish_set":        "medium",
+		"drive.publish_unset":      "medium",
+		"sheet.chart_delete":       "medium",
+		"sheet.delete_pivot_table": "medium",
 	}
 	wantSources := map[string]string{
-		"attendance.class_create":  "internal/cli/schema_hints/zz-attendance-review.json",
-		"attendance.class_update":  "internal/cli/schema_hints/zz-attendance-review.json",
-		"doc.delete_comment":       "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
-		"doc.version_revert":       "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
-		"drive.publish_set":        "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
-		"drive.publish_unset":      "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
-		"sheet.chart_delete":       "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
-		"sheet.delete_pivot_table": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+		"attendance.class_create":  "internal/cli/schema_hints/metadata/attendance.json",
+		"attendance.class_update":  "internal/cli/schema_hints/metadata/attendance.json",
+		"doc.delete_comment":       "internal/cli/schema_hints/metadata/doc.json",
+		"doc.version_revert":       "internal/cli/schema_hints/metadata/doc.json",
+		"drive.publish_set":        "internal/cli/schema_hints/metadata/drive.json",
+		"drive.publish_unset":      "internal/cli/schema_hints/metadata/drive.json",
+		"sheet.chart_delete":       "internal/cli/schema_hints/metadata/sheet.json",
+		"sheet.delete_pivot_table": "internal/cli/schema_hints/metadata/sheet.json",
 	}
 	canonicals := make([]string, 0, len(wantEffects))
 	for canonical := range wantEffects {
@@ -467,8 +478,8 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 		if got := tool["effect"]; got != wantEffects[canonical] {
 			t.Errorf("%s effect = %#v, want %s", canonical, got, wantEffects[canonical])
 		}
-		if got := tool["risk"]; got != "high" {
-			t.Errorf("%s risk = %#v, want high", canonical, got)
+		if got := tool["risk"]; got != wantRisks[canonical] {
+			t.Errorf("%s risk = %#v, want %s", canonical, got, wantRisks[canonical])
 		}
 		if got := tool["confirmation"]; got != "user_required" {
 			t.Errorf("%s confirmation = %#v, want user_required", canonical, got)

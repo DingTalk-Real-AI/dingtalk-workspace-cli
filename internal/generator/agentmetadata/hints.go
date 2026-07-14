@@ -36,17 +36,18 @@ type HintFile struct {
 	ReferenceReview map[string]ReferenceReview `json:"reference_review,omitempty"`
 }
 
-// HintIndex is the single human-hint entrypoint: an index plus per-product
-// HintFile paths. RuntimeGates is audit-only metadata for CI and is not applied
-// as Agent tool fields.
+// HintIndex is the human-authored entrypoint. It maps product IDs to metadata
+// (safety/interface/parameters/runtime_gate) and selection (Agent routing prose)
+// HintFile paths. Index-level runtime_gates were removed; gates live on each
+// metadata tool as runtime_gate.
 type HintIndex struct {
 	Version         int                        `json:"version"`
 	Format          string                     `json:"format"`
 	Source          HintSource                 `json:"source"`
 	Coverage        HintCoverage               `json:"coverage,omitempty"`
-	Products        map[string]string          `json:"products"`
+	Metadata        map[string]string          `json:"metadata"`
+	Selection       map[string]string          `json:"selection"`
 	ReferenceReview map[string]ReferenceReview `json:"reference_review,omitempty"`
-	RuntimeGates    map[string]string          `json:"runtime_gates,omitempty"`
 }
 
 type HintSource struct {
@@ -77,24 +78,27 @@ type HintProduct struct {
 }
 
 type HintTool struct {
-	AgentSummary           string        `json:"agent_summary,omitempty"`
-	UseWhen                []string      `json:"use_when,omitempty"`
-	AvoidWhen              []string      `json:"avoid_when,omitempty"`
-	Prerequisites          []string      `json:"prerequisites,omitempty"`
-	Tips                   []string      `json:"tips,omitempty"`
-	Effect                 string        `json:"effect,omitempty"`
-	Risk                   string        `json:"risk,omitempty"`
-	Confirmation           string        `json:"confirmation,omitempty"`
-	Idempotency            string        `json:"idempotency,omitempty"`
-	WorkflowRefs           []string      `json:"workflow_refs,omitempty"`
-	Examples               []string      `json:"examples,omitempty"`
-	Reviewed               *bool         `json:"reviewed,omitempty"`
-	ReviewReason           string        `json:"review_reason,omitempty"`
-	SourceRefs             []string      `json:"source_refs,omitempty"`
-	InterfaceRef           *InterfaceRef `json:"interface_ref,omitempty"`
-	InterfaceMode          string        `json:"interface_mode,omitempty"`
-	Availability           string        `json:"availability,omitempty"`
-	InterfaceReason        string        `json:"interface_reason,omitempty"`
+	AgentSummary           string                     `json:"agent_summary,omitempty"`
+	UseWhen                []string                   `json:"use_when,omitempty"`
+	AvoidWhen              []string                   `json:"avoid_when,omitempty"`
+	Prerequisites          []string                   `json:"prerequisites,omitempty"`
+	Tips                   []string                   `json:"tips,omitempty"`
+	Effect                 string                     `json:"effect,omitempty"`
+	Risk                   string                     `json:"risk,omitempty"`
+	Confirmation           string                     `json:"confirmation,omitempty"`
+	Idempotency            string                     `json:"idempotency,omitempty"`
+	RuntimeGate            string                     `json:"runtime_gate,omitempty"`
+	CLIPath                string                     `json:"cli_path,omitempty"`
+	Parameters             map[string]json.RawMessage `json:"parameters,omitempty"`
+	WorkflowRefs           []string                   `json:"workflow_refs,omitempty"`
+	Examples               []string                   `json:"examples,omitempty"`
+	Reviewed               *bool                      `json:"reviewed,omitempty"`
+	ReviewReason           string                     `json:"review_reason,omitempty"`
+	SourceRefs             []string                   `json:"source_refs,omitempty"`
+	InterfaceRef           *InterfaceRef              `json:"interface_ref,omitempty"`
+	InterfaceMode          string                     `json:"interface_mode,omitempty"`
+	Availability           string                     `json:"availability,omitempty"`
+	InterfaceReason        string                     `json:"interface_reason,omitempty"`
 	agentSummaryPresent    bool
 	effectPresent          bool
 	riskPresent            bool
@@ -144,14 +148,25 @@ func (hint *HintTool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type hintFileRole string
+
+const (
+	hintRoleImported  hintFileRole = "imported"
+	hintRoleMetadata  hintFileRole = "metadata"
+	hintRoleSelection hintFileRole = "selection"
+	hintRoleIndex     hintFileRole = "index"
+	hintRoleLegacy    hintFileRole = "legacy"
+)
+
 type parsedHintSource struct {
 	file sourceFile
 	hint HintFile
+	role hintFileRole
 }
 
-func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats, origins sourceTracker) error {
+func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats, origins sourceTracker) (usedSelection bool, err error) {
 	if strings.TrimSpace(opts.HintsDir) == "" {
-		return nil
+		return false, nil
 	}
 	hintsRoot := filepath.Clean(resolvePath(opts.Root, opts.HintsDir))
 	hintsPrefix := hintsRoot + string(filepath.Separator)
@@ -164,45 +179,65 @@ func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats,
 	}
 
 	indexPath := filepath.Join(hintsRoot, "index.json")
-	selected := []sourceFile{}
+	type selectedHint struct {
+		file sourceFile
+		role hintFileRole
+	}
+	selected := []selectedHint{}
 	if indexFile, ok := byPath[indexPath]; ok {
 		var index HintIndex
 		if err := json.Unmarshal(indexFile.data, &index); err != nil {
-			return fmt.Errorf("decode Agent hint index %s: %w", indexFile.display, err)
+			return false, fmt.Errorf("decode Agent hint index %s: %w", indexFile.display, err)
 		}
 		if index.Version != HintFileVersion {
-			return fmt.Errorf("decode Agent hint index %s: unsupported version %d", indexFile.display, index.Version)
+			return false, fmt.Errorf("decode Agent hint index %s: unsupported version %d", indexFile.display, index.Version)
 		}
 		if strings.TrimSpace(index.Format) != HintIndexFormat {
-			return fmt.Errorf("decode Agent hint index %s: unsupported format %q", indexFile.display, index.Format)
+			return false, fmt.Errorf("decode Agent hint index %s: unsupported format %q", indexFile.display, index.Format)
 		}
 		kind := strings.ToLower(strings.TrimSpace(index.Source.Kind))
 		if kind == "" {
 			kind = "explicit"
 		}
 		if kind != "explicit" {
-			return fmt.Errorf("decode Agent hint index %s: unsupported source kind %q", indexFile.display, index.Source.Kind)
+			return false, fmt.Errorf("decode Agent hint index %s: unsupported source kind %q", indexFile.display, index.Source.Kind)
 		}
-		productIDs := make([]string, 0, len(index.Products))
-		for productID := range index.Products {
-			productIDs = append(productIDs, productID)
+		appendMapped := func(label string, mapping map[string]string, role hintFileRole) error {
+			productIDs := make([]string, 0, len(mapping))
+			for productID := range mapping {
+				productIDs = append(productIDs, productID)
+			}
+			sort.Strings(productIDs)
+			for _, productID := range productIDs {
+				rel := strings.TrimSpace(mapping[productID])
+				if rel == "" {
+					return fmt.Errorf("decode Agent hint index %s: %s %s missing path", indexFile.display, label, productID)
+				}
+				productPath := filepath.Clean(filepath.Join(hintsRoot, filepath.FromSlash(rel)))
+				if productPath != hintsRoot && !strings.HasPrefix(productPath, hintsPrefix) {
+					return fmt.Errorf("decode Agent hint index %s: %s %s path escapes hints root", indexFile.display, label, productID)
+				}
+				file, ok := byPath[productPath]
+				if !ok {
+					return fmt.Errorf("decode Agent hint index %s: %s %s file missing: %s", indexFile.display, label, productID, rel)
+				}
+				selected = append(selected, selectedHint{file: file, role: role})
+			}
+			return nil
 		}
-		sort.Strings(productIDs)
-		for _, productID := range productIDs {
-			rel := strings.TrimSpace(index.Products[productID])
-			if rel == "" {
-				return fmt.Errorf("decode Agent hint index %s: product %s missing path", indexFile.display, productID)
-			}
-			productPath := filepath.Clean(filepath.Join(hintsRoot, filepath.FromSlash(rel)))
-			if productPath != hintsRoot && !strings.HasPrefix(productPath, hintsPrefix) {
-				return fmt.Errorf("decode Agent hint index %s: product %s path escapes hints root", indexFile.display, productID)
-			}
-			file, ok := byPath[productPath]
-			if !ok {
-				return fmt.Errorf("decode Agent hint index %s: product %s file missing: %s", indexFile.display, productID, rel)
-			}
-			selected = append(selected, file)
+		if len(index.Metadata) == 0 {
+			return false, fmt.Errorf("decode Agent hint index %s: metadata map is required", indexFile.display)
 		}
+		if len(index.Selection) == 0 {
+			return false, fmt.Errorf("decode Agent hint index %s: selection map is required", indexFile.display)
+		}
+		if err := appendMapped("metadata", index.Metadata, hintRoleMetadata); err != nil {
+			return false, err
+		}
+		if err := appendMapped("selection", index.Selection, hintRoleSelection); err != nil {
+			return false, err
+		}
+		usedSelection = true
 		importedRoot := filepath.Join(hintsRoot, "imported")
 		importedPrefix := importedRoot + string(filepath.Separator)
 		imported := []sourceFile{}
@@ -212,7 +247,11 @@ func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats,
 			}
 		}
 		sort.Slice(imported, func(i, j int) bool { return imported[i].display < imported[j].display })
-		selected = append(imported, selected...)
+		prefixed := make([]selectedHint, 0, len(imported)+len(selected))
+		for _, file := range imported {
+			prefixed = append(prefixed, selectedHint{file: file, role: hintRoleImported})
+		}
+		selected = append(prefixed, selected...)
 		if len(index.ReferenceReview) > 0 || index.Coverage != (HintCoverage{}) {
 			index.Source.Kind = kind
 			payload, err := json.Marshal(HintFile{
@@ -222,51 +261,58 @@ func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats,
 				ReferenceReview: index.ReferenceReview,
 			})
 			if err != nil {
-				return fmt.Errorf("encode Agent hint index projection %s: %w", indexFile.display, err)
+				return false, fmt.Errorf("encode Agent hint index projection %s: %w", indexFile.display, err)
 			}
-			selected = append(selected, sourceFile{
-				path:    indexPath,
-				display: indexFile.display,
-				data:    payload,
+			selected = append(selected, selectedHint{
+				file: sourceFile{
+					path:    indexPath,
+					display: indexFile.display,
+					data:    payload,
+				},
+				role: hintRoleIndex,
 			})
 		}
 	} else {
 		for _, file := range files {
 			cleaned := filepath.Clean(file.path)
 			if cleaned == hintsRoot || strings.HasPrefix(cleaned, hintsPrefix) {
-				selected = append(selected, file)
+				selected = append(selected, selectedHint{file: file, role: hintRoleLegacy})
 			}
 		}
 	}
 
 	parsed := []parsedHintSource{}
-	for _, file := range selected {
+	for _, item := range selected {
+		file := item.file
 		var hint HintFile
 		if err := json.Unmarshal(file.data, &hint); err != nil {
-			return fmt.Errorf("decode Agent hint %s: %w", file.display, err)
+			return false, fmt.Errorf("decode Agent hint %s: %w", file.display, err)
 		}
 		if hint.Version != HintFileVersion {
-			return fmt.Errorf("decode Agent hint %s: unsupported version %d", file.display, hint.Version)
+			return false, fmt.Errorf("decode Agent hint %s: unsupported version %d", file.display, hint.Version)
+		}
+		if err := validateHintFileRole(file.display, hint, item.role); err != nil {
+			return false, err
 		}
 		kind := strings.ToLower(strings.TrimSpace(hint.Source.Kind))
 		if kind == "" {
 			kind = "explicit"
 		}
 		if kind != "explicit" && kind != "imported" {
-			return fmt.Errorf("decode Agent hint %s: unsupported source kind %q", file.display, hint.Source.Kind)
+			return false, fmt.Errorf("decode Agent hint %s: unsupported source kind %q", file.display, hint.Source.Kind)
 		}
 		for path, tool := range hint.Tools {
 			tool.InterfaceMode = strings.TrimSpace(tool.InterfaceMode)
 			tool.Availability = strings.TrimSpace(tool.Availability)
 			tool.InterfaceReason = strings.TrimSpace(tool.InterfaceReason)
 			if tool.InterfaceMode == "unavailable" {
-				return fmt.Errorf("decode Agent hint %s: tool %s uses legacy interface_mode=unavailable; migrate to interface_mode=mcp, local, or composite with availability=unavailable", file.display, path)
+				return false, fmt.Errorf("decode Agent hint %s: tool %s uses legacy interface_mode=unavailable; migrate to interface_mode=mcp, local, or composite with availability=unavailable", file.display, path)
 			}
 			if tool.InterfaceMode != "" && tool.InterfaceMode != "mcp" && tool.InterfaceMode != "composite" && tool.InterfaceMode != "local" {
-				return fmt.Errorf("decode Agent hint %s: tool %s has unsupported interface_mode %q", file.display, path, tool.InterfaceMode)
+				return false, fmt.Errorf("decode Agent hint %s: tool %s has unsupported interface_mode %q", file.display, path, tool.InterfaceMode)
 			}
 			if tool.Availability != "" && tool.Availability != "available" && tool.Availability != "unavailable" {
-				return fmt.Errorf("decode Agent hint %s: tool %s has unsupported availability %q", file.display, path, tool.Availability)
+				return false, fmt.Errorf("decode Agent hint %s: tool %s has unsupported availability %q", file.display, path, tool.Availability)
 			}
 			if tool.InterfaceRef == nil {
 				hint.Tools[path] = tool
@@ -275,7 +321,7 @@ func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats,
 			tool.InterfaceRef.ProductID = strings.TrimSpace(tool.InterfaceRef.ProductID)
 			tool.InterfaceRef.RPCName = strings.TrimSpace(tool.InterfaceRef.RPCName)
 			if tool.InterfaceRef.ProductID == "" || tool.InterfaceRef.RPCName == "" {
-				return fmt.Errorf("decode Agent hint %s: tool %s has incomplete interface_ref", file.display, path)
+				return false, fmt.Errorf("decode Agent hint %s: tool %s has incomplete interface_ref", file.display, path)
 			}
 			hint.Tools[path] = tool
 		}
@@ -286,23 +332,23 @@ func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats,
 			switch status {
 			case "alias":
 				if target == "" {
-					return fmt.Errorf("decode Agent hint %s: reference %s alias is missing target", file.display, path)
+					return false, fmt.Errorf("decode Agent hint %s: reference %s alias is missing target", file.display, path)
 				}
 			case "group", "stale", "out_of_surface":
 				if target != "" {
-					return fmt.Errorf("decode Agent hint %s: reference %s status %s cannot have target", file.display, path, status)
+					return false, fmt.Errorf("decode Agent hint %s: reference %s status %s cannot have target", file.display, path, status)
 				}
 			default:
-				return fmt.Errorf("decode Agent hint %s: reference %s has unsupported status %q", file.display, path, status)
+				return false, fmt.Errorf("decode Agent hint %s: reference %s has unsupported status %q", file.display, path, status)
 			}
 			if reason == "" {
-				return fmt.Errorf("decode Agent hint %s: reference %s is missing reason", file.display, path)
+				return false, fmt.Errorf("decode Agent hint %s: reference %s is missing reason", file.display, path)
 			}
 			review.Status, review.Target, review.Reason = status, target, reason
 			hint.ReferenceReview[path] = review
 		}
 		hint.Source.Kind = kind
-		parsed = append(parsed, parsedHintSource{file: file, hint: hint})
+		parsed = append(parsed, parsedHintSource{file: file, hint: hint, role: item.role})
 	}
 	sort.Slice(parsed, func(i, j int) bool {
 		left, right := hintKindPriority(parsed[i].hint.Source.Kind), hintKindPriority(parsed[j].hint.Source.Kind)
@@ -313,10 +359,66 @@ func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats,
 	})
 	for _, source := range parsed {
 		if err := applyHintSource(out, source, stats, origins); err != nil {
-			return err
+			return false, err
+		}
+	}
+	return usedSelection, nil
+}
+
+func validateHintFileRole(display string, hint HintFile, role hintFileRole) error {
+	switch role {
+	case hintRoleMetadata:
+		for path, tool := range hint.Tools {
+			if hasSelectionOnlyFields(tool) {
+				return fmt.Errorf("decode Agent hint %s: metadata tool %s must not carry selection fields", display, path)
+			}
+			gate := strings.TrimSpace(tool.RuntimeGate)
+			if gate != "" && gate != "none" && gate != "confirm_delete" && gate != "typed_yes" && gate != "confirm_dangerous" {
+				return fmt.Errorf("decode Agent hint %s: tool %s has unsupported runtime_gate %q", display, path, gate)
+			}
+			conf := strings.TrimSpace(tool.Confirmation)
+			if gate != "" && gate != "none" && conf != "" && conf != "user_required" {
+				return fmt.Errorf("decode Agent hint %s: tool %s runtime_gate=%s requires confirmation=user_required", display, path, gate)
+			}
+			if (gate == "" || gate == "none") && conf == "user_required" {
+				return fmt.Errorf("decode Agent hint %s: tool %s confirmation=user_required requires runtime_gate != none", display, path)
+			}
+		}
+		for path := range hint.Products {
+			return fmt.Errorf("decode Agent hint %s: metadata file must not carry products routing block (%s)", display, path)
+		}
+	case hintRoleSelection:
+		for path, tool := range hint.Tools {
+			if hasMetadataOnlyFields(tool) {
+				return fmt.Errorf("decode Agent hint %s: selection tool %s must not carry metadata fields", display, path)
+			}
 		}
 	}
 	return nil
+}
+
+func hasSelectionOnlyFields(tool HintTool) bool {
+	return scalarIsPresent(tool.AgentSummary, tool.agentSummaryPresent) ||
+		tool.UseWhen != nil ||
+		tool.AvoidWhen != nil ||
+		tool.Examples != nil ||
+		tool.Prerequisites != nil ||
+		tool.Tips != nil ||
+		tool.WorkflowRefs != nil
+}
+
+func hasMetadataOnlyFields(tool HintTool) bool {
+	return scalarIsPresent(tool.Effect, tool.effectPresent) ||
+		scalarIsPresent(tool.Risk, tool.riskPresent) ||
+		scalarIsPresent(tool.Confirmation, tool.confirmationPresent) ||
+		scalarIsPresent(tool.Idempotency, tool.idempotencyPresent) ||
+		strings.TrimSpace(tool.RuntimeGate) != "" ||
+		len(tool.Parameters) > 0 ||
+		strings.TrimSpace(tool.CLIPath) != "" ||
+		tool.InterfaceRef != nil || tool.interfaceRefPresent ||
+		scalarIsPresent(tool.InterfaceMode, tool.interfaceModePresent) ||
+		scalarIsPresent(tool.Availability, tool.availabilityPresent) ||
+		scalarIsPresent(tool.InterfaceReason, tool.interfaceReasonPresent)
 }
 
 func hintKindPriority(kind string) int {
@@ -516,6 +618,8 @@ func hasAgentHintFields(hint HintTool) bool {
 		scalarIsPresent(hint.Risk, hint.riskPresent) ||
 		scalarIsPresent(hint.Confirmation, hint.confirmationPresent) ||
 		scalarIsPresent(hint.Idempotency, hint.idempotencyPresent) ||
+		strings.TrimSpace(hint.RuntimeGate) != "" ||
+		len(hint.Parameters) > 0 ||
 		hint.WorkflowRefs != nil ||
 		hint.Examples != nil ||
 		hint.Reviewed != nil ||

@@ -368,8 +368,8 @@ var (
 )
 
 func Generate(opts Options) (File, Stats, error) {
-	if strings.TrimSpace(opts.ManualHintsPath) == "" {
-		return File{}, Stats{}, fmt.Errorf("manual Agent hint source is required")
+	if strings.TrimSpace(opts.HintsDir) == "" {
+		return File{}, Stats{}, fmt.Errorf("Agent hint directory is required")
 	}
 	if len(opts.CanonicalToolPaths) == 0 || len(opts.ToolPaths) == 0 || len(opts.ProductIDs) == 0 {
 		return File{}, Stats{}, fmt.Errorf("complete Effective CommandRegistry projection is required")
@@ -381,8 +381,8 @@ func Generate(opts Options) (File, Stats, error) {
 }
 
 // generateFromSources retains the lower-precedence evidence parsers as a
-// package-internal seam for focused tests. Production callers must use
-// Generate, which requires the reviewed Manual Agent Hint delivery source.
+// package-internal seam for focused tests. Production callers must use Generate,
+// which requires the reviewed selection + metadata hint sources under HintsDir.
 func generateFromSources(opts Options) (File, Stats, error) {
 	if opts.Root == "" {
 		opts.Root = "."
@@ -408,9 +408,6 @@ func generateFromSources(opts Options) (File, Stats, error) {
 	}
 	stats := Stats{SourceFiles: len(files), referenceReviews: map[string]ReferenceReview{}}
 	origins := sourceTracker{}
-	if err := applyManualAgentHintSource(&out, byDisplay, opts, &stats); err != nil {
-		return File{}, Stats{}, err
-	}
 
 	skillDisplay := displayPath(opts.Root, resolvePath(opts.Root, opts.SkillPath))
 	if skill, ok := byDisplay[skillDisplay]; ok {
@@ -454,8 +451,14 @@ func generateFromSources(opts Options) (File, Stats, error) {
 			return File{}, Stats{}, err
 		}
 	}
-	if err := parseHintSources(&out, files, opts, &stats, origins); err != nil {
+	usedSelection, err := parseHintSources(&out, files, opts, &stats, origins)
+	if err != nil {
 		return File{}, Stats{}, err
+	}
+	if usedSelection {
+		if err := validateSelectionAuthoringContracts(opts); err != nil {
+			return File{}, Stats{}, err
+		}
 	}
 	if err := applyInterfaceMetadataFallback(&out, byDisplay, opts, &stats, origins); err != nil {
 		return File{}, Stats{}, err
@@ -485,15 +488,15 @@ func generateFromSources(opts Options) (File, Stats, error) {
 	if err := validateEffectiveToolProjection(out, opts); err != nil {
 		return File{}, Stats{}, err
 	}
-	if strings.TrimSpace(opts.ManualHintsPath) != "" {
-		retainReviewedManualSelectionCandidates(&out)
+	if usedSelection {
+		retainReviewedSelectionCandidates(&out)
 	}
 	normalizeFile(&out, opts.MaxExamples)
 	if err := validateToolFieldCandidateConflicts(out); err != nil {
 		return File{}, Stats{}, err
 	}
-	if strings.TrimSpace(opts.ManualHintsPath) != "" {
-		if err := validateReviewedManualSelectionDelivery(out, opts); err != nil {
+	if usedSelection {
+		if err := validateReviewedSelectionDelivery(out, opts); err != nil {
 			return File{}, Stats{}, err
 		}
 	}

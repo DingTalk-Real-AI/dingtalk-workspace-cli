@@ -1,0 +1,459 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/calendar",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "calendar.add_attachments": {
+      "agent_summary": "为日程添加附件",
+      "use_when": [
+        "已知 eventId，已有钉盘 fileId，需要为日程添加附件时（订阅日历日程不支持）"
+      ],
+      "avoid_when": [
+        "尚未上传钉盘文件取得 fileId 时不要调用",
+        "只需查询日程时改用 dws calendar event get"
+      ],
+      "examples": [
+        "dws calendar attachment add --event <EVENT_ID> --files <FILE_ID>:report.pdf,<FILE_ID2>:slides.pptx",
+        "dws calendar attachment add --event <EVENT_ID> --files <FILE_ID>:report.pdf --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar attachment add --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.add_attachments"
+      ]
+    },
+    "calendar.add_calendar_participant": {
+      "agent_summary": "添加日程参与人",
+      "use_when": [
+        "已知 eventId，需要向已有日程批量添加参会人时（订阅日历日程无参会人）"
+      ],
+      "avoid_when": [
+        "要查看参会人时改用 dws calendar attendee list",
+        "要移除参会人时改用 dws calendar attendee delete"
+      ],
+      "examples": [
+        "dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID_1>,<USER_ID_2>",
+        "dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID> --optional"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar attendee add --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.add_calendar_participant"
+      ]
+    },
+    "calendar.add_meeting_room": {
+      "agent_summary": "为日程预订会议室",
+      "use_when": [
+        "已知 eventId 与 roomId，需要为已有日程预订线下会议室时"
+      ],
+      "avoid_when": [
+        "要搜索空闲会议室时先用 dws calendar room search",
+        "要取消会议室预订时改用 dws calendar room delete"
+      ],
+      "examples": [
+        "dws calendar room add --event <EVENT_ID> --rooms <ROOM_ID>",
+        "dws calendar room add --event <EVENT_ID> --rooms <ROOM_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar room add --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.add_meeting_room"
+      ]
+    },
+    "calendar.create_calendar_event": {
+      "agent_summary": "创建日程",
+      "use_when": [
+        "需要创建新日程（时间、可选参会人/提醒/会议室/循环规则）并提取 eventId 时"
+      ],
+      "avoid_when": [
+        "只需查询日程列表或详情时改用 event list/get",
+        "只改已有日程字段时改用 event update；改参会人/会议室用 attendee/room 命令"
+      ],
+      "examples": [
+        "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+        "dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar event create --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.create_calendar_event"
+      ]
+    },
+    "calendar.delete_calendar_event": {
+      "agent_summary": "删除指定日程",
+      "use_when": [
+        "用户明确要求删除/取消指定日程，且 eventId 已确认时（组织者删除会通知所有参与者）"
+      ],
+      "avoid_when": [
+        "只需从自己日历移除参与身份且非组织者场景需区分影响范围",
+        "目标 eventId 未确认或仍需保留日程时不要删除"
+      ],
+      "examples": [
+        "dws calendar event delete --id <id>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar event delete --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.delete_calendar_event"
+      ]
+    },
+    "calendar.delete_meeting_room": {
+      "agent_summary": "移除日程中的会议室",
+      "use_when": [
+        "已知 eventId 与 roomId，需要取消日程会议室预订并释放占用时"
+      ],
+      "avoid_when": [
+        "要新增预订时改用 dws calendar room add",
+        "eventId/roomId 未确认时不要移除"
+      ],
+      "examples": [
+        "dws calendar room delete --event <event> --rooms <rooms>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar room delete --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.delete_meeting_room"
+      ]
+    },
+    "calendar.get_calendar": {
+      "agent_summary": "查询指定日历信息",
+      "use_when": [
+        "已知日历 id（主日历固定 primary），需要查询该日历本信息时"
+      ],
+      "avoid_when": [
+        "要列全部日历时改用 dws calendar book list",
+        "要按名称搜索日历本时改用 dws calendar book search"
+      ],
+      "examples": [
+        "dws calendar book get --id primary",
+        "dws calendar book get --id CALENDAR_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar book get --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.get_calendar"
+      ]
+    },
+    "calendar.get_calendar_detail": {
+      "agent_summary": "查询日程详情",
+      "use_when": [
+        "已知 eventId，需要查看日程明细时"
+      ],
+      "avoid_when": [
+        "要按时间查列表时改用 dws calendar event list",
+        "要创建/删除时改用 create/delete"
+      ],
+      "examples": [
+        "dws calendar event get --id <EVENT_ID>",
+        "dws calendar event get --id <EVENT_ID> --calendar-id primary"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar event get --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.get_calendar_detail"
+      ]
+    },
+    "calendar.get_calendar_participants": {
+      "agent_summary": "获取日程参与人",
+      "use_when": [
+        "已知 eventId，需要查看参会人列表及状态时（订阅日历日程无参会人）"
+      ],
+      "avoid_when": [
+        "要添加/移除参会人时改用 attendee add/delete"
+      ],
+      "examples": [
+        "dws calendar attendee list --event <EVENT_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar attendee list --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.get_calendar_participants"
+      ]
+    },
+    "calendar.list_acls": {
+      "agent_summary": "查询主日历访问控制列表",
+      "use_when": [
+        "需要查看主日历共享给了谁、各自权限时（不是日历本列表）"
+      ],
+      "avoid_when": [
+        "要列日历本时改用 dws calendar book list"
+      ],
+      "examples": [
+        "dws calendar acl list"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar acl list --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.list_acls"
+      ]
+    },
+    "calendar.list_calendar_events": {
+      "agent_summary": "查询当前用户日程列表",
+      "use_when": [
+        "需要按起止时间检索指定日历本下的日程列表时（未传起止默认查当天）"
+      ],
+      "avoid_when": [
+        "已知 eventId 要详情时改用 dws calendar event get",
+        "要创建日程时改用 dws calendar event create"
+      ],
+      "examples": [
+        "dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+        "dws calendar event list --calendar-id primary"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar event list --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.list_calendar_events"
+      ]
+    },
+    "calendar.list_calendars": {
+      "agent_summary": "查询用户日历列表",
+      "use_when": [
+        "需要列出自己的、已订阅的、他人共享的日历本（主日历 id=primary）时"
+      ],
+      "avoid_when": [
+        "已知日历 id 要详情时改用 dws calendar book get",
+        "要按名称模糊搜索时改用 dws calendar book search"
+      ],
+      "examples": [
+        "dws calendar book list"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar book list --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.list_calendars"
+      ]
+    },
+    "calendar.list_meeting_room_groups": {
+      "agent_summary": "查询会议室分组列表",
+      "use_when": [
+        "需要分页查看企业会议室分组（groupId/parentId）时"
+      ],
+      "avoid_when": [
+        "要搜空闲会议室时改用 dws calendar room search"
+      ],
+      "examples": [
+        "dws calendar room list-groups",
+        "dws calendar room list-groups --limit 20 --page 0"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar room list-groups --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.list_meeting_room_groups"
+      ]
+    },
+    "calendar.list_suggested_event_times": {
+      "agent_summary": "建议日程时间",
+      "use_when": [
+        "时间未定，需要基于参会人闲忙推荐可用时间块时"
+      ],
+      "avoid_when": [
+        "时间已确定只需创建日程时改用 event create",
+        "只查闲忙片段时改用 busy search"
+      ],
+      "examples": [
+        "dws calendar event suggest --users userId1,userId2 --duration 60",
+        "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar event suggest --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.list_suggested_event_times"
+      ]
+    },
+    "calendar.query_available_meeting_room": {
+      "agent_summary": "查询空闲或按名搜索会议室",
+      "use_when": [
+        "需要按名称模糊搜会议室，或按时间段查询全程空闲且可预订的会议室时"
+      ],
+      "avoid_when": [
+        "要完成预订时在取得 roomId 后改用 room add",
+        "只要会议室分组时改用 room list-groups"
+      ],
+      "examples": [
+        "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+        "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --group-id <GROUP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar room search --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.query_available_meeting_room"
+      ]
+    },
+    "calendar.query_busy_status": {
+      "agent_summary": "查询用户或会议室闲忙",
+      "use_when": [
+        "需要查询指定用户和/或会议室在时间范围内的已占用时段时（users 与 rooms 至少其一）"
+      ],
+      "avoid_when": [
+        "需要创建或改日程时不要使用；本命令只返回闲忙时间片段"
+      ],
+      "examples": [
+        "dws calendar busy search --users <USER_ID_1>,<USER_ID_2> --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+        "dws calendar busy search --rooms <ROOM_ID_1>,<ROOM_ID_2> --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar busy search --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.query_busy_status"
+      ]
+    },
+    "calendar.remove_calendar_participant": {
+      "agent_summary": "删除日程参与人",
+      "use_when": [
+        "已知 eventId，需要从日程批量移除参会人时（订阅日历日程无参会人）"
+      ],
+      "avoid_when": [
+        "要添加参会人时改用 attendee add",
+        "要查看参会人时改用 attendee list"
+      ],
+      "examples": [
+        "dws calendar attendee delete --attendees <attendees> --event <event>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar attendee delete --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.remove_calendar_participant"
+      ]
+    },
+    "calendar.respond": {
+      "agent_summary": "响应日程",
+      "use_when": [
+        "作为参会人需要设置自己的响应状态（accepted/declined/tentative）时"
+      ],
+      "avoid_when": [
+        "是组织者要改日程内容时改用 event update",
+        "订阅日历日程不可响应"
+      ],
+      "examples": [
+        "dws calendar event respond --id <EVENT_ID> --status accepted",
+        "dws calendar event respond --id <EVENT_ID> --status declined"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar event respond --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.respond"
+      ]
+    },
+    "calendar.search_calendar": {
+      "agent_summary": "搜索日历本列表",
+      "use_when": [
+        "需要按日历本名模糊搜索当前用户拥有的日历本时"
+      ],
+      "avoid_when": [
+        "要获取全部日历时改用 dws calendar book list",
+        "已知 id 要详情时改用 book get"
+      ],
+      "examples": [
+        "dws calendar book search --query \"项目\"",
+        "dws calendar book search --query \"团队周报\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar book search --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.search_calendar"
+      ]
+    },
+    "calendar.update_calendar_event": {
+      "agent_summary": "修改日程",
+      "use_when": [
+        "已知 eventId 且具备组织者权限，需要修改标题、时间、地点、描述等字段时"
+      ],
+      "avoid_when": [
+        "改参会人请用 attendee add/delete；改会议室请用 room add/delete",
+        "目标字段未确认时不要更新"
+      ],
+      "examples": [
+        "dws calendar event update --id <EVENT_ID> --title \"新标题\"",
+        "dws calendar event update --id <EVENT_ID> --desc \"新描述\" --timezone Asia/Tokyo"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "Cobra help: dws calendar event update --help",
+        "skills/mono/references/products/calendar.md",
+        "live-dws-schema:calendar.update_calendar_event"
+      ]
+    }
+  },
+  "products": {
+    "calendar": {
+      "agent_summary": "管理日历本、日程、参与人、附件、会议室，并查询人员或会议室闲忙状态。",
+      "use_when": [
+        "需要查询或管理钉钉日历、日程、参与人、会议室和闲忙信息时。"
+      ],
+      "avoid_when": [
+        "目标是聊天消息、待办或审批，而不是日历与日程资源时。"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 Calendar 参考文档明确命令选择边界并校验示例。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "skills/mono/references/products/calendar.md"
+      ]
+    }
+  }
+}

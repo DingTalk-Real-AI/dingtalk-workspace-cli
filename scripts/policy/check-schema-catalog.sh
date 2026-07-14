@@ -134,7 +134,7 @@ if ! jq -e --arg registry_count "$registry_count" '
 	 elif .interface_mode == "composite" then
 	  .interface_ref == null and ((.interface_reason // "") | length) > 0
 	 else false end) and
-	(((.agent_source_refs // []) | index("internal/cli/schema_manual_hints.json")) != null)
+	(((.agent_source_refs // []) | map(test("schema_hints/selection/")) | any))
   )
 ' internal/cli/schema_catalog.json >/dev/null; then
 	printf '%s\n' 'schema tools must have complete Agent summary/effect/safety metadata' >&2

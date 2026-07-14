@@ -30,16 +30,12 @@ func TestManualAgentSelectionScenariosCoverEveryExecutableSchemaTool(t *testing.
 	if err != nil {
 		t.Fatalf("BindEffectiveCommandRegistry() error = %v", err)
 	}
-	data, err := os.ReadFile("../cli/schema_manual_hints.json")
+	hints, err := cli.LoadAgentHintsFromSelectionForValidation(os.DirFS("../cli/schema_hints/selection"))
 	if err != nil {
-		t.Fatalf("read reviewed Manual Agent hints: %v", err)
-	}
-	snapshot, err := cli.DecodeManualSchemaHintSource(data)
-	if err != nil {
-		t.Fatalf("DecodeManualSchemaHintSource() error = %v", err)
+		t.Fatalf("LoadAgentHintsFromSelectionForValidation() error = %v", err)
 	}
 
-	fixture, report, err := cli.BuildManualAgentSelectionEvalFixture(bound, snapshot.AgentHints)
+	fixture, report, err := cli.BuildManualAgentSelectionEvalFixture(bound, hints)
 	if err != nil {
 		t.Fatalf("BuildManualAgentSelectionEvalFixture() error = %v", err)
 	}

@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/live",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "live.get_my_lives": {
+      "agent_summary": "查看当前用户发起的直播列表与基础统计",
+      "use_when": [
+        "用户要看自己发起过的直播、状态或观看量等列表信息"
+      ],
+      "avoid_when": [
+        "需要创建/开播/结束直播时不要使用；当前公开面仅列表查询"
+      ],
+      "examples": [
+        "dws live stream list"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=live.get_my_lives",
+        "cobra-help:dws live stream list",
+        "Skill:skills/multi/dingtalk-live/SKILL.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#live.get_my_lives",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#live.get_my_lives",
+        "internal/cli/schema_command_registry.json#live.get_my_lives",
+        "skills/mono/references/products/live.md",
+        "live-dws-schema:live.get_my_lives"
+      ]
+    }
+  },
+  "products": {
+    "live": {
+      "agent_summary": "查询当前用户发起的直播列表",
+      "use_when": [
+        "用户要查看自己的直播列表或基础统计"
+      ],
+      "avoid_when": [
+        "当前公开面不支持创建/控制直播"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:product=live",
+        "Skill:skills/multi/dingtalk-live/SKILL.md",
+        "Skill:skills/mono/references/products/live.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

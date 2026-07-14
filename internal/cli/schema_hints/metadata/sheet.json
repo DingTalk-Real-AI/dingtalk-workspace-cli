@@ -1,0 +1,691 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/sheet",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "sheet.add_dimension": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.append_rows": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.batch_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.chart_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "sheet.chart_delete": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.chart_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "sheet.chart_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "sheet.clear_range": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.copy_sheet": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.create_cond_format": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.create_filter": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.create_filter_view": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.create_float_image": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.create_pivot_table": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "properties": {
+          "interface_type": "object"
+        }
+      },
+      "review_reason": "Preserve the reviewed CLI-to-interface conversion: --properties accepts inline JSON or @file text and is validated and decoded to the create_pivot_table properties object.",
+      "cli_path": "sheet pivot-table create",
+      "runtime_gate": "none"
+    },
+    "sheet.create_sheet": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.create_workspace_sheet": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.delete_cond_format": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.delete_dimension": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.delete_dropdown_lists": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.delete_filter": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.delete_filter_view": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.delete_float_image": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.delete_pivot_table": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.delete_sheet": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.fill_range": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.filter_clear_criteria": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "clear_filter_criteria"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.filter_view_delete_criteria": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "clear_filter_view_criteria"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.filter_view_get_criteria": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_filter_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.filter_view_info": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_filter_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.filter_view_list_criteria": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_filter_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.filter_view_update_criteria": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "sheet.find_cells": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.get_all_sheets": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.get_cond_format": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.get_dropdown_lists": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.get_filter": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.get_filter_views": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.get_float_image": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.get_range_as_csv": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.group_dimension": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "sheet.hide_gridline": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "sheet.info": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.insert_dimension": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.list_float_images": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.list_pivot_tables": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "sheet.media_upload": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+      "reviewed": true
+    },
+    "sheet.merge_cells": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.move_dimension": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.range_batch_clear": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.range_batch_set_style": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI reads a local batch file and performs multiple sheet/update_range calls with local continue-on-error control; the workflow has no single direct MCP interface.",
+      "reviewed": true
+    },
+    "sheet.range_copy_to": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "copy_range"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.range_move_to": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "move_range"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "sheet.range_read": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls sheet/get_cell_infos, which is absent from the pinned MCP metadata snapshot; the incompatible sheet/get_range contract must not be advertised.",
+      "reviewed": true
+    },
+    "sheet.range_set_style": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "update_range"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.range_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.replace_all": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.set_dropdown_lists": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.set_range_from_csv": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.show_gridline": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "sheet.sort_filter": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.sort_range": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.submit_export_job": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.table_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "sheet.table_put": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "sheets": {
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "Preserve the reviewed CLI-to-interface conversion: --sheets accepts inline JSON, @file, or stdin and is normalized to the table_put sheets array.",
+      "cli_path": "sheet table-put",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "sheet.template_apply": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "sheet.template_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "sheet.template_search": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "sheet.ungroup_dimension": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "sheet.unmerge_range": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.update_cond_format": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.update_dimension": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.update_filter": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.update_filter_view": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.update_float_image": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.update_pivot_table": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "properties": {
+          "interface_type": "object"
+        }
+      },
+      "review_reason": "Preserve the reviewed CLI-to-interface conversion: --properties accepts inline JSON or @file text and is validated and decoded to the update_pivot_table properties object.",
+      "cli_path": "sheet pivot-table update",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "sheet.update_sheet": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "sheet.write_image": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

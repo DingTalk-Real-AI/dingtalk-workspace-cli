@@ -9,187 +9,59 @@ package agentmetadata
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
-var reviewedManualSelectionFields = map[string]bool{
+var reviewedSelectionFields = map[string]bool{
 	"agent_summary": true,
 	"use_when":      true,
 	"avoid_when":    true,
 	"examples":      true,
 }
 
-// applyManualAgentHintSource selects the committed manual prose before lower
-// precedence evidence is parsed. Later Skill, structured-hint, and MCP prose
-// can therefore remain visible to audits without becoming a second delivery
-// source. This function only reads the sourceFile already loaded by Generate.
-func applyManualAgentHintSource(out *File, files map[string]sourceFile, opts Options, stats *Stats) error {
-	if strings.TrimSpace(opts.ManualHintsPath) == "" {
-		return nil
-	}
-	path := resolvePath(opts.Root, opts.ManualHintsPath)
-	display := displayPath(opts.Root, path)
-	file, ok := files[display]
-	if !ok {
-		return fmt.Errorf("manual Agent hint source %s was not loaded", display)
-	}
-	snapshot, err := cli.DecodeManualSchemaHintSource(file.data)
-	if err != nil {
-		return fmt.Errorf("decode manual Agent hint source %s: %w", display, err)
-	}
-	expectedTools := expectedCanonicalToolSet(opts)
-	if err := cli.ValidateManualAgentHintSet(snapshot.AgentHints, opts.ProductIDs, expectedTools); err != nil {
-		return fmt.Errorf("validate manual Agent hint source %s: %w", display, err)
-	}
-	if err := cli.ValidateManualAgentHintExamples(opts.BoundCommands, snapshot.AgentHints); err != nil {
-		return fmt.Errorf("validate manual Agent hint examples from %s: %w", display, err)
-	}
-	if _, err := cli.ValidateManualAgentSelectionContract(opts.BoundCommands, snapshot.AgentHints); err != nil {
-		return fmt.Errorf("validate manual Agent selection contract from %s: %w", display, err)
-	}
-
-	productIDs := make([]string, 0, len(snapshot.AgentHints.Products))
-	for productID := range snapshot.AgentHints.Products {
-		productIDs = append(productIDs, productID)
-	}
-	sort.Strings(productIDs)
-	for _, productID := range productIDs {
-		hint := snapshot.AgentHints.Products[productID]
-		source := manualAgentHintSource(display, hint.Revision)
-		metadata := out.Products[productID]
-		metadata.AgentSummary = strings.TrimSpace(hint.AgentSummary)
-		metadata.agentSummaryPresent = true
-		metadata.agentSummaryRank = selectionRankReviewedManual
-		metadata.agentSummaryOrigin = source
-		metadata.AgentSummarySource = source
-		metadata.UseWhen = normalizeAuthoredStrings(hint.UseWhen)
-		metadata.useWhenPresent = true
-		metadata.useWhenRank = selectionRankReviewedManual
-		metadata.useWhenOrigin = source
-		metadata.AvoidWhen = normalizeAuthoredStrings(hint.AvoidWhen)
-		metadata.avoidWhenPresent = true
-		metadata.avoidWhenRank = selectionRankReviewedManual
-		metadata.avoidWhenOrigin = source
-		recordProductStringCandidate(&metadata, "agent_summary", metadata.AgentSummary, true, selectionRankReviewedManual, source)
-		recordProductListCandidate(&metadata, "use_when", metadata.UseWhen, true, selectionRankReviewedManual, source)
-		recordProductListCandidate(&metadata, "avoid_when", metadata.AvoidWhen, true, selectionRankReviewedManual, source)
-		metadata.SourceRefs = normalizedStrings(append(append(metadata.SourceRefs, display), hint.Evidence...))
-		out.Products[productID] = metadata
-		stats.HintProducts++
-	}
-
-	canonicalPaths := make([]string, 0, len(snapshot.AgentHints.Tools))
-	for canonical := range snapshot.AgentHints.Tools {
-		canonicalPaths = append(canonicalPaths, canonical)
-	}
-	sort.Strings(canonicalPaths)
-	for _, canonical := range canonicalPaths {
-		hint := snapshot.AgentHints.Tools[canonical]
-		if opts.MaxExamples > 0 && len(hint.Examples) > opts.MaxExamples {
-			return fmt.Errorf("manual Agent hint %s has %d reviewed examples, exceeding max-examples=%d", canonical, len(hint.Examples), opts.MaxExamples)
-		}
-		source := manualAgentHintSource(display, hint.Revision)
-		metadata := out.Tools[canonical]
-		metadata.AgentSummary = strings.TrimSpace(hint.AgentSummary)
-		metadata.agentSummaryPresent = true
-		metadata.agentSummaryRank = selectionRankReviewedManual
-		metadata.agentSummaryOrigin = source
-		metadata.AgentSummarySource = source
-		metadata.UseWhen = normalizeAuthoredStrings(hint.UseWhen)
-		metadata.useWhenPresent = true
-		metadata.useWhenRank = selectionRankReviewedManual
-		metadata.useWhenOrigin = source
-		metadata.AvoidWhen = normalizeAuthoredStrings(hint.AvoidWhen)
-		metadata.avoidWhenPresent = true
-		metadata.avoidWhenRank = selectionRankReviewedManual
-		metadata.avoidWhenOrigin = source
-		metadata.Examples = normalizeAuthoredStrings(hint.Examples)
-		metadata.examplesPresent = true
-		metadata.examplesRank = selectionRankReviewedManual
-		metadata.examplesOrigin = source
-		for field, value := range map[string]any{
-			"agent_summary": metadata.AgentSummary,
-			"use_when":      metadata.UseWhen,
-			"avoid_when":    metadata.AvoidWhen,
-			"examples":      metadata.Examples,
-		} {
-			recordTypedFieldCandidateValue(&metadata, field, value, true, selectionRankReviewedManual, source, hint.Reason)
-		}
-		reviewed := true
-		metadata.Reviewed = &reviewed
-		metadata.reviewedRank = selectionRankReviewedManual
-		metadata.reviewedOrigin = source
-		recordTypedFieldCandidateValue(&metadata, "reviewed", true, true, selectionRankReviewedManual, source, hint.Reason)
-		metadata.SourceRefs = normalizedStrings(append(append(metadata.SourceRefs, display), hint.Evidence...))
-		out.Tools[canonical] = metadata
-		stats.HintTools++
-	}
-	stats.HintFiles++
-	return nil
-}
-
-func manualAgentHintSource(display, revision string) string {
-	return strings.TrimSpace(display) + "#agent_hints@" + strings.TrimSpace(revision)
-}
-
-func expectedCanonicalToolSet(opts Options) map[string]bool {
-	if len(opts.CanonicalToolPaths) > 0 {
-		expected := make(map[string]bool, len(opts.CanonicalToolPaths))
-		for canonical := range opts.CanonicalToolPaths {
-			if canonical = strings.TrimSpace(canonical); canonical != "" {
-				expected[canonical] = true
-			}
-		}
-		return expected
-	}
-	if len(opts.ToolPaths) == 0 {
-		return nil
-	}
-	expected := map[string]bool{}
-	for path := range opts.ToolPaths {
-		path = strings.TrimSpace(path)
-		if !strings.ContainsAny(path, " \t") && strings.Contains(path, ".") {
-			expected[path] = true
-		}
-	}
-	return expected
-}
-
-// retainReviewedManualSelectionCandidates removes legacy prose from the
-// precedence candidate set. The source references remain for evidence/audit,
-// while only the versioned manual values can be delivered for these fields.
-func retainReviewedManualSelectionCandidates(file *File) {
+// retainReviewedSelectionCandidates keeps only reviewed_explicit candidates for
+// Agent selection fields so metadata/skill/MCP prose cannot win after selection
+// files have been applied.
+func retainReviewedSelectionCandidates(file *File) {
 	if file == nil {
 		return
 	}
 	for productID, metadata := range file.Products {
+		if metadata.fieldCandidates == nil {
+			metadata.fieldCandidates = map[string][]FieldCandidateProvenance{}
+		}
 		for _, field := range []string{"agent_summary", "use_when", "avoid_when"} {
-			metadata.fieldCandidates[field] = onlyReviewedManualCandidates(metadata.fieldCandidates[field])
+			metadata.fieldCandidates[field] = onlyReviewedExplicitCandidates(metadata.fieldCandidates[field])
 		}
 		file.Products[productID] = metadata
 	}
 	for path, metadata := range file.Tools {
-		for field := range reviewedManualSelectionFields {
-			metadata.fieldCandidates[field] = onlyReviewedManualCandidates(metadata.fieldCandidates[field])
+		if metadata.fieldCandidates == nil {
+			metadata.fieldCandidates = map[string][]FieldCandidateProvenance{}
+		}
+		for field := range reviewedSelectionFields {
+			metadata.fieldCandidates[field] = onlyReviewedExplicitCandidates(metadata.fieldCandidates[field])
 		}
 		file.Tools[path] = metadata
 	}
 }
 
-func onlyReviewedManualCandidates(candidates []FieldCandidateProvenance) []FieldCandidateProvenance {
+func onlyReviewedExplicitCandidates(candidates []FieldCandidateProvenance) []FieldCandidateProvenance {
 	selected := make([]FieldCandidateProvenance, 0, len(candidates))
 	for _, candidate := range candidates {
-		if precedenceRank(candidate.Precedence) == selectionRankReviewedManual {
+		if precedenceRank(candidate.Precedence) == selectionRankReviewedExplicit {
 			selected = append(selected, candidate)
 		}
 	}
 	return selected
 }
 
-func validateReviewedManualSelectionDelivery(file File, opts Options) error {
+func validateReviewedSelectionDelivery(file File, opts Options) error {
 	problems := []string{}
 	productIDs := sortedBoolKeys(opts.ProductIDs)
 	for _, productID := range productIDs {
@@ -198,19 +70,22 @@ func validateReviewedManualSelectionDelivery(file File, opts Options) error {
 			problems = append(problems, "missing product "+productID)
 			continue
 		}
-		if strings.TrimSpace(metadata.AgentSummary) == "" || metadata.agentSummaryRank != selectionRankReviewedManual {
-			problems = append(problems, productID+" agent_summary is not reviewed_manual")
+		if strings.TrimSpace(metadata.AgentSummary) == "" || metadata.agentSummaryRank != selectionRankReviewedExplicit {
+			problems = append(problems, productID+" agent_summary is not reviewed_explicit")
 		}
-		if len(metadata.UseWhen) == 0 || metadata.useWhenRank != selectionRankReviewedManual {
-			problems = append(problems, productID+" use_when is not reviewed_manual")
+		if len(metadata.UseWhen) == 0 || metadata.useWhenRank != selectionRankReviewedExplicit {
+			problems = append(problems, productID+" use_when is not reviewed_explicit")
 		}
-		if len(metadata.AvoidWhen) == 0 || metadata.avoidWhenRank != selectionRankReviewedManual {
-			problems = append(problems, productID+" avoid_when is not reviewed_manual")
+		if len(metadata.AvoidWhen) == 0 || metadata.avoidWhenRank != selectionRankReviewedExplicit {
+			problems = append(problems, productID+" avoid_when is not reviewed_explicit")
 		}
 		for _, field := range []string{"agent_summary", "use_when", "avoid_when"} {
 			provenance, ok := metadata.FieldProvenance[field]
-			if !ok || provenance.Precedence != selectionPrecedenceReviewedManual || selectedCandidateCount(provenance.Candidates) != 1 {
-				problems = append(problems, productID+" "+field+" provenance is not one reviewed_manual winner")
+			if !ok || provenance.Precedence != selectionPrecedenceReviewedExplicit || selectedCandidateCount(provenance.Candidates) != 1 {
+				problems = append(problems, productID+" "+field+" provenance is not one reviewed_explicit winner")
+			}
+			if ok && !strings.Contains(provenance.Source, "/selection/") {
+				problems = append(problems, productID+" "+field+" source is not selection/: "+provenance.Source)
 			}
 		}
 	}
@@ -232,21 +107,24 @@ func validateReviewedManualSelectionDelivery(file File, opts Options) error {
 			name  string
 			valid bool
 		}{
-			{"agent_summary", strings.TrimSpace(metadata.AgentSummary) != "" && metadata.agentSummaryRank == selectionRankReviewedManual},
-			{"use_when", len(metadata.UseWhen) > 0 && metadata.useWhenRank == selectionRankReviewedManual},
-			{"avoid_when", len(metadata.AvoidWhen) > 0 && metadata.avoidWhenRank == selectionRankReviewedManual},
-			{"examples", len(metadata.Examples) > 0 && metadata.examplesRank == selectionRankReviewedManual},
-			{"reviewed", metadata.Reviewed != nil && *metadata.Reviewed && metadata.reviewedRank == selectionRankReviewedManual},
+			{"agent_summary", strings.TrimSpace(metadata.AgentSummary) != "" && metadata.agentSummaryRank == selectionRankReviewedExplicit},
+			{"use_when", len(metadata.UseWhen) > 0 && metadata.useWhenRank == selectionRankReviewedExplicit},
+			{"avoid_when", len(metadata.AvoidWhen) > 0 && metadata.avoidWhenRank == selectionRankReviewedExplicit},
+			{"examples", len(metadata.Examples) > 0 && metadata.examplesRank == selectionRankReviewedExplicit},
+			{"reviewed", metadata.Reviewed != nil && *metadata.Reviewed && metadata.reviewedRank == selectionRankReviewedExplicit},
 		}
 		for _, check := range checks {
 			if !check.valid {
-				problems = append(problems, canonical+" "+check.name+" is not reviewed_manual")
+				problems = append(problems, canonical+" "+check.name+" is not reviewed_explicit")
 			}
 		}
 		for _, field := range []string{"agent_summary", "use_when", "avoid_when", "examples"} {
 			provenance, ok := metadata.FieldProvenance[field]
-			if !ok || provenance.Precedence != selectionPrecedenceReviewedManual || selectedCandidateCount(provenance.Candidates) != 1 {
-				problems = append(problems, canonical+" "+field+" provenance is not one reviewed_manual winner")
+			if !ok || provenance.Precedence != selectionPrecedenceReviewedExplicit || selectedCandidateCount(provenance.Candidates) != 1 {
+				problems = append(problems, canonical+" "+field+" provenance is not one reviewed_explicit winner")
+			}
+			if ok && !strings.Contains(provenance.Source, "/selection/") {
+				problems = append(problems, canonical+" "+field+" source is not selection/: "+provenance.Source)
 			}
 		}
 	}
@@ -254,7 +132,7 @@ func validateReviewedManualSelectionDelivery(file File, opts Options) error {
 		return nil
 	}
 	sort.Strings(problems)
-	return fmt.Errorf("manual Agent selection delivery invariant failed: %s", strings.Join(problems, "; "))
+	return fmt.Errorf("selection Agent delivery invariant failed: %s", strings.Join(problems, "; "))
 }
 
 func expectedCanonicalToolPaths(opts Options) map[string]string {
@@ -287,4 +165,53 @@ func selectedCandidateCount(candidates []FieldCandidateProvenance) int {
 		}
 	}
 	return count
+}
+
+func expectedCanonicalToolSet(opts Options) map[string]bool {
+	if len(opts.CanonicalToolPaths) > 0 {
+		expected := make(map[string]bool, len(opts.CanonicalToolPaths))
+		for canonical := range opts.CanonicalToolPaths {
+			if canonical = strings.TrimSpace(canonical); canonical != "" {
+				expected[canonical] = true
+			}
+		}
+		return expected
+	}
+	if len(opts.ToolPaths) == 0 {
+		return nil
+	}
+	expected := map[string]bool{}
+	for path := range opts.ToolPaths {
+		path = strings.TrimSpace(path)
+		if !strings.ContainsAny(path, " \t") && strings.Contains(path, ".") {
+			expected[path] = true
+		}
+	}
+	return expected
+}
+
+func validateSelectionAuthoringContracts(opts Options) error {
+	selectionRoot := filepath.Join(resolvePath(opts.Root, opts.HintsDir), "selection")
+	hints, err := cli.LoadAgentHintsFromSelectionForValidation(os.DirFS(selectionRoot))
+	if err != nil {
+		return fmt.Errorf("load selection Agent hints: %w", err)
+	}
+	expectedTools := expectedCanonicalToolSet(opts)
+	if err := cli.ValidateManualAgentHintSet(hints, opts.ProductIDs, expectedTools); err != nil {
+		return fmt.Errorf("validate selection Agent hints: %w", err)
+	}
+	if opts.MaxExamples > 0 {
+		for canonical, hint := range hints.Tools {
+			if len(hint.Examples) > opts.MaxExamples {
+				return fmt.Errorf("selection Agent hint %s has %d reviewed examples, exceeding max-examples=%d", canonical, len(hint.Examples), opts.MaxExamples)
+			}
+		}
+	}
+	if err := cli.ValidateManualAgentHintExamples(opts.BoundCommands, hints); err != nil {
+		return fmt.Errorf("validate selection Agent hint examples: %w", err)
+	}
+	if _, err := cli.ValidateManualAgentSelectionContract(opts.BoundCommands, hints); err != nil {
+		return fmt.Errorf("validate selection Agent selection contract: %w", err)
+	}
+	return nil
 }

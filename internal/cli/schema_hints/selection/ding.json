@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/ding",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "ding.recall_ding_message": {
+      "agent_summary": "撤回已发送的机器人 DING",
+      "use_when": [
+        "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
+      ],
+      "avoid_when": [
+        "需要以用户身份撤回 DING 时不要使用本命令"
+      ],
+      "examples": [
+        "dws ding message recall --robot-code <ROBOT_CODE> --id <OPEN_DING_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=ding.recall_ding_message",
+        "cobra-help:dws ding message recall",
+        "Skill:skills/mono/references/products/ding.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#ding.recall_ding_message",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#ding.recall_ding_message",
+        "internal/cli/schema_command_registry.json#ding.recall_ding_message",
+        "skills/mono/references/products/ding.md",
+        "live-dws-schema:ding.recall_ding_message"
+      ]
+    },
+    "ding.send_ding_message": {
+      "agent_summary": "以企业机器人发送应用内/短信/电话 DING",
+      "use_when": [
+        "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
+      ],
+      "avoid_when": [
+        "普通聊天消息用 chat message send / send-by-bot",
+        "需要用户身份 DING 时不要用本命令（机器人身份）",
+        "短信/电话有成本，用户未确认前不要发 call/sms"
+      ],
+      "examples": [
+        "dws ding message send --robot-code <ROBOT_CODE> --users userId1,userId2 --content \"请查看\" --format json",
+        "dws ding message send --robot-code <ROBOT_CODE> --type call --users userId1 --content \"紧急告警\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=ding.send_ding_message",
+        "cobra-help:dws ding message send",
+        "Skill:skills/mono/references/products/ding.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#ding.send_ding_message",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#ding.send_ding_message",
+        "internal/cli/schema_command_registry.json#ding.send_ding_message",
+        "skills/mono/references/products/ding.md",
+        "live-dws-schema:ding.send_ding_message"
+      ]
+    }
+  },
+  "products": {
+    "ding": {
+      "agent_summary": "以企业机器人发送或撤回应用内/短信/电话 DING",
+      "use_when": [
+        "需要机器人身份发送或撤回 DING"
+      ],
+      "avoid_when": [
+        "普通聊天消息用 chat；用户身份 DING 不要走机器人命令"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:product=ding",
+        "Skill:skills/mono/references/products/ding.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

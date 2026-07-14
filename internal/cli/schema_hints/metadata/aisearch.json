@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/aisearch",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "aisearch.enterprise_person_search": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aisearch.search_enterprise": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "queries": {
+          "required": false
+        },
+        "time-range": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+      "cli_path": "aisearch enterprise",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "aisearch.search_enterprise_behavior": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

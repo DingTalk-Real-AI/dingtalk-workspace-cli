@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/report",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "report.create_report": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "to-chat": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+      "cli_path": "report entry submit",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "report.get_available_report_templates": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "report.get_received_report_list": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "report.get_report_entry_details": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "report.get_report_statistics_by_id": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "report.get_send_report_list": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "report.get_template_details_by_name": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

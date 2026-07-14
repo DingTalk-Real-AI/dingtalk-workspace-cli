@@ -3,7 +3,7 @@
   "tools": {
     "contact dept get-info": {
       "agent_summary": "获取指定部门详情",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "只知道部门名称时应先搜索部门；需要列出直属子部门时改用子部门查询。"
@@ -17,15 +17,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取指定部门详情",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "获取指定部门详情",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -33,17 +33,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -57,8 +57,8 @@
           "value": [
             "只知道部门名称时应先搜索部门；需要列出直属子部门时改用子部门查询。"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -66,8 +66,8 @@
               "value": [
                 "只知道部门名称时应先搜索部门；需要列出直属子部门时改用子部门查询。"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -105,8 +105,8 @@
           "value": [
             "dws contact dept get-info --dept 12345 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -114,8 +114,8 @@
               "value": [
                 "dws contact dept get-info --dept 12345 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -137,17 +137,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -173,16 +173,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -205,8 +212,8 @@
           "value": [
             "已知 deptId，需要部门名称、人数等详情时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -214,8 +221,8 @@
               "value": [
                 "已知 deptId，需要部门名称、人数等详情时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -234,8 +241,8 @@
         "CommandRegistry:canonical_path=contact.get_dept_info_by_dept_id",
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact dept get-info",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_dept_info_by_dept_id",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
@@ -247,7 +254,7 @@
     },
     "contact dept list-children": {
       "agent_summary": "列出指定部门的直属子部门",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "需要父部门自身详情或递归组织树时不要使用；该命令只列直属子部门。"
@@ -261,15 +268,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "列出指定部门的直属子部门",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "列出指定部门的直属子部门",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -277,17 +284,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -301,8 +308,8 @@
           "value": [
             "需要父部门自身详情或递归组织树时不要使用；该命令只列直属子部门。"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -310,8 +317,8 @@
               "value": [
                 "需要父部门自身详情或递归组织树时不要使用；该命令只列直属子部门。"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -349,8 +356,8 @@
           "value": [
             "dws contact dept list-children --dept 12345 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -358,8 +365,8 @@
               "value": [
                 "dws contact dept list-children --dept 12345 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -381,17 +388,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -417,16 +424,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -449,8 +463,8 @@
           "value": [
             "已知父部门 deptId，需要列出直属子部门时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -458,8 +472,8 @@
               "value": [
                 "已知父部门 deptId，需要列出直属子部门时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -478,8 +492,8 @@
         "CommandRegistry:canonical_path=contact.get_sub_depts_by_dept_id",
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact dept list-children",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_sub_depts_by_dept_id",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_sub_depts_by_dept_id"
@@ -490,7 +504,7 @@
     },
     "contact dept list-members": {
       "agent_summary": "查看部门成员（逗号分隔 deptId）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "只需部门详情或人数时使用 contact dept get-info；需要直属子部门时使用 contact dept list-children"
@@ -504,15 +518,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "查看部门成员（逗号分隔 deptId）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "查看部门成员（逗号分隔 deptId）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -520,17 +534,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -544,8 +558,8 @@
           "value": [
             "只需部门详情或人数时使用 contact dept get-info；需要直属子部门时使用 contact dept list-children"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -553,8 +567,8 @@
               "value": [
                 "只需部门详情或人数时使用 contact dept get-info；需要直属子部门时使用 contact dept list-children"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -592,8 +606,8 @@
           "value": [
             "dws contact dept list-members --depts 12345,67890 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -601,8 +615,8 @@
               "value": [
                 "dws contact dept list-members --depts 12345,67890 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -624,17 +638,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -666,16 +680,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -698,8 +719,8 @@
           "value": [
             "需要按一个或多个 deptId 查看部门成员名单时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -707,8 +728,8 @@
               "value": [
                 "需要按一个或多个 deptId 查看部门成员名单时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -729,8 +750,8 @@
         "cobra-help:dws contact dept list-members",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_dept_members_by_deptId",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_dept_members_by_deptId",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
@@ -743,7 +764,7 @@
     },
     "contact dept search": {
       "agent_summary": "按关键词搜索部门",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "已经有准确部门 ID 并需要详情时改用部门详情命令；该命令用于关键词定位部门。"
@@ -757,15 +778,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "按关键词搜索部门",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "按关键词搜索部门",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -773,17 +794,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -797,8 +818,8 @@
           "value": [
             "已经有准确部门 ID 并需要详情时改用部门详情命令；该命令用于关键词定位部门。"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -806,8 +827,8 @@
               "value": [
                 "已经有准确部门 ID 并需要详情时改用部门详情命令；该命令用于关键词定位部门。"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -845,8 +866,8 @@
           "value": [
             "dws contact dept search --query \"技术部\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -854,8 +875,8 @@
               "value": [
                 "dws contact dept search --query \"技术部\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -877,17 +898,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -919,16 +940,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -951,8 +979,8 @@
           "value": [
             "只知道部门名称或关键词，需要定位 deptId 时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -960,8 +988,8 @@
               "value": [
                 "只知道部门名称或关键词，需要定位 deptId 时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -982,8 +1010,8 @@
         "cobra-help:dws contact dept search",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_dept_by_keyword",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.search_dept_by_keyword",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.search_dept_by_keyword",
@@ -995,7 +1023,7 @@
     },
     "contact relation list-my-followings": {
       "agent_summary": "获取当前用户的特别关注列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "需要搜索企业通讯录或查询任意员工详情时不要使用；这里只返回当前用户的特别关注列表。"
@@ -1009,15 +1037,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取当前用户的特别关注列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "获取当前用户的特别关注列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1025,17 +1053,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1049,8 +1077,8 @@
           "value": [
             "需要搜索企业通讯录或查询任意员工详情时不要使用；这里只返回当前用户的特别关注列表。"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -1058,8 +1086,8 @@
               "value": [
                 "需要搜索企业通讯录或查询任意员工详情时不要使用；这里只返回当前用户的特别关注列表。"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1097,8 +1125,8 @@
           "value": [
             "dws contact relation list-my-followings --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -1106,8 +1134,8 @@
               "value": [
                 "dws contact relation list-my-followings --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1129,17 +1157,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1165,16 +1193,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -1197,8 +1232,8 @@
           "value": [
             "需要查看当前用户特别关注或星标联系人时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -1206,8 +1241,8 @@
               "value": [
                 "需要查看当前用户特别关注或星标联系人时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1226,8 +1261,8 @@
         "CommandRegistry:canonical_path=contact.list_my_followings",
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact relation list-my-followings",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.list_my_followings",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.list_my_followings"
@@ -1238,7 +1273,7 @@
     },
     "contact user dismission search": {
       "agent_summary": "查询离职员工列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "需要查询在职员工或修改离职信息时不要使用；该命令只检索离职员工记录。"
@@ -1253,15 +1288,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "查询离职员工列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "查询离职员工列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1269,17 +1304,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1293,8 +1328,8 @@
           "value": [
             "需要查询在职员工或修改离职信息时不要使用；该命令只检索离职员工记录。"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -1302,8 +1337,8 @@
               "value": [
                 "需要查询在职员工或修改离职信息时不要使用；该命令只检索离职员工记录。"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1342,8 +1377,8 @@
             "dws contact user dismission search --format json",
             "dws contact user dismission search --name \"张三\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -1352,8 +1387,8 @@
                 "dws contact user dismission search --format json",
                 "dws contact user dismission search --name \"张三\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1375,17 +1410,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1411,16 +1446,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -1443,8 +1485,8 @@
           "value": [
             "需要按姓名、离职时间或部门查询离职员工时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -1452,8 +1494,8 @@
               "value": [
                 "需要按姓名、离职时间或部门查询离职员工时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -1472,8 +1514,8 @@
         "CommandRegistry:canonical_path=contact.query_dismission_employee_list",
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact user dismission search",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.query_dismission_employee_list",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.query_dismission_employee_list"
@@ -1484,7 +1526,7 @@
     },
     "contact user get": {
       "agent_summary": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "还没有 userId 时先 search / aisearch person",
@@ -1499,15 +1541,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1515,17 +1557,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1540,8 +1582,8 @@
             "还没有 userId 时先 search / aisearch person",
             "查自己不要传 me/self，用 contact user get-self"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -1550,8 +1592,8 @@
                 "还没有 userId 时先 search / aisearch person",
                 "查自己不要传 me/self，用 contact user get-self"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1589,8 +1631,8 @@
           "value": [
             "dws contact user get --ids userId1,userId2"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -1598,8 +1640,8 @@
               "value": [
                 "dws contact user get --ids userId1,userId2"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1621,17 +1663,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1663,16 +1705,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
@@ -1695,8 +1744,8 @@
           "value": [
             "已有一个或多个 userId，需要部门、主管等详情"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -1704,8 +1753,8 @@
               "value": [
                 "已有一个或多个 userId，需要部门、主管等详情"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1727,8 +1776,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_user_info_by_user_ids",
         "internal/cli/schema_command_registry.json#contact.get_user_info_by_user_ids",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_user_info_by_user_ids",
         "live-dws-schema:contact.get_user_info_by_user_ids",
         "skills/mono/references/products/contact.md",
@@ -1741,7 +1790,7 @@
     },
     "contact user get-self": {
       "agent_summary": "获取当前登录用户资料与 userId",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "查他人详情用 contact user get 或先搜索"
@@ -1755,15 +1804,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取当前登录用户资料与 userId",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": "获取当前登录用户资料与 userId",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1771,17 +1820,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1795,8 +1844,8 @@
           "value": [
             "查他人详情用 contact user get 或先搜索"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -1804,8 +1853,8 @@
               "value": [
                 "查他人详情用 contact user get 或先搜索"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1843,8 +1892,8 @@
           "value": [
             "dws contact user get-self --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -1852,8 +1901,8 @@
               "value": [
                 "dws contact user get-self --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1875,17 +1924,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1917,16 +1966,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
@@ -1949,8 +2005,8 @@
           "value": [
             "用户问我是谁/我的 userId/当前账号信息"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -1958,8 +2014,8 @@
               "value": [
                 "用户问我是谁/我的 userId/当前账号信息"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -1981,8 +2037,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_current_user_profile",
         "internal/cli/schema_command_registry.json#contact.get_current_user_profile",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_current_user_profile",
         "live-dws-schema:contact.get_current_user_profile",
         "skills/mono/references/products/contact.md",
@@ -1995,7 +2051,7 @@
     },
     "contact user profile fields": {
       "agent_summary": "查询当前用户有权查看的花名册字段",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "需要读取某位员工的具体花名册字段值时不要停在字段目录，应再调用员工花名册查询。"
@@ -2009,15 +2065,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "查询当前用户有权查看的花名册字段",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "查询当前用户有权查看的花名册字段",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2025,17 +2081,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -2049,8 +2105,8 @@
           "value": [
             "需要读取某位员工的具体花名册字段值时不要停在字段目录，应再调用员工花名册查询。"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -2058,8 +2114,8 @@
               "value": [
                 "需要读取某位员工的具体花名册字段值时不要停在字段目录，应再调用员工花名册查询。"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2097,8 +2153,8 @@
           "value": [
             "dws contact user profile fields --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -2106,8 +2162,8 @@
               "value": [
                 "dws contact user profile fields --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2129,17 +2185,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -2165,16 +2221,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -2197,8 +2260,8 @@
           "value": [
             "查询花名册前，需要先确认当前用户可见的字段 code 时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -2206,8 +2269,8 @@
               "value": [
                 "查询花名册前，需要先确认当前用户可见的字段 code 时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2226,8 +2289,8 @@
         "CommandRegistry:canonical_path=contact.list_authorized_roster_fields",
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact user profile fields",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.list_authorized_roster_fields",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.list_authorized_roster_fields"
@@ -2238,7 +2301,7 @@
     },
     "contact user profile get": {
       "agent_summary": "按字段 code 查询指定员工花名册字段值",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "尚不知道可见字段时先用 contact user profile fields",
@@ -2253,15 +2316,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "按字段 code 查询指定员工花名册字段值",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": "按字段 code 查询指定员工花名册字段值",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2269,17 +2332,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope.",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope."
             },
             {
               "value": "available",
@@ -2294,8 +2357,8 @@
             "尚不知道可见字段时先用 contact user profile fields",
             "普通通讯录姓名搜索不要走花名册"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -2304,8 +2367,8 @@
                 "尚不知道可见字段时先用 contact user profile fields",
                 "普通通讯录姓名搜索不要走花名册"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2313,15 +2376,23 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope.",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope."
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -2343,8 +2414,8 @@
           "value": [
             "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -2352,8 +2423,8 @@
               "value": [
                 "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2375,17 +2446,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope.",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope."
             },
             {
               "value": "mcp",
@@ -2411,16 +2482,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope.",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "The reviewed helper deliberately permits either or both optional filters and passes an empty request to query the caller's authorized roster scope."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
@@ -2443,8 +2521,8 @@
           "value": [
             "已确认 staffId 与可见字段 code，需要读花名册字段"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -2452,8 +2530,8 @@
               "value": [
                 "已确认 staffId 与可见字段 code，需要读花名册字段"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2473,8 +2551,8 @@
         "Skill:skills/mono/references/products/contact.md",
         "cobra-help:dws contact user profile get",
         "internal/cli/schema_command_registry.json#contact.get_authorized_emp_rosterInfo",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_authorized_emp_rosterInfo",
         "live-dws-schema:contact.get_authorized_emp_rosterInfo#FAILED",
         "pinned-mcp:contact.get_authorized_emp_rosterInfo",
@@ -2487,7 +2565,7 @@
     },
     "contact user search": {
       "agent_summary": "按关键词搜索好友和同事，提取 userId/openDingTalkId",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "职责/上级/技能等语义找人优先 aisearch person",
@@ -2503,15 +2581,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "按关键词搜索好友和同事，提取 userId/openDingTalkId",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": "按关键词搜索好友和同事，提取 userId/openDingTalkId",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2519,17 +2597,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -2545,8 +2623,8 @@
             "已有 userId 查详情用 contact user get",
             "查自己用 contact user get-self"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -2556,8 +2634,8 @@
                 "已有 userId 查详情用 contact user get",
                 "查自己用 contact user get-self"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2595,8 +2673,8 @@
           "value": [
             "dws contact user search --query \"张三\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -2604,8 +2682,8 @@
               "value": [
                 "dws contact user search --query \"张三\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2627,17 +2705,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -2669,16 +2747,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
@@ -2701,8 +2786,8 @@
           "value": [
             "按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -2710,8 +2795,8 @@
               "value": [
                 "按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -2733,8 +2818,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_contact_by_key_word",
         "internal/cli/schema_command_registry.json#contact.search_contact_by_key_word",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.search_contact_by_key_word",
         "live-dws-schema:contact.search_contact_by_key_word",
         "skills/mono/references/intent-guide.md",
@@ -2748,7 +2833,7 @@
     },
     "contact user search-mobile": {
       "agent_summary": "按手机号搜索用户",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "agent_summary_source": "dws-agent-selection/contact",
       "availability": "available",
       "avoid_when": [
         "已有用户 ID 或需要批量用户详情时改用批量详情命令；该命令仅按手机号定位用户。"
@@ -2762,15 +2847,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "按手机号搜索用户",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
             {
               "value": "按手机号搜索用户",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2778,17 +2863,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -2802,8 +2887,8 @@
           "value": [
             "已有用户 ID 或需要批量用户详情时改用批量详情命令；该命令仅按手机号定位用户。"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -2811,8 +2896,8 @@
               "value": [
                 "已有用户 ID 或需要批量用户详情时改用批量详情命令；该命令仅按手机号定位用户。"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2850,8 +2935,8 @@
           "value": [
             "dws contact user search-mobile --mobile 13800138000 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -2859,8 +2944,8 @@
               "value": [
                 "dws contact user search-mobile --mobile 13800138000 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2882,17 +2967,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/contact.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/contact is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/contact.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/contact is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -2924,16 +3009,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
           ]
@@ -2956,8 +3048,8 @@
           "value": [
             "已知手机号，需要精确搜索用户时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
           "candidates": [
@@ -2965,8 +3057,8 @@
               "value": [
                 "已知手机号，需要精确搜索用户时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。"
             }
@@ -2987,8 +3079,8 @@
         "cobra-help:dws contact user search-mobile",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_user_by_mobile",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/contact.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
         "internal/cli/schema_mcp_metadata.json#tools.contact.search_user_by_mobile",
         "skills/mono/references/products/contact.md",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.search_user_by_mobile",

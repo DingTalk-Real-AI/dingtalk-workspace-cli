@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/devdoc",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "devdoc.search_open_platform_docs_rag": {
+      "agent_summary": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）",
+      "use_when": [
+        "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
+      ],
+      "avoid_when": [
+        "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+        "要执行开放平台应用配置变更时用 dev"
+      ],
+      "examples": [
+        "dws devdoc article search --query \"OAuth2 接入\" --format json",
+        "dws devdoc article search --query \"errcode 40078\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=devdoc.search_open_platform_docs_rag",
+        "cobra-help:dws devdoc article search",
+        "Skill:skills/mono/references/products/devdoc.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#devdoc.search_open_platform_docs_rag",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#devdoc.search_open_platform_docs_rag",
+        "internal/cli/schema_command_registry.json#devdoc.search_open_platform_docs_rag",
+        "skills/mono/references/products/devdoc.md",
+        "live-dws-schema:devdoc.search_open_platform_docs_rag"
+      ]
+    }
+  },
+  "products": {
+    "devdoc": {
+      "agent_summary": "搜索钉钉开放平台开发文档与错误排查资料",
+      "use_when": [
+        "查询 OpenAPI、字段、错误码、SDK、鉴权或接入指南"
+      ],
+      "avoid_when": [
+        "搜索用户业务文档或读写业务数据时不要用 devdoc"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:product=devdoc",
+        "Skill:skills/mono/references/products/devdoc.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

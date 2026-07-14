@@ -29,19 +29,19 @@ The Schema data flow is one way:
    └─ builds the real Cobra command tree and flags
 
 2. schema_command_registry.json
-   + schema_manual_hints.json.commands
+   + schema_hints/metadata/<product>.json tool parameters (+ cli_path)
    └─ forms EffectiveCommandRegistry
       └─ binds exactly to real Cobra leaves and aliases
 
 3. Parameter resolution
    Cobra flags
    + schema_parameter_bindings.json
-   + schema_manual_hints.json.commands[].parameters
+   + metadata tool parameters
    └─ produces ParameterSpec and constraints
 
 4. Agent and interface semantics
-   schema_manual_hints.json.agent_hints
-   + reviewed safety/interface structured hints
+   schema_hints/selection/<product>.json   (selection prose)
+   + schema_hints/metadata/<product>.json  (safety/interface/runtime_gate)
    + pinned MCP metadata
    └─ resolves Agent metadata by source precedence
       Markdown is evidence only; it is not concatenated into final prose
@@ -60,7 +60,7 @@ The Schema data flow is one way:
       └─ dws schema list/product/group/leaf/--all
 ```
 
-Manual command additions are normalized into `EffectiveCommandRegistry`
+Parameter overlays from metadata are merged into `EffectiveCommandRegistry`
 *before* Cobra binding; after that point there is no second identity source and
 no identity precedence winner. The binder must reject a missing/non-runnable
 Cobra path, an alias collision, and any native identity annotation that
@@ -107,19 +107,15 @@ When adding or changing an Agent-visible command, review all relevant inputs:
   machine-readable editing contract. Preserve the local `$schema` reference;
   unknown fields, invalid visibility values, stale paths, and collisions fail
   Go validation and policy.
-- `internal/cli/schema_manual_hints.json` is the single reviewed manual input.
-  Its `commands` section adds an exact existing runnable Cobra leaf to the
-  effective registry or overrides a Schema-only flag projection. Its
-  `agent_hints` section owns reviewed Agent selection prose for products and
-  tools. Command additions are merged before binding; neither section forms a
-  runtime fallback.
+- `internal/cli/schema_hints/metadata/<product>.json` for safety, interface,
+  `runtime_gate`, and optional parameter overlays (`parameters` / `cli_path`).
+- `internal/cli/schema_hints/selection/<product>.json` for reviewed Agent
+  selection prose (`agent_summary`, `use_when`, `avoid_when`, `examples`).
+- `internal/cli/schema_hints/index.json` only maps product IDs to those files.
 - Native Runtime Schema identity annotations, when present, as consistency
   assertions against `EffectiveCommandRegistry`. They must agree exactly and
   must never materialize, infer, or override registry identity.
-- `internal/cli/schema_manual_hints.schema.json` is the machine-readable
-  editing contract for Manual Schema hints; read it before changing the JSON.
 - Flag-to-interface property mappings and required/default semantics.
-- `internal/cli/schema_hints/` for selection, interface, and safety metadata.
 - Generated files under `internal/cli/schema_agent_metadata/` and
   `internal/cli/schema_catalog.json` after running generation.
 
@@ -128,62 +124,123 @@ that works through `dws <path>` but cannot be found through the matching
 `dws schema` lookup is a contract failure unless it has a reviewed exact
 exclusion.
 
-Manual Schema hints must reference an exact public runnable Cobra leaf and
-real flags. They may override Schema description, interface-property/type
+Metadata parameter overlays must reference an exact public runnable Cobra leaf
+and real flags. They may override Schema description, interface-property/type
 mapping, `required`, and `required_when`; they must not create commands or
-flags, define an interface, or advertise an unknown RPC. Every entry requires
-`reviewed: true` and a non-empty reason.
+flags, define an interface, or advertise an unknown RPC. Every authored entry
+requires `reviewed: true` and a non-empty review reason.
 
-For Agent-authored Manual Schema hints:
+For Agent-authored metadata or selection edits:
 
-1. Preserve the `$schema` field and version.
-2. Confirm the exact command and flag names in the current Cobra tree.
+1. Confirm the exact command and flag names in the current Cobra tree.
+2. Edit only the owning block (`metadata/` or `selection/`); do not mix fields.
 3. Add the smallest possible entry; do not copy generated Catalog fields into
    the input.
-4. Describe user-visible semantics in `reason` and parameter descriptions.
+4. Describe user-visible semantics in `review_reason` and parameter
+   descriptions.
 5. Run generation, drift, Schema policy, and the focused CLI tests before
    proposing the change.
 
-## Manual Agent hints
+## Agent curation workflow (Schema hints)
 
-Agent-facing selection prose is a reviewed, versioned source inside
-`internal/cli/schema_manual_hints.json`; do not create a second Agent-hint
-source file. Keep command/parameter overrides in `commands` and keep
-`agent_summary`, `use_when`, `avoid_when`, and `examples` under
-`agent_hints`. A tool hint is keyed by its exact canonical path and must match
-the Effective CommandRegistry. Product and tool entries require a review
-reason and evidence.
+Use this workflow when refreshing Agent selection prose and confirmation
+alignment. Prefer **agent-authored review** over bulk merge scripts that dump
+`selection-review.json` or Skill Markdown into Catalog fields.
 
-AI may be used offline to produce one complete candidate batch. Commit that
-batch as reviewed manual input and preserve its `generated_by`, `model`,
-`prompt_version`, and `batch` provenance. Normal `go generate`, builds, tests,
-and runtime startup must never invoke a model, rewrite this manual file, or
-semantically concatenate Markdown into the selected Agent prose. They may only
-read, validate, resolve, and project the committed values. Markdown and Help
-are evidence for authoring and drift checks, not hidden description winners.
+Human-authored inputs are split into two blocks:
+
+| Block | Path | Owns |
+|---|---|---|
+| **metadata** | `internal/cli/schema_hints/metadata/<product>.json` | `effect` / `risk` / `confirmation` / `idempotency` / `interface_*` / `runtime_gate` / optional `parameters` |
+| **selection** | `internal/cli/schema_hints/selection/<product>.json` | `agent_summary` / `use_when` / `avoid_when` / `examples` (+ product routing) |
+
+`index.json` only maps product IDs to those files. Do not mix selection fields
+into metadata files or metadata fields into selection files.
+
+### Goals
+
+1. **Selection prose** is decision-oriented (Feishu/Lark style): trigger intent,
+   sibling-command routing, and outcome shape — not a restatement of the
+   summary. Delivered Catalog provenance is `reviewed_explicit` from
+   `selection/`.
+2. **Safety** follows Runtime: `confirmation=user_required` iff the tool's
+   metadata `runtime_gate != none` (for example `confirm_delete`, `typed_yes`,
+   `confirm_dangerous`).
+3. **Parameter overrides** (former Manual `commands`) live on metadata tools as
+   `parameters` (+ `cli_path`) and are applied into EffectiveCommandRegistry.
+
+### Authoring
+
+For every curated tool:
+
+1. Edit `metadata/<product>.json` for safety/interface/gates/parameters.
+2. Edit `selection/<product>.json` for selection prose (`reviewed: true`,
+   `review_reason`, `source_refs`).
+3. Run `make generate-schema`. Do not hand-edit generated
+   `schema_agent_metadata/` or `schema_catalog.json`.
+
+### Pull live MCP descriptions (personal token)
+
+Pinned `internal/cli/schema_mcp_metadata.json` is a sanitized baseline. Prefer
+live Schema from a logged-in personal session:
+
+```bash
+dws auth status                 # token_valid should be true
+dws cache refresh               # refresh discovery / tools cache
+dws schema <mcp-canonical> -f json
+# or CLI path: dws schema --cli-path "drive copy" -f json
+```
+
+Resolve MCP identity via `interface_ref` when CLI canonical ≠ MCP path
+(example: CLI `drive.copy_document` → live `doc.copy_document`). On pull
+failure, fall back to Skill + Cobra Help + pinned MCP, and record evidence
+(for example `live-dws-schema:<path>#FAILED`). Never print or commit tokens.
+
+Precedence when sources disagree: **Runtime/Cobra > live MCP > pinned MCP >
+Skill (evidence only)**.
+
+### Parallel product agents
+
+Split work by product groups. Each agent must:
+
+- Read Skill, Cobra/`--help`, Runtime confirmation sites, and live `dws schema`
+  for its tools.
+- Hand-write selection + metadata; forbid wholesale JSON merges from review
+  dumps.
+- Edit only its `metadata/<product>.json` and `selection/<product>.json`.
+- **Never** `git checkout` unrelated product files to “clean scope”.
+
+### Regenerate and gates
+
+```bash
+make generate-schema
+./scripts/policy/check-runtime-confirmation-truth.sh
+go test ./internal/app -run '^TestSheetFinalSchemaConfirmationMatchesRuntimeGuards$' -count=1
+```
+
+Example rules (fail generation otherwise):
+
+- At most two examples per tool; no `--yes` in stored examples.
+- Examples must match live Cobra argv (path, flags, required groups).
+- No shell comments in examples.
+
+After generation, spot-check Catalog: selection provenance is
+`reviewed_explicit` from `selection/`, and `user_required` count equals
+metadata `runtime_gate != none`.
 
 `make generate-schema` is a full deterministic snapshot rebuild, not an
 incremental patch over the previous Catalog. It rereads every reviewed input,
 removes stale generated product metadata, and rewrites the exact metadata and
 Catalog projections. Incremental work happens only when an Agent or human
-edits selected reviewed Manual Hint entries; the next publication still
+edits selected `metadata/` or `selection/` entries; the next publication still
 recomputes all outputs. Generated files must never be read back as merge input,
-and byte guards fail generation if it changes the Manual Hint or CommandRegistry.
+and byte guards fail generation if it changes the hint inputs or CommandRegistry.
 
-The initial AI-authored baseline must cover the exact Effective
-CommandRegistry tool set and all published products in one revision. Each
-product/tool entry references a declared revision record. Later human or Agent
-work may add a new revision record and update only the reviewed target entries;
-unchanged entries retain their original provenance. Missing or unknown revision
-references fail validation. The generation pipeline must not fill missing
-prose from Catalog, generated Agent metadata, or a prior snapshot.
-
-Manual Agent hints may select or revise prose, including choosing a more or
-less restrictive recommendation. They cannot create a Cobra command or flag,
-change parameter facts, invent an RPC/interface, alter safety metadata, or
-bypass command completeness. Examples must use an executable primary/alias
-path and flags accepted by the live Cobra command; never add `--yes` to stored
-examples.
+Selection prose may choose a more or less restrictive recommendation. It cannot
+create a Cobra command or flag, change parameter facts, invent an
+RPC/interface, alter safety metadata, or bypass command completeness. Examples
+must use an executable primary/alias path and flags accepted by the live Cobra
+command; never add `--yes` to stored examples.
 
 Every example is always checked against its real `BoundCommand`: exact path,
 accepted flags, Cobra required flags/positionals, and the effective
@@ -241,7 +298,7 @@ text endpoint.
 
 Parameter and safety resolution is source-precedence based and value-neutral.
 Do not choose a winner because one value looks stricter: a higher-priority
-reviewed manual/explicit source may intentionally raise or lower `required`,
+reviewed metadata/explicit source may intentionally raise or lower `required`,
 `effect`, `risk`, `confirmation`, or `idempotency`. Preserve all candidates and
 the selected source in provenance, and fail same-precedence conflicts rather
 than silently merging them. Cobra's hard-required marker remains an executable

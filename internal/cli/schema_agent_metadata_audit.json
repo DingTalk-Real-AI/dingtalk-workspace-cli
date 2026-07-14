@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:b21edf93a49d52486b85ebf05a0c118b1f5495f2ecd71945640f8b03fbf3a895",
+  "source_hash": "sha256:6095740524d6e99986d5ae4b155a95ec6e73ffb8f1e4fca2f1e61f1087e0263b",
   "surface_hash": "sha256:efb97fcad7968fe1375d729a232df9978adcb1ec71eeaca1e18326d047906a99",
-  "source_files": 128,
-  "hint_files": 25,
-  "hint_products": 50,
-  "hint_tools": 1307,
+  "source_files": 147,
+  "hint_files": 44,
+  "hint_products": 38,
+  "hint_tools": 1274,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -36,8 +36,8 @@
     "tools_with_avoid_when": 561,
     "tools_with_examples": 561,
     "tools_with_interface_mode": 561,
-    "unmatched_skill_tools": 158,
-    "unreviewed_skill_tools": 40
+    "unmatched_skill_tools": 125,
+    "unreviewed_skill_tools": 7
   },
   "source_products": [
     "agoal",
@@ -83,105 +83,6 @@
   "unmatched_references": [
     {
       "tool_path": "chat.get_group_members"
-    },
-    {
-      "tool_path": "conference.ai_close_camera"
-    },
-    {
-      "tool_path": "conference.ai_close_simultaneous_interpretation"
-    },
-    {
-      "tool_path": "conference.ai_close_subtitle"
-    },
-    {
-      "tool_path": "conference.ai_close_transcript"
-    },
-    {
-      "tool_path": "conference.ai_end_meeting_for_all"
-    },
-    {
-      "tool_path": "conference.ai_leave_myself"
-    },
-    {
-      "tool_path": "conference.ai_mute_all"
-    },
-    {
-      "tool_path": "conference.ai_mute_mic"
-    },
-    {
-      "tool_path": "conference.ai_one_click_call"
-    },
-    {
-      "tool_path": "conference.ai_open_annotation"
-    },
-    {
-      "tool_path": "conference.ai_open_beauty_setting_page"
-    },
-    {
-      "tool_path": "conference.ai_open_camera"
-    },
-    {
-      "tool_path": "conference.ai_open_interactive_panel"
-    },
-    {
-      "tool_path": "conference.ai_open_invite_member_panel"
-    },
-    {
-      "tool_path": "conference.ai_open_security_menu"
-    },
-    {
-      "tool_path": "conference.ai_open_share_panel"
-    },
-    {
-      "tool_path": "conference.ai_open_simultaneous_interpretation"
-    },
-    {
-      "tool_path": "conference.ai_open_subtitle"
-    },
-    {
-      "tool_path": "conference.ai_open_transcript"
-    },
-    {
-      "tool_path": "conference.ai_open_virtual_background_setting_page"
-    },
-    {
-      "tool_path": "conference.ai_request_record"
-    },
-    {
-      "tool_path": "conference.ai_share_desktop"
-    },
-    {
-      "tool_path": "conference.ai_start_cloud_record"
-    },
-    {
-      "tool_path": "conference.ai_stop_cloud_record"
-    },
-    {
-      "tool_path": "conference.ai_stop_share"
-    },
-    {
-      "tool_path": "conference.ai_switch_gallery_view"
-    },
-    {
-      "tool_path": "conference.ai_switch_speaker_view"
-    },
-    {
-      "tool_path": "conference.ai_switch_standard_view"
-    },
-    {
-      "tool_path": "conference.ai_take_group_photo"
-    },
-    {
-      "tool_path": "conference.ai_unmute_mic"
-    },
-    {
-      "tool_path": "conference.create_conference"
-    },
-    {
-      "tool_path": "conference.get_conference_id"
-    },
-    {
-      "tool_path": "conference.get_conference_status"
     },
     {
       "tool_path": "devdoc.devdoc_rag_pretest"

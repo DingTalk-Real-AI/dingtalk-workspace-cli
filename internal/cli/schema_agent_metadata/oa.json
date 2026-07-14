@@ -3,7 +3,7 @@
   "tools": {
     "oa approval approve": {
       "agent_summary": "同意审批",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "实例或 taskId 未确认时不要同意；先用 list-pending / tasks 取 ID",
@@ -19,15 +19,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "同意审批",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "同意审批",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -35,17 +35,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -60,8 +60,8 @@
             "实例或 taskId 未确认时不要同意；先用 list-pending / tasks 取 ID",
             "要拒绝时改用 dws oa approval reject；要撤销自己发起的单时改用 revoke"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -70,8 +70,8 @@
                 "实例或 taskId 未确认时不要同意；先用 list-pending / tasks 取 ID",
                 "要拒绝时改用 dws oa approval reject；要撤销自己发起的单时改用 revoke"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -110,8 +110,8 @@
             "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e",
             "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -120,8 +120,8 @@
                 "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e",
                 "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -143,17 +143,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -185,16 +185,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -217,8 +224,8 @@
           "value": [
             "已知 processInstanceId 与待办 taskId，用户明确要求同意该审批任务时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -226,8 +233,8 @@
               "value": [
                 "已知 processInstanceId 与待办 taskId，用户明确要求同意该审批任务时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -248,8 +255,8 @@
         "cobra-help:dws oa approval approve",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.approve_processInstance",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.approve_processInstance",
         "live-dws-schema:oa.approve_processInstance",
         "skills/mono/references/products/oa.md",
@@ -263,7 +270,7 @@
     },
     "oa approval detail": {
       "agent_summary": "获取指定审批实例的详情信息",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "需要操作历史而非表单详情时改用 dws oa approval records",
@@ -279,15 +286,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取指定审批实例的详情信息",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "获取指定审批实例的详情信息",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -295,17 +302,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -320,8 +327,8 @@
             "需要操作历史而非表单详情时改用 dws oa approval records",
             "该命令不会同意/拒绝/撤销"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -330,8 +337,8 @@
                 "需要操作历史而非表单详情时改用 dws oa approval records",
                 "该命令不会同意/拒绝/撤销"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -370,8 +377,8 @@
             "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e",
             "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -380,8 +387,8 @@
                 "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e",
                 "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -403,17 +410,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -445,16 +452,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -477,8 +491,8 @@
           "value": [
             "已知 processInstanceId，需要查看表单内容与当前状态详情时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -486,8 +500,8 @@
               "value": [
                 "已知 processInstanceId，需要查看表单内容与当前状态详情时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -508,8 +522,8 @@
         "cobra-help:dws oa approval detail",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_detail",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_detail",
         "live-dws-schema:oa.get_processInstance_detail",
         "skills/mono/references/products/oa.md",
@@ -522,7 +536,7 @@
     },
     "oa approval list-cc": {
       "agent_summary": "获取抄送用户的列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "要看待处理或自己发起的审批时不要使用",
@@ -538,15 +552,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取抄送用户的列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "获取抄送用户的列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -554,17 +568,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -579,8 +593,8 @@
             "要看待处理或自己发起的审批时不要使用",
             "该命令只列抄送实例，不执行审批动作"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -589,8 +603,8 @@
                 "要看待处理或自己发起的审批时不要使用",
                 "该命令只列抄送实例，不执行审批动作"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -629,8 +643,8 @@
             "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
             "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -639,8 +653,8 @@
                 "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
                 "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -662,17 +676,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -698,16 +712,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -730,8 +751,8 @@
           "value": [
             "需要查看抄送给当前用户的审批单列表时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -739,8 +760,8 @@
               "value": [
                 "需要查看抄送给当前用户的审批单列表时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -759,8 +780,8 @@
         "CommandRegistry:canonical_path=oa.get_noticed_instances",
         "Skill:skills/mono/references/products/oa.md",
         "cobra-help:dws oa approval list-cc",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances",
         "live-dws-schema:oa.get_noticed_instances",
         "skills/mono/references/products/oa.md",
@@ -772,7 +793,7 @@
     },
     "oa approval list-executed": {
       "agent_summary": "获取员工已处理任务列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "要看待处理单时改用 dws oa approval list-pending",
@@ -788,15 +809,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取员工已处理任务列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "获取员工已处理任务列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -804,17 +825,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -829,8 +850,8 @@
             "要看待处理单时改用 dws oa approval list-pending",
             "要看自己发起或抄送时改用 list-submitted / list-cc"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -839,8 +860,8 @@
                 "要看待处理单时改用 dws oa approval list-pending",
                 "要看自己发起或抄送时改用 list-submitted / list-cc"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -879,8 +900,8 @@
             "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
             "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -889,8 +910,8 @@
                 "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
                 "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -912,17 +933,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -948,16 +969,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -980,8 +1008,8 @@
           "value": [
             "需要查看当前用户已经处理过的审批单列表时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -989,8 +1017,8 @@
               "value": [
                 "需要查看当前用户已经处理过的审批单列表时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1009,8 +1037,8 @@
         "CommandRegistry:canonical_path=oa.get_done_tasks",
         "Skill:skills/mono/references/products/oa.md",
         "cobra-help:dws oa approval list-executed",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks",
         "live-dws-schema:oa.get_done_tasks",
         "skills/mono/references/products/oa.md",
@@ -1022,7 +1050,7 @@
     },
     "oa approval list-forms": {
       "agent_summary": "获取当前用户可见的审批表单列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "需要实例、任务或操作记录时不要使用；该命令只列可见模板"
@@ -1037,15 +1065,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取当前用户可见的审批表单列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "获取当前用户可见的审批表单列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1053,17 +1081,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1077,8 +1105,8 @@
           "value": [
             "需要实例、任务或操作记录时不要使用；该命令只列可见模板"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1086,8 +1114,8 @@
               "value": [
                 "需要实例、任务或操作记录时不要使用；该命令只列可见模板"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1126,8 +1154,8 @@
             "dws oa approval list-forms --cursor 0 --limit 100",
             "dws oa approval list-forms --cursor 0 --limit 100 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1136,8 +1164,8 @@
                 "dws oa approval list-forms --cursor 0 --limit 100",
                 "dws oa approval list-forms --cursor 0 --limit 100 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1159,17 +1187,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1201,16 +1229,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -1233,8 +1268,8 @@
           "value": [
             "需要列出可见审批模板并取得 processCode 时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1242,8 +1277,8 @@
               "value": [
                 "需要列出可见审批模板并取得 processCode 时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1264,8 +1299,8 @@
         "cobra-help:dws oa approval list-forms",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_user_visible_process",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.list_user_visible_process",
         "live-dws-schema:oa.list_user_visible_process",
         "skills/mono/references/products/oa.md",
@@ -1278,7 +1313,7 @@
     },
     "oa approval list-initiated": {
       "agent_summary": "查询当前用户已发起的审批实例列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "不知道 processCode 时先用 dws oa approval list-forms",
@@ -1294,15 +1329,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "查询当前用户已发起的审批实例列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "查询当前用户已发起的审批实例列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1310,17 +1345,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1335,8 +1370,8 @@
             "不知道 processCode 时先用 dws oa approval list-forms",
             "要撤销实例时先确认 instanceId 再改用 revoke"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1345,8 +1380,8 @@
                 "不知道 processCode 时先用 dws oa approval list-forms",
                 "要撤销实例时先确认 instanceId 再改用 revoke"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1385,8 +1420,8 @@
             "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20",
             "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1395,8 +1430,8 @@
                 "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20",
                 "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1418,17 +1453,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1460,16 +1495,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -1492,8 +1534,8 @@
           "value": [
             "已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1501,8 +1543,8 @@
               "value": [
                 "已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1523,8 +1565,8 @@
         "cobra-help:dws oa approval list-initiated",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_initiated_instances",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.list_initiated_instances",
         "live-dws-schema:oa.list_initiated_instances",
         "skills/mono/references/products/oa.md",
@@ -1538,7 +1580,7 @@
     },
     "oa approval list-pending": {
       "agent_summary": "查询当前用户待处理的审批单列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "已知实例只要 taskId 时改用 dws oa approval tasks",
@@ -1554,15 +1596,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "查询当前用户待处理的审批单列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "查询当前用户待处理的审批单列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1570,17 +1612,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1595,8 +1637,8 @@
             "已知实例只要 taskId 时改用 dws oa approval tasks",
             "不要用本命令执行同意/拒绝"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1605,8 +1647,8 @@
                 "已知实例只要 taskId 时改用 dws oa approval tasks",
                 "不要用本命令执行同意/拒绝"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1645,8 +1687,8 @@
             "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
             "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1655,8 +1697,8 @@
                 "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
                 "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1678,17 +1720,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1720,16 +1762,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -1752,8 +1801,8 @@
           "value": [
             "需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1761,8 +1810,8 @@
               "value": [
                 "需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1783,8 +1832,8 @@
         "cobra-help:dws oa approval list-pending",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_approvals",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_approvals",
         "live-dws-schema:oa.list_pending_approvals",
         "skills/mono/references/products/oa.md",
@@ -1798,7 +1847,7 @@
     },
     "oa approval list-submitted": {
       "agent_summary": "获取已提交实例列表",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "要按 processCode 与时间窗列已发起实例时也可对照 list-initiated",
@@ -1814,15 +1863,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取已提交实例列表",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "获取已提交实例列表",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1830,17 +1879,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -1855,8 +1904,8 @@
             "要按 processCode 与时间窗列已发起实例时也可对照 list-initiated",
             "要处理待办时改用 list-pending / tasks"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1865,8 +1914,8 @@
                 "要按 processCode 与时间窗列已发起实例时也可对照 list-initiated",
                 "要处理待办时改用 list-pending / tasks"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1905,8 +1954,8 @@
             "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
             "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -1915,8 +1964,8 @@
                 "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
                 "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -1938,17 +1987,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -1974,16 +2023,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -2006,8 +2062,8 @@
           "value": [
             "需要查看当前用户已提交/发起相关的审批单列表时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2015,8 +2071,8 @@
               "value": [
                 "需要查看当前用户已提交/发起相关的审批单列表时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2035,8 +2091,8 @@
         "CommandRegistry:canonical_path=oa.get_submitted_instances",
         "Skill:skills/mono/references/products/oa.md",
         "cobra-help:dws oa approval list-submitted",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances",
         "live-dws-schema:oa.get_submitted_instances",
         "skills/mono/references/products/oa.md",
@@ -2048,7 +2104,7 @@
     },
     "oa approval oa-cc-noticer": {
       "agent_summary": "抄送审批人",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "只需查看抄送列表时改用 dws oa approval list-cc",
@@ -2064,15 +2120,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "抄送审批人",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "抄送审批人",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2080,17 +2136,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -2105,8 +2161,8 @@
             "只需查看抄送列表时改用 dws oa approval list-cc",
             "实例与抄送人未确认时不要添加"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2115,8 +2171,8 @@
                 "只需查看抄送列表时改用 dws oa approval list-cc",
                 "实例与抄送人未确认时不要添加"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2155,8 +2211,8 @@
             "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"68674200835816\"",
             "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"userId1,userId2\" --operator-id \"123123\""
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2165,8 +2221,8 @@
                 "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"68674200835816\"",
                 "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"userId1,userId2\" --operator-id \"123123\""
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2188,17 +2244,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -2224,16 +2280,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -2256,8 +2319,8 @@
           "value": [
             "已知 processInstanceId，需要为审批实例追加抄送人时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2265,8 +2328,8 @@
               "value": [
                 "已知 processInstanceId，需要为审批实例追加抄送人时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2285,8 +2348,8 @@
         "CommandRegistry:canonical_path=oa.oa_cc_noticer",
         "Skill:skills/mono/references/products/oa.md",
         "cobra-help:dws oa approval oa-cc-noticer",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer",
         "live-dws-schema:oa.oa_cc_noticer",
         "skills/mono/references/products/oa.md",
@@ -2298,7 +2361,7 @@
     },
     "oa approval oa-comments": {
       "agent_summary": "用户添加审批评论",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "只需同意/拒绝/转交时改用对应写命令",
@@ -2314,15 +2377,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "用户添加审批评论",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "用户添加审批评论",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2330,17 +2393,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -2355,8 +2418,8 @@
             "只需同意/拒绝/转交时改用对应写命令",
             "评论内容或实例未确认时不要添加"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2365,8 +2428,8 @@
                 "只需同意/拒绝/转交时改用对应写命令",
                 "评论内容或实例未确认时不要添加"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2405,8 +2468,8 @@
             "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\"",
             "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2415,8 +2478,8 @@
                 "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\"",
                 "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2438,17 +2501,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -2474,16 +2537,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -2506,8 +2576,8 @@
           "value": [
             "已知 processInstanceId，需要为审批实例添加评论文本时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2515,8 +2585,8 @@
               "value": [
                 "已知 processInstanceId，需要为审批实例添加评论文本时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2535,8 +2605,8 @@
         "CommandRegistry:canonical_path=oa.dingflow_comments",
         "Skill:skills/mono/references/products/oa.md",
         "cobra-help:dws oa approval oa-comments",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments",
         "live-dws-schema:oa.dingflow_comments",
         "skills/mono/references/products/oa.md",
@@ -2548,7 +2618,7 @@
     },
     "oa approval records": {
       "agent_summary": "获取审批操作记录",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "需要当前表单详情时改用 dws oa approval detail",
@@ -2564,15 +2634,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "获取审批操作记录",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "获取审批操作记录",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2580,17 +2650,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -2605,8 +2675,8 @@
             "需要当前表单详情时改用 dws oa approval detail",
             "该命令只读历史，不处理审批"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2615,8 +2685,8 @@
                 "需要当前表单详情时改用 dws oa approval detail",
                 "该命令只读历史，不处理审批"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2655,8 +2725,8 @@
             "dws oa approval records --instance-id \u003cprocessInstanceId\u003e",
             "dws oa approval records --instance-id \u003cprocessInstanceId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2665,8 +2735,8 @@
                 "dws oa approval records --instance-id \u003cprocessInstanceId\u003e",
                 "dws oa approval records --instance-id \u003cprocessInstanceId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2688,17 +2758,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -2730,16 +2800,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -2762,8 +2839,8 @@
           "value": [
             "已知 processInstanceId，需要查看谁做了什么审批操作及结果时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2771,8 +2848,8 @@
               "value": [
                 "已知 processInstanceId，需要查看谁做了什么审批操作及结果时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2793,8 +2870,8 @@
         "cobra-help:dws oa approval records",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_records",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_processInstance_records",
         "live-dws-schema:oa.get_processInstance_records",
         "skills/mono/references/products/oa.md",
@@ -2807,7 +2884,7 @@
     },
     "oa approval redirect-task": {
       "agent_summary": "转交审批任务",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "任务、接收人或转交意图未确认时不要转交",
@@ -2823,15 +2900,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "转交审批任务",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "转交审批任务",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2839,17 +2916,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -2864,8 +2941,8 @@
             "任务、接收人或转交意图未确认时不要转交",
             "要自己处理时改用 approve/reject"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2874,8 +2951,8 @@
                 "任务、接收人或转交意图未确认时不要转交",
                 "要自己处理时改用 approve/reject"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2914,8 +2991,8 @@
             "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e",
             "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e --remark \"请帮忙处理\""
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -2924,8 +3001,8 @@
                 "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e",
                 "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e --remark \"请帮忙处理\""
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -2947,17 +3024,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -2983,16 +3060,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -3015,8 +3099,8 @@
           "value": [
             "已知 taskId 与接收人 toActionerId，用户明确要求转交审批任务时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3024,8 +3108,8 @@
               "value": [
                 "已知 taskId 与接收人 toActionerId，用户明确要求转交审批任务时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3044,8 +3128,8 @@
         "CommandRegistry:canonical_path=oa.redirect_task",
         "Skill:skills/mono/references/products/oa.md",
         "cobra-help:dws oa approval redirect-task",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task",
         "live-dws-schema:oa.redirect_task",
         "skills/mono/references/products/oa.md",
@@ -3057,7 +3141,7 @@
     },
     "oa approval reject": {
       "agent_summary": "拒绝审批",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "要同意时改用 dws oa approval approve",
@@ -3073,15 +3157,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "拒绝审批",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "拒绝审批",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3089,17 +3173,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -3114,8 +3198,8 @@
             "要同意时改用 dws oa approval approve",
             "实例、taskId 或拒绝原因未确认时不要拒绝"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3124,8 +3208,8 @@
                 "要同意时改用 dws oa approval approve",
                 "实例、taskId 或拒绝原因未确认时不要拒绝"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3133,17 +3217,17 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "not_required",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "user_required",
@@ -3156,17 +3240,17 @@
         },
         "effect": {
           "value": "write",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "write",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "destructive",
@@ -3182,8 +3266,8 @@
             "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不同意\"",
             "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不符合要求\" --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3192,8 +3276,8 @@
                 "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不同意\"",
                 "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不符合要求\" --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3215,17 +3299,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -3257,40 +3341,40 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": true,
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/selection/oa.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
         "risk": {
           "value": "medium",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "medium",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "high",
@@ -3305,8 +3389,8 @@
           "value": [
             "已知 processInstanceId 与 taskId，用户明确要求拒绝/驳回该审批任务时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3314,8 +3398,8 @@
               "value": [
                 "已知 processInstanceId 与 taskId，用户明确要求拒绝/驳回该审批任务时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3336,8 +3420,8 @@
         "cobra-help:dws oa approval reject",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.reject_processInstance",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.reject_processInstance",
         "live-dws-schema:oa.reject_processInstance",
         "skills/mono/SKILL.md",
@@ -3352,7 +3436,7 @@
     },
     "oa approval revoke": {
       "agent_summary": "撤销当前用户已发起的审批实例",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "不是自己发起的单或 instanceId 未确认时不要撤销",
@@ -3367,15 +3451,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "撤销当前用户已发起的审批实例",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "撤销当前用户已发起的审批实例",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3383,17 +3467,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -3408,8 +3492,8 @@
             "不是自己发起的单或 instanceId 未确认时不要撤销",
             "要拒绝别人的待办时改用 reject，不要用 revoke"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3418,8 +3502,8 @@
                 "不是自己发起的单或 instanceId 未确认时不要撤销",
                 "要拒绝别人的待办时改用 reject，不要用 revoke"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3427,17 +3511,17 @@
         },
         "confirmation": {
           "value": "user_required",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "user_required",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "user_required",
@@ -3456,17 +3540,17 @@
         },
         "effect": {
           "value": "write",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "write",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "write",
@@ -3481,8 +3565,8 @@
           "value": [
             "dws oa approval revoke --instance-id \u003cinstance-id\u003e"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3490,8 +3574,8 @@
               "value": [
                 "dws oa approval revoke --instance-id \u003cinstance-id\u003e"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3513,17 +3597,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -3555,40 +3639,40 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": true,
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/selection/oa.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
         },
         "risk": {
           "value": "high",
-          "source": "internal/cli/schema_hints/products/oa.json",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa marks this tool as reviewed",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "high",
-              "source": "internal/cli/schema_hints/products/oa.json",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa marks this tool as reviewed"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "high",
@@ -3609,8 +3693,8 @@
           "value": [
             "用户明确要求撤销自己已发起的审批实例，且 processInstanceId 已确认时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3618,8 +3702,8 @@
               "value": [
                 "用户明确要求撤销自己已发起的审批实例，且 processInstanceId 已确认时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3640,8 +3724,8 @@
         "cobra-help:dws oa approval revoke",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.revoke_processInstance",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.revoke_processInstance",
         "live-dws-schema:oa.revoke_processInstance",
         "skills/mono/SKILL.md",
@@ -3656,7 +3740,7 @@
     },
     "oa approval tasks": {
       "agent_summary": "查询待我审批的任务Id",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
+      "agent_summary_source": "dws-agent-selection/oa",
       "availability": "available",
       "avoid_when": [
         "还不知道实例列表时先用 dws oa approval list-pending",
@@ -3672,15 +3756,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "查询待我审批的任务Id",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
               "value": "查询待我审批的任务Id",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3688,17 +3772,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -3713,8 +3797,8 @@
             "还不知道实例列表时先用 dws oa approval list-pending",
             "本命令只取 taskId，不执行审批"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3723,8 +3807,8 @@
                 "还不知道实例列表时先用 dws oa approval list-pending",
                 "本命令只取 taskId，不执行审批"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3763,8 +3847,8 @@
             "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e",
             "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e --format json"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3773,8 +3857,8 @@
                 "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e",
                 "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e --format json"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3796,17 +3880,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/oa.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/oa is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/oa.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/oa is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -3838,16 +3922,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "dws-tool-metadata/oa marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/oa marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
           ]
@@ -3870,8 +3961,8 @@
           "value": [
             "已知 processInstanceId，需要取得当前用户待办 taskId 以便同意或拒绝时"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/oa.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
@@ -3879,8 +3970,8 @@
               "value": [
                 "已知 processInstanceId，需要取得当前用户待办 taskId 以便同意或拒绝时"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-14-live-schema-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/oa.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。"
             }
@@ -3901,8 +3992,8 @@
         "cobra-help:dws oa approval tasks",
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_tasks",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/oa.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/oa.json",
+        "internal/cli/schema_hints/selection/oa.json",
         "internal/cli/schema_mcp_metadata.json#tools.oa.list_pending_tasks",
         "live-dws-schema:oa.list_pending_tasks",
         "skills/mono/references/products/oa.md",

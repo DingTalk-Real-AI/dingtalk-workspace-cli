@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/contact",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "contact.get_authorized_emp_rosterInfo": {
+      "agent_summary": "按字段 code 查询指定员工花名册字段值",
+      "use_when": [
+        "已确认 staffId 与可见字段 code，需要读花名册字段"
+      ],
+      "avoid_when": [
+        "尚不知道可见字段时先用 contact user profile fields",
+        "普通通讯录姓名搜索不要走花名册"
+      ],
+      "examples": [
+        "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.get_authorized_emp_rosterInfo",
+        "cobra-help:dws contact user profile get",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_authorized_emp_rosterInfo",
+        "internal/cli/schema_command_registry.json#contact.get_authorized_emp_rosterInfo",
+        "skills/mono/references/products/contact.md",
+        "live-dws-schema:contact.get_authorized_emp_rosterInfo#FAILED",
+        "pinned-mcp:contact.get_authorized_emp_rosterInfo"
+      ]
+    },
+    "contact.get_current_user_profile": {
+      "agent_summary": "获取当前登录用户资料与 userId",
+      "use_when": [
+        "用户问我是谁/我的 userId/当前账号信息"
+      ],
+      "avoid_when": [
+        "查他人详情用 contact user get 或先搜索"
+      ],
+      "examples": [
+        "dws contact user get-self --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.get_current_user_profile",
+        "cobra-help:dws contact user get-self",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_current_user_profile",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.get_current_user_profile",
+        "internal/cli/schema_command_registry.json#contact.get_current_user_profile",
+        "skills/mono/references/products/contact.md",
+        "live-dws-schema:contact.get_current_user_profile"
+      ]
+    },
+    "contact.get_dept_info_by_dept_id": {
+      "agent_summary": "获取指定部门详情",
+      "use_when": [
+        "已知 deptId，需要部门名称、人数等详情时"
+      ],
+      "avoid_when": [
+        "只知道部门名称时应先搜索部门；需要列出直属子部门时改用子部门查询。"
+      ],
+      "examples": [
+        "dws contact dept get-info --dept 12345 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.get_dept_info_by_dept_id",
+        "cobra-help:dws contact dept get-info",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_dept_info_by_dept_id"
+      ]
+    },
+    "contact.get_dept_members_by_deptId": {
+      "agent_summary": "查看部门成员（逗号分隔 deptId）",
+      "use_when": [
+        "需要按一个或多个 deptId 查看部门成员名单时"
+      ],
+      "avoid_when": [
+        "只需部门详情或人数时使用 contact dept get-info；需要直属子部门时使用 contact dept list-children"
+      ],
+      "examples": [
+        "dws contact dept list-members --depts 12345,67890 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.get_dept_members_by_deptId",
+        "cobra-help:dws contact dept list-members",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_dept_members_by_deptId",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.get_dept_members_by_deptId"
+      ]
+    },
+    "contact.get_sub_depts_by_dept_id": {
+      "agent_summary": "列出指定部门的直属子部门",
+      "use_when": [
+        "已知父部门 deptId，需要列出直属子部门时"
+      ],
+      "avoid_when": [
+        "需要父部门自身详情或递归组织树时不要使用；该命令只列直属子部门。"
+      ],
+      "examples": [
+        "dws contact dept list-children --dept 12345 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.get_sub_depts_by_dept_id",
+        "cobra-help:dws contact dept list-children",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_sub_depts_by_dept_id"
+      ]
+    },
+    "contact.get_user_info_by_user_ids": {
+      "agent_summary": "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
+      "use_when": [
+        "已有一个或多个 userId，需要部门、主管等详情"
+      ],
+      "avoid_when": [
+        "还没有 userId 时先 search / aisearch person",
+        "查自己不要传 me/self，用 contact user get-self"
+      ],
+      "examples": [
+        "dws contact user get --ids userId1,userId2"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.get_user_info_by_user_ids",
+        "cobra-help:dws contact user get",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.get_user_info_by_user_ids",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.get_user_info_by_user_ids",
+        "internal/cli/schema_command_registry.json#contact.get_user_info_by_user_ids",
+        "skills/mono/references/products/contact.md",
+        "live-dws-schema:contact.get_user_info_by_user_ids"
+      ]
+    },
+    "contact.list_authorized_roster_fields": {
+      "agent_summary": "查询当前用户有权查看的花名册字段",
+      "use_when": [
+        "查询花名册前，需要先确认当前用户可见的字段 code 时"
+      ],
+      "avoid_when": [
+        "需要读取某位员工的具体花名册字段值时不要停在字段目录，应再调用员工花名册查询。"
+      ],
+      "examples": [
+        "dws contact user profile fields --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.list_authorized_roster_fields",
+        "cobra-help:dws contact user profile fields",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.list_authorized_roster_fields"
+      ]
+    },
+    "contact.list_my_followings": {
+      "agent_summary": "获取当前用户的特别关注列表",
+      "use_when": [
+        "需要查看当前用户特别关注或星标联系人时"
+      ],
+      "avoid_when": [
+        "需要搜索企业通讯录或查询任意员工详情时不要使用；这里只返回当前用户的特别关注列表。"
+      ],
+      "examples": [
+        "dws contact relation list-my-followings --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.list_my_followings",
+        "cobra-help:dws contact relation list-my-followings",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.list_my_followings"
+      ]
+    },
+    "contact.query_dismission_employee_list": {
+      "agent_summary": "查询离职员工列表",
+      "use_when": [
+        "需要按姓名、离职时间或部门查询离职员工时"
+      ],
+      "avoid_when": [
+        "需要查询在职员工或修改离职信息时不要使用；该命令只检索离职员工记录。"
+      ],
+      "examples": [
+        "dws contact user dismission search --format json",
+        "dws contact user dismission search --name \"张三\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.query_dismission_employee_list",
+        "cobra-help:dws contact user dismission search",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.query_dismission_employee_list"
+      ]
+    },
+    "contact.search_contact_by_key_word": {
+      "agent_summary": "按关键词搜索好友和同事，提取 userId/openDingTalkId",
+      "use_when": [
+        "按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"
+      ],
+      "avoid_when": [
+        "职责/上级/技能等语义找人优先 aisearch person",
+        "已有 userId 查详情用 contact user get",
+        "查自己用 contact user get-self"
+      ],
+      "examples": [
+        "dws contact user search --query \"张三\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.search_contact_by_key_word",
+        "cobra-help:dws contact user search",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.search_contact_by_key_word",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.search_contact_by_key_word",
+        "internal/cli/schema_command_registry.json#contact.search_contact_by_key_word",
+        "skills/mono/references/products/contact.md",
+        "live-dws-schema:contact.search_contact_by_key_word"
+      ]
+    },
+    "contact.search_dept_by_keyword": {
+      "agent_summary": "按关键词搜索部门",
+      "use_when": [
+        "只知道部门名称或关键词，需要定位 deptId 时"
+      ],
+      "avoid_when": [
+        "已经有准确部门 ID 并需要详情时改用部门详情命令；该命令用于关键词定位部门。"
+      ],
+      "examples": [
+        "dws contact dept search --query \"技术部\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.search_dept_by_keyword",
+        "cobra-help:dws contact dept search",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.search_dept_by_keyword",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.search_dept_by_keyword"
+      ]
+    },
+    "contact.search_user_by_mobile": {
+      "agent_summary": "按手机号搜索用户",
+      "use_when": [
+        "已知手机号，需要精确搜索用户时"
+      ],
+      "avoid_when": [
+        "已有用户 ID 或需要批量用户详情时改用批量详情命令；该命令仅按手机号定位用户。"
+      ],
+      "examples": [
+        "dws contact user search-mobile --mobile 13800138000 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.search_user_by_mobile",
+        "cobra-help:dws contact user search-mobile",
+        "Skill:skills/mono/references/products/contact.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#contact.search_user_by_mobile",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.search_user_by_mobile"
+      ]
+    }
+  },
+  "products": {
+    "contact": {
+      "agent_summary": "查询通讯录用户、部门、关注关系与授权花名册",
+      "use_when": [
+        "按姓名/手机号/userId/部门条件做通讯录精确查询"
+      ],
+      "avoid_when": [
+        "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "CommandRegistry:product=contact",
+        "Skill:skills/mono/references/products/contact.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

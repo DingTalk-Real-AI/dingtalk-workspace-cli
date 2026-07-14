@@ -13,152 +13,121 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestGenerateUsesReviewedManualAgentProseAsSingleDeliverySource(t *testing.T) {
+func TestGenerateUsesReviewedSelectionAsSingleDeliverySource(t *testing.T) {
 	root := t.TempDir()
-	writeManualAgentFixture(t, root, true)
+	writeSelectionFixture(t, root, true, `["dws sample item search --query value"]`)
 	writeManualFixtureFile(t, root, "skills/mono/SKILL.md", "# Skill\n")
 	writeManualFixtureFile(t, root, "skills/mono/references/intent-guide.md", "# Intent\n")
 	writeManualFixtureFile(t, root, "skills/mono/references/products/sample.md", "# Sample\n")
-	writeManualFixtureFile(t, root, "internal/cli/schema_hints/a.json", `{
+	writeManualFixtureFile(t, root, "internal/cli/schema_hints/imported/legacy.json", `{
   "version":1,
-  "source":{"kind":"explicit","name":"legacy-a","reviewed":true},
+  "source":{"kind":"imported","name":"legacy"},
   "tools":{"sample.search_items":{"agent_summary":"legacy A","use_when":["legacy A"],"avoid_when":["legacy A"],"examples":["dws sample item search --legacy-a"]}}
 }`)
-	writeManualFixtureFile(t, root, "internal/cli/schema_hints/b.json", `{
-  "version":1,
-  "source":{"kind":"explicit","name":"legacy-b","reviewed":true},
-  "tools":{"sample.search_items":{"agent_summary":"legacy B","use_when":["legacy B"],"avoid_when":["legacy B"],"examples":["dws sample item search --legacy-b"]}}
-}`)
 
-	manualPath := filepath.Join(root, "internal/cli/schema_manual_hints.json")
-	before, err := os.ReadFile(manualPath)
+	selectionPath := filepath.Join(root, "internal/cli/schema_hints/selection/sample.json")
+	before, err := os.ReadFile(selectionPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	file, _, err := Generate(manualAgentFixtureOptions(root))
+	file, _, err := Generate(selectionFixtureOptions(root))
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	after, err := os.ReadFile(manualPath)
+	after, err := os.ReadFile(selectionPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(after) != string(before) {
-		t.Fatal("Generate modified the reviewed manual hint input")
+		t.Fatal("Generate modified the reviewed selection input")
 	}
 
 	tool := file.Tools["sample item search"]
 	if tool.AgentSummary != "Search existing sample items" || len(tool.UseWhen) != 1 || tool.UseWhen[0] != "An existing item must be found" {
-		t.Fatalf("manual selection was not delivered: %#v", tool)
+		t.Fatalf("selection was not delivered: %#v", tool)
 	}
 	product := file.Products["sample"]
 	for _, field := range []string{"agent_summary", "use_when", "avoid_when"} {
 		provenance := product.FieldProvenance[field]
-		if provenance.Precedence != selectionPrecedenceReviewedManual || selectedCandidateCount(provenance.Candidates) != 1 {
+		if provenance.Precedence != selectionPrecedenceReviewedExplicit || selectedCandidateCount(provenance.Candidates) != 1 {
 			t.Fatalf("product %s provenance = %#v", field, provenance)
+		}
+		if !strings.Contains(provenance.Source, "/selection/") {
+			t.Fatalf("product %s source = %q, want selection/", field, provenance.Source)
 		}
 	}
 	for _, field := range []string{"agent_summary", "use_when", "avoid_when", "examples"} {
 		provenance := tool.FieldProvenance[field]
-		if provenance.Precedence != selectionPrecedenceReviewedManual || selectedCandidateCount(provenance.Candidates) != 1 {
+		if provenance.Precedence != selectionPrecedenceReviewedExplicit || selectedCandidateCount(provenance.Candidates) != 1 {
 			t.Fatalf("%s provenance = %#v", field, provenance)
 		}
 		for _, candidate := range provenance.Candidates {
-			if candidate.Precedence != selectionPrecedenceReviewedManual {
+			if candidate.Precedence != selectionPrecedenceReviewedExplicit {
 				t.Fatalf("legacy prose remained a semantic candidate for %s: %#v", field, provenance.Candidates)
 			}
 		}
 	}
 }
 
-func TestGenerateRejectsMaxExamplesThatWouldTruncateReviewedManualHints(t *testing.T) {
+func TestGenerateRejectsMaxExamplesThatWouldTruncateReviewedSelection(t *testing.T) {
 	root := t.TempDir()
-	writeManualAgentFixture(t, root, true)
-	path := filepath.Join(root, "internal/cli/schema_manual_hints.json")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body = []byte(strings.Replace(string(body),
-		`"examples":["dws sample item search --query value"]`,
-		`"examples":["dws sample item search --query value","dws sample item search --query other"]`, 1))
-	if err := os.WriteFile(path, body, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSelectionFixture(t, root, true, `["dws sample item search --query value","dws sample item search --query other"]`)
 	writeManualFixtureFile(t, root, "skills/mono/SKILL.md", "# Skill\n")
 	writeManualFixtureFile(t, root, "skills/mono/references/intent-guide.md", "# Intent\n")
 	if err := os.MkdirAll(filepath.Join(root, "skills/mono/references/products"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "internal/cli/schema_hints"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	opts := manualAgentFixtureOptions(root)
+	opts := selectionFixtureOptions(root)
 	opts.MaxExamples = 1
-	_, _, err = Generate(opts)
+	_, _, err := Generate(opts)
 	if err == nil || !strings.Contains(err.Error(), "exceeding max-examples=1") {
 		t.Fatalf("Generate() error = %v", err)
 	}
 }
 
-func TestGenerateRejectsIncompleteManualAgentCoverage(t *testing.T) {
+func TestGenerateRejectsIncompleteSelectionCoverage(t *testing.T) {
 	root := t.TempDir()
-	writeManualAgentFixture(t, root, false)
+	writeSelectionFixture(t, root, false, `[]`)
 	writeManualFixtureFile(t, root, "skills/mono/SKILL.md", "# Skill\n")
 	writeManualFixtureFile(t, root, "skills/mono/references/intent-guide.md", "# Intent\n")
 	if err := os.MkdirAll(filepath.Join(root, "skills/mono/references/products"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "internal/cli/schema_hints"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err := Generate(manualAgentFixtureOptions(root))
+	_, _, err := Generate(selectionFixtureOptions(root))
 	if err == nil || !strings.Contains(err.Error(), "missing=[sample.search_items]") {
 		t.Fatalf("coverage error = %v", err)
 	}
 }
 
-func TestGenerateRequiresManualAgentHintSource(t *testing.T) {
+func TestGenerateRequiresAgentHintDirectory(t *testing.T) {
 	_, _, err := Generate(Options{})
-	if err == nil || !strings.Contains(err.Error(), "manual Agent hint source is required") {
+	if err == nil || !strings.Contains(err.Error(), "Agent hint directory is required") {
 		t.Fatalf("Generate() error = %v", err)
 	}
 }
 
 func TestGenerateRequiresCompleteEffectiveCommandRegistryProjection(t *testing.T) {
-	_, _, err := Generate(Options{ManualHintsPath: "manual.json"})
+	_, _, err := Generate(Options{HintsDir: "internal/cli/schema_hints"})
 	if err == nil || !strings.Contains(err.Error(), "complete Effective CommandRegistry projection is required") {
 		t.Fatalf("Generate() error = %v", err)
 	}
 }
 
-func TestGenerateValidatesManualExamplesAgainstBoundCobra(t *testing.T) {
+func TestGenerateValidatesSelectionExamplesAgainstBoundCobra(t *testing.T) {
 	root := t.TempDir()
-	writeManualAgentFixture(t, root, true)
-	path := filepath.Join(root, "internal/cli/schema_manual_hints.json")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body = []byte(strings.Replace(string(body), "--query value", "--invented value", 1))
-	if err := os.WriteFile(path, body, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSelectionFixture(t, root, true, `["dws sample item search --invented value"]`)
 	writeManualFixtureFile(t, root, "skills/mono/SKILL.md", "# Skill\n")
 	writeManualFixtureFile(t, root, "skills/mono/references/intent-guide.md", "# Intent\n")
 	if err := os.MkdirAll(filepath.Join(root, "skills/mono/references/products"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "internal/cli/schema_hints"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = Generate(manualAgentFixtureOptions(root))
+	_, _, err := Generate(selectionFixtureOptions(root))
 	if err == nil || !strings.Contains(err.Error(), "unknown flag --invented") {
 		t.Fatalf("Generate() error = %v", err)
 	}
 }
 
-func manualAgentFixtureOptions(root string) Options {
+func selectionFixtureOptions(root string) Options {
 	leaf := &cobra.Command{Use: "search", Run: func(*cobra.Command, []string) {}}
 	leaf.Flags().String("query", "", "query")
 	boundSpec := cli.BoundCommandSpec{
@@ -171,7 +140,6 @@ func manualAgentFixtureOptions(root string) Options {
 		ProductsDir:        "skills/mono/references/products",
 		IntentGuidePath:    "skills/mono/references/intent-guide.md",
 		HintsDir:           "internal/cli/schema_hints",
-		ManualHintsPath:    "internal/cli/schema_manual_hints.json",
 		ToolPaths:          map[string]string{"sample.search_items": "sample item search", "sample item search": "sample item search"},
 		CanonicalToolPaths: map[string]string{"sample.search_items": "sample item search"},
 		BoundCommands: cli.BoundCommandRegistry{
@@ -187,30 +155,55 @@ func manualAgentFixtureOptions(root string) Options {
 	}
 }
 
-func writeManualAgentFixture(t *testing.T, root string, includeTool bool) {
+func writeSelectionFixture(t *testing.T, root string, includeTool bool, examplesJSON string) {
 	t.Helper()
+	writeManualFixtureFile(t, root, "internal/cli/schema_hints/index.json", `{
+  "version":1,
+  "format":"dws-agent-hint-index",
+  "source":{"kind":"explicit","name":"fixture"},
+  "metadata":{"sample":"metadata/sample.json"},
+  "selection":{"sample":"selection/sample.json"}
+}`)
+	writeManualFixtureFile(t, root, "internal/cli/schema_hints/metadata/sample.json", `{
+  "version":1,
+  "source":{"kind":"explicit","name":"dws-tool-metadata/sample","reviewed":true},
+  "tools":{
+    "sample.search_items":{
+      "effect":"read",
+      "risk":"low",
+      "confirmation":"not_required",
+      "runtime_gate":"none",
+      "reviewed":true,
+      "review_reason":"fixture metadata"
+    }
+  }
+}`)
 	tool := ""
 	if includeTool {
 		tool = `"sample.search_items":{
       "agent_summary":"Search existing sample items",
       "use_when":["An existing item must be found"],
       "avoid_when":["A new item must be created"],
-      "examples":["dws sample item search --query value"],
+      "examples":` + examplesJSON + `,
       "reviewed":true,
-      "revision":"ai-v1",
-      "reason":"Reviewed selection guidance",
-      "evidence":["dws sample item search --help"]
+      "review_reason":"Reviewed selection guidance",
+      "source_refs":["dws sample item search --help"]
     }`
 	}
-	writeManualFixtureFile(t, root, "internal/cli/schema_manual_hints.json", `{
-  "$schema":"./schema_manual_hints.schema.json",
+	writeManualFixtureFile(t, root, "internal/cli/schema_hints/selection/sample.json", `{
   "version":1,
-  "commands":[],
-  "agent_hints":{
-    "revisions":{"ai-v1":{"generated_by":"ai","model":"gpt-5","prompt_version":"v1","reason":"fixture"}},
-    "products":{"sample":{"agent_summary":"Manage samples","use_when":["The target is a sample"],"avoid_when":["The target is not a sample"],"reviewed":true,"revision":"ai-v1","reason":"Reviewed product routing","evidence":["sample.md"]}},
-    "tools":{`+tool+`}
-  }
+  "source":{"kind":"explicit","name":"dws-agent-selection/sample","reviewed":true},
+  "products":{
+    "sample":{
+      "agent_summary":"Manage samples",
+      "use_when":["The target is a sample"],
+      "avoid_when":["The target is not a sample"],
+      "reviewed":true,
+      "review_reason":"Reviewed product routing",
+      "source_refs":["sample.md"]
+    }
+  },
+  "tools":{`+tool+`}
 }`)
 }
 

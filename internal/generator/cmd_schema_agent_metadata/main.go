@@ -34,7 +34,6 @@ func main() {
 	var productsDir string
 	var intentGuidePath string
 	var hintsDir string
-	var manualHintsPath string
 	var interfaceMetadataPath string
 	var outputPath string
 	var outputDir string
@@ -49,8 +48,7 @@ func main() {
 	flag.StringVar(&skillPath, "skill", "skills/mono/SKILL.md", "Main DWS SKILL.md path")
 	flag.StringVar(&productsDir, "products", "skills/mono/references/products", "Product skill reference directory")
 	flag.StringVar(&intentGuidePath, "intent-guide", "skills/mono/references/intent-guide.md", "Cross-product intent guide path")
-	flag.StringVar(&hintsDir, "hints", "internal/cli/schema_hints", "Versioned Agent hint JSON directory")
-	flag.StringVar(&manualHintsPath, "manual-hints", "internal/cli/schema_manual_hints.json", "Reviewed Manual Schema/Agent hint input; read-only")
+	flag.StringVar(&hintsDir, "hints", "internal/cli/schema_hints", "Versioned Agent hint JSON directory (metadata/ + selection/)")
 	flag.StringVar(&interfaceMetadataPath, "interface-metadata", "internal/cli/schema_mcp_metadata.json", "Sanitized versioned MCP metadata used only for fallback Agent summaries")
 	flag.StringVar(&outputPath, "output", "", "Output embedded Agent metadata JSON file (legacy single-file mode)")
 	flag.StringVar(&outputDir, "output-dir", "", "Output directory for split embedded Agent metadata JSON")
@@ -70,14 +68,12 @@ func main() {
 		{Name: "canonical product Skill input directory", Path: "skills/mono/references/products"},
 		{Name: "canonical intent guide input", Path: "skills/mono/references/intent-guide.md"},
 		{Name: "canonical structured hint input directory", Path: "internal/cli/schema_hints"},
-		{Name: "canonical reviewed manual Agent hint input", Path: "internal/cli/schema_manual_hints.json"},
 		{Name: "canonical reviewed CommandRegistry input", Path: "internal/cli/schema_command_registry.json"},
 		{Name: "canonical pinned interface metadata input", Path: "internal/cli/schema_mcp_metadata.json"},
 		{Name: "main Skill input", Path: skillPath},
 		{Name: "product Skill input directory", Path: productsDir},
 		{Name: "intent guide input", Path: intentGuidePath},
 		{Name: "structured hint input directory", Path: hintsDir},
-		{Name: "reviewed manual Agent hint input", Path: manualHintsPath},
 		{Name: "reviewed CommandRegistry input", Path: registryPath},
 	}
 	if strings.TrimSpace(interfaceMetadataPath) != "" {
@@ -104,7 +100,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	if err := validateManualAgentHintInput(root, manualHintsPath, registry); err != nil {
+	if err := validateSelectionHintInput(root, hintsDir, registry); err != nil {
 		fail(err)
 	}
 
@@ -114,7 +110,6 @@ func main() {
 		ProductsDir:              productsDir,
 		IntentGuidePath:          intentGuidePath,
 		HintsDir:                 hintsDir,
-		ManualHintsPath:          manualHintsPath,
 		InterfaceMetadataPath:    interfaceMetadataPath,
 		MaxExamples:              maxExamples,
 		MaxInterfaceSummaryRunes: maxInterfaceSummaryRunes,
@@ -364,43 +359,32 @@ func validateCommandRegistryFile(rootPath, registryPath string) error {
 	return err
 }
 
-func validateManualAgentHintInput(rootPath, manualHintsPath string, registry commandRegistryProjection) error {
-	if strings.TrimSpace(manualHintsPath) == "" {
-		return fmt.Errorf("manual Agent hint input cannot be disabled")
+func validateSelectionHintInput(rootPath, hintsDir string, registry commandRegistryProjection) error {
+	hintsRoot := resolveRootPath(rootPath, hintsDir)
+	selectionRoot := filepath.Join(hintsRoot, "selection")
+	metadataRoot := filepath.Join(hintsRoot, "metadata")
+	for _, dir := range []string{selectionRoot, metadataRoot} {
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			return fmt.Errorf("required Agent hint directory missing: %s", dir)
+		}
 	}
-	path := resolveRootPath(rootPath, manualHintsPath)
-	canonicalPath := resolveRootPath(rootPath, "internal/cli/schema_manual_hints.json")
-	selectedInfo, err := os.Stat(path)
+	selectionFS := os.DirFS(selectionRoot)
+	agentHints, err := cli.LoadAgentHintsFromSelectionForValidation(selectionFS)
 	if err != nil {
-		return fmt.Errorf("stat reviewed manual Agent hints: %w", err)
-	}
-	canonicalInfo, err := os.Stat(canonicalPath)
-	if err != nil {
-		return fmt.Errorf("stat canonical reviewed manual Agent hints: %w", err)
-	}
-	if !os.SameFile(selectedInfo, canonicalInfo) {
-		return fmt.Errorf("manual Agent hint input %q must resolve to canonical reviewed source %q", manualHintsPath, "internal/cli/schema_manual_hints.json")
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read reviewed manual Agent hints: %w", err)
-	}
-	snapshot, err := cli.DecodeManualSchemaHintSource(data)
-	if err != nil {
-		return fmt.Errorf("decode reviewed manual Agent hints: %w", err)
+		return fmt.Errorf("load selection Agent hints: %w", err)
 	}
 	expectedTools := make(map[string]bool, len(registry.CanonicalToolPaths))
 	for canonical := range registry.CanonicalToolPaths {
 		expectedTools[canonical] = true
 	}
-	if err := cli.ValidateManualAgentHintSet(snapshot.AgentHints, registry.ProductIDs, expectedTools); err != nil {
-		return fmt.Errorf("validate reviewed manual Agent hints: %w", err)
+	if err := cli.ValidateManualAgentHintSet(agentHints, registry.ProductIDs, expectedTools); err != nil {
+		return fmt.Errorf("validate selection Agent hints: %w", err)
 	}
-	if err := cli.ValidateManualAgentHintExamples(registry.Bound, snapshot.AgentHints); err != nil {
-		return fmt.Errorf("validate reviewed manual Agent hint examples: %w", err)
+	if err := cli.ValidateManualAgentHintExamples(registry.Bound, agentHints); err != nil {
+		return fmt.Errorf("validate selection Agent hint examples: %w", err)
 	}
-	if _, err := cli.ValidateManualAgentSelectionContract(registry.Bound, snapshot.AgentHints); err != nil {
-		return fmt.Errorf("validate reviewed manual Agent selection contract: %w", err)
+	if _, err := cli.ValidateManualAgentSelectionContract(registry.Bound, agentHints); err != nil {
+		return fmt.Errorf("validate selection Agent selection contract: %w", err)
 	}
 	return nil
 }
@@ -413,13 +397,11 @@ func resolveRootPath(root, path string) string {
 	return filepath.Join(root, path)
 }
 
-// validateManualHintsOutputIsolation protects the reviewed manual hint source
-// before the generator creates, removes, or writes any output. Output paths
-// keep their existing command semantics (relative to the current working
-// directory), while the manual input remains relative to --root.
-func validateManualHintsOutputIsolation(rootPath, manualHintsPath, outputPath, outputDir, auditOutputPath string) error {
+// validateManualHintsOutputIsolation protects reviewed human-authored hint
+// inputs before the generator writes any output.
+func validateManualHintsOutputIsolation(rootPath, hintsDir, outputPath, outputDir, auditOutputPath string) error {
 	return validateAgentMetadataOutputIsolation(rootPath,
-		[]outputguard.Input{{Name: "reviewed manual Agent hint input", Path: manualHintsPath}},
+		[]outputguard.Input{{Name: "structured hint input directory", Path: hintsDir}},
 		outputPath, outputDir, auditOutputPath,
 	)
 }

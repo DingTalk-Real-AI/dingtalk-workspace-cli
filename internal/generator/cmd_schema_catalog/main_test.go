@@ -90,7 +90,6 @@ func TestValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
 		"skills/mono/SKILL.md",
 		"skills/mono/references/intent-guide.md",
 		"internal/cli/schema_command_registry.json",
-		"internal/cli/schema_manual_hints.json",
 		"internal/cli/schema_mcp_metadata.json",
 		"internal/cli/schema_mcp_service_review.json",
 		"internal/cli/schema_parameter_bindings.json",
@@ -124,7 +123,7 @@ func TestValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
 		want   string
 	}{
 		{name: "registry", output: filepath.Join(root, "internal/cli/schema_command_registry.json"), want: "CommandRegistry"},
-		{name: "manual", output: filepath.Join(root, "internal/cli/schema_manual_hints.json"), want: "manual Schema/Agent hint"},
+		{name: "hints", output: filepath.Join(root, "internal/cli/schema_hints"), want: "structured metadata source directory"},
 		{name: "metadata member", output: filepath.Join(metadataDir, "replacement.json"), want: "Agent metadata"},
 		{name: "metadata directory", output: metadataDir, want: "Agent metadata"},
 	} {

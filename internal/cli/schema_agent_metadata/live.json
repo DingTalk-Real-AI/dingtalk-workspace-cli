@@ -3,7 +3,7 @@
   "tools": {
     "live stream list": {
       "agent_summary": "查看当前用户发起的直播列表与基础统计",
-      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
+      "agent_summary_source": "dws-agent-selection/live",
       "availability": "available",
       "avoid_when": [
         "需要创建/开播/结束直播时不要使用；当前公开面仅列表查询"
@@ -17,15 +17,15 @@
       "field_provenance": {
         "agent_summary": {
           "value": "查看当前用户发起的直播列表与基础统计",
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
               "value": "查看当前用户发起的直播列表与基础统计",
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -33,17 +33,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/products/live.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/live.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/live is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/products/live.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/live.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/live is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/live marks this tool as reviewed"
             },
             {
               "value": "available",
@@ -57,8 +57,8 @@
           "value": [
             "需要创建/开播/结束直播时不要使用；当前公开面仅列表查询"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -66,8 +66,8 @@
               "value": [
                 "需要创建/开播/结束直播时不要使用；当前公开面仅列表查询"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -105,8 +105,8 @@
           "value": [
             "dws live stream list"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -114,8 +114,8 @@
               "value": [
                 "dws live stream list"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -137,17 +137,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/products/live.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/metadata/live.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-agent-hints/live is an explicit Agent hint source",
+          "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/products/live.json",
-              "precedence": "explicit",
+              "source": "internal/cli/schema_hints/metadata/live.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-agent-hints/live is an explicit Agent hint source"
+              "review_reason": "dws-tool-metadata/live marks this tool as reviewed"
             },
             {
               "value": "mcp",
@@ -179,16 +179,23 @@
         },
         "reviewed": {
           "value": true,
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/metadata/live.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
           "candidates": [
             {
               "value": true,
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/metadata/live.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
+              "review_reason": "dws-tool-metadata/live marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
           ]
@@ -211,8 +218,8 @@
           "value": [
             "用户要看自己发起过的直播、状态或观看量等列表信息"
           ],
-          "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-          "precedence": "reviewed_manual",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
@@ -220,8 +227,8 @@
               "value": [
                 "用户要看自己发起过的直播、状态或观看量等列表信息"
               ],
-              "source": "internal/cli/schema_manual_hints.json#agent_hints@agent-live-mcp-2026-07-14-v1",
-              "precedence": "reviewed_manual",
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
             }
@@ -243,8 +250,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.live.prod.json#live.get_my_lives",
         "internal/cli/schema_command_registry.json#live.get_my_lives",
         "internal/cli/schema_hints/imported/wukong.json",
-        "internal/cli/schema_hints/products/live.json",
-        "internal/cli/schema_manual_hints.json",
+        "internal/cli/schema_hints/metadata/live.json",
+        "internal/cli/schema_hints/selection/live.json",
         "internal/cli/schema_mcp_metadata.json#tools.live.get_my_lives",
         "live-dws-schema:live.get_my_lives",
         "skills/mono/references/products/live.md",

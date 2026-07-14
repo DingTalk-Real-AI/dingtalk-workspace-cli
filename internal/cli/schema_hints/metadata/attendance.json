@@ -1,0 +1,433 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/attendance",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "attendance.adjustment_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.adjustment_search": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "limit": {
+          "required": false
+        },
+        "page": {
+          "required": false
+        }
+      },
+      "review_reason": "Cobra supplies reviewed page=1 and limit=20 defaults and RunE sends those defaults when omitted, so callers need not pass either pagination flag.",
+      "cli_path": "attendance adjustment search",
+      "runtime_gate": "none"
+    },
+    "attendance.approve_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.approve_templates": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.batch_get_employee_shifts": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "attendance.boss_check": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.check_record": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.check_result": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.checkin_records": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.class_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.class_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.class_search": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.class_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.get_attendance_summary": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls attendance-wukong/get_user_attendance_summary, which is absent from the pinned MCP metadata snapshot; the incompatible attendance/get_attendance_summary contract must not be advertised.",
+      "reviewed": true
+    },
+    "attendance.get_user_attendance_record": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "attendance.globalsetting_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.globalsetting_save": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.group_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.group_filtered_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.group_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.group_search": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "limit": {
+          "required": false
+        },
+        "page": {
+          "required": false
+        }
+      },
+      "review_reason": "Cobra supplies reviewed page=1 and limit=20 defaults and RunE materializes both PageQuery fields when omitted, so callers need not pass either flag.",
+      "cli_path": "attendance group search",
+      "runtime_gate": "none"
+    },
+    "attendance.group_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.group_update_members": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.overtime_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.overtime_search": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "limit": {
+          "required": false
+        },
+        "page": {
+          "required": false
+        }
+      },
+      "review_reason": "Cobra supplies reviewed page=1 and limit=20 defaults and RunE sends those defaults when omitted, so callers need not pass either pagination flag.",
+      "cli_path": "attendance overtime search",
+      "runtime_gate": "none"
+    },
+    "attendance.query_attendance_group_or_rules": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "attendance.report_columns": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.report_query_data": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.report_query_leave": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.schedule_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.schedule_import": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.selfsetting_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.selfsetting_save": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.vacation_balance": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.vacation_records": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.vacation_save_balance": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "attendance.vacation_types": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "attendance.vacation_update_type": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    }
+  }
+}

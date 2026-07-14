@@ -61,7 +61,6 @@ func validateCatalogOutputIsolation(rootPath, outputPath, surfacePath string) er
 		{Name: "intent guide metadata source", Path: "skills/mono/references/intent-guide.md"},
 		{Name: "structured metadata source directory", Path: "internal/cli/schema_hints"},
 		{Name: "reviewed CommandRegistry input", Path: "internal/cli/schema_command_registry.json"},
-		{Name: "reviewed manual Schema/Agent hint input", Path: "internal/cli/schema_manual_hints.json"},
 		{Name: "generated Agent metadata input", Path: "internal/cli/schema_agent_metadata"},
 		{Name: "pinned MCP metadata input", Path: "internal/cli/schema_mcp_metadata.json"},
 		{Name: "reviewed MCP service disposition input", Path: "internal/cli/schema_mcp_service_review.json"},

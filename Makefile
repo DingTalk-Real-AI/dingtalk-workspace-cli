@@ -52,17 +52,23 @@ test-schema-agent-examples:
 generate-schema:
 	@set -e; \
 	registry_guard=$$(mktemp); \
-	manual_hints_guard=$$(mktemp); \
-	trap 'rm -f "$$registry_guard" "$$manual_hints_guard"' EXIT HUP INT TERM; \
+	metadata_guard=$$(mktemp -d); \
+	selection_guard=$$(mktemp -d); \
+	trap 'rm -rf "$$registry_guard" "$$metadata_guard" "$$selection_guard"' EXIT HUP INT TERM; \
 	cp internal/cli/schema_command_registry.json "$$registry_guard"; \
-	cp internal/cli/schema_manual_hints.json "$$manual_hints_guard"; \
+	cp -R internal/cli/schema_hints/metadata/. "$$metadata_guard/"; \
+	cp -R internal/cli/schema_hints/selection/. "$$selection_guard/"; \
 	$(GO) generate ./internal/cli; \
 	cmp -s internal/cli/schema_command_registry.json "$$registry_guard" || { \
 		printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry.json' >&2; \
 		exit 1; \
 	}; \
-	cmp -s internal/cli/schema_manual_hints.json "$$manual_hints_guard" || { \
-		printf '%s\n' 'generation modified reviewed input internal/cli/schema_manual_hints.json' >&2; \
+	diff -qr internal/cli/schema_hints/metadata "$$metadata_guard" >/dev/null || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/metadata' >&2; \
+		exit 1; \
+	}; \
+	diff -qr internal/cli/schema_hints/selection "$$selection_guard" >/dev/null || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/selection' >&2; \
 		exit 1; \
 	}
 

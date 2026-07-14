@@ -8,29 +8,34 @@ edited directly.
 
 ## Layout
 
-Human Agent hint authority lives in:
+Human-authored inputs live in two blocks:
 
-- `index.json` (`format: dws-agent-hint-index`) — product file map, reference
-  review, and `runtime_gates` (CI-only; not projected as tool fields)
-- `products/<product>.json` — per-product explicit tool/product hints
+- `index.json` (`format: dws-agent-hint-index`) — maps product IDs to metadata
+  and selection files, plus reference review
+- `metadata/<product>.json` — command metadata: safety, interface,
+  `runtime_gate`, and optional parameter overrides
+- `selection/<product>.json` — Agent selection prose
 - `imported/` — sanitized baseline from a fixed external revision
 
-When `index.json` is present, the generator loads only `imported/` plus the
-product files listed in the index. Sibling review JSON files in this directory
-remain CI/audit inputs and are not applied as Agent metadata sources.
+When `index.json` is present, the generator loads `imported/` plus the
+metadata and selection files listed in the index. Sibling review JSON files in
+this directory remain CI/audit inputs and are not applied as Agent metadata
+sources.
+
+For the end-to-end Agent curation workflow, see `AGENTS.md` § “Agent curation
+workflow (Schema hints)”.
 
 ## Source kinds
 
-- `reviewed_manual`: the selected Agent prose committed under
-  `agent_hints` in `internal/cli/schema_manual_hints.json`. It has the highest
-  precedence for `agent_summary`, `use_when`, `avoid_when`, and `examples`.
-- `explicit`: reviewed DWS hints. Scalar fields override imported baselines.
+- `reviewed_explicit`: reviewed metadata or selection HintFiles under
+  `metadata/` / `selection/` (`reviewed: true`). Selection prose is delivered
+  only from `selection/`.
+- `explicit`: explicit but not per-tool-reviewed DWS hints.
 - `imported`: sanitized metadata from a fixed external revision. It fills missing Agent semantics but cannot redefine command paths or parameter contracts.
 
-Skill Markdown and the structured files in this directory remain authoring
-evidence and lower-level safety/interface inputs. Normal generation does not
-semantically combine Markdown into the final Agent prose and never rewrites
-the reviewed manual file.
+Skill Markdown and audit JSON in this directory remain authoring evidence.
+Normal generation does not semantically combine Markdown into the final Agent
+prose and never rewrites metadata/selection files.
 
 The Agent metadata generator also reads the committed `internal/cli/schema_mcp_metadata.json` after Skill and Hint parsing. A sanitized MCP description can fill an otherwise empty `agent_summary`; it is marked `reviewed: false`, retains revision provenance, and cannot infer or override risk/effect fields.
 
@@ -127,36 +132,27 @@ projection differs.
 
 Run `make generate-schema` after changing Hint or Skill sources. External Wukong metadata must be refreshed by the controlled offline import pipeline with an immutable revision, then committed together with its audit before regenerating the Catalog; runtime refresh is forbidden.
 
-## Manual Schema and Agent hints
+## Metadata parameters and selection prose
 
 Agent semantic hints in this directory do not change the executable CLI
-contract. The single reviewed manual input is
-`internal/cli/schema_manual_hints.json`: its `commands` section is for an
-existing public Cobra leaf or a CLI-facing parameter correction, while its
-`agent_hints` section stores reviewed product/tool selection prose. Command
-entries use one exact `cli_path`, one canonical path, `reviewed: true`, and a
-non-empty reason. Tool prose is keyed by an exact Effective CommandRegistry
-canonical path and also requires review reason and evidence.
-The file declares `internal/cli/schema_manual_hints.schema.json` through its
-top-level `$schema` field. Agents and editors should use that schema as the
-field-level source of truth instead of inferring the format from generated
-Catalog JSON.
+contract beyond reviewed parameter overlays on metadata tools.
 
-Command hints may override Schema description, interface-property/type mapping,
-`required`, and `required_when` for flags that already exist on that command.
-They cannot create a command or flag, target a hidden/group command, define an
-interface, or mark an unknown RPC available. Missing commands and flags,
-wildcards, canonical conflicts, duplicate paths, and unreviewed entries fail
-generation.
+| Block | Owns |
+|---|---|
+| `metadata/<product>.json` | safety, interface, `runtime_gate`, optional `parameters` / `cli_path` |
+| `selection/<product>.json` | `agent_summary`, `use_when`, `avoid_when`, `examples` |
 
-`agent_hints` may be authored by an offline AI pass, but the committed batch is
-a reviewed manual source. Its revision table records `generated_by`, `model`,
-and `prompt_version`; every product/tool points to one declared batch revision.
-The initial batch covers the exact product/tool set. A later local revision may
-update selected entries without relabeling unchanged prose. `go generate` only
-reads, validates, and projects this data. It must never call a model, copy a
-previous Catalog, or overwrite the manual source. Agent prose cannot change
-command identity, flags, parameters, safety, or interface facts.
+Parameter overlays may override Schema description, interface-property/type
+mapping, `required`, and `required_when` for flags that already exist on that
+command. They cannot create a command or flag, target a hidden/group command,
+define an interface, or mark an unknown RPC available. Missing commands and
+flags, wildcards, canonical conflicts, duplicate paths, and unreviewed entries
+fail generation.
+
+Selection prose is committed as a reviewed source. `go generate` only reads,
+validates, and projects this data. It must never call a model, copy a previous
+Catalog, or overwrite metadata/selection files. Selection cannot change command
+identity, flags, parameters, safety, or interface facts.
 
 Commands intentionally kept outside Schema remain in the separate exact
 reviewed exclusion file `internal/cli/schema_command_exclusions.json`. An
@@ -166,12 +162,9 @@ that exclusion as stale.
 ### Agent editing workflow
 
 1. Locate the real Cobra leaf and verify its exact path and current flags.
-2. Read `internal/cli/schema_manual_hints.schema.json`; preserve `$schema` and
-   `version` in the data file.
-3. Add only fields that need review. In `commands`, do not repeat generated
-   Agent metadata, interface availability, risk, or confirmation. In
-   `agent_hints`, keep only product/tool selection prose and authoring evidence;
-   do not copy safety, interface, or parameter facts.
+2. Edit only the owning block (`metadata/` or `selection/`); do not mix fields.
+3. Add only fields that need review. Do not copy generated Catalog fields into
+   the input.
 4. Use `property` and `interface_type` only for a real CLI-to-interface
    conversion. `required` and `required_when` describe the Schema projection;
    they do not modify Cobra execution validation.
@@ -181,9 +174,10 @@ that exclusion as stale.
    make generate-schema
    ./scripts/policy/check-generated-drift.sh
    ./scripts/policy/check-schema-catalog.sh
+   ./scripts/policy/check-runtime-confirmation-truth.sh
    go test ./internal/cli ./internal/app
    ```
 
-6. Review the generated Catalog diff. A command/parameter hint should affect
-   only the intended contract. A complete Agent batch intentionally updates
-   every selected product/tool projection and its hashes.
+6. Review the generated Catalog diff. A parameter overlay should affect only
+   the intended contract. A selection edit updates prose provenance to
+   `reviewed_explicit` from `selection/`.

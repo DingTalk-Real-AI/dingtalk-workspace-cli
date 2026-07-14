@@ -1,0 +1,1572 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/sheet",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "sheet.add_dimension": {
+      "agent_summary": "在工作表末尾追加空行或空列。",
+      "use_when": [
+        "需要扩展表格维度（末尾加空行/空列）时"
+      ],
+      "avoid_when": [
+        "追加带数据的行用 append；在中间插入用 insert-dimension"
+      ],
+      "examples": [
+        "dws sheet add-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --length 5"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet add-dimension --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.add_dimension"
+      ]
+    },
+    "sheet.append_rows": {
+      "agent_summary": "在工作表数据末尾追加带值的数据行。",
+      "use_when": [
+        "要在已有数据下方追加记录行（带 values）时"
+      ],
+      "avoid_when": [
+        "末尾追加空行/空列用 add-dimension；中间插入空行用 insert-dimension；覆盖已有区域用 range update/csv-put"
+      ],
+      "examples": [
+        "dws sheet append --node <NODE_ID> --sheet-id <SHEET_ID> --values '[[\"张三\",\"销售部\",50000]]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet append --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.append_rows"
+      ]
+    },
+    "sheet.batch_update": {
+      "agent_summary": "批量打包多个写操作原子执行（可含清除/删除，需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要求把多个已审查写操作作为一批执行时"
+      ],
+      "avoid_when": [
+        "单操作请用对应原子命令；仅预览用 --dry-run，不要在未确认时加 --yes"
+      ],
+      "examples": [
+        "dws sheet batch-update --node <NODE_ID> --operations '[{\"toolName\":\"range clear\",\"input\":{\"sheet-id\":\"Sheet1\",\"range\":\"A1:B3\",\"type\":\"content\"}}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet batch-update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.batch_update"
+      ]
+    },
+    "sheet.chart_create": {
+      "agent_summary": "创建浮动图表。",
+      "use_when": [
+        "需要在电子表格工作表上新建柱状/折线等浮动图表时"
+      ],
+      "avoid_when": [
+        "更新已有图表用 chart update；删除用 chart delete；AI 表格图表走 aitable"
+      ],
+      "examples": [
+        "dws sheet chart create --node NODE_ID --sheet-id SHEET_ID --properties '{\"chartType\":\"bar\",\"range\":\"A1:B10\"}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet chart create --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_float_chart"
+      ]
+    },
+    "sheet.chart_delete": {
+      "agent_summary": "删除浮动图表（需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要求删除某浮动图表时"
+      ],
+      "avoid_when": [
+        "列目录用 chart list"
+      ],
+      "examples": [
+        "dws sheet chart delete --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet chart delete --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_float_chart"
+      ]
+    },
+    "sheet.chart_list": {
+      "agent_summary": "列出工作表浮动图表。",
+      "use_when": [
+        "需要枚举图表 ID 以便 update/delete 时"
+      ],
+      "avoid_when": [
+        "创建用 chart create；AI 表格图表用 aitable chart"
+      ],
+      "examples": [
+        "dws sheet chart list --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet chart list --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.list_float_charts"
+      ]
+    },
+    "sheet.chart_update": {
+      "agent_summary": "更新浮动图表属性。",
+      "use_when": [
+        "已知 chart-id，需要调整图表配置时"
+      ],
+      "avoid_when": [
+        "新建用 create；删除用 delete"
+      ],
+      "examples": [
+        "dws sheet chart update --node <NODE_ID> --sheet-id <SHEET_ID> --chart-id <CHART_ID> --properties '{\"title\":\"新标题\"}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet chart update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_float_chart"
+      ]
+    },
+    "sheet.clear_range": {
+      "agent_summary": "清除指定范围的内容、格式或全部（需确认后加 --yes）。",
+      "use_when": [
+        "需要清空一片区域且保留行列占位时"
+      ],
+      "avoid_when": [
+        "要物理删除行列用 delete-dimension；删整张工作表用 delete-sheet；单格写空可用 range update 但整片清除应优先本命令"
+      ],
+      "examples": [
+        "dws sheet range clear --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\" --type content"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range clear --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.clear_range"
+      ]
+    },
+    "sheet.copy_sheet": {
+      "agent_summary": "在同一文档内复制工作表（含数据与格式）。",
+      "use_when": [
+        "需要基于现有工作表创建完整副本时可选用，可指定副本名与位置"
+      ],
+      "avoid_when": [
+        "只要新建空白工作表用 sheet new；跨文档复制请走文档/知识库复制能力，不要用本命令"
+      ],
+      "examples": [
+        "dws sheet copy --node <NODE_ID> --sheet-id <SHEET_ID> --title \"销售副本\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet copy --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.copy_sheet"
+      ]
+    },
+    "sheet.create_cond_format": {
+      "agent_summary": "创建条件格式规则。",
+      "use_when": [
+        "需要按条件自动着色/标注单元格时"
+      ],
+      "avoid_when": [
+        "改已有规则用 update；删规则用 delete；普通样式刷用 set-style"
+      ],
+      "examples": [
+        "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A1:E10\"]' --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"80\"}}' --cell-style '{\"backgroundColor\":\"#FFEB3B\"}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet cond-format create --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_cond_format"
+      ]
+    },
+    "sheet.create_filter": {
+      "agent_summary": "创建全局筛选（每表仅一个；range 须含表头）。",
+      "use_when": [
+        "用户说筛选/过滤/只看某些行，且要影响所有协作者视图时创建全局筛选"
+      ],
+      "avoid_when": [
+        "个人化筛选视图用 filter-view create；已存在全局筛选时先 get 再 update；禁止删行来代替筛选"
+      ],
+      "examples": [
+        "dws sheet filter create --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:E100\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter create --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_filter"
+      ]
+    },
+    "sheet.create_filter_view": {
+      "agent_summary": "创建个人筛选视图（可同时带 criteria）。",
+      "use_when": [
+        "需要命名的个人化筛选视角且不影响其他协作者时"
+      ],
+      "avoid_when": [
+        "影响全员的全局筛选用 filter create；只改已有视图属性用 filter-view update"
+      ],
+      "examples": [
+        "dws sheet filter-view create --node <NODE_ID> --sheet-id <SHEET_ID> --name \"销售筛选\" --range \"A1:E10\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view create --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_filter_view"
+      ]
+    },
+    "sheet.create_float_image": {
+      "agent_summary": "创建浮动图片（src 必须来自 media-upload 的 resourceUrl）。",
+      "use_when": [
+        "需要在单元格上方悬浮图片、不占用单元格内容时"
+      ],
+      "avoid_when": [
+        "单元格内嵌图片用 write-image；更新/删除浮动图用 update/delete-float-image"
+      ],
+      "examples": [
+        "dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --src \"/core/api/resources/img/...\" --range A1 --width 400 --height 300"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet create-float-image --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_float_image"
+      ]
+    },
+    "sheet.create_pivot_table": {
+      "agent_summary": "创建原生透视表。",
+      "use_when": [
+        "需要基于源数据区域创建透视表时"
+      ],
+      "avoid_when": [
+        "更新配置用 update；删除用 delete"
+      ],
+      "examples": [
+        "dws sheet pivot-table create --node NODE_ID --source \"'Sheet1'!A1:D100\" --properties '{\"rows\":[{\"field\":\"A\"}],\"values\":[{\"field\":\"D\",\"aggregation\":\"sum\"}]}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet pivot-table create --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_pivot_table"
+      ]
+    },
+    "sheet.create_sheet": {
+      "agent_summary": "在已有电子表格文档中新建工作表（Sheet 页签）。",
+      "use_when": [
+        "已有 axls 文档，需要新增一个工作表页签时"
+      ],
+      "avoid_when": [
+        "要新建整份表格文档用 sheet create；复制已有工作表用 sheet copy；删除工作表用 sheet delete-sheet"
+      ],
+      "examples": [
+        "dws sheet new --node <NODE_ID> --name \"Sheet2\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet new --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_sheet"
+      ]
+    },
+    "sheet.create_workspace_sheet": {
+      "agent_summary": "创建钉钉在线电子表格文档（axls），返回 nodeId。",
+      "use_when": [
+        "需要新建一份钉钉在线电子表格文档（不是 AI 表格 Base，也不是本地 xlsx）时"
+      ],
+      "avoid_when": [
+        "要创建 AI 多维表 Base 用 aitable base create；只要在已有表格里加工作表用 sheet new；本地 xlsx 用 doc download"
+      ],
+      "examples": [
+        "dws sheet create --name \"销售数据\"",
+        "dws sheet create --name \"Q1 数据\" --folder <FOLDER_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet create --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.create_workspace_sheet"
+      ]
+    },
+    "sheet.delete_cond_format": {
+      "agent_summary": "删除条件格式规则（需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要求删除某条条件格式规则时"
+      ],
+      "avoid_when": [
+        "只想改规则用 update；列目录用 list"
+      ],
+      "examples": [
+        "dws sheet cond-format delete --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet cond-format delete --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_cond_format"
+      ]
+    },
+    "sheet.delete_dimension": {
+      "agent_summary": "删除指定位置起的连续行或列（需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要物理删除若干行/列时"
+      ],
+      "avoid_when": [
+        "只清空内容保留占位用 range clear；移动行列用 move-dimension"
+      ],
+      "examples": [
+        "dws sheet delete-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --position \"3\" --length 2"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet delete-dimension --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_dimension"
+      ]
+    },
+    "sheet.delete_dropdown_lists": {
+      "agent_summary": "删除指定范围的下拉列表（需确认后加 --yes；不清除已填值）。",
+      "use_when": [
+        "需要移除下拉约束但保留单元格已有值时"
+      ],
+      "avoid_when": [
+        "只改选项用 set-dropdown 覆盖；清单元格内容用 range clear"
+      ],
+      "examples": [
+        "dws sheet delete-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet delete-dropdown --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_dropdown_lists"
+      ]
+    },
+    "sheet.delete_filter": {
+      "agent_summary": "删除全局筛选（需确认后加 --yes）。",
+      "use_when": [
+        "需要移除整张表的全局筛选及全部条件时"
+      ],
+      "avoid_when": [
+        "只清某列条件用 filter clear-criteria；删筛选视图用 filter-view delete"
+      ],
+      "examples": [
+        "dws sheet filter delete --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter delete --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_filter"
+      ]
+    },
+    "sheet.delete_filter_view": {
+      "agent_summary": "删除整个筛选视图（需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要删除某个筛选视图及其全部条件时"
+      ],
+      "avoid_when": [
+        "只清某列条件用 delete-criteria；删全局筛选用 filter delete"
+      ],
+      "examples": [
+        "dws sheet filter-view delete --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view delete --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_filter_view"
+      ]
+    },
+    "sheet.delete_float_image": {
+      "agent_summary": "删除浮动图片（需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要求删除某张浮动图片时"
+      ],
+      "avoid_when": [
+        "删除单元格内嵌图需改写单元格；列目录用 list-float-images"
+      ],
+      "examples": [
+        "dws sheet delete-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet delete-float-image --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_float_image"
+      ]
+    },
+    "sheet.delete_pivot_table": {
+      "agent_summary": "删除透视表（需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要求永久删除指定透视表时"
+      ],
+      "avoid_when": [
+        "只更新配置用 update"
+      ],
+      "examples": [
+        "dws sheet pivot-table delete --node NODE_ID --sheet-id SHEET_ID --pivot-table-id PT_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet pivot-table delete --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_pivot_table"
+      ]
+    },
+    "sheet.delete_sheet": {
+      "agent_summary": "删除指定工作表（不可逆，需确认后加 --yes）。",
+      "use_when": [
+        "用户明确要求永久删除某个工作表页签，且已确认目标 sheetId 时"
+      ],
+      "avoid_when": [
+        "只想清空单元格内容用 range clear；删行列用 delete-dimension；隐藏工作表用 update --hidden"
+      ],
+      "examples": [
+        "dws sheet delete-sheet --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet delete-sheet --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.delete_sheet"
+      ]
+    },
+    "sheet.fill_range": {
+      "agent_summary": "按源区域对目标区域做自动填充（复制或序列）。",
+      "use_when": [
+        "需要像拖拽填充一样把源范围扩展到目标范围时"
+      ],
+      "avoid_when": [
+        "直接写死值用 range update/csv-put；区域复制到另一位置用 range copy-to"
+      ],
+      "examples": [
+        "dws sheet range fill --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:A5\" --target-range \"A6:A20\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range fill --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.fill_range"
+      ]
+    },
+    "sheet.filter_clear_criteria": {
+      "agent_summary": "清除全局筛选中某一列条件（不删筛选本身）。",
+      "use_when": [
+        "只需取消某列过滤、保留全局筛选框架时"
+      ],
+      "avoid_when": [
+        "删除整个全局筛选用 filter delete；筛选视图列条件用 filter-view delete-criteria"
+      ],
+      "examples": [
+        "dws sheet filter clear-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --column 1"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter clear-criteria --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.clear_filter_criteria"
+      ]
+    },
+    "sheet.filter_view_delete_criteria": {
+      "agent_summary": "清除筛选视图某列条件（需确认后加 --yes；保留视图）。",
+      "use_when": [
+        "只需取消筛选视图中某列过滤时"
+      ],
+      "avoid_when": [
+        "删除整个筛选视图用 filter-view delete"
+      ],
+      "examples": [
+        "dws sheet filter-view delete-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view delete-criteria --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.clear_filter_view_criteria"
+      ]
+    },
+    "sheet.filter_view_get_criteria": {
+      "agent_summary": "获取筛选视图指定列的条件详情。",
+      "use_when": [
+        "修改某列条件前先查看该列当前 filterType/operators 时"
+      ],
+      "avoid_when": [
+        "全部列条件用 list-criteria"
+      ],
+      "examples": [
+        "dws sheet filter-view get-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view get-criteria --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_filter_views"
+      ]
+    },
+    "sheet.filter_view_info": {
+      "agent_summary": "获取单个筛选视图完整配置（含 criteria）。",
+      "use_when": [
+        "已知 filterViewId，需要查看名称/范围/全部条件时"
+      ],
+      "avoid_when": [
+        "列目录用 list；列条件清单用 list-criteria；全局筛选用 filter get"
+      ],
+      "examples": [
+        "dws sheet filter-view info --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view info --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_filter_views"
+      ]
+    },
+    "sheet.filter_view_list_criteria": {
+      "agent_summary": "列出筛选视图已设置的全部列条件。",
+      "use_when": [
+        "管理条件前需要看当前视图有哪些列条件时"
+      ],
+      "avoid_when": [
+        "单列详情用 get-criteria；视图属性用 info"
+      ],
+      "examples": [
+        "dws sheet filter-view list-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view list-criteria --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_filter_views"
+      ]
+    },
+    "sheet.filter_view_update_criteria": {
+      "agent_summary": "设置或更新筛选视图的单列条件。",
+      "use_when": [
+        "只要精确配置某一列的 values/condition/color 条件时"
+      ],
+      "avoid_when": [
+        "批量多列或改名改范围用 filter-view update；清除该列用 delete-criteria"
+      ],
+      "examples": [
+        "dws sheet filter-view update-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0 --filter-criteria '{\"filterType\":\"values\",\"visibleValues\":[\"销售部\"]}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view update-criteria --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.set_filter_view_criteria"
+      ]
+    },
+    "sheet.find_cells": {
+      "agent_summary": "在工作表中搜索单元格（支持精确匹配/正则/搜公式）。",
+      "use_when": [
+        "要查找包含某文本或公式的单元格位置时，必须用服务端 find"
+      ],
+      "avoid_when": [
+        "不要用 range read 全量下载后客户端过滤；要替换文本用 replace"
+      ],
+      "examples": [
+        "dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find \"销售额\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet find --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.find_cells"
+      ]
+    },
+    "sheet.get_all_sheets": {
+      "agent_summary": "列出电子表格文档内全部工作表的 ID 与名称。",
+      "use_when": [
+        "需要拿到 sheetId/工作表名称，作为后续读写的前置步骤时"
+      ],
+      "avoid_when": [
+        "要看单个工作表行列边界与合并区用 sheet info；读单元格内容用 sheet range read"
+      ],
+      "examples": [
+        "dws sheet list --node <NODE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet list --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_all_sheets"
+      ]
+    },
+    "sheet.get_cond_format": {
+      "agent_summary": "列出工作表条件格式规则。",
+      "use_when": [
+        "查看或修改前需要枚举条件格式规则 ID 时"
+      ],
+      "avoid_when": [
+        "创建/更新/删除分别用 cond-format create/update/delete"
+      ],
+      "examples": [
+        "dws sheet cond-format list --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet cond-format list --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_cond_format"
+      ]
+    },
+    "sheet.get_dropdown_lists": {
+      "agent_summary": "查询指定范围的下拉列表配置。",
+      "use_when": [
+        "修改或核对下拉选项前，先读取现有 dataValidations 时"
+      ],
+      "avoid_when": [
+        "设置下拉用 set-dropdown；删除下拉用 delete-dropdown；判空看 hasDropdown"
+      ],
+      "examples": [
+        "dws sheet get-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet get-dropdown --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_dropdown_lists"
+      ]
+    },
+    "sheet.get_filter": {
+      "agent_summary": "获取工作表全局筛选信息。",
+      "use_when": [
+        "要查看当前全局筛选范围与列条件，或创建前确认是否已存在时"
+      ],
+      "avoid_when": [
+        "个人筛选视图用 filter-view list/info；不要与 filter-view 混淆"
+      ],
+      "examples": [
+        "dws sheet filter get --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter get --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_filter"
+      ]
+    },
+    "sheet.get_filter_views": {
+      "agent_summary": "列出工作表全部筛选视图概要。",
+      "use_when": [
+        "用户明确说筛选视图，需要枚举 filterViewId/名称/范围时"
+      ],
+      "avoid_when": [
+        "全局筛选用 filter get；单视图详情用 filter-view info"
+      ],
+      "examples": [
+        "dws sheet filter-view list --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view list --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_filter_views"
+      ]
+    },
+    "sheet.get_float_image": {
+      "agent_summary": "获取单张浮动图片详情。",
+      "use_when": [
+        "已知 float-image-id，需要查看锚点/尺寸/src 时"
+      ],
+      "avoid_when": [
+        "列出全部浮动图用 list-float-images"
+      ],
+      "examples": [
+        "dws sheet get-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet get-float-image --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_float_image"
+      ]
+    },
+    "sheet.get_range_as_csv": {
+      "agent_summary": "以 CSV 文本读取指定区域。",
+      "use_when": [
+        "需要把区域导出为 CSV 文本便于管道处理时"
+      ],
+      "avoid_when": [
+        "需要结构化 per-cell（样式/超链接/公式）用 range read；导出整份 xlsx 用 sheet export"
+      ],
+      "examples": [
+        "dws sheet csv-get --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D20\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet csv-get --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_range_as_csv"
+      ]
+    },
+    "sheet.group_dimension": {
+      "agent_summary": "为连续整行或整列创建分组（可展开/折叠）。",
+      "use_when": [
+        "需要按整行范围如 3:7 或整列如 C:F 创建分组时"
+      ],
+      "avoid_when": [
+        "取消分组用 ungroup-dimension；隐藏行列用 update-dimension --hidden；range 不能是 A1:C5 矩形"
+      ],
+      "examples": [
+        "dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet group-dimension --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.group_dimension"
+      ]
+    },
+    "sheet.hide_gridline": {
+      "agent_summary": "隐藏工作表网格线。",
+      "use_when": [
+        "需要关闭指定工作表的网格线显示时"
+      ],
+      "avoid_when": [
+        "要显示网格线用 sheet show-gridline"
+      ],
+      "examples": [
+        "dws sheet hide-gridline --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet hide-gridline --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.set_gridline_visibility"
+      ]
+    },
+    "sheet.info": {
+      "agent_summary": "获取指定工作表详情（行列数、非空范围、合并区等）。",
+      "use_when": [
+        "需要确认工作表尺寸、nonEmptyRange 或合并结构，以便规划读取范围时"
+      ],
+      "avoid_when": [
+        "只要工作表列表用 sheet list；读单元格值用 sheet range read"
+      ],
+      "examples": [
+        "dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet info --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_sheet"
+      ]
+    },
+    "sheet.insert_dimension": {
+      "agent_summary": "在指定位置之前插入空行或空列。",
+      "use_when": [
+        "要在某行号/列字母之前插入若干空行或空列时"
+      ],
+      "avoid_when": [
+        "末尾追加空行空列用 add-dimension；末尾追加数据用 append；删除行列用 delete-dimension"
+      ],
+      "examples": [
+        "dws sheet insert-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --position \"3\" --length 2"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet insert-dimension --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.insert_dimension"
+      ]
+    },
+    "sheet.list_float_images": {
+      "agent_summary": "列出工作表全部浮动图片。",
+      "use_when": [
+        "需要枚举浮动图 ID 以便后续 get/update/delete 时"
+      ],
+      "avoid_when": [
+        "查单张详情用 get-float-image"
+      ],
+      "examples": [
+        "dws sheet list-float-images --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet list-float-images --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.list_float_images"
+      ]
+    },
+    "sheet.list_pivot_tables": {
+      "agent_summary": "列出或获取透视表信息。",
+      "use_when": [
+        "需要查看工作表上有哪些透视表或某个透视表详情时"
+      ],
+      "avoid_when": [
+        "创建/更新/删除分别用 pivot-table create/update/delete"
+      ],
+      "examples": [
+        "dws sheet pivot-table list --node NODE_ID --sheet-id SHEET_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet pivot-table list --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.list_pivot_tables"
+      ]
+    },
+    "sheet.media_upload": {
+      "agent_summary": "上传附件到表格并返回 resourceUrl（浮动图片前置步骤）。",
+      "use_when": [
+        "需要把本地文件上传为表格资源，或为 create-float-image 准备 src 时"
+      ],
+      "avoid_when": [
+        "要把图片写入单元格内容用 write-image；AI 表格附件用 aitable attachment upload"
+      ],
+      "examples": [
+        "dws sheet media-upload --node <NODE_ID> --file ./report.pdf"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet media-upload --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "sheet.merge_cells": {
+      "agent_summary": "合并指定区域单元格（默认 mergeAll，可按行/列合并）。",
+      "use_when": [
+        "需要把一片区域合并为一个或多个合并单元格时"
+      ],
+      "avoid_when": [
+        "取消合并用 unmerge-cells；合并会丢弃非左上角值"
+      ],
+      "examples": [
+        "dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet merge-cells --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.merge_cells"
+      ]
+    },
+    "sheet.move_dimension": {
+      "agent_summary": "移动连续行或列到目标索引（保留格式）。",
+      "use_when": [
+        "要调整行/列物理顺序时，使用原子 move-dimension"
+      ],
+      "avoid_when": [
+        "不要用读出再写回模拟移动；移动矩形单元格区域用 range move-to"
+      ],
+      "examples": [
+        "dws sheet move-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index 1 --end-index 1 --destination-index 4"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet move-dimension --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.move_dimension"
+      ]
+    },
+    "sheet.range_batch_clear": {
+      "agent_summary": "批量清除多个区域（原子事务，需确认后加 --yes）。",
+      "use_when": [
+        "需要一次清除多个互不相关的区域，并希望同批提交时"
+      ],
+      "avoid_when": [
+        "只清一个区域用 range clear；混有写入/合并等操作用 batch-update"
+      ],
+      "examples": [
+        "dws sheet range batch-clear --node NODE_ID --ranges '[\"Sheet1!A1:B3\",\"Sheet2!C1:D5\"]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range batch-clear --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "sheet.range_batch_set_style": {
+      "agent_summary": "按 JSON 配置文件顺序批量设置多个区域样式。",
+      "use_when": [
+        "多个区域样式不同、希望用配置文件一次提交时"
+      ],
+      "avoid_when": [
+        "单一区域统一样式用 range set-style"
+      ],
+      "examples": [
+        "dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range batch-set-style --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_range"
+      ]
+    },
+    "sheet.range_copy_to": {
+      "agent_summary": "将源范围复制到目标位置。",
+      "use_when": [
+        "需要把一块区域原样复制到另一位置（可跨工作表）时"
+      ],
+      "avoid_when": [
+        "移动而不是复制用 range move-to；自动填充序列用 range fill"
+      ],
+      "examples": [
+        "dws sheet range copy-to --node NODE_ID --sheet-id SHEET_ID --source-range \"A1:C5\" --target-range \"E1\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range copy-to --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.copy_range"
+      ]
+    },
+    "sheet.range_move_to": {
+      "agent_summary": "将源范围移动到目标位置（需确认后加 --yes）。",
+      "use_when": [
+        "需要把区域从源位置挪到目标位置且源处应腾空时"
+      ],
+      "avoid_when": [
+        "只需复制保留源用 range copy-to；移动整行/整列用 move-dimension"
+      ],
+      "examples": [
+        "dws sheet range move-to --node NODE_ID --sheet-id SHEET_ID --source-range \"A1:C5\" --target-range \"E1\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range move-to --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.move_range"
+      ]
+    },
+    "sheet.range_read": {
+      "agent_summary": "读取工作表指定范围的单元格数据（可取格式化值/原始值/公式）。",
+      "use_when": [
+        "需要查看 axls 工作表内容或指定 A1 范围时；大表应限制 range"
+      ],
+      "avoid_when": [
+        "搜索关键字用 sheet find；纯 CSV 文本导出区域用 sheet csv-get；本地 xlsx 用 doc download；AI 表格记录用 aitable record query"
+      ],
+      "examples": [
+        "dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D10\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range read --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.get_range"
+      ]
+    },
+    "sheet.range_set_style": {
+      "agent_summary": "为指定范围统一设置背景、字体、对齐、换行或数字格式。",
+      "use_when": [
+        "需要批量刷样式或数字格式（百分比/货币/日期）时"
+      ],
+      "avoid_when": [
+        "写单元格值/公式用 range update；多区域不同样式配置用 range batch-set-style"
+      ],
+      "examples": [
+        "dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range \"B2:B10\" --number-format \"¥#,##0.00\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range set-style --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_range"
+      ]
+    },
+    "sheet.range_update": {
+      "agent_summary": "更新指定区域单元格（值/公式/超链接等 object 协议）；少量或含公式时使用。",
+      "use_when": [
+        "需要写入少量单元格、公式或超链接，且能提供 sheetId 与精确 range 时"
+      ],
+      "avoid_when": [
+        "大批量纯值写入优先 sheet csv-put；末尾追加行用 append；全局替换文本用 replace；只改样式用 range set-style；清整片区域用 range clear"
+      ],
+      "examples": [
+        "dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1\" --values '[[{\"type\":\"text\",\"text\":\"张三\"}]]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_range"
+      ]
+    },
+    "sheet.replace_all": {
+      "agent_summary": "全局查找替换文本（服务端原子操作）。",
+      "use_when": [
+        "要把工作表中匹配文本批量替换为另一文本时"
+      ],
+      "avoid_when": [
+        "不要用 find + range update 组合模拟；只查找不替换用 find"
+      ],
+      "examples": [
+        "dws sheet replace --node <NODE_ID> --sheet-id <SHEET_ID> --find \"旧文本\" --replacement \"新文本\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet replace --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.replace_all"
+      ]
+    },
+    "sheet.set_dropdown_lists": {
+      "agent_summary": "为指定范围设置下拉列表（可多选、可带颜色）。",
+      "use_when": [
+        "需要给单元格配置可选值下拉约束时"
+      ],
+      "avoid_when": [
+        "查看已有下拉用 get-dropdown；移除下拉用 delete-dropdown"
+      ],
+      "examples": [
+        "dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet set-dropdown --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.set_dropdown_lists"
+      ]
+    },
+    "sheet.set_range_from_csv": {
+      "agent_summary": "将 CSV 纯值写入起始单元格（可自动扩容；大批量纯值首选）。",
+      "use_when": [
+        "写入纯值且超过约 5 行/20 格，或数据来自 CSV/表格文本时优先使用"
+      ],
+      "avoid_when": [
+        "需要公式/超链接/富文本用 range update；在末尾追加数据行用 append；覆盖已有数据需 --allow-overwrite"
+      ],
+      "examples": [
+        "dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 --csv @data.csv --allow-overwrite"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet csv-put --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.set_range_from_csv"
+      ]
+    },
+    "sheet.show_gridline": {
+      "agent_summary": "显示工作表网格线。",
+      "use_when": [
+        "需要打开指定工作表的网格线显示时"
+      ],
+      "avoid_when": [
+        "要隐藏网格线用 sheet hide-gridline；改冻结或隐藏工作表用 sheet update"
+      ],
+      "examples": [
+        "dws sheet show-gridline --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet show-gridline --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.set_gridline_visibility"
+      ]
+    },
+    "sheet.sort_filter": {
+      "agent_summary": "在全局筛选范围内按列排序（会改物理顺序）。",
+      "use_when": [
+        "已有全局筛选，需要按某列升/降序排列筛选范围内数据时"
+      ],
+      "avoid_when": [
+        "无筛选取区域排序用 range sort；排序不可撤销"
+      ],
+      "examples": [
+        "dws sheet filter sort --node <NODE_ID> --sheet-id <SHEET_ID> --column 0 --ascending"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter sort --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.sort_filter"
+      ]
+    },
+    "sheet.sort_range": {
+      "agent_summary": "对指定区域排序（改变物理行序）。",
+      "use_when": [
+        "需要按某列对一块矩形区域排序，且不依赖全局筛选时"
+      ],
+      "avoid_when": [
+        "已有全局筛选时按筛选范围排序用 filter sort；不要用读出再写回模拟排序"
+      ],
+      "examples": [
+        "dws sheet range sort --node NODE_ID --sheet-id SHEET_ID --range A1:D10 --sort-keys '[{\"column\":\"A\",\"ascending\":true}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet range sort --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.sort_range"
+      ]
+    },
+    "sheet.submit_export_job": {
+      "agent_summary": "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+      "use_when": [
+        "需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"
+      ],
+      "avoid_when": [
+        "禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"
+      ],
+      "examples": [
+        "dws sheet export --node <NODE_ID> --output ./report.xlsx"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet export --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.submit_export_job"
+      ]
+    },
+    "sheet.table_get": {
+      "agent_summary": "读取结构化 table 区域数据。",
+      "use_when": [
+        "工作表内存在结构化 table，需要按 table 语义读取时"
+      ],
+      "avoid_when": [
+        "普通单元格区域用 range read；AI 表格记录用 aitable record query"
+      ],
+      "examples": [
+        "dws sheet table-get --node <NODE_ID> --sheet-id <SHEET_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet table-get --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.table_get"
+      ]
+    },
+    "sheet.table_put": {
+      "agent_summary": "写入一个或多个结构化 table。",
+      "use_when": [
+        "需要按结构化 table 协议写入表数据时"
+      ],
+      "avoid_when": [
+        "普通区域写入用 range update/csv-put；AI 表格记录写入用 aitable record create"
+      ],
+      "examples": [
+        "dws sheet table-put --node NODE_ID --sheets '[{\"name\":\"Sheet1\",\"columns\":[\"name\"],\"data\":[[\"Alice\"]]}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet table-put --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.table_put"
+      ]
+    },
+    "sheet.template_apply": {
+      "agent_summary": "应用模板创建新的电子表格文档。",
+      "use_when": [
+        "已有 templateId，需要据此生成新表格文档时"
+      ],
+      "avoid_when": [
+        "空白新建用 sheet create；先搜模板用 search/list"
+      ],
+      "examples": [
+        "dws sheet template apply --template-id <TEMPLATE_ID> --name \"新表格\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet template apply --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.apply_sheet_template"
+      ]
+    },
+    "sheet.template_list": {
+      "agent_summary": "分页列出可用表格模板。",
+      "use_when": [
+        "浏览可用表格模板以便 apply 时"
+      ],
+      "avoid_when": [
+        "按关键词搜索用 template search；应用模板建新文档用 template apply"
+      ],
+      "examples": [
+        "dws sheet template list --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet template list --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.list_sheet_templates"
+      ]
+    },
+    "sheet.template_search": {
+      "agent_summary": "按关键词搜索表格模板。",
+      "use_when": [
+        "用户说找某个主题的表格模板时"
+      ],
+      "avoid_when": [
+        "无关键词浏览用 template list；应用用 template apply"
+      ],
+      "examples": [
+        "dws sheet template search --query \"销售\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet template search --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.search_sheet_templates"
+      ]
+    },
+    "sheet.ungroup_dimension": {
+      "agent_summary": "取消指定连续行/列分组。",
+      "use_when": [
+        "需要解除已有行/列分组时"
+      ],
+      "avoid_when": [
+        "创建分组用 group-dimension"
+      ],
+      "examples": [
+        "dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet ungroup-dimension --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.ungroup_dimension"
+      ]
+    },
+    "sheet.unmerge_range": {
+      "agent_summary": "取消指定范围内的合并单元格。",
+      "use_when": [
+        "需要拆分已合并区域时"
+      ],
+      "avoid_when": [
+        "创建合并用 merge-cells"
+      ],
+      "examples": [
+        "dws sheet unmerge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D5\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet unmerge-cells --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.unmerge_range"
+      ]
+    },
+    "sheet.update_cond_format": {
+      "agent_summary": "更新已有条件格式规则。",
+      "use_when": [
+        "已知规则 ID，需要调整条件或样式时"
+      ],
+      "avoid_when": [
+        "新建用 create；删除用 delete"
+      ],
+      "examples": [
+        "dws sheet cond-format update --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"90\"}}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet cond-format update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_cond_format"
+      ]
+    },
+    "sheet.update_dimension": {
+      "agent_summary": "更新连续行/列的显隐或行高/列宽。",
+      "use_when": [
+        "要隐藏/显示行或列，或设置行高/列宽时"
+      ],
+      "avoid_when": [
+        "插入/删除行列用 insert/delete-dimension；移动行列用 move-dimension"
+      ],
+      "examples": [
+        "dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index \"1\" --length 5 --pixel-size 40"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet update-dimension --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_dimension"
+      ]
+    },
+    "sheet.update_filter": {
+      "agent_summary": "批量更新全局筛选多列条件。",
+      "use_when": [
+        "全局筛选已存在，需要设置或替换若干列条件时"
+      ],
+      "avoid_when": [
+        "尚无筛选时先 create；只清一列用 clear-criteria；筛选视图条件用 filter-view update-criteria"
+      ],
+      "examples": [
+        "dws sheet filter update --node <NODE_ID> --sheet-id <SHEET_ID> --criteria '[{\"column\":0,\"filterType\":\"values\",\"visibleValues\":[\"已完成\"]}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_filter"
+      ]
+    },
+    "sheet.update_filter_view": {
+      "agent_summary": "更新筛选视图名称、范围和/或多列条件。",
+      "use_when": [
+        "需要改筛选视图名、扩大范围或批量改多列条件时"
+      ],
+      "avoid_when": [
+        "只改单列条件用 update-criteria；删整个视图用 delete"
+      ],
+      "examples": [
+        "dws sheet filter-view update --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --name \"新名称\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet filter-view update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_filter_view"
+      ]
+    },
+    "sheet.update_float_image": {
+      "agent_summary": "更新浮动图片锚点、尺寸、偏移或资源路径。",
+      "use_when": [
+        "需要移动/缩放/替换已有浮动图片时"
+      ],
+      "avoid_when": [
+        "创建用 create-float-image；删除用 delete-float-image"
+      ],
+      "examples": [
+        "dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --range C5"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet update-float-image --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_float_image"
+      ]
+    },
+    "sheet.update_pivot_table": {
+      "agent_summary": "更新透视表配置。",
+      "use_when": [
+        "已知透视表 ID，需要调整行/列/值字段配置时"
+      ],
+      "avoid_when": [
+        "新建用 create；删除用 delete"
+      ],
+      "examples": [
+        "dws sheet pivot-table update --node NODE_ID --sheet-id SHEET_ID --pivot-table-id PIVOT_TABLE_ID --properties '{\"show_subtotals\":false}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet pivot-table update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_pivot_table"
+      ]
+    },
+    "sheet.update_sheet": {
+      "agent_summary": "更新工作表属性：名称、位置、隐藏、标签色、冻结行列。",
+      "use_when": [
+        "要重命名工作表、调整页签顺序、隐藏/显示、冻结行列或改标签颜色时"
+      ],
+      "avoid_when": [
+        "改单元格内容用 range update；删整张工作表用 delete-sheet；复制工作表用 copy"
+      ],
+      "examples": [
+        "dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --title \"汇总表\" --frozen-row-count 2"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet update --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.update_sheet"
+      ]
+    },
+    "sheet.write_image": {
+      "agent_summary": "上传图片并写入指定单元格（占单元格内容）。",
+      "use_when": [
+        "需要把图片嵌进某个单元格时"
+      ],
+      "avoid_when": [
+        "悬浮在单元格上的浮动图用 create-float-image；禁止用 range update 写图片"
+      ],
+      "examples": [
+        "dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:A1 --file ./chart.png"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet write-image --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:sheet.write_image"
+      ]
+    }
+  },
+  "products": {
+    "sheet": {
+      "agent_summary": "创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+      "use_when": [
+        "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时"
+      ],
+      "avoid_when": [
+        "目标是 AI 表格 Base 的结构化记录、钉钉文档正文或本地 Excel 文件时不要使用 sheet"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 MCP/Skill/Cobra 审阅产品级选择边界。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet --help",
+        "skills/mono/references/products/sheet.md",
+        "dws-schema-live:product-index"
+      ]
+    }
+  }
+}

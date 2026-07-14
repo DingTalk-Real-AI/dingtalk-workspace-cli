@@ -1,0 +1,222 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/drive",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "drive.add_permission": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "add_permission"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.commit_upload": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.copy_document": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "copy_document"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.create_folder": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.create_shortcut": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "drive.delete_document": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "delete_document"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "drive.download_file": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.get_file_info": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.get_node_stats": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "drive.get_upload_info": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.list_files": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI command routes by --workspace between drive/list_files and doc/list_nodes, so the reviewed executable wrapper has no single direct MCP interface.",
+      "reviewed": true
+    },
+    "drive.list_permission": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_permission"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.list_spaces": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.move_document": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "move_document"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.permission_remove": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "remove_permission"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "drive.permission_update": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "update_permission"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.publish_get": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "drive.publish_set": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "confirm_dangerous"
+    },
+    "drive.publish_unset": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "confirm_dangerous"
+    },
+    "drive.recent": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "drive.recycle_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "drive.recycle_restore": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "drive.rename_document": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "rename_document"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.search_files": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "drive.upload": {
+      "effect": "write",
+      "risk": "medium",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+      "reviewed": true
+    }
+  }
+}

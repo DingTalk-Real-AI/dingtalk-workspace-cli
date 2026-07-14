@@ -15,7 +15,7 @@ package cli
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,8 +37,16 @@ const (
 	runtimeSchemaManualReasonAnnotation    = "dws.schema.manual.reason"
 )
 
-//go:embed schema_manual_hints.json
-var embeddedManualSchemaHintsJSON []byte
+//go:embed schema_hints/metadata/*.json
+var embeddedMetadataFS embed.FS
+
+//go:embed schema_hints/selection/*.json
+var embeddedSelectionFS embed.FS
+
+const (
+	embeddedMetadataGlob  = "schema_hints/metadata/*.json"
+	embeddedSelectionGlob = "schema_hints/selection/*.json"
+)
 
 // ManualSchemaHintSnapshot is the human-owned bridge from an existing
 // public Cobra leaf to Schema. It cannot create commands, flags, exclusions, or
@@ -219,7 +227,10 @@ func ApplyEmbeddedManualSchemaHints(root *cobra.Command) (ManualSchemaHintReport
 
 func embeddedManualSchemaHints() (ManualSchemaHintSnapshot, error) {
 	manualSchemaHintsOnce.Do(func() {
-		manualSchemaHintsSnapshot, manualSchemaHintsErr = decodeManualSchemaHints(embeddedManualSchemaHintsJSON)
+		manualSchemaHintsSnapshot, manualSchemaHintsErr = loadManualSchemaHintsFromHintDirs(
+			embeddedMetadataFS, embeddedMetadataGlob,
+			embeddedSelectionFS, embeddedSelectionGlob,
+		)
 	})
 	return manualSchemaHintsSnapshot, manualSchemaHintsErr
 }

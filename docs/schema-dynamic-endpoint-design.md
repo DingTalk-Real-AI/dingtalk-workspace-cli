@@ -43,7 +43,8 @@ skills/mono Markdown + internal/cli/schema_hints/*.json |
                          +-----------------------+
                          |
 live Cobra flag facts / typed parameter metadata
-  + schema_manual_hints.json          (reviewed parameter overlay)
+  + schema_hints/metadata/*.json      (reviewed parameter overlay + safety)
+  + schema_hints/selection/*.json     (reviewed Agent selection prose)
   + schema_parameter_bindings.json    (reviewed flag -> RPC property)
   + schema_mcp_metadata.json          (pinned, sanitized interface facts)
   + normalized Agent metadata
@@ -123,11 +124,11 @@ DWS 当前对外仍保留兼容 wire：leaf 使用 flat `parameters`，安全和
 | reviewed manual command additions | 将一个精确存在的 runnable Cobra leaf 合并进 `EffectiveCommandRegistry`；必须 reviewed 且带 reason | 运行时 fallback、覆盖冲突 identity、创建命令 |
 | Go/Cobra | 路径是否真实可执行、Cobra 接受的 flag、CLI 类型/默认值、执行校验、help 文本 | 稳定 canonical identity、Agent 场景选择、虚构 RPC |
 | native Schema identity annotations | implementation-side consistency evidence；存在时必须与 `EffectiveCommandRegistry` 精确一致 | 提供、补全、推断或覆盖 identity |
-| `schema_manual_hints.json` parameter overrides | 精确覆盖现有 flag 的描述、映射、类型和 required 语义 | 创建命令/flag、绕过 completeness、虚构 RPC |
+| `schema_hints/metadata/*.json` parameter overlays | 精确覆盖现有 flag 的描述、映射、类型和 required 语义；并承载 safety / `runtime_gate` / interface | 创建命令/flag、绕过 completeness、虚构 RPC |
 | typed parameter metadata / constraints | `required_when`、one-of、互斥、联动、格式、枚举、位置参数 | 命令 identity |
 | `schema_parameter_bindings.json` | 稳定 CLI flag 到 RPC property 的映射 | 命令发现、risk 推断 |
 | `schema_mcp_metadata.json` | pinned RPC identity、接口描述和脱敏参数事实 | CLI identity、运行时路由、risk 推断 |
-| `internal/cli/schema_hints/*.json` | reviewed selection、effect、risk、confirmation、idempotency、examples、interface disposition | 创建 Cobra 命令或参数 |
+| `schema_hints/selection/*.json` | reviewed selection prose（summary / use_when / avoid_when / examples） | 创建 Cobra 命令或参数、改写 safety |
 | Skills/Markdown | 产品路由、工作流和使用建议 | 命令存在性和 flag 事实 |
 | `schema_catalog.json` 及其他 generated JSON | resolved registry 的兼容发布序列化；运行时由 production loader 解回 typed registry/index | generation/source resolution 输入、identity fallback、手工修复源 |
 
