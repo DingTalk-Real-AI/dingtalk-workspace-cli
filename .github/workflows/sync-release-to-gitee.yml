@@ -21,7 +21,9 @@ permissions:
 jobs:
   sync-gitee:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Gitee's attachment API can take several minutes per large archive. The
+    # script has bounded per-file retries; keep the job budget above that bound.
+    timeout-minutes: 90
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

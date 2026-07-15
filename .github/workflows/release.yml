@@ -170,9 +170,9 @@ jobs:
       - release
       - verify-darwin-signatures
     runs-on: ubuntu-latest
-    # Mirroring every release asset to Gitee can be slow; 30 minutes previously
-    # cut the fallback upload off mid-run.
-    timeout-minutes: 60
+    # The optional Gitee fallback has its own bounded retry budget and may be
+    # enabled during a cross-border incident. Normal releases skip that step.
+    timeout-minutes: 120
 
     steps:
       - name: Check out repository
@@ -258,7 +258,7 @@ jobs:
         # 默认关闭：国内 release 应由 Gitee 侧本地构建发布，避免 GitHub -> Gitee 跨境传大包卡住。
         # 仅在需要临时补救时设置 repo variable ENABLE_GITEE_UPLOAD_FALLBACK=true。
         if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
-        timeout-minutes: 20
+        timeout-minutes: 90
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ github.ref_name }}

@@ -38,8 +38,10 @@ if [ "$current_commit" != "$target_commit" ]; then
   rm -rf "$WORKDIR"
   git worktree add --detach "$WORKDIR" "$TAG"
   mkdir -p "$WORKDIR/scripts/release"
-  cp "$SCRIPT_ROOT/scripts/release/publish-gitee-local.sh" "$WORKDIR/scripts/release/publish-gitee-local.sh"
-  chmod +x "$WORKDIR/scripts/release/publish-gitee-local.sh"
+  for release_script in publish-gitee-local.sh reconcile-gitee-assets.sh; do
+    cp "$SCRIPT_ROOT/scripts/release/$release_script" "$WORKDIR/scripts/release/$release_script"
+    chmod +x "$WORKDIR/scripts/release/$release_script"
+  done
 fi
 
 cd "$WORKDIR"
