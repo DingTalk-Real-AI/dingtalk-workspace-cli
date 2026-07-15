@@ -122,9 +122,13 @@ while IFS= read -r line; do
 		workDir:  dir,
 		sessions: newCodexThreadSessions(""),
 	}
+	imagePath := filepath.Join(dir, "forwarded.png")
+	if err := os.WriteFile(imagePath, []byte("png-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	var deltas []string
-	reply, err := fwd.forwardStream(context.Background(), "conv-1", "第一问", func(s string) {
+	reply, err := fwd.forwardStreamWithAttachments(context.Background(), "conv-1", "第一问", []connectMediaAttachment{{LocalPath: imagePath, FileName: "forwarded.png", MediaType: "image"}}, func(s string) {
 		deltas = append(deltas, s)
 	})
 	if err != nil {
@@ -150,6 +154,9 @@ while IFS= read -r line; do
 	}
 	if strings.Count(log, `"method":"thread/resume"`) != 1 {
 		t.Fatalf("expected one thread/resume, log:\n%s", log)
+	}
+	if !strings.Contains(log, `"type":"localImage"`) || !strings.Contains(log, imagePath) {
+		t.Fatalf("turn/start missing native localImage input, log:\n%s", log)
 	}
 }
 

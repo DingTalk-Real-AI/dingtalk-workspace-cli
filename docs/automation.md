@@ -62,6 +62,24 @@ make lint
 git diff --check
 ```
 
+## Homebrew Formula PR Automation
+
+Official tag releases require the repository Actions secret
+`HOMEBREW_PR_TOKEN`. The `DingTalk-Real-AI` organization currently does not
+allow fine-grained personal access tokens to target this repository, so use a
+classic personal access token owned by a maintainer or release-bot account with
+only the `public_repo` scope. Do not reuse a broad developer token.
+
+Store the non-expiring token as the `HOMEBREW_PR_TOKEN` repository Actions
+secret. Replace it immediately if it is exposed, its owner loses repository
+access, or the release-bot ownership changes. The Release workflow uses this
+dedicated token only to push an `automation/homebrew-*` branch and open the
+stable or beta Formula PR. It does not push Formula changes directly to `main`.
+No maintainer environment variable is required when creating a tag. Using the
+built-in `GITHUB_TOKEN` is insufficient because organization policy prevents
+Actions from creating pull requests, and its generated PR events may require
+separate workflow approval.
+
 ## Handoff Checklist
 
 Before handoff, include:

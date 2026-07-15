@@ -170,6 +170,8 @@ func TestPrintJSONIncludesServerDiag(t *testing.T) {
 			TraceID:         "trace-xyz",
 			ServerErrorCode: "TIMEOUT_ERROR",
 			TechnicalDetail: "deadline exceeded",
+			FriendlyHint:    "请开通消息搜索权益",
+			ActionURL:       "https://example.test/enable-search",
 		}),
 	)); err != nil {
 		t.Fatalf("PrintJSON() error = %v", err)
@@ -184,6 +186,36 @@ func TestPrintJSONIncludesServerDiag(t *testing.T) {
 	}
 	if !strings.Contains(got, `"technical_detail": "deadline exceeded"`) {
 		t.Fatalf("expected technical_detail in output, got %q", got)
+	}
+	if !strings.Contains(got, `"friendly_hint": "请开通消息搜索权益"`) {
+		t.Fatalf("expected server friendly_hint in output, got %q", got)
+	}
+	if !strings.Contains(got, `"action_url": "https://example.test/enable-search"`) {
+		t.Fatalf("expected server action_url in output, got %q", got)
+	}
+}
+
+func TestPrintHumanIncludesServerGuidance(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	if err := PrintHuman(&b, NewAPI(
+		"search entitlement required",
+		WithServerDiag(ServerDiagnostics{
+			ServerErrorCode: "SEARCH_ENTITLEMENT_REQUIRED",
+			FriendlyHint:    "请联系管理员开通消息搜索权益",
+			ActionURL:       "https://example.test/enable-search",
+		}),
+	)); err != nil {
+		t.Fatalf("PrintHuman() error = %v", err)
+	}
+
+	got := b.String()
+	if !strings.Contains(got, "Hint: 请联系管理员开通消息搜索权益") {
+		t.Fatalf("expected server guidance in output, got %q", got)
+	}
+	if !strings.Contains(got, "Action: 开启地址: https://example.test/enable-search") {
+		t.Fatalf("expected server action URL in output, got %q", got)
 	}
 }
 

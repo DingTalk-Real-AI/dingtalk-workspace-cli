@@ -147,8 +147,8 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 | `dws chat group members remove` | Remove one or more members from a group chat. | When the agent kicks users who should no longer have access to the group. |
 | `dws chat group rename` | Update the display name of a group chat. | When the agent is rebranding or clarifying the purpose of an existing group. |
 | `dws chat list-top-conversations` | Fetch the list of conversations the current user has pinned to the top of their chat list. | When the agent needs to prioritize the user's most important conversations in a summary or dashboard. |
-| `dws chat message list` | Pull the recent message history of a specific conversation (v2), paginated. | When the agent needs to read what has recently been said in a conversation to summarize or reason about it. |
-| `dws chat message list-all` | Search all messages across the current user's conversations within a time range. | When the agent needs to audit or summarize everything the user saw across chats in a window. |
+| `dws chat message list` | Pull the recent message history of a specific conversation, including quoted-message context for merged forwards and images. | When the agent needs to read what has recently been said in a conversation and retain the context of replies. |
+| `dws chat message list-all` | Search all messages across the current user's conversations within a time range, surfacing any search-entitlement guidance. | When the agent needs to audit or summarize everything the user saw across chats in a window. |
 | `dws chat message list-by-sender` | Fetch messages authored by a specific sender across both single and group chats. | When the agent needs to pull everything a particular colleague said recently. |
 | `dws chat message list-focused` | Fetch messages from users the current user has marked as "special focus" (starred contacts). | When the agent builds a priority-inbox view highlighting messages from important people. |
 | `dws chat message list-mentions` | Fetch messages where the current user was @-mentioned. | When the agent wants to surface items that explicitly require the user's attention. |

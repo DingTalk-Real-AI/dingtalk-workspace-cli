@@ -94,7 +94,8 @@ func newDingCommand() *cobra.Command {
 		Short: "查询 DING 消息历史",
 		Long: `查询当前用户的 DING 消息列表，支持按类型过滤。
 --type 支持: ALL(全部)、UNREAD(未读)、SEND(已发)、NEW_COMMENT(新评论)、DELETED(已删除)。
---type 为服务端必填字段，空值会报「type不能为空」；不传时 CLI 默认按 ALL 查询。`,
+--type 为服务端必填字段，空值会报「type不能为空」；不传时 CLI 默认按 ALL 查询。
+列表项会返回 DING 内容，调用方可在同一结果中读取 openDingId、状态与 content，无需再发起详情查询。`,
 		Example: `  dws ding message list                 # 默认 --type ALL
   dws ding message list --type UNREAD
   dws ding message list --type SEND --cursor 10`,

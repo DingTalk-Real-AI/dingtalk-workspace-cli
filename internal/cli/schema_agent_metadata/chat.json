@@ -10553,7 +10553,7 @@
       ]
     },
     "chat message list": {
-      "agent_summary": "分页读取指定群聊或单聊的消息",
+      "agent_summary": "分页读取指定会话消息及其引用上下文",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
@@ -10567,18 +10567,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "分页读取指定群聊或单聊的消息",
+          "value": "分页读取指定会话消息及其引用上下文",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "分页读取指定群聊或单聊的消息",
+              "value": "分页读取指定会话消息及其引用上下文",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -10611,7 +10611,7 @@
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。",
           "candidates": [
             {
               "value": [
@@ -10620,7 +10620,7 @@
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -10659,7 +10659,7 @@
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。",
           "candidates": [
             {
               "value": [
@@ -10668,7 +10668,7 @@
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -10741,7 +10741,7 @@
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -10761,21 +10761,21 @@
         },
         "use_when": {
           "value": [
-            "用户明确指定某个会话并要查看其消息记录时"
+            "用户明确指定某个会话，并要读取消息或追溯引用回复中的原消息上下文时"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。",
           "candidates": [
             {
               "value": [
-                "用户明确指定某个会话并要查看其消息记录时"
+                "用户明确指定某个会话，并要读取消息或追溯引用回复中的原消息上下文时"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。"
             }
           ]
         }
@@ -10799,11 +10799,11 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "用户明确指定某个会话并要查看其消息记录时"
+        "用户明确指定某个会话，并要读取消息或追溯引用回复中的原消息上下文时"
       ]
     },
     "chat message list-all": {
-      "agent_summary": "按时间范围查询当前用户的跨会话消息",
+      "agent_summary": "按时间范围搜索跨会话消息并保留权益指引",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
@@ -10817,18 +10817,18 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "按时间范围查询当前用户的跨会话消息",
+          "value": "按时间范围搜索跨会话消息并保留权益指引",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "按时间范围查询当前用户的跨会话消息",
+              "value": "按时间范围搜索跨会话消息并保留权益指引",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -10861,7 +10861,7 @@
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。",
           "candidates": [
             {
               "value": [
@@ -10870,7 +10870,7 @@
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -10909,7 +10909,7 @@
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。",
           "candidates": [
             {
               "value": [
@@ -10918,7 +10918,7 @@
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -10997,7 +10997,7 @@
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。"
             }
           ]
         },
@@ -11022,7 +11022,7 @@
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+          "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。",
           "candidates": [
             {
               "value": [
@@ -11031,7 +11031,7 @@
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。"
+              "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。"
             }
           ]
         }

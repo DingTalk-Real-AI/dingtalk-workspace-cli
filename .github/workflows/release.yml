@@ -26,6 +26,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check Homebrew PR automation token
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        # Organization policy intentionally prevents the broad, built-in
+        # GITHUB_TOKEN from creating PRs. Keep Formula automation on a
+        # repository-scoped token instead of weakening that policy.
+        env:
+          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+        run: |
+          if [ -z "${HOMEBREW_PR_TOKEN:-}" ]; then
+            echo "HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases" >&2
+            exit 1
+          fi
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -175,6 +188,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+
+      - name: Open stable Homebrew formula PR
+        # Beta builds must never replace the stable Homebrew formula. Formula
+        # updates use the normal PR path instead of writing main from a tag job.
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(github.ref_name, '-') }}
+        run: ./scripts/release/publish-homebrew-formula.sh
+        env:
+          DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
+          DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+          DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
+          DWS_TAP_PR_BRANCH: "automation/homebrew-${{ github.ref_name }}"
+          DWS_TAP_PR_TITLE: "chore: update Homebrew formula for ${{ github.ref_name }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ github.ref_name }}"
+
+      - name: Open beta Homebrew formula PR
+        # Keep beta in a separately named, keg-only Formula so it cannot replace the
+        # stable dws link for ordinary Homebrew users.
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(github.ref_name, '-') }}
+        run: ./scripts/release/publish-homebrew-formula.sh
+        env:
+          DWS_FORMULA_SOURCE: dist/homebrew/dingtalk-workspace-cli-beta.rb
+          DWS_TAP_FORMULA_PATH: Formula/dingtalk-workspace-cli-beta.rb
+          DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
+          DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+          DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
+          DWS_TAP_PR_BRANCH: "automation/homebrew-beta-${{ github.ref_name }}"
+          DWS_TAP_PR_TITLE: "chore: update Homebrew beta formula for ${{ github.ref_name }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ github.ref_name }}"
 
       - name: Sync release to China OSS mirror
         # 自动同步到国内镜像，供 install.sh 的 DWS_RELEASE_BASE 开关消费。

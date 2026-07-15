@@ -1,5 +1,5 @@
 class __CLASS_NAME__ < Formula
-  desc "DingTalk Workspace CLI"
+  desc "Install locally built DingTalk workspace CLI artifacts for verification"
   homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
   url "__ARCHIVE_URL__"
   sha256 "__ARCHIVE_SHA256__"
@@ -12,8 +12,6 @@ __KEG_ONLY_LINE__
   end
 
   def install
-    require "fileutils"
-
     root = Dir["dws-*"].find { |entry| File.directory?(entry) } || "."
     binary = File.join(root, "dws")
     raise "binary not found: #{binary}" unless File.exist?(binary)
@@ -28,44 +26,15 @@ __KEG_ONLY_LINE__
     skill_dest = pkgshare/"skills/dws"
     skill_dest.mkpath
     resource("skills").stage do
-      FileUtils.cp_r(Dir["*"], skill_dest)
+      cp_r(Dir["*"], skill_dest)
     end
   end
 
-  def post_install
-    require "fileutils"
-
-    skill_root = pkgshare/"skills/dws"
-    entries = Dir["#{skill_root}/*"]
-    return if entries.empty?
-
-    targets = [
-      Pathname.new(File.join(Dir.home, ".agents/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".claude/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".cursor/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".qoder/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".qoderwork/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".gemini/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".codex/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".github/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".windsurf/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".augment/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".cline/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".amp/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".kiro/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".trae/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".openclaw/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".hermes/skills/dws")),
-    ]
-
-    targets.each_with_index do |dest, index|
-      parent_gate = dest.parent.parent
-      next if index > 0 && !parent_gate.directory?
-
-      FileUtils.rm_rf(dest)
-      FileUtils.mkdir_p(dest)
-      FileUtils.cp_r(entries, dest)
-    end
+  def caveats
+    <<~EOS
+      Agent Skills are bundled in #{pkgshare}/skills/dws.
+      Run `dws skill setup` to install them into your Agent directories.
+    EOS
   end
 
   test do
