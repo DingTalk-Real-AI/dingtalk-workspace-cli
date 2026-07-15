@@ -19,12 +19,14 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
-// todoPageSize is the per-page fetch size for get_user_todos_in_current_org,
-// matching helpers.todo list. todoMaxPages caps total pages so a runaway list
-// can never loop unbounded (40 * 50 = 2000 todos, well past any realistic
+// todoPageSize is the per-page fetch size for get_user_todos_in_current_org.
+// The real backend currently returns an empty page for pageSize=50 while
+// pageSize=20 works, so keep this aligned with the public +get-my-tasks default
+// instead of pushing the maximum. todoMaxPages caps total pages so a runaway
+// list can never loop unbounded (40 * 20 = 800 todos, well past any realistic
 // backlog a single user filters/matches against).
 const (
-	todoPageSize = 50
+	todoPageSize = 20
 	todoMaxPages = 40
 )
 

@@ -214,9 +214,10 @@ var MessagesList = shortcut.Shortcut{
 	Tips: []string{`dws chat +messages-list --group <openConversationId> --time "2025-03-01 00:00:00"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
-			"openconversation_id": rt.Str("group"),
-			"time":                rt.Str("time"),
-			"forward":             rt.Bool("forward"),
+			"openCid": rt.Str("group"),
+			"cid":     rt.Str("group"),
+			"time":    rt.Str("time"),
+			"forward": rt.Bool("forward"),
 		}
 		if rt.Int("limit") > 0 {
 			params["limit"] = rt.Int("limit")
@@ -638,11 +639,11 @@ var MessagesSendCard = shortcut.Shortcut{
 	Command:     "+messages-send-card",
 	Product:     "im",
 	Description: "创建并推送流式卡片（需配合 messages-update-card）",
-	Intent:      "当你要发送一张可后续流式更新的卡片消息（如 AI 逐字输出）时使用；会实际推送卡片并返回 bizId，群 openConversationId 或单聊接收者 openDingTalkId 二选一，配合 messages-update-card 更新。",
+	Intent:      "当你要发送一张可后续流式更新的卡片消息（如 AI 逐字输出）时使用；会实际推送卡片并返回 bizId，群 openConversationId 或单聊接收者 userId 二选一，配合 messages-update-card 更新。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（与 --receiver 互斥）"},
-		{Name: "receiver", Type: shortcut.FlagString, Desc: "单聊接收者 openDingTalkId（与 --group 互斥）"},
+		{Name: "receiver", Type: shortcut.FlagString, Desc: "单聊接收者 userId（与 --group 互斥）"},
 	},
 	Tips: []string{`dws chat +messages-send-card --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -658,7 +659,7 @@ var MessagesSendCard = shortcut.Shortcut{
 		if group != "" {
 			params["openConversationId"] = group
 		} else {
-			params["receiverOpenDingTalkId"] = receiver
+			params["receiverUid"] = receiver
 		}
 		return rt.CallMCP("create_and_send_card", params)
 	},
@@ -809,6 +810,7 @@ var MessagesSetPin = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("set_pin_message", map[string]any{
 			"openConversationId": rt.Str("open-conversation-id"),
+			"cid":                rt.Str("open-conversation-id"),
 			"openMessageId":      rt.Str("msg-id"),
 		})
 	},
@@ -830,6 +832,7 @@ var MessagesUnsetPin = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("unset_pin_message", map[string]any{
 			"openConversationId": rt.Str("open-conversation-id"),
+			"cid":                rt.Str("open-conversation-id"),
 			"openMessageId":      rt.Str("msg-id"),
 		})
 	},
@@ -850,7 +853,10 @@ var MessagesListPin = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +messages-list-pin --open-conversation-id <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"openConversationId": rt.Str("open-conversation-id")}
+		params := map[string]any{
+			"openConversationId": rt.Str("open-conversation-id"),
+			"cid":                rt.Str("open-conversation-id"),
+		}
 		if rt.Changed("cursor") {
 			params["cursor"] = rt.Str("cursor")
 		}

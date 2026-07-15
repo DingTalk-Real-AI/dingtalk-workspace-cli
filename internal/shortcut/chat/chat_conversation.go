@@ -63,6 +63,7 @@ var ConversationSetTop = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("set_top_conversation", map[string]any{
 			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
 			"top":                !rt.Bool("off"),
 		})
 	},
@@ -84,6 +85,7 @@ var ConversationMute = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_notification_off", map[string]any{
 			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
 			"mute":               !rt.Bool("off"),
 		})
 	},
@@ -105,6 +107,7 @@ var ConversationMuteAtAll = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_at_all_notification_off", map[string]any{
 			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
 			"mute":               !rt.Bool("off"),
 		})
 	},
@@ -126,6 +129,7 @@ var ConversationMuteRedEnvelope = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_red_env_notification_off", map[string]any{
 			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
 			"mute":               !rt.Bool("off"),
 		})
 	},
@@ -144,7 +148,10 @@ var ConversationMarkUnread = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +conversation-mark-unread --conversation-id <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("mark_conversation_unread", map[string]any{"openConversationId": rt.Str("conversation-id")})
+		return rt.CallMCP("mark_conversation_unread", map[string]any{
+			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
+		})
 	},
 }
 
@@ -161,7 +168,10 @@ var ConversationClearRedPoint = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +conversation-clear-red-point --conversation-id <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("clear_conversation_red_point", map[string]any{"openConversationId": rt.Str("conversation-id")})
+		return rt.CallMCP("clear_conversation_red_point", map[string]any{
+			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
+		})
 	},
 }
 
@@ -399,7 +409,10 @@ var ConversationClearMessages = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +conversation-clear-messages --conversation-id <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("clear_conversation_messages", map[string]any{"openConversationId": rt.Str("conversation-id")})
+		return rt.CallMCP("clear_conversation_messages", map[string]any{
+			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
+		})
 	},
 }
 
@@ -437,7 +450,10 @@ var ConversationHide = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +conversation-hide --conversation-id <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("hide_conversation", map[string]any{"openConversationId": rt.Str("conversation-id")})
+		return rt.CallMCP("hide_conversation", map[string]any{
+			"openConversationId": rt.Str("conversation-id"),
+			"cid":                rt.Str("conversation-id"),
+		})
 	},
 }
 

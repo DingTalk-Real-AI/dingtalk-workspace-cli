@@ -17,15 +17,17 @@ import (
 	"encoding/json"
 	"strings"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 // ShareDoc: send a document link to a person by NAME, no ID juggling.
 //
-// Steps: resolve name → single userId (disambiguate on multiple matches) →
-// build a Markdown message that links to the document → send it as a single-chat
-// message. This is a pure "share a link" flow: it does not touch any doc tool,
-// it just delivers the URL you already have straight to the recipient's inbox.
+// Steps: resolve name → single user (disambiguate on multiple matches) →
+// build a Markdown message that links to the document → send it to the user's
+// openDingTalkId as a single-chat message. This is a pure "share a link" flow:
+// it does not touch any doc tool, it just delivers the URL you already have
+// straight to the recipient's inbox.
 //
 //	dws doc +share-doc --to 张三 --url https://docs.dingtalk.com/xxx --note "帮忙过一下"
 var ShareDoc = shortcut.Shortcut{
@@ -34,7 +36,7 @@ var ShareDoc = shortcut.Shortcut{
 	Product:     "chat",
 	Description: "按姓名把文档链接私信发给某人（自动解析 userId）",
 	Intent: "当你手上已经有一个文档链接、想直接私信发给某个人而不必先查 userId 时使用；" +
-		"内部先按姓名搜通讯录解析出唯一 userId，再把链接拼成一条 Markdown 消息发出去，" +
+		"内部先按姓名搜通讯录解析出唯一用户，再用 openDingTalkId 把链接拼成一条 Markdown 消息发出去，" +
 		"姓名匹配到多人时会列出候选让你区分。只发链接、不读取或改动文档本身，会真实发出消息。",
 	Risk: shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
@@ -52,6 +54,9 @@ var ShareDoc = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		if user.openDingTalkID == "" {
+			return apperrors.NewValidation("通讯录结果缺少 openDingTalkId，无法发送文档分享消息；请改用 chat +messages-send --open-dingtalk-id")
+		}
 
 		// Step 2 — build a Markdown message linking to the document.
 		text := shareDocBuildText(url, note)
@@ -60,9 +65,9 @@ var ShareDoc = shortcut.Shortcut{
 
 		// Step 3 — deliver it as a single-chat message.
 		return rt.CallMCP("send_personal_message", map[string]any{
-			"receiverUserId": user.userID,
-			"msgType":        "markdown",
-			"content":        string(content),
+			"receiverOpenDingTalkId": user.openDingTalkID,
+			"msgType":                "markdown",
+			"content":                string(content),
 		})
 	},
 }

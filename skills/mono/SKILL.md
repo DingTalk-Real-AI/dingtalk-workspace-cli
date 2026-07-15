@@ -9,7 +9,7 @@ cli_version: ">=1.0.15"
 通过 `dws` 命令管理钉钉产品能力。
 
 
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。本期真实测试未通过的 shortcut 会从 `--help` 和 `dws shortcut list` 默认视图隐藏；Agent 不应主动推荐隐藏命令，内部排查 / 下期修复才使用 `dws shortcut list --include-hidden`。
 
 ## 严格禁止 (NEVER DO)
 - 不要使用 dws 命令以外的方式操作（禁止 curl、HTTP API、浏览器）
@@ -23,6 +23,16 @@ cli_version: ">=1.0.15"
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
 - **脚本优先**：[scripts/](./scripts/) 下的 `python scripts/<name>.py` 已封装翻页/轮询/批量逻辑，遇到对应场景（如 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等）**优先调用脚本**而非手写多步命令。脚本均支持 `--dry-run` 预览、`--format json` 输出，失败时回退到手动步骤
 - **实时个人消息事件例外**：用户要监听消息、订阅事件、自动回复消息或事件驱动 Agent 时，必须走 `dws event consume` 长连接，不要写脚本轮询消息历史
+
+## Shortcut 与原子命令的使用原则
+
+`shortcut` 是对常用操作的高层封装，适合优先承担用户意图；产品参考文档和本 skill 负责判断意图、风险、跨产品流程和复杂参数，CLI 帮助负责声明当前版本真正可调用的命令。
+
+- 用户意图可由可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`。
+- 调用前用 `dws <service> --help` 或 `dws shortcut list --service <service> --format json` 确认可见命令；不要凭文档或记忆猜测 shortcut。
+- 如果 shortcut 没出现在默认 help / list 中，视为本期未对外 release：不要主动推荐或调用隐藏 shortcut，改用已验证的原子命令、脚本、参考流程，或说明该能力本期未开放。
+- 只有在内部 CR、真实测试复盘、下期修复时，才使用 `dws shortcut list --include-hidden --format json` 查看隐藏项及 `hiddenReason`。
+- shortcut 失败时按“错误处理”流程先加 `--verbose` 复查；若仍失败，不要自行换成隐藏 shortcut 兜底，应记录具体输入、输出、trace / endpoint / tool 信息。
 
 
 ## 产品总览

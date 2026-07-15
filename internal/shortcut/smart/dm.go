@@ -20,14 +20,15 @@ package smart
 import (
 	"encoding/json"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 // DM: message a person by NAME, no ID juggling.
 //
-// Steps: resolve name → single userId (disambiguate on multiple matches) → send
-// a single-chat message. Replaces `contact +search-user` (copy userId) →
-// `chat +messages-send --user <id>`.
+// Steps: resolve name → single user (disambiguate on multiple matches) → send
+// a single-chat message via openDingTalkId. Replaces `contact +search-user`
+// (copy openDingTalkId) → `chat +messages-send --open-dingtalk-id <id>`.
 //
 //	dws chat +dm --to 张三 --text "周报发我一下"
 var DM = shortcut.Shortcut{
@@ -36,7 +37,7 @@ var DM = shortcut.Shortcut{
 	Product:     "chat",
 	Description: "按姓名直接给某人发单聊消息（自动解析 userId）",
 	Intent: "当你只知道对方姓名、想直接发一条单聊消息而不想先查 userId 时使用；" +
-		"内部先按姓名搜通讯录解析出唯一 userId 再发送，姓名匹配到多人时会列出候选让你区分。会真实发出消息。",
+		"内部先按姓名搜通讯录解析出唯一用户，并用其 openDingTalkId 发送，姓名匹配到多人时会列出候选让你区分。会真实发出消息。",
 	Risk: shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "to", Type: shortcut.FlagString, Desc: "收件人姓名/花名", Required: true},
@@ -51,13 +52,16 @@ var DM = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		if user.openDingTalkID == "" {
+			return apperrors.NewValidation("通讯录结果缺少 openDingTalkId，无法发送单聊消息；请改用 chat +messages-send --open-dingtalk-id")
+		}
 
 		// Step 2 — send the single-chat message.
 		content, _ := json.Marshal(map[string]string{"title": text, "text": text})
 		return rt.CallMCP("send_personal_message", map[string]any{
-			"receiverUserId": user.userID,
-			"msgType":        "markdown",
-			"content":        string(content),
+			"receiverOpenDingTalkId": user.openDingTalkID,
+			"msgType":                "markdown",
+			"content":                string(content),
 		})
 	},
 }

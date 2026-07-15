@@ -22,8 +22,8 @@ import (
 )
 
 // Remind: create a personal todo for YOURSELF with an optional due/reminder time,
-// in one command. No name resolution and no executorIds — a personal todo without
-// executorIds defaults to the current user.
+// in one command. It resolves the current user and explicitly passes executorIds;
+// the real todo backend does not reliably default a missing executor to "me".
 //
 // Steps: take --task as the subject, and (optionally) parse --at into epoch
 // milliseconds (mirroring the todo helper's parseISOTimeToMillis, which stores
@@ -37,7 +37,7 @@ var Remind = shortcut.Shortcut{
 	Product:     "todo",
 	Description: "给自己创建一条带截止/提醒时间的待办",
 	Intent: "当你想给自己记一件事、并（可选）设一个截止/提醒时间，又不想先查自己的 userId 时使用；" +
-		"内部直接创建个人待办，不传 executorIds 时默认执行人就是你自己，--at 会按 ISO8601 解析为截止时间。会真实创建待办。",
+		"内部先解析当前登录用户的 userId，再显式设置 executorIds，--at 会按 ISO8601 解析为截止时间。会真实创建待办。",
 	Risk: shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "task", Type: shortcut.FlagString, Desc: "待办标题/内容", Required: true},
@@ -45,10 +45,18 @@ var Remind = shortcut.Shortcut{
 	},
 	Tips: []string{`dws todo +remind --task "交周报" --at 2026-03-10T18:00:00+08:00`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		// subject is the only required field; a personal todo with no executorIds
-		// is created for the current user.
+		profile, err := rt.CallMCPData("contact", "get_current_user_profile", nil)
+		if err != nil {
+			return err
+		}
+		userID := myAttendanceCurrentUserID(profile)
+		if userID == "" {
+			return apperrors.NewValidation("无法解析当前登录用户的 userId，无法给自己创建待办")
+		}
+
 		vo := map[string]any{
-			"subject": rt.Str("task"),
+			"subject":     rt.Str("task"),
+			"executorIds": []string{userID},
 		}
 
 		// Optional due/reminder time. The todo helper feeds --due through

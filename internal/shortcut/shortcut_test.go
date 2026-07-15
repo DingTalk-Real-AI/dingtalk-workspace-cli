@@ -153,7 +153,7 @@ func TestCallMCPDataRejectsLikelyWriteUnderDryRun(t *testing.T) {
 	}
 
 	rt := &RuntimeContext{cmd: cmd, shortcut: Shortcut{Service: "chat"}}
-	_, err := rt.CallMCPData("chat", "send_personal_message", map[string]any{"receiverUserId": "u"})
+	_, err := rt.CallMCPData("chat", "send_personal_message", map[string]any{"receiverUid": "u"})
 	if err == nil {
 		t.Fatal("expected likely write guard error")
 	}

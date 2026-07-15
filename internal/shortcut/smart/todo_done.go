@@ -113,17 +113,30 @@ func shortcutTodoMatch(cards []map[string]any, keyword string) []shortcutTodoCar
 	return out
 }
 
-// shortcutTodoCards pulls the todoCards list out of the response, probing the
-// common container shape {"result": {"todoCards": [...]}} first, then a bare
-// top-level todoCards as a fallback.
+// shortcutTodoCards pulls the todoCards list out of the response, probing
+// wrapper layers defensively.  Real MCP responses may arrive as either
+// {"result":{"todoCards":[...]}} or {"result":{"result":{"todoCards":[...]}}}
+// depending on the call path, so do not assume a single fixed wrapper.
 func shortcutTodoCards(data map[string]any) []map[string]any {
-	if r, ok := data["result"].(map[string]any); ok {
-		if arr, ok := r["todoCards"].([]any); ok {
-			return shortcutTodoToMaps(arr)
-		}
-	}
-	if arr, ok := data["todoCards"].([]any); ok {
+	if arr := shortcutTodoFindCards(data, 0); arr != nil {
 		return shortcutTodoToMaps(arr)
+	}
+	return nil
+}
+
+func shortcutTodoFindCards(m map[string]any, depth int) []any {
+	if depth > 4 {
+		return nil
+	}
+	if arr, ok := m["todoCards"].([]any); ok {
+		return arr
+	}
+	for _, k := range []string{"result", "data"} {
+		if child, ok := m[k].(map[string]any); ok {
+			if arr := shortcutTodoFindCards(child, depth+1); arr != nil {
+				return arr
+			}
+		}
 	}
 	return nil
 }

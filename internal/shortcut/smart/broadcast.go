@@ -24,8 +24,8 @@ import (
 
 // Broadcast: send the SAME single-chat message to several people by NAME.
 //
-// Steps: split the --to name CSV → resolve each name to a unique userId →
-// send an individual single-chat message to each resolved user. Names that
+// Steps: split the --to name CSV → resolve each name to a unique user →
+// send an individual single-chat message to each user's openDingTalkId. Names that
 // fail to resolve (unknown / ambiguous) are collected and reported at the end
 // without aborting delivery to the others. Replaces manually running
 // `chat +dm` once per recipient.
@@ -37,7 +37,7 @@ var Broadcast = shortcut.Shortcut{
 	Product:     "chat",
 	Description: "按姓名逐一给多个人群发同一条单聊消息（自动解析 userId、逐个发送）",
 	Intent: "当你想把同一条通知一次性单聊发给多位同事、但只知道他们的姓名不想逐个查 userId 时使用；" +
-		"内部把姓名列表逐个解析成唯一 userId 后，对每个人单独发一条单聊消息，并汇总成功/失败人数。" +
+		"内部把姓名列表逐个解析成唯一用户后，用 openDingTalkId 对每个人单独发一条单聊消息，并汇总成功/失败人数。" +
 		"某个姓名匹配不到人或匹配到多人时，会跳过该人并在结尾报出，不影响其他人收到消息。会真实发出多条消息。",
 	Risk: shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
@@ -71,6 +71,10 @@ var Broadcast = shortcut.Shortcut{
 				failed = append(failed, fmt.Sprintf("%s（%s）", name, err.Error()))
 				continue
 			}
+			if user.openDingTalkID == "" {
+				failed = append(failed, fmt.Sprintf("%s（通讯录结果缺少 openDingTalkId）", name))
+				continue
+			}
 
 			// Step 2 — send the single-chat message to this recipient. Under
 			// --dry-run we still resolve names (a read) but never send: record the
@@ -80,9 +84,9 @@ var Broadcast = shortcut.Shortcut{
 				continue
 			}
 			if _, err := rt.CallMCPWriteData("chat", "send_personal_message", map[string]any{
-				"receiverUserId": user.userID,
-				"msgType":        "markdown",
-				"content":        string(content),
+				"receiverOpenDingTalkId": user.openDingTalkID,
+				"msgType":                "markdown",
+				"content":                string(content),
 			}); err != nil {
 				failed = append(failed, fmt.Sprintf("%s（发送失败：%s）", name, err.Error()))
 				continue

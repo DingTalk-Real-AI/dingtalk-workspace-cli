@@ -25,6 +25,13 @@ metadata:
 - 全局 `--profile <名称|corpId>`：单次指定本命令用哪个组织，一次性、不改默认组织
 - 危险 / 写 / 删操作执行前先向用户确认
 
+## Shortcut 可用性与隐藏规则
+- `shortcut` 是对常用操作的高层封装，子 skill 负责意图、风险、跨产品流程和复杂参数；当前 `dws` 二进制的 `--help` / `dws shortcut list` 才是可用命令事实源。
+- 用户意图可由默认可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`。
+- 调用前用 `dws <service> --help` 或 `dws shortcut list --service <service> --format json` 确认可见命令；不要凭 skill 文档或记忆猜测 shortcut。
+- 本期真实测试未通过的 shortcut 会从默认 help / list 隐藏。缺失的 shortcut 视为未对外 release，改用已验证原子命令、脚本或参考流程；不要主动推荐隐藏命令。
+- 只有内部 CR、真实测试复盘、下期修复时，才用 `dws shortcut list --include-hidden --format json` 查看隐藏项和 `hiddenReason`。
+
 ## 多组织 / --profile（关键规则）
 dws 可同时登录多个钉钉组织，一个 profile = 一个已登录组织（corp）。当前 profile 决定本次命令用哪个组织的身份（corpId / userId 自动注入）。
 

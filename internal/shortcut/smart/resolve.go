@@ -24,8 +24,9 @@ import (
 // contactUser is the minimal identity a smart shortcut needs after resolving a
 // name.
 type contactUser struct {
-	userID string
-	name   string
+	userID         string
+	openDingTalkID string
+	name           string
 }
 
 // resolveUser turns a human name into a single unique contact, the "name → ID"
@@ -53,8 +54,8 @@ func resolveUser(rt *shortcut.RuntimeContext, name string) (contactUser, error) 
 	return users[0], nil
 }
 
-// extractUsers pulls {userId, name} out of a search_contact_by_key_word response
-// ({"result": [ {userId, name, ...} ]}).
+// extractUsers pulls {userId, openDingTalkId, name} out of a
+// search_contact_by_key_word response ({"result": [ {userId, name, ...} ]}).
 func extractUsers(data map[string]any) []contactUser {
 	raw, ok := data["result"].([]any)
 	if !ok {
@@ -71,7 +72,11 @@ func extractUsers(data map[string]any) []contactUser {
 			continue
 		}
 		nm, _ := m["name"].(string)
-		out = append(out, contactUser{userID: id, name: nm})
+		openID, _ := m["openDingTalkId"].(string)
+		if openID == "" {
+			openID, _ = m["openDingtalkId"].(string)
+		}
+		out = append(out, contactUser{userID: id, openDingTalkID: openID, name: nm})
 	}
 	return out
 }

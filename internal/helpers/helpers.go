@@ -459,8 +459,33 @@ func buildMinimalPATJSON(code string) string {
 
 // isBusinessError checks if a parsed JSON body represents a business-level error.
 func isBusinessError(body map[string]any) bool {
-	if _, ok := body["error"].(string); ok {
+	if v, ok := body["error"]; ok {
+		switch t := v.(type) {
+		case string:
+			if strings.TrimSpace(t) != "" {
+				return true
+			}
+		case map[string]any:
+			if len(t) > 0 {
+				return true
+			}
+		case []any:
+			if len(t) > 0 {
+				return true
+			}
+		default:
+			if t != nil {
+				return true
+			}
+		}
+	}
+	if v, ok := body["status"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "error") {
 		return true
+	}
+	for _, key := range []string{"errorCode", "error_code", "code"} {
+		if isErrorCodeValue(body[key]) {
+			return true
+		}
 	}
 	if v, ok := body["success"].(bool); ok && !v {
 		return true
@@ -469,6 +494,32 @@ func isBusinessError(body map[string]any) bool {
 		return true
 	}
 	return false
+}
+
+func isErrorCodeValue(v any) bool {
+	switch t := v.(type) {
+	case string:
+		code := strings.TrimSpace(t)
+		if code == "" {
+			return false
+		}
+		switch strings.ToLower(code) {
+		case "0", "ok", "success", "succeed":
+			return false
+		default:
+			return true
+		}
+	case float64:
+		return t != 0
+	case int:
+		return t != 0
+	case int64:
+		return t != 0
+	case json.Number:
+		return strings.TrimSpace(t.String()) != "" && t.String() != "0"
+	default:
+		return false
+	}
 }
 
 // isNotLoggedInError checks if the error body indicates missing authentication.

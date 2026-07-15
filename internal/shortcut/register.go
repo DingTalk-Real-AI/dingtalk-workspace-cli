@@ -28,6 +28,9 @@ var allShortcuts []Shortcut
 // Register adds one or more shortcuts to the built-in registry. Call from a
 // service package's init().
 func Register(shortcuts ...Shortcut) {
+	for i := range shortcuts {
+		shortcuts[i] = applyReleaseGate(shortcuts[i])
+	}
 	allShortcuts = append(allShortcuts, shortcuts...)
 }
 

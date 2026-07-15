@@ -25,7 +25,7 @@ import (
 //
 // Steps:
 //  1. depending on whether --group or --user is given, call either
-//     list_conversation_message_v2 (group; param openconversation_id) or
+//     list_conversation_message_v2 (group; param openCid) or
 //     list_individual_chat_message (single chat; param userId) on the chat
 //     server — tool names and param keys copied verbatim from chat.go's
 //     `dws chat message list` call sites;
@@ -68,8 +68,8 @@ var ChatMessages = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — build params and pick the right tool. Param keys
-		// (openconversation_id / userId / time / forward / limit) are copied
-		// verbatim from chat.go's `dws chat message list` call sites.
+		// (openCid/cid / userId / time / forward / limit) match the MCP server
+		// schema for group and direct message listing.
 		var tool string
 		params := map[string]any{}
 
@@ -93,7 +93,8 @@ var ChatMessages = shortcut.Shortcut{
 
 		if rt.Str("group") != "" {
 			tool = "list_conversation_message_v2"
-			params["openconversation_id"] = rt.Str("group")
+			params["openCid"] = rt.Str("group")
+			params["cid"] = rt.Str("group")
 		} else {
 			tool = "list_individual_chat_message"
 			params["userId"] = rt.Str("user")

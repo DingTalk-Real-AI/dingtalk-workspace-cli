@@ -64,6 +64,7 @@ var ChatMembersGet = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("list_group_member_by_ids", map[string]any{
 			"openConversationId":    rt.Str("id"),
+			"cid":                   rt.Str("id"),
 			"memberOpenDingTalkIds": rt.StrSlice("users"),
 		})
 	},
@@ -87,7 +88,10 @@ var ChatTransferOwner = shortcut.Shortcut{
 	Tips: []string{`dws chat +chat-transfer-owner --group <openConversationId> --new-owner <openDingTalkId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		newOwner := rt.Str("new-owner")
-		params := map[string]any{"openConversationId": rt.Str("group")}
+		params := map[string]any{
+			"openConversationId": rt.Str("group"),
+			"cid":                rt.Str("group"),
+		}
 		if isOpenID(newOwner) {
 			params["newOwnerOpenDingTalkId"] = newOwner
 		} else {
@@ -111,7 +115,10 @@ var ChatInviteURL = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +chat-invite-url --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"openConversationId": rt.Str("group")}
+		params := map[string]any{
+			"openConversationId": rt.Str("group"),
+			"cid":                rt.Str("group"),
+		}
 		if rt.Changed("expires-seconds") {
 			params["expiresSeconds"] = rt.Int("expires-seconds")
 		}
@@ -457,24 +464,24 @@ var ChatAuditJoin = shortcut.Shortcut{
 	Command:     "+chat-audit-join",
 	Product:     "im",
 	Description: "审批入群验证（通过/拒绝/删除/忽略/拉黑）",
-	Intent:      "当你要处理某条入群申请时使用；会实际执行通过/拒绝/删除/忽略/拉黑动作，需传群 openConversationId、recordId、申请人与邀请人 openDingTalkId 及 status。",
+	Intent:      "当你要处理某条入群申请时使用；会实际执行通过/拒绝/删除/忽略/拉黑动作，需传群 openConversationId、recordId、申请人与邀请人 userId 及 status。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
 		{Name: "record-id", Type: shortcut.FlagInt, Desc: "申请记录 ID", Required: true},
-		{Name: "applicant", Type: shortcut.FlagString, Desc: "申请人 openDingTalkId", Required: true},
-		{Name: "inviter", Type: shortcut.FlagString, Desc: "邀请人 openDingTalkId", Required: true},
+		{Name: "applicant", Type: shortcut.FlagString, Desc: "申请人 userId", Required: true},
+		{Name: "inviter", Type: shortcut.FlagString, Desc: "邀请人 userId", Required: true},
 		{Name: "status", Type: shortcut.FlagString, Desc: "审批动作", Required: true, Enum: []string{"AuditApprove", "AuditDelete", "AuditIgnore", "AuditRefuse", "AuditBlock"}},
 		{Name: "description", Type: shortcut.FlagString, Desc: "审批说明"},
 	},
-	Tips: []string{`dws chat +chat-audit-join --group <openConversationId> --record-id 123 --applicant <odid> --inviter <odid> --status AuditApprove`},
+	Tips: []string{`dws chat +chat-audit-join --group <openConversationId> --record-id 123 --applicant <userId> --inviter <userId> --status AuditApprove`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
-			"openConversationId":      rt.Str("group"),
-			"applyRecordId":           rt.Int("record-id"),
-			"applicantOpenDingTalkId": rt.Str("applicant"),
-			"inviterOpenDingTalkId":   rt.Str("inviter"),
-			"status":                  rt.Str("status"),
+			"openConversationId": rt.Str("group"),
+			"applyRecordId":      rt.Int("record-id"),
+			"applicantUid":       rt.Str("applicant"),
+			"inviterUid":         rt.Str("inviter"),
+			"status":             rt.Str("status"),
 		}
 		if rt.Changed("description") {
 			params["auditDescription"] = rt.Str("description")
@@ -661,6 +668,7 @@ var ChatMuteMember = shortcut.Shortcut{
 		off := rt.Bool("off")
 		params := map[string]any{
 			"openConversationId": rt.Str("group"),
+			"cid":                rt.Str("group"),
 			"mute":               !off,
 		}
 		if len(userIDs) > 0 {
