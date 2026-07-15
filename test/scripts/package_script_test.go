@@ -321,16 +321,30 @@ func TestCheckedInHomebrewBetaFormulaIsSeparateAndKegOnly(t *testing.T) {
 		t.Fatalf("ReadFile(%s) error = %v", formulaPath, err)
 	}
 	formula := string(data)
+	versionPrefix := `version "`
+	versionStart := strings.Index(formula, versionPrefix)
+	if versionStart == -1 {
+		t.Fatal("checked-in Homebrew beta formula is missing a version declaration")
+	}
+	versionStart += len(versionPrefix)
+	versionEnd := strings.Index(formula[versionStart:], `"`)
+	if versionEnd == -1 {
+		t.Fatal("checked-in Homebrew beta formula has an invalid version declaration")
+	}
+	version := formula[versionStart : versionStart+versionEnd]
+	if !strings.Contains(version, "-") {
+		t.Fatalf("checked-in Homebrew beta formula must be a prerelease, got version %q", version)
+	}
+	releaseBase := "releases/download/v" + version + "/"
 	for _, required := range []string{
 		"class DingtalkWorkspaceCliBeta < Formula",
 		`desc "Automate DingTalk workspace tasks from the terminal (beta channel)"`,
-		`version "1.0.52-beta.4"`,
 		`keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"`,
-		"releases/download/v1.0.52-beta.4/dws-darwin-amd64.tar.gz",
-		"releases/download/v1.0.52-beta.4/dws-darwin-arm64.tar.gz",
-		"releases/download/v1.0.52-beta.4/dws-linux-amd64.tar.gz",
-		"releases/download/v1.0.52-beta.4/dws-linux-arm64.tar.gz",
-		"releases/download/v1.0.52-beta.4/dws-skills.zip",
+		releaseBase + "dws-darwin-amd64.tar.gz",
+		releaseBase + "dws-darwin-arm64.tar.gz",
+		releaseBase + "dws-linux-amd64.tar.gz",
+		releaseBase + "dws-linux-arm64.tar.gz",
+		releaseBase + "dws-skills.zip",
 		"This beta is keg-only",
 	} {
 		if !strings.Contains(formula, required) {
