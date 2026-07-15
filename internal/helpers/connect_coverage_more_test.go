@@ -112,7 +112,6 @@ func TestConnectForwarderPureCoverage(t *testing.T) {
 	cmd := exec.Command("sh", "-c", "exit 0")
 	applyDetach(cmd)
 	configureWorkerProcessGroup(cmd)
-	_ = detachSysProcAttr()
 	cleanupWorkerProcessGroup(0)
 	_ = runAgentInstall("channel", agentSpec{app: "app", install: []string{"sh", "-c", "exit 0"}})
 	_ = runAgentInstall("channel", agentSpec{app: "app", install: []string{"sh", "-c", "exit 1"}})
@@ -236,10 +235,10 @@ func TestAtPollTextAndCancellationCoverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	poller := &atMentionPoller{}
-	poller.start(ctx)
+	stopped := poller.start(ctx)
 	poller.poll(ctx)
 	poller.handleMessage(ctx, atMentionMessage{})
-	time.Sleep(5 * time.Millisecond)
+	waitAtPollStop(t, stopped)
 
 	var payload map[string]any
 	_ = json.Unmarshal([]byte(`{"ok":true}`), &payload)

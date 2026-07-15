@@ -114,6 +114,12 @@ func (f *basicConnectorForwarder) forward(_ context.Context, _ string, text stri
 	return f.reply, f.err
 }
 
+func (f *basicConnectorForwarder) promptSnapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.prompts...)
+}
+
 func (*basicConnectorForwarder) label() string { return "fake" }
 
 type resetConnectorForwarder struct {
@@ -139,7 +145,9 @@ func (*streamingConnectorForwarder) canStream() bool { return true }
 
 func (f *streamingConnectorForwarder) forwardStream(_ context.Context, _ string, text string, onDelta func(string)) (string, error) {
 	f.streamed = true
+	f.mu.Lock()
 	f.prompts = append(f.prompts, text)
+	f.mu.Unlock()
 	if onDelta != nil {
 		onDelta("partial")
 	}
@@ -179,6 +187,7 @@ func preserveConnectStreamHooks(t *testing.T) {
 	oldLockDir := connectLockDir
 	oldDaemonDir := connectDaemonDirOverride
 	oldSleep := helperSleep
+	oldCardRepair := runConnectCardRepair
 	t.Cleanup(func() {
 		newConnectStreamClient = oldStream
 		newConnectChatReplier = oldReplier
@@ -186,6 +195,7 @@ func preserveConnectStreamHooks(t *testing.T) {
 		connectLockDir = oldLockDir
 		connectDaemonDirOverride = oldDaemonDir
 		helperSleep = oldSleep
+		runConnectCardRepair = oldCardRepair
 	})
 }
 
@@ -202,18 +212,34 @@ func connectorMessage(id, text string) *chatbot.BotCallbackDataModel {
 	}
 }
 
-func runConnectorScenario(t *testing.T, messages []*chatbot.BotCallbackDataModel, fwd forwarder, media connectMediaClient, extras *connectExtras, replyErrors []error, wantReplyCalls int) (*fakeConnectReplier, *fakeConnectStreamClient) {
-	return runConnectorScenarioWithCard(t, messages, fwd, media, nil, extras, replyErrors, wantReplyCalls)
+func runConnectorScenario(t *testing.T, messages []*chatbot.BotCallbackDataModel, fwd forwarder, media connectMediaClient, extras *connectExtras, replyErrors []error, wantReplyCalls int, wantTurnCalls ...int) (*fakeConnectReplier, *fakeConnectStreamClient) {
+	return runConnectorScenarioWithCard(t, messages, fwd, media, nil, extras, replyErrors, wantReplyCalls, wantTurnCalls...)
 }
 
-func runConnectorScenarioWithCard(t *testing.T, messages []*chatbot.BotCallbackDataModel, fwd forwarder, media connectMediaClient, cardCli *aiCardClient, extras *connectExtras, replyErrors []error, wantReplyCalls int) (*fakeConnectReplier, *fakeConnectStreamClient) {
+func runConnectorScenarioWithCard(t *testing.T, messages []*chatbot.BotCallbackDataModel, fwd forwarder, media connectMediaClient, cardCli *aiCardClient, extras *connectExtras, replyErrors []error, wantReplyCalls int, wantTurnCalls ...int) (*fakeConnectReplier, *fakeConnectStreamClient) {
 	t.Helper()
 	preserveConnectStreamHooks(t)
 	connectLockDir = t.TempDir()
 	connectDaemonDirOverride = t.TempDir()
 	helperSleep = func(time.Duration) {}
+	runConnectCardRepair = func(repair func()) { repair() }
 	replier := &fakeConnectReplier{errors: replyErrors, events: make(chan struct{}, 16)}
 	stream := &fakeConnectStreamClient{}
+	turnEvents := make(chan struct{}, len(messages))
+	if extras == nil {
+		extras = &connectExtras{}
+	} else {
+		copy := *extras
+		extras = &copy
+	}
+	extras.onTurnDone = func() { turnEvents <- struct{}{} }
+	wantTurns := 0
+	if len(messages) > 0 {
+		wantTurns = 1
+	}
+	if len(wantTurnCalls) > 0 {
+		wantTurns = wantTurnCalls[0]
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	stream.start = func(_ context.Context, handler chatbot.IChatBotMessageHandler) error {
 		if handler == nil {
@@ -231,8 +257,12 @@ func runConnectorScenarioWithCard(t *testing.T, messages []*chatbot.BotCallbackD
 				return errors.New("timed out waiting for reply")
 			}
 		}
-		if cardCli != nil && wantReplyCalls == 0 {
-			time.Sleep(120 * time.Millisecond)
+		for range wantTurns {
+			select {
+			case <-turnEvents:
+			case <-time.After(2 * time.Second):
+				return errors.New("timed out waiting for queued turn")
+			}
 		}
 		cancel()
 		return nil
@@ -256,8 +286,9 @@ func TestRunStreamConnectorBasicMessageEdges(t *testing.T) {
 		noWebhook := connectorMessage("webhook", "hello")
 		noWebhook.SessionWebhook = ""
 		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{blank, noWebhook}, fwd, nil, nil, nil, 0)
-		if len(fwd.prompts) != 1 || !strings.Contains(fwd.prompts[0], "原始消息 JSON") {
-			t.Fatalf("fallback messages forwarded: %#v", fwd.prompts)
+		prompts := fwd.promptSnapshot()
+		if len(prompts) != 1 || !strings.Contains(prompts[0], "原始消息 JSON") {
+			t.Fatalf("fallback messages forwarded: %#v", prompts)
 		}
 	})
 
@@ -282,9 +313,10 @@ func TestRunStreamConnectorBasicMessageEdges(t *testing.T) {
 		markdown.Msgtype = "markdown"
 		markdown.Content = map[string]any{"text": " markdown body "}
 		fwd := &basicConnectorForwarder{reply: "ok"}
-		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{interactive, markdown}, fwd, nil, nil, nil, 2)
-		if len(fwd.prompts) != 2 {
-			t.Fatalf("structured prompts = %#v", fwd.prompts)
+		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{interactive, markdown}, fwd, nil, nil, nil, 2, 2)
+		prompts := fwd.promptSnapshot()
+		if len(prompts) != 2 {
+			t.Fatalf("structured prompts = %#v", prompts)
 		}
 	})
 
@@ -297,23 +329,24 @@ func TestRunStreamConnectorBasicMessageEdges(t *testing.T) {
 		second.ConversationId = first.ConversationId
 		third.ConversationId = first.ConversationId
 		fwd := &slowConnectorForwarder{basicConnectorForwarder: &basicConnectorForwarder{reply: "ok"}, delay: 30 * time.Millisecond}
-		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{fallback, first, second, third}, fwd, nil, nil, nil, 3)
+		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{fallback, first, second, third}, fwd, nil, nil, nil, 3, 3)
 		foundMerged := false
-		for _, prompt := range fwd.prompts {
+		prompts := fwd.promptSnapshot()
+		for _, prompt := range prompts {
 			if strings.Contains(prompt, "连续发送") {
 				foundMerged = true
 			}
 		}
 		if !foundMerged {
-			t.Fatalf("queued prompts were not merged: %#v", fwd.prompts)
+			t.Fatalf("queued prompts were not merged: %#v", prompts)
 		}
 	})
 
 	t.Run("access gate denial", func(t *testing.T) {
 		fwd := &basicConnectorForwarder{reply: "unused"}
 		extras := &connectExtras{gate: newConnectGate([]string{"allowed"}, nil, 0)}
-		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{connectorMessage("denied", "question")}, fwd, nil, extras, nil, 0)
-		if len(fwd.prompts) != 0 {
+		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{connectorMessage("denied", "question")}, fwd, nil, extras, nil, 0, 0)
+		if len(fwd.promptSnapshot()) != 0 {
 			t.Fatal("denied message reached forwarder")
 		}
 	})
@@ -323,8 +356,9 @@ func TestRunStreamConnectorForwardAndReplyEdges(t *testing.T) {
 	t.Run("long markdown and retry success", func(t *testing.T) {
 		fwd := &basicConnectorForwarder{reply: strings.Repeat("long", 80)}
 		replier, _ := runConnectorScenario(t, []*chatbot.BotCallbackDataModel{connectorMessage("long", "question")}, fwd, nil, &connectExtras{persona: "Persona"}, []error{errors.New("one"), errors.New("two"), nil}, 3)
-		if replier.calls != 3 || replier.kinds[0] != "markdown" || !strings.Contains(fwd.prompts[0], "Persona") {
-			t.Fatalf("markdown retry = calls %d kinds %#v prompts %#v", replier.calls, replier.kinds, fwd.prompts)
+		prompts := fwd.promptSnapshot()
+		if replier.calls != 3 || replier.kinds[0] != "markdown" || !strings.Contains(prompts[0], "Persona") {
+			t.Fatalf("markdown retry = calls %d kinds %#v prompts %#v", replier.calls, replier.kinds, prompts)
 		}
 	})
 
@@ -365,13 +399,24 @@ func TestRunStreamConnectorForwardAndReplyEdges(t *testing.T) {
 		fwd := &basicConnectorForwarder{reply: "answer"}
 		kb := &knowledgeBase{chunks: []knowledgeChunk{{source: "guide.md", text: "alpha guidance", terms: knowledgeTerms("alpha guidance")}}}
 		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{connectorMessage("knowledge", "alpha question")}, fwd, nil, &connectExtras{kb: kb}, nil, 1)
-		if !strings.Contains(fwd.prompts[0], "guide.md") {
-			t.Fatalf("knowledge prompt = %q", fwd.prompts[0])
+		prompts := fwd.promptSnapshot()
+		if !strings.Contains(prompts[0], "guide.md") {
+			t.Fatalf("knowledge prompt = %q", prompts[0])
 		}
 	})
 }
 
 func TestRunStreamConnectorControlAndLifecycleEdges(t *testing.T) {
+	t.Run("asynchronous card repair runner", func(t *testing.T) {
+		done := make(chan struct{})
+		runConnectCardRepair(func() { close(done) })
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("card repair runner did not start")
+		}
+	})
+
 	for _, tc := range []struct {
 		name     string
 		text     string
@@ -452,8 +497,9 @@ func TestRunStreamConnectorControlAndLifecycleEdges(t *testing.T) {
 		extras := &connectExtras{approval: approval}
 		fwd := &basicConnectorForwarder{reply: "ordinary answer"}
 		_, stream := runConnectorScenario(t, []*chatbot.BotCallbackDataModel{connectorMessage("approval", "question")}, fwd, nil, extras, nil, 1)
-		if stream.cardHandler == nil || !strings.Contains(fwd.prompts[0], "ACTION") {
-			t.Fatalf("approval registration=%v prompt=%q", stream.cardHandler != nil, fwd.prompts[0])
+		prompts := fwd.promptSnapshot()
+		if stream.cardHandler == nil || !strings.Contains(prompts[0], "ACTION") {
+			t.Fatalf("approval registration=%v prompt=%q", stream.cardHandler != nil, prompts[0])
 		}
 		_, _ = stream.cardHandler(context.Background(), &card.CardRequest{})
 	})
@@ -466,7 +512,7 @@ func TestRunStreamConnectorControlAndLifecycleEdges(t *testing.T) {
 		message.SenderStaffId = "owner"
 		fwd := &basicConnectorForwarder{reply: "unused"}
 		runConnectorScenario(t, []*chatbot.BotCallbackDataModel{message}, fwd, nil, &connectExtras{approval: approval}, nil, 0)
-		if len(fwd.prompts) != 0 {
+		if len(fwd.promptSnapshot()) != 0 {
 			t.Fatal("owner decision reached forwarder")
 		}
 	})
@@ -608,8 +654,9 @@ func TestRunStreamConnectorMediaEdges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fwd := &basicConnectorForwarder{reply: "done"}
 			runConnectorScenario(t, []*chatbot.BotCallbackDataModel{tc.message}, fwd, tc.media, nil, nil, 1)
-			if len(fwd.prompts) != 1 || !strings.Contains(fwd.prompts[0], tc.want) {
-				t.Fatalf("media prompt = %#v, want %q", fwd.prompts, tc.want)
+			prompts := fwd.promptSnapshot()
+			if len(prompts) != 1 || !strings.Contains(prompts[0], tc.want) {
+				t.Fatalf("media prompt = %#v, want %q", prompts, tc.want)
 			}
 		})
 	}

@@ -53,6 +53,15 @@ func waitAtPollForward(t *testing.T, f *atPollSignalForwarder) {
 	}
 }
 
+func waitAtPollStop(t *testing.T, stopped <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for at-poll shutdown")
+	}
+}
+
 func newAtPollForTest(fwd forwarder, extras *connectExtras) *atMentionPoller {
 	return &atMentionPoller{
 		clientID: "client", botClient: newAICardClient("client", "secret", ""),
@@ -80,19 +89,25 @@ func TestAtMentionPollerStartAndPollCoverage(t *testing.T) {
 		ch <- time.Now()
 		return ch
 	}
+	tickerStarted := make(chan struct{})
 	atPollTicker = func(time.Duration) (<-chan time.Time, func()) {
 		ch := make(chan time.Time, 1)
 		ch <- time.Now()
+		close(tickerStarted)
 		return ch, func() {}
 	}
+	atPollExecutable = func() (string, error) { return "", errors.New("executable") }
 	ctx, cancel := context.WithCancel(context.Background())
 	p := newAtPollForTest(&atPollSignalForwarder{done: make(chan struct{}, 1)}, &connectExtras{})
-	p.start(ctx)
-	time.Sleep(10 * time.Millisecond)
+	stopped := p.start(ctx)
+	select {
+	case <-tickerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for at-poll startup")
+	}
 	cancel()
-	time.Sleep(10 * time.Millisecond)
+	waitAtPollStop(t, stopped)
 
-	atPollExecutable = func() (string, error) { return "", errors.New("executable") }
 	p.poll(context.Background())
 	atPollExecutable = func() (string, error) { return "test", nil }
 	atPollCommandContext = func(context.Context, string, ...string) *exec.Cmd {

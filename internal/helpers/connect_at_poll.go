@@ -67,8 +67,10 @@ type atMentionMessage struct {
 	ConversationType   string `json:"conversationType"`
 }
 
-func (p *atMentionPoller) start(ctx context.Context) {
+func (p *atMentionPoller) start(ctx context.Context) <-chan struct{} {
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		select {
 		case <-helperAfter(3 * time.Second):
 		case <-ctx.Done():
@@ -86,6 +88,7 @@ func (p *atMentionPoller) start(ctx context.Context) {
 			}
 		}
 	}()
+	return stopped
 }
 
 func (p *atMentionPoller) poll(ctx context.Context) {

@@ -515,6 +515,44 @@ func TestPortalStartHandshakeReadAndAckErrors(t *testing.T) {
 		t.Fatalf("read error = %v", err)
 	}
 
+	// Keep the websocket open with no frames so cancellation can only unblock
+	// the client's ReadMessage call. This deterministically covers the
+	// context-cancelled read path instead of racing cancellation against ACK.
+	readReady := make(chan struct{})
+	releaseRead := make(chan struct{})
+	cancelReadSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		close(readReady)
+		<-releaseRead
+		_ = conn.Close()
+	}))
+	defer cancelReadSrv.Close()
+	endpoint = "ws" + strings.TrimPrefix(cancelReadSrv.URL, "http")
+	s = makeSource(endpoint)
+	readCtx, cancelRead := context.WithCancel(context.Background())
+	readErr := make(chan error, 1)
+	go func() { readErr <- s.Start(readCtx, func(*dwsevent.RawEvent) {}) }()
+	select {
+	case <-readReady:
+	case <-time.After(time.Second):
+		close(releaseRead)
+		t.Fatal("cancelled read connection timeout")
+	}
+	cancelRead()
+	select {
+	case err := <-readErr:
+		close(releaseRead)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled read = %v", err)
+		}
+	case <-time.After(time.Second):
+		close(releaseRead)
+		t.Fatal("cancelled read timeout")
+	}
+
 	frame := payload.DataFrame{Type: "event", Headers: payload.DataFrameHeader{payload.DataFrameHeaderKMessageId: "m"}, Data: `{}`}
 	abruptSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)

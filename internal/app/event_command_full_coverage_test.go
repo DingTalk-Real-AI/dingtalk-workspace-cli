@@ -164,12 +164,9 @@ func TestEventSourcesAndForegroundCoverage(t *testing.T) {
 		t.Fatalf("foreground bus error = %v", err)
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if err := os.MkdirAll(filepath.Join(home, ".dws"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(home, ".dws", "mcp_url"), []byte("https://pre-mcp.example.test"), 0o600); err != nil {
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte("https://pre-mcp.example.test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DWS_STREAM_SOURCE_ID", "")

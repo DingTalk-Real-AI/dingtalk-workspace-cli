@@ -25,12 +25,8 @@ import (
 )
 
 var (
-	keychainReadFile    = os.ReadFile
 	keychainMkdirAll    = os.MkdirAll
 	keychainWriteFile   = os.WriteFile
-	keychainRename      = os.Rename
-	keychainRemove      = os.Remove
-	keychainStat        = os.Stat
 	keychainUserHomeDir = os.UserHomeDir
 	keychainRandRead    = rand.Read
 )

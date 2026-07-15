@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -76,14 +75,6 @@ func TestLastPureAndCommandBranches(t *testing.T) {
 }
 
 func TestLastIOAndConfirmationBranches(t *testing.T) {
-	origGetrlimit := connectGetrlimit
-	connectGetrlimit = func(int, *syscall.Rlimit) error { return errors.New("rlimit") }
-	checkFDLimit()
-	connectGetrlimit = func(_ int, limit *syscall.Rlimit) error { limit.Cur = 1; return nil }
-	checkFDLimit()
-	connectGetrlimit = origGetrlimit
-	t.Cleanup(func() { connectGetrlimit = origGetrlimit })
-
 	origOpen, origRead, origRemove := connectLockOpenFile, connectLockReadFile, connectLockRemove
 	connectLockOpenFile = func(string, int, os.FileMode) (*os.File, error) { return nil, errors.New("open") }
 	if _, err := acquireConnectLock("client"); err == nil || err.Error() != "open" {

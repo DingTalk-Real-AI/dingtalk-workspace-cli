@@ -794,38 +794,6 @@ func TestBasicAuthCoverageEdges(t *testing.T) {
 		}
 	})
 
-	t.Run("browser", func(t *testing.T) {
-		oldStart := browserStartCommand
-		t.Cleanup(func() { browserStartCommand = oldStart })
-		var calls []string
-		browserStartCommand = func(name string, args ...string) error {
-			calls = append(calls, name+":"+strings.Join(args, ","))
-			return nil
-		}
-		if err := openBrowserForOS("darwin", "https://example.test"); err != nil {
-			t.Fatal(err)
-		}
-		if err := openBrowserForOS("linux", "http://example.test"); err != nil {
-			t.Fatal(err)
-		}
-		if len(calls) != 2 || !strings.HasPrefix(calls[0], "open:") || !strings.HasPrefix(calls[1], "xdg-open:") {
-			t.Fatalf("browser calls = %v", calls)
-		}
-		if err := openBrowserForOS("plan9", "https://example.test"); err == nil {
-			t.Fatal("unsupported browser platform succeeded")
-		}
-		if err := openBrowserForOS("darwin", "://bad"); err == nil {
-			t.Fatal("invalid browser URL succeeded")
-		}
-		if err := openBrowserForOS("darwin", "file:///tmp/x"); err == nil {
-			t.Fatal("unsafe browser URL succeeded")
-		}
-		browserStartCommand = func(string, ...string) error { return errors.New("start") }
-		if err := openBrowserForOS("darwin", "https://example.test"); err == nil {
-			t.Fatal("browser start error was ignored")
-		}
-	})
-
 	t.Run("endpoints and sources", func(t *testing.T) {
 		dir := t.TempDir()
 		t.Setenv("DWS_CONFIG_DIR", dir)
@@ -1890,15 +1858,13 @@ func TestSmallRemainingAuthEdges(t *testing.T) {
 		}
 	})
 
-	t.Run("defaults browser and strict keychain", func(t *testing.T) {
+	t.Run("defaults and strict keychain", func(t *testing.T) {
 		oldID := defaultAuthClientID
 		oldSecret := defaultAuthSecret
-		oldStart := browserStartCommand
 		oldEdition := edition.Get()
 		t.Cleanup(func() {
 			defaultAuthClientID = oldID
 			defaultAuthSecret = oldSecret
-			browserStartCommand = oldStart
 			edition.Override(oldEdition)
 			SetClientID("")
 			SetClientSecret("")
@@ -1923,14 +1889,6 @@ func TestSmallRemainingAuthEdges(t *testing.T) {
 		resetAppConfigCache()
 		if got := ClientSecret(); got != "saved-secret" {
 			t.Fatalf("persisted client secret = %q", got)
-		}
-
-		browserStartCommand = func(string, ...string) error { return nil }
-		if err := openBrowser("https://example.test"); err != nil {
-			t.Fatal(err)
-		}
-		if err := oldStart("true"); err != nil {
-			t.Fatalf("default browser command hook = %v", err)
 		}
 
 		account := secretAccountKey("strict-id")

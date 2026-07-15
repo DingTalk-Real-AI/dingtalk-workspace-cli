@@ -1101,6 +1101,10 @@ type connectExtras struct {
 	gate     *connectGate
 	kb       *knowledgeBase
 	approval *approvalOrchestrator
+	// onTurnDone is an optional lifecycle observer invoked after one queued
+	// batch has completely finished. It is nil in production and lets focused
+	// tests wait for ack-first work without timing sleeps.
+	onTurnDone func()
 	// persona is a role's system-prompt fragment prepended to every forwarded
 	// prompt (empty = no prefix). Sourced from RoleConfig.Persona.
 	persona string
@@ -1348,6 +1352,9 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		// while a turn is running are merged into one pending follow-up instead
 		// of forming an unbounded stale FIFO.
 		queue.submit(turn, func(turns []connectQueuedTurn) {
+			if extras.onTurnDone != nil {
+				defer extras.onTurnDone()
+			}
 			turn := mergeConnectQueuedTurns(turns)
 			if len(turns) > 1 {
 				fmt.Fprintf(os.Stderr, "[connect] 合并 %d 条待处理消息 (convId=%s, latestMsgId=%s)\n", len(turns), turn.convID, turn.msgID)
@@ -1527,7 +1534,9 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 						// Client-side fetch of a fresh card occasionally misses
 						// the burst and shows "内容加载失败"; a delayed repair
 						// frame triggers a re-render.
-						go cardCli.repair(context.Background(), cardInst, reply)
+						runConnectCardRepair(func() {
+							cardCli.repair(context.Background(), cardInst, reply)
+						})
 					}
 				}
 			}
@@ -1590,6 +1599,10 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	health.onConnected()
 	<-ctx.Done()
 	return nil
+}
+
+var runConnectCardRepair = func(repair func()) {
+	go repair()
 }
 
 // envOr returns the non-empty value of env var key, otherwise def.

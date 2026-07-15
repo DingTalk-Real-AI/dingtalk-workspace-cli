@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
@@ -515,25 +516,25 @@ func TestQoderAttachmentForwardingRemainingEdges(t *testing.T) {
 
 	success := writeShellExecutable(t, t.TempDir(), "qoder-ok", "printf 'answer\\n'\n")
 	sessions := newConvSessions("")
-	fwd = &qoderStreamForwarder{name: "qoderwork", bin: success, timeout: 1_000_000_000, yolo: true, model: "model", sessions: sessions}
+	fwd = &qoderStreamForwarder{name: "qoderwork", bin: success, timeout: 30 * time.Second, yolo: true, model: "model", sessions: sessions}
 	if reply, err := fwd.forwardWithAttachments(context.Background(), "conv", "text", []connectMediaAttachment{{LocalPath: ""}, {LocalPath: "/tmp/file"}}); err != nil || reply == "" {
 		t.Fatalf("qoder success = %q, %v", reply, err)
 	}
 
 	backend := writeShellExecutable(t, t.TempDir(), "qoder-backend", "printf 'API Error: rejected\\n'\n")
-	fwd = &qoderStreamForwarder{name: "qoder", bin: backend, timeout: 1_000_000_000}
+	fwd = &qoderStreamForwarder{name: "qoder", bin: backend, timeout: 30 * time.Second}
 	if reply, err := fwd.forwardWithAttachments(context.Background(), "conv", "text", []connectMediaAttachment{{LocalPath: "/tmp/file"}}); err != nil || reply == "" {
 		t.Fatalf("qoder backend error reply = %q, %v", reply, err)
 	}
 
 	failure := writeShellExecutable(t, t.TempDir(), "qoder-fail", "exit 1\n")
-	fwd = &qoderStreamForwarder{name: "qoder", bin: failure, timeout: 1_000_000_000, sessions: sessions}
+	fwd = &qoderStreamForwarder{name: "qoder", bin: failure, timeout: 30 * time.Second, sessions: sessions}
 	if _, err := fwd.forwardWithAttachments(context.Background(), "conv", "text", []connectMediaAttachment{{LocalPath: "/tmp/file"}}); err == nil {
 		t.Fatal("qoder process failure succeeded")
 	}
 
 	empty := writeShellExecutable(t, t.TempDir(), "qoder-empty", "exit 0\n")
-	fwd = &qoderStreamForwarder{name: "qoder", bin: empty, timeout: 1_000_000_000}
+	fwd = &qoderStreamForwarder{name: "qoder", bin: empty, timeout: 30 * time.Second}
 	if reply, err := fwd.forwardWithAttachments(context.Background(), "conv", "text", []connectMediaAttachment{{LocalPath: "/tmp/file"}}); err != nil || reply == "" {
 		t.Fatalf("qoder empty = %q, %v", reply, err)
 	}

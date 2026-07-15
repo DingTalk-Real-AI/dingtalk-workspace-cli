@@ -180,11 +180,12 @@ func getSystemDEKReadOnly(service string) ([]byte, error) {
 		err error
 	}
 	resCh := make(chan result, 1)
+	getKeyring := keyringGet
 
 	go func() {
 		defer func() { recover() }()
 
-		encodedKey, err := keyringGet(service, "dek")
+		encodedKey, err := getKeyring(service, "dek")
 		if err == nil {
 			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
 			if decodeErr == nil && len(key) == dekBytes {
@@ -225,12 +226,13 @@ func getOrCreateDEK(service string) ([]byte, error) {
 		err error
 	}
 	resCh := make(chan result, 1)
+	getKeyring := keyringGet
 
 	go func() {
 		defer func() { recover() }()
 
 		// Try to get existing DEK from system Keychain
-		encodedKey, err := keyringGet(service, "dek")
+		encodedKey, err := getKeyring(service, "dek")
 		if err == nil {
 			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
 			if decodeErr == nil && len(key) == dekBytes {
