@@ -76,6 +76,12 @@
       "availability": "available",
       "reviewed": true
     },
+    "todo.list_todo_attachment": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
     "todo.remove_task_executors": {
       "effect": "write",
       "risk": "medium",

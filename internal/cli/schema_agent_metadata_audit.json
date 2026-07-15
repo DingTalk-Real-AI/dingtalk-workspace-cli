@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:b42825642a99ec968d421660de7bab9de4b756d81906f1df2e1301865760a24f",
-  "surface_hash": "sha256:e858be68701d256818eccd085a6f7f97655835b9c7cbbce6275ed930c2436dc3",
+  "source_hash": "sha256:0dcb64cfcaa820ddf30b8261204e1ec5248cfe5fcf9922b9972bb3847e6cfa18",
+  "surface_hash": "sha256:2e2c4a5a159f2d681fc2e65c7be18651449d9ebfd8d37e4bd0a9ad3732987cd2",
   "source_files": 149,
   "hint_files": 46,
   "hint_products": 39,
-  "hint_tools": 1280,
+  "hint_tools": 1282,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -29,14 +29,14 @@
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 564,
-    "tools_with_metadata": 564,
-    "tools_with_agent_summary": 564,
-    "tools_with_use_when": 564,
-    "tools_with_avoid_when": 564,
-    "tools_with_examples": 564,
-    "tools_with_interface_mode": 564,
-    "unmatched_skill_tools": 125,
+    "surface_tools": 565,
+    "tools_with_metadata": 565,
+    "tools_with_agent_summary": 565,
+    "tools_with_use_when": 565,
+    "tools_with_avoid_when": 565,
+    "tools_with_examples": 565,
+    "tools_with_interface_mode": 565,
+    "unmatched_skill_tools": 124,
     "unreviewed_skill_tools": 7
   },
   "source_products": [
@@ -3945,20 +3945,6 @@
       }
     },
     {
-      "tool_path": "todo task list-attachment",
-      "source": "skills/mono/references/products/todo.md",
-      "line": 216,
-      "candidates": [
-        "todo task add-attachment",
-        "todo task add-executor",
-        "todo task add-participant"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
       "tool_path": "todo task remove-attachment",
       "source": "skills/mono/references/products/todo.md",
       "line": 231,
@@ -3976,20 +3962,6 @@
       "tool_path": "todo task remove-attachment",
       "source": "skills/mono/references/products/todo.md",
       "line": 232,
-      "candidates": [
-        "todo task add-attachment",
-        "todo task add-executor",
-        "todo task add-participant"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "todo task list-attachment",
-      "source": "skills/mono/references/products/todo.md",
-      "line": 375,
       "candidates": [
         "todo task add-attachment",
         "todo task add-executor",

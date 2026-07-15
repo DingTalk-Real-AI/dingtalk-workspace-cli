@@ -136,12 +136,23 @@ func TestTodoCommandsPreflightExistingTask(t *testing.T) {
 }
 
 func TestTodoTaskPreflightIsSkippedForDryRun(t *testing.T) {
-	caller := &qualityEvaluationCaller{dryRun: true}
-	if err := executeQualityEvaluationCommand(t, "todo", caller, newTodoCommand(),
-		"task", "done", "--task-id", "12345", "--status", "true"); err != nil {
-		t.Fatalf("todo task done dry-run returned error: %v", err)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "done", args: []string{"task", "done", "--task-id", "12345", "--status", "true"}},
+		{name: "list attachment", args: []string{"task", "list-attachment", "--task-id", "12345"}},
 	}
-	if len(caller.calls) != 0 {
-		t.Fatalf("dry-run made remote calls: %#v", caller.calls)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &qualityEvaluationCaller{dryRun: true}
+			if err := executeQualityEvaluationCommand(t, "todo", caller, newTodoCommand(), tt.args...); err != nil {
+				t.Fatalf("todo dry-run returned error: %v", err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("dry-run made remote calls: %#v", caller.calls)
+			}
+		})
 	}
 }
