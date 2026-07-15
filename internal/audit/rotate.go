@@ -16,6 +16,11 @@ const (
 	auditLockRetry   = 20 * time.Millisecond
 )
 
+var (
+	rotateLockFile    = lockFile
+	rotateLockTimeout = auditLockTimeout
+)
+
 type DateRotatingWriter struct {
 	mu        sync.Mutex
 	dir       string
@@ -79,13 +84,13 @@ func (w *DateRotatingWriter) beginAppend() (*os.File, func(), error) {
 }
 
 func (w *DateRotatingWriter) acquireLock() error {
-	deadline := time.Now().Add(auditLockTimeout)
+	deadline := time.Now().Add(rotateLockTimeout)
 	for {
-		if err := lockFile(w.lock); err == nil {
+		if err := rotateLockFile(w.lock); err == nil {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("audit: timeout acquiring file lock after %v (another dws process may be writing)", auditLockTimeout)
+			return fmt.Errorf("audit: timeout acquiring file lock after %v (another dws process may be writing)", rotateLockTimeout)
 		}
 		time.Sleep(auditLockRetry)
 	}

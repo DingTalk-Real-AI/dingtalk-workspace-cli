@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -518,4 +519,42 @@ func TestStdioCallAndStartEdges(t *testing.T) {
 
 	stderr := &StdioClient{command: "edge", stderr: io.NopCloser(strings.NewReader("\nline\n"))}
 	stderr.drainStderr()
+}
+
+func TestDiagnosticsRecursiveArraysAndStdioInitializationCoverage(t *testing.T) {
+	content := map[string]any{
+		"errorCode": "ERROR",
+		"content": []any{
+			"skip",
+			map[string]any{"data": []any{map[string]any{"code": "REAL", "friendlyHint": "hint"}}},
+		},
+	}
+	diag := ExtractServerDiagnosticsFromMap(content)
+	if diag.ServerErrorCode != "REAL" || diag.FriendlyHint != "hint" {
+		t.Fatalf("recursive diagnostics = %#v", diag)
+	}
+	deep := map[string]any{"friendlyHint": "too deep"}
+	for range 10 {
+		deep = map[string]any{"data": deep}
+	}
+	if got := stringFromMapRecursive(deep, 0, "friendlyHint"); got != "" {
+		t.Fatalf("depth-limited diagnostic = %q", got)
+	}
+
+	client := NewStdioClient("unused", nil, nil)
+	client.initialized = true
+	client.initResult = InitializeResult{ProtocolVersion: "test"}
+	if err := client.EnsureInitialized(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := client.initialize(context.Background()); err != nil || got.ProtocolVersion != "test" {
+		t.Fatalf("cached initialize = %#v, %v", got, err)
+	}
+}
+
+func TestEnsureInitializedReturnsStartError(t *testing.T) {
+	client := NewStdioClient(filepath.Join(t.TempDir(), "missing"), nil, nil)
+	if err := client.EnsureInitialized(context.Background()); err == nil {
+		t.Fatal("EnsureInitialized() error = nil")
+	}
 }

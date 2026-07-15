@@ -271,3 +271,13 @@ type consumeAddr string
 
 func (a consumeAddr) Network() string { return "test" }
 func (a consumeAddr) String() string  { return string(a) }
+
+func TestWatchStdinEOFCancelledAfterData(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	called := false
+	watchStdinEOF(ctx, strings.NewReader("data"), io.Discard, func() { called = true })
+	if called {
+		t.Fatal("watchStdinEOF called shutdown after context cancellation")
+	}
+}

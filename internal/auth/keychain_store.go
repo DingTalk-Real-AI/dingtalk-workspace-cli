@@ -35,6 +35,7 @@ var (
 	authKeychainRemove    = keychain.Remove
 	authKeychainExists    = keychain.Exists
 	authKeychainMigrate   = keychain.MigrateFromLegacy
+	authValidateEntries   = keychain.ValidateAuthTokenEntries
 )
 
 // ErrTokenDataNotFound means the requested keychain slot does not exist.
@@ -126,17 +127,9 @@ func preflightTokenPersistence(configDir string) error {
 	if err != nil {
 		return fmt.Errorf("load token profiles: %w", err)
 	}
-	seen := make(map[string]struct{}, len(cfg.Profiles))
 	for _, profile := range cfg.Profiles {
-		corpID := strings.TrimSpace(profile.CorpID)
-		if corpID == "" {
-			continue
-		}
-		if _, ok := seen[corpID]; ok {
-			continue
-		}
-		seen[corpID] = struct{}{}
-
+		// LoadProfiles normalizes away blank and duplicate corp IDs.
+		corpID := profile.CorpID
 		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 			return fmt.Errorf(
 				"profile token slot %q is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
@@ -144,7 +137,7 @@ func preflightTokenPersistence(configDir string) error {
 			)
 		}
 	}
-	if err := keychain.ValidateAuthTokenEntries(keychain.Service); err != nil {
+	if err := authValidateEntries(keychain.Service); err != nil {
 		return fmt.Errorf(
 			"auth token ciphertext inventory is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, use `dws auth reset` only when discarding all local profiles: %w",
 			err,

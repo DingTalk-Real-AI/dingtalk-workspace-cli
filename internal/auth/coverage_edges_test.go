@@ -1159,11 +1159,7 @@ func TestPortableAuthBundleCoverageEdges(t *testing.T) {
 		if err := os.Remove(filepath.Join(configDir, "app.json")); err != nil {
 			t.Fatal(err)
 		}
-		encPath := filepath.Join(keychain.StorageDir(keychain.Service), keychain.AccountToken+".enc")
-		if err := os.MkdirAll(filepath.Dir(encPath), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(encPath, []byte("encrypted"), 0o600); err != nil {
+		if err := SaveTokenDataKeychain(&TokenData{AccessToken: "portable", CorpID: "corp"}); err != nil {
 			t.Fatal(err)
 		}
 		if !PortableAuthTargetPopulated(configDir) || !PortableAuthSourceReady() {
@@ -1208,10 +1204,11 @@ func TestPortableAuthBundleCoverageEdges(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(keyDir, "nested"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		for name, value := range map[string]string{keychain.AccountToken + ".enc": "cipher", "dek": "key", "nested/value": "nested"} {
-			if err := os.WriteFile(filepath.Join(keyDir, name), []byte(value), 0o600); err != nil {
-				t.Fatal(err)
-			}
+		if err := SaveTokenDataKeychain(&TokenData{AccessToken: "portable", CorpID: "corp"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(keyDir, "nested", "value"), []byte("nested"), 0o600); err != nil {
+			t.Fatal(err)
 		}
 		if err := os.Symlink(filepath.Join(keyDir, "dek"), filepath.Join(keyDir, "link")); err != nil {
 			t.Fatal(err)
@@ -1606,12 +1603,13 @@ func TestTokenStorageAndRevocationCoverageEdges(t *testing.T) {
 		if _, err := LoadTokenDataForProfile(dir, "explicit"); !errors.Is(err, fail) {
 			t.Fatalf("explicit profile load error = %v", err)
 		}
+		tokenLoadKeychainForCorpID = func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound }
 		tokenLoadKeychain = func() (*TokenData, error) { return &TokenData{CorpID: "corp", AccessToken: "legacy"}, nil }
 		if got, err := LoadTokenDataForProfile(dir, ""); err != nil || got.AccessToken != "legacy" {
 			t.Fatalf("matching legacy fallback = %#v %v", got, err)
 		}
 		tokenLoadKeychain = func() (*TokenData, error) { return &TokenData{CorpID: "other"}, nil }
-		if _, err := LoadTokenDataForProfile(dir, ""); !errors.Is(err, fail) {
+		if _, err := LoadTokenDataForProfile(dir, ""); !errors.Is(err, ErrTokenDataNotFound) {
 			t.Fatalf("mismatched legacy fallback error = %v", err)
 		}
 

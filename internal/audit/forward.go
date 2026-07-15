@@ -20,6 +20,11 @@ type HTTPForwarder struct {
 	timeout time.Duration
 }
 
+var (
+	forwardMarshal         = json.Marshal
+	forwardRedactEventJSON = RedactEventJSON
+)
+
 func NewHTTPForwarder(url, token string, redact RedactLevel, report func(string, ...any)) *HTTPForwarder {
 	if report == nil {
 		report = func(string, ...any) {}
@@ -75,9 +80,9 @@ func (f *HTTPForwarder) send(evt Event) {
 	var body []byte
 	var err error
 	if f.redact != RedactNone {
-		body, err = RedactEventJSON(evt, f.redact)
+		body, err = forwardRedactEventJSON(evt, f.redact)
 	} else {
-		body, err = json.Marshal(evt)
+		body, err = forwardMarshal(evt)
 	}
 	if err != nil {
 		f.report("forward marshal failed: %v", err)

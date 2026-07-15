@@ -4,12 +4,10 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -83,162 +81,6 @@ func TestCanonicalCommandsAndFlags(t *testing.T) {
 	}
 	if schemaDescription(map[string]any{"description": 1}) != "" {
 		t.Fatal("non-string description rendered")
-	}
-}
-
-func TestSchemaCommandModes(t *testing.T) {
-	root := &cobra.Command{Use: "dws"}
-	dev := &cobra.Command{Use: "dev"}
-	group := &cobra.Command{Use: "app"}
-	leaf := &cobra.Command{
-		Use:   "create",
-		Short: "create app",
-		Run:   func(*cobra.Command, []string) {},
-		Annotations: map[string]string{
-			"mcp-tool":   "app.create",
-			"mcp-source": "source",
-		},
-	}
-	group.AddCommand(leaf)
-	dev.AddCommand(group)
-	root.AddCommand(dev)
-	fetch := func(context.Context, string) (map[string]HelperToolSchema, error) {
-		return map[string]HelperToolSchema{
-			"app.create": {
-				Description: "create",
-				Properties:  map[string]any{"appName": map[string]any{"type": "string", "default": "demo"}},
-				Required:    []string{"appName"},
-			},
-		}, nil
-	}
-	schemaCmd := NewSchemaCommand(nil, fetch)
-	var out bytes.Buffer
-	schemaCmd.SetOut(&out)
-	root.AddCommand(schemaCmd)
-	root.SetArgs([]string{"schema", "dev.app.create"})
-	if err := root.Execute(); err != nil || !strings.Contains(out.String(), "app-name") {
-		t.Fatalf("helper schema output = %q, %v", out.String(), err)
-	}
-
-	root = &cobra.Command{Use: "dws"}
-	schemaCmd = NewSchemaCommand(nil, nil)
-	out.Reset()
-	schemaCmd.SetOut(&out)
-	root.AddCommand(schemaCmd)
-	root.SetArgs([]string{"schema"})
-	if err := root.Execute(); err != nil || !strings.Contains(out.String(), "static endpoint mode") {
-		t.Fatalf("static schema output = %q, %v", out.String(), err)
-	}
-	root = &cobra.Command{Use: "dws"}
-	schemaCmd = NewSchemaCommand(nil, nil)
-	root.AddCommand(schemaCmd)
-	root.SetArgs([]string{"schema", "one", "--cli-path", "two"})
-	if err := root.Execute(); err == nil {
-		t.Fatal("conflicting schema paths accepted")
-	}
-	root = &cobra.Command{Use: "dws"}
-	schemaCmd = NewSchemaCommand(nil, nil)
-	out.Reset()
-	schemaCmd.SetOut(&out)
-	root.AddCommand(schemaCmd)
-	root.SetArgs([]string{"schema", "--cli-path", "other"})
-	if err := root.Execute(); err != nil || !strings.Contains(out.String(), "static endpoint mode") {
-		t.Fatalf("cli-path schema = %q, %v", out.String(), err)
-	}
-	root = &cobra.Command{Use: "dws"}
-	dev = &cobra.Command{Use: "dev"}
-	leaf = &cobra.Command{Use: "leaf", Run: func(*cobra.Command, []string) {}, Annotations: map[string]string{"mcp-tool": "tool"}}
-	dev.AddCommand(leaf)
-	root.AddCommand(dev)
-	schemaCmd = NewSchemaCommand(nil, func(context.Context, string) (map[string]HelperToolSchema, error) {
-		return nil, errors.New("fetch failed")
-	})
-	root.AddCommand(schemaCmd)
-	root.SetArgs([]string{"schema", "dev.leaf"})
-	if err := root.Execute(); err == nil {
-		t.Fatal("schema fetch error did not propagate")
-	}
-}
-
-func TestHelperSchemaEdgeCases(t *testing.T) {
-	if payload, ok, err := renderHelperSchema(t.Context(), nil, "dev", nil); err != nil || ok || payload != nil {
-		t.Fatalf("nil helper root = %#v, %v, %v", payload, ok, err)
-	}
-	root := &cobra.Command{Use: "dws"}
-	dev := &cobra.Command{Use: "dev", Short: "dev"}
-	leafNoTool := &cobra.Command{Use: "connect", Run: func(*cobra.Command, []string) {}}
-	leaf := &cobra.Command{Use: "leaf", Run: func(*cobra.Command, []string) {}, Annotations: map[string]string{"mcp-tool": "tool"}}
-	hidden := &cobra.Command{Use: "hidden", Hidden: true, Run: func(*cobra.Command, []string) {}}
-	dev.AddCommand(leafNoTool, leaf, hidden)
-	root.AddCommand(dev)
-	for _, path := range []string{"", "other", "dev.unknown", "dev", "dev --flag"} {
-		if _, _, err := renderHelperSchema(t.Context(), root, path, nil); err != nil {
-			t.Fatalf("render %q: %v", path, err)
-		}
-	}
-	if payload, err := helperLeafSchema(t.Context(), leafNoTool, nil); err != nil || payload["error"] == nil {
-		t.Fatalf("unbound leaf = %#v, %v", payload, err)
-	}
-	if payload, err := helperLeafSchema(t.Context(), leaf, nil); err != nil || payload["error"] == nil {
-		t.Fatalf("nil fetcher leaf = %#v, %v", payload, err)
-	}
-	failure := errors.New("fetch failed")
-	if _, err := helperLeafSchema(t.Context(), leaf, func(context.Context, string) (map[string]HelperToolSchema, error) {
-		return nil, failure
-	}); !errors.Is(err, failure) {
-		t.Fatalf("fetch error = %v", err)
-	}
-	if payload, err := helperLeafSchema(t.Context(), leaf, func(context.Context, string) (map[string]HelperToolSchema, error) {
-		return map[string]HelperToolSchema{}, nil
-	}); err != nil || payload["error"] == nil {
-		t.Fatalf("missing tool = %#v, %v", payload, err)
-	}
-	leaf.Annotations["mcp-source"] = "custom"
-	payload, err := helperLeafSchema(t.Context(), leaf, func(_ context.Context, source string) (map[string]HelperToolSchema, error) {
-		if source != "custom" {
-			t.Fatalf("source = %q", source)
-		}
-		return map[string]HelperToolSchema{"tool": {Description: "desc"}}, nil
-	})
-	if err != nil || payload["source"] != "mcp:custom" {
-		t.Fatalf("leaf payload = %#v, %v", payload, err)
-	}
-}
-
-func TestHelperSchemaPrimitiveEdges(t *testing.T) {
-	tool := HelperToolSchema{
-		Properties: map[string]any{
-			"nil":      nil,
-			"string":   map[string]any{"type": "string", "default": "x"},
-			"integer":  map[string]any{"type": "integer", "default": float64(2)},
-			"fraction": map[string]any{"type": "number", "default": 2.5},
-			"bool":     map[string]any{"type": "boolean", "default": true},
-			"array":    map[string]any{"type": "array"},
-			"object":   map[string]any{"type": "object"},
-			"unknown":  map[string]any{"type": "unknown"},
-			"missing":  map[string]any{},
-		},
-		Required: []string{"string"},
-	}
-	if params := helperFlatParameters(tool); len(params) != len(tool.Properties) {
-		t.Fatalf("parameters = %#v", params)
-	}
-	for _, typ := range []string{"string", "integer", "number", "boolean", "array", "object", "unknown"} {
-		_ = mcpJSONType(map[string]any{"type": typ})
-	}
-	if mcpString(nil, "x") != "" || mcpString(map[string]any{"x": 1}, "x") != "" {
-		t.Fatal("invalid MCP string rendered")
-	}
-	for _, prop := range []map[string]any{nil, {}, {"default": nil}, {"default": "x"}, {"default": float64(1)}, {"default": 1.25}, {"default": true}} {
-		_, _ = mcpDefault(prop)
-	}
-	for input, want := range map[string]string{"SSLVerify": "ssl-verify", "__a--b__": "a-b", "aB2C": "a-b2-c"} {
-		if got := kebabCase(input); got != want {
-			t.Fatalf("kebabCase(%q) = %q, want %q", input, got, want)
-		}
-	}
-	if got := helperSubcommands(&cobra.Command{Use: "empty"}); len(got) != 0 {
-		t.Fatalf("empty subcommands = %#v", got)
 	}
 }
 

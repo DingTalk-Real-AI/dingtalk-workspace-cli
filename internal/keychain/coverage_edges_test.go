@@ -214,7 +214,7 @@ func TestDarwinDEKKeyringEdges(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(valid)
 
 	keyringGet = func(string, string) (string, error) { return encoded, nil }
-	if got, err := getDEKReadOnly("valid"); err != nil || len(got) != dekBytes {
+	if got, err := getSystemDEKReadOnly("valid"); err != nil || len(got) != dekBytes {
 		t.Fatalf("read valid = %d, %v", len(got), err)
 	}
 	if got, err := getOrCreateDEK("valid"); err != nil || len(got) != dekBytes {
@@ -222,16 +222,16 @@ func TestDarwinDEKKeyringEdges(t *testing.T) {
 	}
 	for _, value := range []string{"%%%", base64.StdEncoding.EncodeToString([]byte("short"))} {
 		keyringGet = func(string, string) (string, error) { return value, nil }
-		if _, err := getDEKReadOnly("invalid"); !IsDEKMissing(err) {
+		if _, err := getSystemDEKReadOnly("invalid"); !IsDEKMissing(err) {
 			t.Fatalf("invalid read error = %v", err)
 		}
 	}
 	keyringGet = func(string, string) (string, error) { return "", keyring.ErrNotFound }
-	if _, err := getDEKReadOnly("missing"); !IsDEKMissing(err) {
+	if _, err := getSystemDEKReadOnly("missing"); !IsDEKMissing(err) {
 		t.Fatalf("missing read error = %v", err)
 	}
 	keyringGet = func(string, string) (string, error) { return "", errKeychainInjected }
-	if _, err := getDEKReadOnly("unavailable"); !IsUnavailable(err) {
+	if _, err := getSystemDEKReadOnly("unavailable"); !IsUnavailable(err) {
 		t.Fatalf("unavailable read error = %v", err)
 	}
 	if _, err := getOrCreateDEK("unavailable"); !IsUnavailable(err) {
@@ -260,14 +260,14 @@ func TestDarwinDEKKeyringEdges(t *testing.T) {
 
 	keychainTimeout = time.Millisecond
 	keyringGet = func(string, string) (string, error) { select {} }
-	if _, err := getDEKReadOnly("timeout"); !IsUnavailable(err) {
+	if _, err := getSystemDEKReadOnly("timeout"); !IsUnavailable(err) {
 		t.Fatalf("read timeout = %v", err)
 	}
 	if _, err := getOrCreateDEK("timeout"); !IsUnavailable(err) {
 		t.Fatalf("create timeout = %v", err)
 	}
 	keyringGet = func(string, string) (string, error) { panic("keyring panic") }
-	if _, err := getDEKReadOnly("panic"); !IsUnavailable(err) {
+	if _, err := getSystemDEKReadOnly("panic"); !IsUnavailable(err) {
 		t.Fatalf("read panic = %v", err)
 	}
 	if _, err := getOrCreateDEK("panic"); !IsUnavailable(err) {
@@ -275,7 +275,7 @@ func TestDarwinDEKKeyringEdges(t *testing.T) {
 	}
 
 	keychainStat = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
-	if _, err := getDEKReadOnly("missing-keychain"); !IsUnavailable(err) {
+	if _, err := getSystemDEKReadOnly("missing-keychain"); !IsUnavailable(err) {
 		t.Fatalf("preflight read = %v", err)
 	}
 	if _, err := getOrCreateDEK("missing-keychain"); !IsUnavailable(err) {
@@ -355,8 +355,8 @@ func TestDarwinCryptoAndPlatformFailureEdges(t *testing.T) {
 		t.Fatal("DEK error expected")
 	}
 	keychainMkdirAll = origMkdir
-	if got, err := getDEK("direct"); err != nil || len(got) != dekBytes {
-		t.Fatalf("getDEK = %d, %v", len(got), err)
+	if got, err := getOrCreateDEK("direct"); err != nil || len(got) != dekBytes {
+		t.Fatalf("getOrCreateDEK = %d, %v", len(got), err)
 	}
 	keychainReadFile = func(string) ([]byte, error) { return bytesOf(1, dekBytes), nil }
 	keychainMkdirAll = func(string, os.FileMode) error { return errKeychainInjected }

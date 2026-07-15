@@ -41,19 +41,23 @@ type portableTempFile interface {
 }
 
 var (
-	portableRuntimeGOOS = func() string { return runtime.GOOS }
-	portableStat        = os.Stat
-	portableGlob        = filepath.Glob
-	portableRel         = filepath.Rel
-	portableWalkDir     = filepath.WalkDir
-	portableOpen        = func(name string) (io.ReadCloser, error) { return os.Open(name) }
-	portableMkdirAll    = os.MkdirAll
-	portableChmod       = os.Chmod
-	portableCreateTemp  = func(dir, pattern string) (portableTempFile, error) { return os.CreateTemp(dir, pattern) }
-	portableRemove      = os.Remove
-	portableRename      = os.Rename
-	portableJSONMarshal = json.MarshalIndent
-	portablePathInRoot  = func(root, target string) bool {
+	portableRuntimeGOOS          = func() string { return runtime.GOOS }
+	portableStat                 = os.Stat
+	portableGlob                 = filepath.Glob
+	portableRel                  = filepath.Rel
+	portableWalkDir              = filepath.WalkDir
+	portableOpen                 = func(name string) (io.ReadCloser, error) { return os.Open(name) }
+	portableMkdirAll             = os.MkdirAll
+	portableChmod                = os.Chmod
+	portableCreateTemp           = func(dir, pattern string) (portableTempFile, error) { return os.CreateTemp(dir, pattern) }
+	portableRemove               = os.Remove
+	portableRename               = os.Rename
+	portableJSONMarshal          = json.MarshalIndent
+	portableConfigFilesForExport = portableConfigFiles
+	portableWriteManifest        = writePortableManifest
+	portableAddDir               = addPortableDir
+	portableAddFile              = addPortableFile
+	portablePathInRoot           = func(root, target string) bool {
 		cleanRoot := filepath.Clean(root) + string(filepath.Separator)
 		return target == filepath.Clean(root) || strings.HasPrefix(filepath.Clean(target)+string(filepath.Separator), cleanRoot)
 	}
@@ -143,7 +147,7 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 	tw := tar.NewWriter(gz)
 	defer tw.Close()
 
-	configFiles, err := portableConfigFiles(configDir)
+	configFiles, err := portableConfigFilesForExport(configDir)
 	if err != nil {
 		return err
 	}
@@ -154,16 +158,16 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 		KeychainService: keychain.Service,
 		ConfigFiles:     configFiles,
 	}
-	if err := writePortableManifest(tw, manifest); err != nil {
+	if err := portableWriteManifest(tw, manifest); err != nil {
 		return err
 	}
 
-	if err := addPortableDir(tw, keychainDir, path.Join("keychain", keychain.Service)); err != nil {
+	if err := portableAddDir(tw, keychainDir, path.Join("keychain", keychain.Service)); err != nil {
 		return err
 	}
 	for _, name := range configFiles {
 		src := filepath.Join(configDir, name)
-		if err := addPortableFile(tw, src, path.Join("config", filepath.ToSlash(name))); err != nil {
+		if err := portableAddFile(tw, src, path.Join("config", filepath.ToSlash(name))); err != nil {
 			return err
 		}
 	}

@@ -141,6 +141,11 @@ func TestAitableExportValidatesBranchSpecificInputs(t *testing.T) {
 			wantErr: "--table-id",
 		},
 		{
+			name:    "view scope requires table and view ids",
+			args:    []string{"--base-id", "base-smoke", "--scope", "view", "--table-id", "table-smoke", "--export-format", "excel"},
+			wantErr: "--view-id",
+		},
+		{
 			name:    "task polling rejects creation flags",
 			args:    []string{"--base-id", "base-smoke", "--task-id", "task-smoke", "--scope", "all", "--format", "json"},
 			wantErr: "mutually exclusive",

@@ -282,6 +282,7 @@ var (
 	loginRecommendProductSelector    = selectLoginRecommendProducts
 	authLoginInteractiveTerminal     = isInteractiveTerminal
 	migrateKeychainToFileDEK         = authpkg.MigrateKeychainToFileDEK
+	authMigrateTarget                = func(cmd *cobra.Command) (string, error) { return cmd.Flags().GetString("to") }
 	authRunForm                      = (*huh.Form).Run
 	authSaveTokenData                = authpkg.SaveTokenData
 	authSaveAppConfig                = authpkg.SaveAppConfig
@@ -570,7 +571,7 @@ func newAuthMigrateKeychainCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target, err := cmd.Flags().GetString("to")
+			target, err := authMigrateTarget(cmd)
 			if err != nil {
 				return apperrors.NewInternal("failed to read --to")
 			}

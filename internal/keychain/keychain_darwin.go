@@ -68,8 +68,10 @@ var readDefaultKeychain = func() ([]byte, error) {
 }
 
 var (
-	keyringGet = keyring.Get
-	keyringSet = keyring.Set
+	keyringGet                       = keyring.Get
+	keyringSet                       = keyring.Set
+	keychainAuthTokenCiphertextPaths = authTokenCiphertextPaths
+	keychainEntryReadFile            = os.ReadFile
 )
 
 func defaultKeychainPathFromSecurityOutput(output []byte) string {
@@ -355,7 +357,7 @@ func keyForNewEntry(service, account string) ([]byte, error) {
 	}
 
 	anchorPath := filepath.Join(StorageDir(service), safeFileName(AccountToken))
-	anchor, err := os.ReadFile(anchorPath)
+	anchor, err := keychainEntryReadFile(anchorPath)
 	if err == nil {
 		_, key, decryptErr := decryptWithAvailableDEK(service, anchor)
 		return key, decryptErr
@@ -390,7 +392,7 @@ func platformSet(service, account, data string) error {
 		key []byte
 		err error
 	)
-	existing, readErr := os.ReadFile(targetPath)
+	existing, readErr := keychainEntryReadFile(targetPath)
 	switch {
 	case readErr == nil:
 		_, key, err = decryptWithAvailableDEK(service, existing)
@@ -425,12 +427,12 @@ func platformSet(service, account, data string) error {
 }
 
 func platformValidateAuthTokenEntries(service string) error {
-	paths, err := authTokenCiphertextPaths(service)
+	paths, err := keychainAuthTokenCiphertextPaths(service)
 	if err != nil {
 		return err
 	}
 	for _, path := range paths {
-		ciphertext, err := os.ReadFile(path)
+		ciphertext, err := keychainEntryReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read keychain entry %q: %w", filepath.Base(path), err)
 		}

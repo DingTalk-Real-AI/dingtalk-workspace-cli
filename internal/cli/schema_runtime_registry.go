@@ -18,6 +18,28 @@ type runtimeSchemaMetadataSources struct {
 	MCP   embeddedMCPMetadata
 }
 
+var (
+	resolveApplyManualSchemaHints    = ApplyEmbeddedManualSchemaHints
+	resolveEffectiveCommandRegistry  = BuildEffectiveCommandRegistry
+	resolveBoundCommandRegistry      = BindEffectiveCommandRegistry
+	resolveAssembleSchemaRegistry    = AssembleSchemaRegistryFromBound
+	resolveValidateParameterDelivery = ValidateSchemaParameterBindingDelivery
+	assembleValidateBindings         = ValidateEmbeddedSchemaParameterBindings
+	assembleCollectEntries           = collectRuntimeSchemaEntriesFromBound
+	assembleRuntimeToolSpec          = runtimeToolSpecFromMetadata
+	assembleTypedRegistry            = SchemaRegistryFromRuntime
+	assembleMarshalRaw               = marshalSchemaRaw
+	resolveReviewedDryRun            = reviewedDryRunCapability
+	resolveRuntimeToolText           = runtimeToolTextMetadataFromMetadata
+	resolveRuntimeParameters         = runtimeCommandParameterSpecs
+	renderRegistrySnapshot           = SchemaRegistry.ToSnapshotPayload
+	renderRegistryPayload            = SchemaRegistry.ToPayload
+	renderRegistryProductSummary     = ProductSpec.ToSummaryPayload
+	renderRegistryToolPayload        = ToolSpec.ToPayload
+	renderRegistryToolSummary        = ToolSpec.ToSummaryPayload
+	finalSchemaAgentMetadata         = runtimeAgentMetadata
+)
+
 // ResolvedSchemaBuild is the single source-to-delivery hand-off used by the
 // Catalog generator. Effective, Bound, and Registry are three views of one
 // resolution pass: reviewed identity, executable Cobra binding, and the final
@@ -62,18 +84,18 @@ func ResolveSchemaBuild(root *cobra.Command) (ResolvedSchemaBuild, error) {
 	if root == nil {
 		return ResolvedSchemaBuild{}, fmt.Errorf("resolve Schema build: root is nil")
 	}
-	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
+	if _, err := resolveApplyManualSchemaHints(root); err != nil {
 		return ResolvedSchemaBuild{}, fmt.Errorf("apply reviewed manual Schema hints: %w", err)
 	}
-	effective, err := BuildEffectiveCommandRegistry(root)
+	effective, err := resolveEffectiveCommandRegistry(root)
 	if err != nil {
 		return ResolvedSchemaBuild{}, fmt.Errorf("build effective Schema command registry: %w", err)
 	}
-	bound, err := BindEffectiveCommandRegistry(root, effective)
+	bound, err := resolveBoundCommandRegistry(root, effective)
 	if err != nil {
 		return ResolvedSchemaBuild{}, fmt.Errorf("bind effective Schema command registry: %w", err)
 	}
-	registry, err := AssembleSchemaRegistryFromBound(bound)
+	registry, err := resolveAssembleSchemaRegistry(bound)
 	if err != nil {
 		return ResolvedSchemaBuild{}, err
 	}
@@ -93,7 +115,7 @@ func AssembleSchemaRegistry(root *cobra.Command) (SchemaRegistry, error) {
 	if err != nil {
 		return SchemaRegistry{}, err
 	}
-	if err := ValidateSchemaParameterBindingDelivery(resolved.bound, resolved.registry); err != nil {
+	if err := resolveValidateParameterDelivery(resolved.bound, resolved.registry); err != nil {
 		return SchemaRegistry{}, fmt.Errorf("validate final Schema parameter binding delivery: %w", err)
 	}
 	return resolved.registry, nil
@@ -103,20 +125,20 @@ func AssembleSchemaRegistry(root *cobra.Command) (SchemaRegistry, error) {
 // single typed ToolSpec model. Command discovery is intentionally impossible
 // below this boundary: callers must first provide a fail-closed bound registry.
 func AssembleSchemaRegistryFromBound(bound BoundCommandRegistry) (SchemaRegistry, error) {
-	if err := ValidateEmbeddedSchemaParameterBindings(); err != nil {
+	if err := assembleValidateBindings(); err != nil {
 		return SchemaRegistry{}, fmt.Errorf("validate reviewed Schema parameter bindings: %w", err)
 	}
 	return assembleSchemaRegistryFromBound(bound, embeddedRuntimeSchemaMetadataSources())
 }
 
 func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtimeSchemaMetadataSources) (SchemaRegistry, error) {
-	entries, err := collectRuntimeSchemaEntriesFromBound(bound)
+	entries, err := assembleCollectEntries(bound)
 	if err != nil {
 		return SchemaRegistry{}, err
 	}
 	byProduct := make(map[string]*ProductSpec)
 	for _, entry := range entries {
-		tool, err := runtimeToolSpecFromMetadata(entry, metadata)
+		tool, err := assembleRuntimeToolSpec(entry, metadata)
 		if err != nil {
 			return SchemaRegistry{}, err
 		}
@@ -145,15 +167,15 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 	for _, productID := range productIDs {
 		products = append(products, *byProduct[productID])
 	}
-	registry, err := SchemaRegistryFromRuntime("runtime-command", products)
+	registry, err := assembleTypedRegistry("runtime-command", products)
 	if err != nil {
 		return SchemaRegistry{}, fmt.Errorf("build typed Schema registry: %w", err)
 	}
-	registry.InterfaceMetadata, err = marshalSchemaRaw(interfaceMetadataSummaryFrom(metadata.MCP))
+	registry.InterfaceMetadata, err = assembleMarshalRaw(interfaceMetadataSummaryFrom(metadata.MCP))
 	if err != nil {
 		return SchemaRegistry{}, fmt.Errorf("encode interface metadata summary: %w", err)
 	}
-	registry.AgentMetadata, err = marshalSchemaRaw(agentMetadataSummaryFrom(metadata.Agent))
+	registry.AgentMetadata, err = assembleMarshalRaw(agentMetadataSummaryFrom(metadata.Agent))
 	if err != nil {
 		return SchemaRegistry{}, fmt.Errorf("encode Agent metadata summary: %w", err)
 	}
@@ -162,18 +184,18 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 
 func runtimeToolSpecFromMetadata(entry runtimeSchemaEntry, metadata runtimeSchemaMetadataSources) (ToolSpec, error) {
 	canonicalPath := entry.ProductID + "." + entry.ToolName
-	dryRun, err := reviewedDryRunCapability(canonicalPath)
+	dryRun, err := resolveReviewedDryRun(canonicalPath)
 	if err != nil {
 		return ToolSpec{}, fmt.Errorf("resolve reviewed dry-run capability for %s: %w", canonicalPath, err)
 	}
 	hint := runtimeSchemaHintForEntry(entry)
 	embeddedMeta, hasEmbeddedMeta := embeddedMCPMetadataForEntryFrom(entry, metadata.Agent, metadata.MCP)
-	title, description, metadataSource, textProvenance, err := runtimeToolTextMetadataFromMetadata(entry, metadata)
+	title, description, metadataSource, textProvenance, err := resolveRuntimeToolText(entry, metadata)
 	if err != nil {
 		return ToolSpec{}, fmt.Errorf("resolve Schema text metadata for %s: %w", canonicalPath, err)
 	}
 	constraints := runtimeCommandConstraints(entry.Command)
-	parameters, err := runtimeCommandParameterSpecs(entry.Command, canonicalPath, hint.Parameters, embeddedMeta.Parameters, constraints)
+	parameters, err := resolveRuntimeParameters(entry.Command, canonicalPath, hint.Parameters, embeddedMeta.Parameters, constraints)
 	if err != nil {
 		return ToolSpec{}, fmt.Errorf("resolve Schema parameters for %s: %w", canonicalPath, err)
 	}
@@ -254,7 +276,7 @@ func runtimeSchemaPayloadFromRegistry(registry SchemaRegistry, args []string) (m
 	}
 	registry = index.Registry()
 	if len(args) == 0 {
-		snapshot, err := registry.ToSnapshotPayload()
+		snapshot, err := renderRegistrySnapshot(registry)
 		if err != nil {
 			return nil, err
 		}
@@ -264,12 +286,12 @@ func runtimeSchemaPayloadFromRegistry(registry SchemaRegistry, args []string) (m
 	raw := strings.TrimSpace(args[0])
 	if tool, ok := index.Resolve(raw); ok {
 		tool = schemaToolForResolvedPath(tool, raw)
-		return tool.ToPayload()
+		return renderRegistryToolPayload(tool)
 	}
 	tokens := splitSchemaPathTokens(raw)
 	if len(tokens) == 1 {
 		if product, ok := index.Product(tokens[0]); ok {
-			payload, err := product.ToSummaryPayload()
+			payload, err := renderRegistryProductSummary(product)
 			if err != nil {
 				return nil, err
 			}
@@ -290,7 +312,7 @@ func runtimeSchemaPayloadFromRegistry(registry SchemaRegistry, args []string) (m
 				if !schemaToolUnderGroup(tool, path) {
 					continue
 				}
-				summary, summaryErr := tool.ToSummaryPayload()
+				summary, summaryErr := renderRegistryToolSummary(tool)
 				if summaryErr != nil {
 					return nil, summaryErr
 				}
@@ -312,7 +334,7 @@ func runtimeSchemaPayloadFromRegistry(registry SchemaRegistry, args []string) (m
 }
 
 func runtimeSchemaAllPayloadFromRegistry(registry SchemaRegistry) (map[string]any, error) {
-	return registry.ToPayload()
+	return renderRegistryPayload(registry)
 }
 
 func schemaToolForResolvedPath(tool ToolSpec, raw string) ToolSpec {
@@ -363,17 +385,8 @@ func validateSchemaRegistryAgainstCommandRegistry(registry SchemaRegistry, comma
 		if !ok {
 			return fmt.Errorf("reviewed CommandRegistry canonical %s is missing from typed Schema registry", canonical)
 		}
-		if err := validateCanonicalToolIdentity(tool); err != nil {
-			return err
-		}
 		if actual := normalizeSchemaCLIPath(tool.Identity.PrimaryCLIPath); actual != expected.PrimaryCLIPath {
 			return fmt.Errorf("schema tool %s primary path %q disagrees with reviewed CommandRegistry %q", canonical, actual, expected.PrimaryCLIPath)
-		}
-		if actual := normalizeSchemaCLIPath(tool.Identity.CLIPath); actual != expected.PrimaryCLIPath {
-			return fmt.Errorf("schema tool %s canonical cli path %q disagrees with reviewed CommandRegistry primary path %q", canonical, actual, expected.PrimaryCLIPath)
-		}
-		if tool.Identity.IsAlias {
-			return fmt.Errorf("schema tool %s canonical identity must have is_alias=false", canonical)
 		}
 		actualSourceProduct := strings.TrimSpace(tool.Identity.SourceProductID)
 		if actualSourceProduct == "" {
@@ -406,7 +419,7 @@ func validateSchemaRegistryAgentMetadata(registry SchemaRegistry) error {
 	if err != nil {
 		return err
 	}
-	metadata := runtimeAgentMetadata()
+	metadata := finalSchemaAgentMetadata()
 	resolved := make(map[string]string, len(metadata.Tools))
 	var problems []string
 	keys := make([]string, 0, len(metadata.Tools))

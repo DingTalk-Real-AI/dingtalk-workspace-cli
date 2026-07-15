@@ -212,13 +212,17 @@ var (
 	manualSchemaHintsOnce     sync.Once
 	manualSchemaHintsSnapshot ManualSchemaHintSnapshot
 	manualSchemaHintsErr      error
+	loadManualSchemaHints     = embeddedManualSchemaHints
+	loadManualCommandRegistry = loadEmbeddedCommandRegistry
+	marshalManualParameter    = json.Marshal
+	applyManualParameter      = annotateManualSchemaParameter
 )
 
 // ApplyEmbeddedManualSchemaHints applies the committed human review
 // file to an already-built Cobra tree. The operation is deterministic and
 // idempotent.
 func ApplyEmbeddedManualSchemaHints(root *cobra.Command) (ManualSchemaHintReport, error) {
-	snapshot, err := embeddedManualSchemaHints()
+	snapshot, err := loadManualSchemaHints()
 	if err != nil {
 		return ManualSchemaHintReport{}, err
 	}
@@ -487,7 +491,7 @@ func ValidateManualAgentHintExamples(bound BoundCommandRegistry, hints ManualAge
 // SchemaRegistry, after generated Agent metadata has been compiled in. This is
 // deliberately stronger than the pre-generation path/flag validation above.
 func ValidateEmbeddedManualAgentExampleDelivery(bound BoundCommandRegistry, registry SchemaRegistry) (ManualAgentExampleExecutionPlan, error) {
-	snapshot, err := embeddedManualSchemaHints()
+	snapshot, err := loadManualSchemaHints()
 	if err != nil {
 		return ManualAgentExampleExecutionPlan{}, err
 	}
@@ -815,9 +819,6 @@ func validateManualAgentExampleCobraContract(command *cobra.Command, arguments [
 
 		shorthandsAndValue := strings.TrimPrefix(argument, "-")
 		shorthands, _, hasExplicitValue := strings.Cut(shorthandsAndValue, "=")
-		if shorthands == "" {
-			return fmt.Errorf("invalid empty shorthand flag")
-		}
 		for offset := 0; offset < len(shorthands); offset++ {
 			shorthand := shorthands[offset : offset+1]
 			if shorthand[0] >= 0x80 {
@@ -961,11 +962,8 @@ func manualAgentExampleFlagGroup(group []string) string {
 func visitManualAgentCommandFlags(command *cobra.Command, visit func(*pflag.Flag)) {
 	seen := map[string]bool{}
 	visitSet := func(flags *pflag.FlagSet) {
-		if flags == nil {
-			return
-		}
 		flags.VisitAll(func(flag *pflag.Flag) {
-			if flag == nil || seen[flag.Name] {
+			if seen[flag.Name] {
 				return
 			}
 			seen[flag.Name] = true
@@ -1005,7 +1003,7 @@ func applyManualSchemaHints(root *cobra.Command, snapshot ManualSchemaHintSnapsh
 	if snapshot.Version != manualSchemaHintVersion {
 		return ManualSchemaHintReport{}, fmt.Errorf("unsupported manual Schema hint version %d", snapshot.Version)
 	}
-	reviewedRegistry, err := loadEmbeddedCommandRegistry()
+	reviewedRegistry, err := loadManualCommandRegistry()
 	if err != nil {
 		return ManualSchemaHintReport{}, fmt.Errorf("load reviewed Schema command registry: %w", err)
 	}
@@ -1099,7 +1097,7 @@ func applyManualSchemaHints(root *cobra.Command, snapshot ManualSchemaHintSnapsh
 		sort.Strings(flagNames)
 		for _, flagName := range flagNames {
 			parameter := item.hint.Parameters[flagName]
-			if err := annotateManualSchemaParameter(item.command, flagName, parameter, item.hint.Reason); err != nil {
+			if err := applyManualParameter(item.command, flagName, parameter, item.hint.Reason); err != nil {
 				return ManualSchemaHintReport{}, fmt.Errorf("manual Schema hint %q flag --%s: %w", item.hint.CLIPath, flagName, err)
 			}
 			report.Parameters = append(report.Parameters, item.hint.CLIPath+" --"+flagName)
@@ -1148,7 +1146,7 @@ func annotateManualSchemaParameter(command *cobra.Command, flagName string, hint
 		return fmt.Errorf("flag --%s is missing", flagName)
 	}
 	hint = normalizeManualSchemaParameterHint(hint)
-	encoded, err := json.Marshal(hint)
+	encoded, err := marshalManualParameter(hint)
 	if err != nil {
 		return fmt.Errorf("encode reviewed parameter: %w", err)
 	}

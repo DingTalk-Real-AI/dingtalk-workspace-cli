@@ -4,10 +4,97 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/spf13/cobra"
 )
+
+func TestMainWritesProductionSmokeRegistry(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = write
+	t.Cleanup(func() { os.Stdout = oldStdout })
+	main()
+	if err := write.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if _, err := output.ReadFrom(read); err != nil {
+		t.Fatal(err)
+	}
+	if output.Len() == 0 {
+		t.Fatal("main wrote an empty smoke registry")
+	}
+}
+
+func TestMainReportsSmokeRegistryFailures(t *testing.T) {
+	originalRoot := newSmokeRoot
+	originalBuild := buildEffectiveSmokeRegistry
+	originalBind := bindEffectiveSmokeRegistry
+	originalRegistry := buildSmokeRegistryData
+	originalExit := exitSmokeProcess
+	t.Cleanup(func() {
+		newSmokeRoot = originalRoot
+		buildEffectiveSmokeRegistry = originalBuild
+		bindEffectiveSmokeRegistry = originalBind
+		buildSmokeRegistryData = originalRegistry
+		exitSmokeProcess = originalExit
+	})
+	exitSmokeProcess = func(int) { panic("exit") }
+	newSmokeRoot = func(...context.Context) *cobra.Command { return &cobra.Command{Use: "dws"} }
+
+	tests := []struct {
+		name  string
+		setup func()
+	}{
+		{name: "build", setup: func() {
+			buildEffectiveSmokeRegistry = func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
+				return cli.EffectiveCommandRegistry{}, errors.New("build")
+			}
+		}},
+		{name: "bind", setup: func() {
+			buildEffectiveSmokeRegistry = func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
+				return cli.EffectiveCommandRegistry{}, nil
+			}
+			bindEffectiveSmokeRegistry = func(*cobra.Command, cli.EffectiveCommandRegistry) (cli.BoundCommandRegistry, error) {
+				return cli.BoundCommandRegistry{}, errors.New("bind")
+			}
+		}},
+		{name: "registry", setup: func() {
+			buildEffectiveSmokeRegistry = func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
+				return cli.EffectiveCommandRegistry{}, nil
+			}
+			bindEffectiveSmokeRegistry = func(*cobra.Command, cli.EffectiveCommandRegistry) (cli.BoundCommandRegistry, error) {
+				return cli.BoundCommandRegistry{}, nil
+			}
+			buildSmokeRegistryData = func(cli.EffectiveCommandRegistry) (smokeRegistry, error) {
+				return smokeRegistry{}, errors.New("registry")
+			}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			buildEffectiveSmokeRegistry = originalBuild
+			bindEffectiveSmokeRegistry = originalBind
+			buildSmokeRegistryData = originalRegistry
+			test.setup()
+			defer func() {
+				if recover() != "exit" {
+					t.Fatal("main did not exit")
+				}
+			}()
+			main()
+		})
+	}
+}
 
 func TestBuildSmokeRegistryIncludesEveryPublicPathDeterministically(t *testing.T) {
 	registry := cli.EffectiveCommandRegistry{Commands: []cli.CommandSpec{

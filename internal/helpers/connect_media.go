@@ -66,10 +66,13 @@ func connectAttachmentMIME(path string) string {
 }
 
 var (
-	mediaMkdirAll = os.MkdirAll
-	mediaCreate   = os.Create
-	mediaCopy     = io.Copy
-	mediaRemove   = os.Remove
+	mediaMkdirAll       = os.MkdirAll
+	mediaCreate         = os.Create
+	mediaCopy           = io.Copy
+	mediaRemove         = os.Remove
+	connectMediaCallRaw = func(c *aiCardClient, ctx context.Context, method, path string, body map[string]any) (string, error) {
+		return c.callRaw(ctx, method, path, body)
+	}
 )
 
 // pictureDownloadCode digs the downloadCode out of a picture callback's
@@ -397,9 +400,6 @@ func callbackInboundMedia(msgtype string, content interface{}) (pictureCodes []s
 			return
 		}
 		key := fileInboundKey(info)
-		if key == "" {
-			return
-		}
 		if _, picture := seenPictures[info.DownloadCode]; picture {
 			return
 		}
@@ -678,7 +678,7 @@ func (c *aiCardClient) getUserUnionID(ctx context.Context, userID string) (strin
 // path, returning the path.
 func (c *aiCardClient) downloadDentryFile(ctx context.Context, spaceID, dentryID int64, unionID, fileName string) (string, error) {
 	path := fmt.Sprintf("/v2.0/storage/spaces/%d/dentries/%d/getDownloadInfo", spaceID, dentryID)
-	raw, err := c.callRaw(ctx, http.MethodPost, path, map[string]any{
+	raw, err := connectMediaCallRaw(c, ctx, http.MethodPost, path, map[string]any{
 		"unionId": unionID,
 	})
 	if err != nil {

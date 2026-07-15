@@ -24,6 +24,8 @@ import (
 	"time"
 )
 
+var busctlReadFull = io.ReadFull
+
 // ReadyFDEnv is the env var the spawned `event _bus` child inspects to find
 // the ready-pipe write end. The parent passes the FD number; child opens it
 // via os.NewFile(fd, "ready") and writes 'R' on success or 'E' on failure.
@@ -156,7 +158,7 @@ func waitReady(pr *os.File) error {
 	done := make(chan result, 1)
 	go func() {
 		buf := make([]byte, 1)
-		n, err := io.ReadFull(pr, buf)
+		n, err := busctlReadFull(pr, buf)
 		if err != nil {
 			done <- result{err: err}
 			return

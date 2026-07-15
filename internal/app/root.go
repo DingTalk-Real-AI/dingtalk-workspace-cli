@@ -278,9 +278,6 @@ func commandRequestsJSONErrors(cmd *cobra.Command) bool {
 		cmd.InheritedFlags(),
 		cmd.PersistentFlags(),
 	} {
-		if flags == nil {
-			continue
-		}
 		if flag := flags.Lookup("format"); flag != nil {
 			if value, err := flags.GetString("format"); err == nil && strings.EqualFold(strings.TrimSpace(value), "json") {
 				return true

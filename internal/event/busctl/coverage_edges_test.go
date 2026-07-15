@@ -53,6 +53,21 @@ func TestDiscoverValidationAndFailures(t *testing.T) {
 	}
 }
 
+func TestWaitReadyRejectsShortSuccessfulRead(t *testing.T) {
+	original := busctlReadFull
+	t.Cleanup(func() { busctlReadFull = original })
+	busctlReadFull = func(io.Reader, []byte) (int, error) { return 0, nil }
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	defer write.Close()
+	if err := waitReady(read); !errors.Is(err, ErrSpawnFailed) {
+		t.Fatalf("waitReady(short read) error = %v", err)
+	}
+}
+
 func TestSpawnAndReadyFailureEdges(t *testing.T) {
 	origExecutable := spawnExecutable
 	origPipe := spawnPipe

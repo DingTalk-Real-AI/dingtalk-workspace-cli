@@ -246,9 +246,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 			}
 			// Arm the stdin-EOF shutdown watcher only for a pipe-style,
 			// unbounded run (see shouldWatchStdinEOF).
-			if shouldWatchStdinEOF(maxEvents, duration) {
-				cfg.Stdin = c.InOrStdin()
-			}
+			applyEventConsumeStdin(&cfg, maxEvents, duration, c.InOrStdin())
 
 			// Step 5: validation (flag-only rules).
 			if err := consume.ValidateConfig(cfg); err != nil {
@@ -1222,6 +1220,12 @@ func shouldWatchStdinEOF(maxEvents int, duration time.Duration) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice == 0
+}
+
+func applyEventConsumeStdin(cfg *consume.Config, maxEvents int, duration time.Duration, stdin io.Reader) {
+	if cfg != nil && shouldWatchStdinEOF(maxEvents, duration) {
+		cfg.Stdin = stdin
+	}
 }
 
 // eventTypesWithDefault picks the catch-all list from registry when the

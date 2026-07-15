@@ -26,6 +26,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var schemaCommandCatalogError = embeddedSchemaCatalogError
+
 type FlagKind string
 
 const (
@@ -96,7 +98,7 @@ func NewSchemaCommand(_ CatalogLoader) *cobra.Command {
 			if cliPath != "" {
 				args = []string{cliPath}
 			}
-			if err := embeddedSchemaCatalogError(); err != nil {
+			if err := schemaCommandCatalogError(); err != nil {
 				return fmt.Errorf("load embedded typed Schema registry: %w", err)
 			}
 			var payload map[string]any

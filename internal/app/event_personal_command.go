@@ -303,9 +303,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	}
 	// Arm the stdin-EOF shutdown watcher only for a pipe-style, unbounded
 	// run (see shouldWatchStdinEOF).
-	if shouldWatchStdinEOF(opts.Common.MaxEvents, opts.Common.Duration) {
-		cfg.Stdin = c.InOrStdin()
-	}
+	applyEventConsumeStdin(&cfg, opts.Common.MaxEvents, opts.Common.Duration, c.InOrStdin())
 	applyPersonalConsumeFilters(&cfg, opts, sub.SubscribeID, eventKey)
 	if opts.DebugRawEvents && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "debug raw events enabled: local event filters disabled\nworkdir: %s\nbus_log: %s\n",

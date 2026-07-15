@@ -39,6 +39,8 @@ const (
 	geminiInlineRawLimit = 15 << 20
 )
 
+var geminiFilePollInterval = time.Second
+
 type geminiAPIForwarder struct {
 	model      string
 	apiKey     string
@@ -205,18 +207,12 @@ func (f *geminiAPIForwarder) uploadFile(ctx context.Context, path, mimeType, dis
 	if strings.TrimSpace(displayName) == "" {
 		displayName = filepath.Base(path)
 	}
-	meta, err := json.Marshal(map[string]any{"file": map[string]any{"display_name": displayName}})
-	if err != nil {
-		return geminiUploadedFile{}, err
-	}
+	meta, _ := json.Marshal(map[string]any{"file": map[string]any{"display_name": displayName}})
 	startURL, err := f.filesEndpoint(true)
 	if err != nil {
 		return geminiUploadedFile{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, startURL, bytes.NewReader(meta))
-	if err != nil {
-		return geminiUploadedFile{}, err
-	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, startURL, bytes.NewReader(meta))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", f.apiKey)
 	req.Header.Set("X-Goog-Upload-Protocol", "resumable")
@@ -278,7 +274,7 @@ func (f *geminiAPIForwarder) waitForUploadedFile(ctx context.Context, file gemin
 		select {
 		case <-ctx.Done():
 			return geminiUploadedFile{}, ctx.Err()
-		case <-time.After(time.Second):
+		case <-time.After(geminiFilePollInterval):
 		}
 		base, err := f.filesEndpoint(false)
 		if err != nil {

@@ -33,6 +33,16 @@ type runtimeSchemaExclusionGroup struct {
 	Commands []string `json:"commands"`
 }
 
+var (
+	completenessLoadExclusions = EmbeddedRuntimeSchemaExclusions
+	completenessApplyManual    = ApplyEmbeddedManualSchemaHints
+	completenessBuildEffective = BuildEffectiveCommandRegistry
+	completenessBindEffective  = BindEffectiveCommandRegistry
+	completenessRuntimeReport  = runtimeSchemaCompletenessFromBound
+	completenessDeliveryReport = schemaCatalogDeliveryCompletenessAgainstLoadedAndBound
+	completenessCollectEntries = collectRuntimeSchemaEntries
+)
+
 //go:embed schema_command_exclusions.json
 var embeddedRuntimeSchemaExclusionsJSON []byte
 
@@ -82,14 +92,14 @@ func EmbeddedRuntimeSchemaExclusions() ([]RuntimeSchemaExclusion, error) {
 // ValidateEmbeddedRuntimeSchemaCompleteness enforces the reviewed reverse
 // command-tree contract used by generation and CI.
 func ValidateEmbeddedRuntimeSchemaCompleteness(root *cobra.Command) error {
-	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
+	if _, err := completenessApplyManual(root); err != nil {
 		return err
 	}
-	effective, err := BuildEffectiveCommandRegistry(root)
+	effective, err := completenessBuildEffective(root)
 	if err != nil {
 		return err
 	}
-	bound, err := BindEffectiveCommandRegistry(root, effective)
+	bound, err := completenessBindEffective(root, effective)
 	if err != nil {
 		return err
 	}
@@ -101,11 +111,11 @@ func ValidateEmbeddedRuntimeSchemaCompleteness(root *cobra.Command) error {
 // must not discover or bind commands again: Catalog generation uses this gate
 // to ensure every pre-delivery check observes the same identity candidate.
 func validateResolvedRuntimeSchemaCompleteness(root *cobra.Command, bound BoundCommandRegistry) error {
-	exclusions, err := EmbeddedRuntimeSchemaExclusions()
+	exclusions, err := completenessLoadExclusions()
 	if err != nil {
 		return err
 	}
-	report := runtimeSchemaCompletenessFromBound(root, exclusions, bound)
+	report := completenessRuntimeReport(root, exclusions, bound)
 	if len(report.DeliveryErrors) > 0 {
 		return fmt.Errorf("invalid effective Schema command registry: %s", strings.Join(report.DeliveryErrors, "; "))
 	}
@@ -126,7 +136,7 @@ func validateResolvedRuntimeSchemaCompleteness(root *cobra.Command, bound BoundC
 // This closes the final path where completeness used to rebuild identity from
 // Cobra after the source registry had already passed generation gates.
 func validateResolvedSchemaCatalogDeliveryCompleteness(root *cobra.Command, bound BoundCommandRegistry, snapshot SchemaCatalogSnapshot) error {
-	exclusions, err := EmbeddedRuntimeSchemaExclusions()
+	exclusions, err := completenessLoadExclusions()
 	if err != nil {
 		return err
 	}
@@ -142,7 +152,7 @@ func validateSchemaCatalogDeliveryCompletenessFromBound(root *cobra.Command, bou
 	if err != nil {
 		return fmt.Errorf("load final Schema Catalog through production loader: %w", err)
 	}
-	report := schemaCatalogDeliveryCompletenessAgainstLoadedAndBound(root, loaded, exclusions, bound)
+	report := completenessDeliveryReport(root, loaded, exclusions, bound)
 	if len(report.DeliveryErrors) > 0 {
 		return fmt.Errorf("invalid final Schema Catalog delivery: %s", strings.Join(report.DeliveryErrors, "; "))
 	}
@@ -163,7 +173,7 @@ func validateSchemaCatalogDeliveryCompletenessFromBound(root *cobra.Command, bou
 // reviewed CommandRegistry or have a reviewed exclusion with a non-empty
 // reason.
 func RuntimeSchemaCompleteness(root *cobra.Command, exclusions []RuntimeSchemaExclusion) RuntimeSchemaCompletenessReport {
-	entries, err := collectRuntimeSchemaEntries(root)
+	entries, err := completenessCollectEntries(root)
 	if err != nil {
 		return RuntimeSchemaCompletenessReport{DeliveryErrors: []string{err.Error()}}
 	}
@@ -217,7 +227,7 @@ func schemaCatalogDeliveryCompletenessAgainstLoadedAndIdentity(
 		if expected.CanonicalPath == "" {
 			return
 		}
-		payload, err := schemaPayloadFromLoadedCatalog(loaded, []string{path})
+		payload, err := deliverySchemaPayload(loaded, []string{path})
 		if err != nil {
 			return
 		}
@@ -230,7 +240,7 @@ func schemaCatalogDeliveryCompletenessAgainstLoadedAndIdentity(
 
 	canonicals := loaded.Index.CanonicalPaths()
 	for _, canonical := range canonicals {
-		tool, ok := loaded.Index.Resolve(canonical)
+		tool, ok := deliveryIndexResolve(loaded.Index, canonical)
 		if !ok {
 			deliveryErrors = append(deliveryErrors, fmt.Sprintf("typed Schema index lost canonical %q", canonical))
 			continue
@@ -241,11 +251,11 @@ func schemaCatalogDeliveryCompletenessAgainstLoadedAndIdentity(
 				deliveryErrors = append(deliveryErrors, fmt.Sprintf("tool %s identity source is %q, want resolved source %q", canonical, gotSource, expected.Source))
 			}
 		}
-		if payload, err := schemaPayloadFromLoadedCatalog(loaded, []string{canonical}); err != nil {
+		if payload, err := deliverySchemaPayload(loaded, []string{canonical}); err != nil {
 			deliveryErrors = append(deliveryErrors, fmt.Sprintf("canonical %q is not queryable: %v", canonical, err))
 		} else if got := strings.TrimSpace(schemaString(payload["canonical_path"])); got != canonical {
 			deliveryErrors = append(deliveryErrors, fmt.Sprintf("canonical %q resolves to %q", canonical, got))
-		} else if expectedPayload, renderErr := tool.ToPayload(); renderErr != nil {
+		} else if expectedPayload, renderErr := deliveryToolPayload(tool); renderErr != nil {
 			deliveryErrors = append(deliveryErrors, fmt.Sprintf("canonical %q cannot render typed payload: %v", canonical, renderErr))
 		} else if !schemaJSONEqual(payload, expectedPayload) {
 			deliveryErrors = append(deliveryErrors, fmt.Sprintf("canonical %q query differs from final ToolSpec", canonical))
@@ -269,7 +279,7 @@ func schemaCatalogDeliveryCompletenessAgainstLoadedAndIdentity(
 				deliveryErrors = append(deliveryErrors, fmt.Sprintf("tool %s advertises path %q owned by %s", canonical, path, expected.CanonicalPath))
 				continue
 			}
-			payload, err := schemaPayloadFromLoadedCatalog(loaded, []string{path})
+			payload, err := deliverySchemaPayload(loaded, []string{path})
 			if err != nil {
 				deliveryErrors = append(deliveryErrors, fmt.Sprintf("tool %s path %q is not queryable: %v", canonical, path, err))
 				continue
@@ -279,7 +289,7 @@ func schemaCatalogDeliveryCompletenessAgainstLoadedAndIdentity(
 				continue
 			}
 			expectedTool := schemaToolForResolvedPath(tool, path)
-			expectedPayload, renderErr := expectedTool.ToPayload()
+			expectedPayload, renderErr := deliveryToolPayload(expectedTool)
 			if renderErr != nil {
 				deliveryErrors = append(deliveryErrors, fmt.Sprintf("tool %s path %q cannot render typed payload: %v", canonical, path, renderErr))
 			} else if !schemaJSONEqual(payload, expectedPayload) {
@@ -299,7 +309,7 @@ func schemaCatalogDeliveryCompletenessAgainstLoadedAndIdentity(
 // lookup.
 func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 	var problems []string
-	all, err := loaded.Registry.ToPayload()
+	all, err := deliveryRegistryPayload(loaded.Registry)
 	if err != nil {
 		return []string{fmt.Sprintf("render final Schema --all projection: %v", err)}
 	}
@@ -320,17 +330,17 @@ func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 
 	groupPaths := map[string]bool{}
 	for _, product := range loaded.Registry.Products {
-		expectedProduct, renderErr := product.ToSummaryPayload()
+		expectedProduct, renderErr := renderRegistryProductSummary(product)
 		if renderErr != nil {
 			problems = append(problems, fmt.Sprintf("render product %s summary: %v", product.ID, renderErr))
-		} else if actual, queryErr := schemaPayloadFromLoadedCatalog(loaded, []string{product.ID}); queryErr != nil {
+		} else if actual, queryErr := deliverySchemaPayload(loaded, []string{product.ID}); queryErr != nil {
 			problems = append(problems, fmt.Sprintf("product %s is not queryable: %v", product.ID, queryErr))
 		} else if !schemaJSONEqual(actual["product"], expectedProduct) {
 			problems = append(problems, fmt.Sprintf("product %s query differs from final ProductSpec", product.ID))
 		}
 		for _, tool := range product.Tools {
 			canonical := tool.Identity.CanonicalPath
-			expectedTool, renderErr := tool.ToPayload()
+			expectedTool, renderErr := deliveryToolPayload(tool)
 			if renderErr != nil {
 				problems = append(problems, fmt.Sprintf("render final ToolSpec %s: %v", canonical, renderErr))
 			} else if actual, exists := allByCanonical[canonical]; !exists {
@@ -368,14 +378,14 @@ func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 			if !schemaToolUnderGroup(tool, path) {
 				continue
 			}
-			summary, renderErr := tool.ToSummaryPayload()
+			summary, renderErr := deliveryToolSummary(tool)
 			if renderErr != nil {
 				problems = append(problems, fmt.Sprintf("render group %s tool %s: %v", path, tool.Identity.CanonicalPath, renderErr))
 				continue
 			}
 			expected = append(expected, summary)
 		}
-		actual, queryErr := schemaPayloadFromLoadedCatalog(loaded, []string{path})
+		actual, queryErr := deliverySchemaPayload(loaded, []string{path})
 		if queryErr != nil {
 			problems = append(problems, fmt.Sprintf("group %s is not queryable: %v", path, queryErr))
 		} else if !schemaJSONEqual(actual["tools"], expected) {
@@ -487,12 +497,8 @@ func walkPublicRunnableLeaves(root *cobra.Command, fn func(*cobra.Command)) {
 	if root == nil {
 		return
 	}
-	var walk func(*cobra.Command, bool)
-	walk = func(command *cobra.Command, hiddenAncestor bool) {
-		hidden := hiddenAncestor || command.Hidden
-		if command != root && hidden {
-			return
-		}
+	var walk func(*cobra.Command)
+	walk = func(command *cobra.Command) {
 		if command.Runnable() && !command.HasSubCommands() {
 			fn(command)
 			return
@@ -501,10 +507,10 @@ func walkPublicRunnableLeaves(root *cobra.Command, fn func(*cobra.Command)) {
 			if child.Name() == "help" || !child.IsAvailableCommand() {
 				continue
 			}
-			walk(child, hidden)
+			walk(child)
 		}
 	}
-	walk(root, false)
+	walk(root)
 }
 
 func normalizeSchemaCLIPath(path string) string {
