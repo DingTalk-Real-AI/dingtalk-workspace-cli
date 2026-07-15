@@ -35,6 +35,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/authretry"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -588,6 +589,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		if isAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
 				if overrideErr := fn(defaultConfigDir(), err); overrideErr != nil {
+					if refresh, ok := authretry.As(overrideErr); ok {
+						if !r.canAutoRefreshAuth(hasPluginAuth) {
+							return executor.Result{}, authRefreshCause(refresh, err)
+						}
+						result, retryErr := r.maybeAuthRefreshRetry(ctx, endpoint, invocation, authToken, err, refresh)
+						if retryErr != nil {
+							captureRuntimeFailure(invocation, err, retryErr)
+						}
+						return result, retryErr
+					}
 					captureRuntimeFailure(invocation, err, overrideErr)
 					return executor.Result{}, overrideErr
 				}
@@ -612,6 +623,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 				}
 				return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 			}
+			if refresh, ok := authretry.As(editionErr); ok {
+				if !r.canAutoRefreshAuth(hasPluginAuth) {
+					return executor.Result{}, authRefreshCause(refresh, editionErr)
+				}
+				result, retryErr := r.maybeAuthRefreshRetry(ctx, endpoint, invocation, authToken, editionErr, refresh)
+				if retryErr != nil {
+					captureRuntimeFailure(invocation, editionErr, retryErr)
+				}
+				return result, retryErr
+			}
 			return executor.Result{}, editionErr
 		}
 	}
@@ -627,15 +648,6 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	if callResult.IsError {
 		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
 		logBusinessError(r.transport.FileLogger, "mcp_tool_error", invocation, callResult.Content, diag)
-
-		// ClassifyToolResult hook: let the overlay intercept known error
-		// patterns (PAT permission, gateway-auth) before generic handling.
-		if classify := edition.Get().ClassifyToolResult; classify != nil {
-			if hookErr := classify(callResult.Content); hookErr != nil {
-				captureRuntimeFailure(invocation, hookErr, hookErr)
-				return executor.Result{}, hookErr
-			}
-		}
 
 		mcpErr := apperrors.NewAPI(
 			extractMCPErrorMessage(callResult),

@@ -23,33 +23,30 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 )
 
-// ForceRefreshAccessToken forces a single refresh_token exchange and returns
-// the new access_token. It is intended for callers that have observed a
-// server-side rejection (HTTP 401 or business code such as
-// TOKEN_VERIFIED_FAILED) on what locally appeared to be a still-valid token.
-//
-// Steps:
-//  1. MarkAccessTokenStale rewrites ExpiresAt to a past instant so
-//     OAuthProvider.GetAccessToken's fast-path will miss.
-//  2. NewOAuthProvider + GetAccessToken triggers lockedRefresh, which uses the
-//     existing dual-layer lock (process + file) to serialize concurrent
-//     refresh attempts across goroutines and processes.
-//  3. ResetRuntimeTokenCache clears the per-process sync.Once cache so the
-//     next resolveAuthToken call re-reads from disk.
-//
-// Existing OAuthProvider.GetAccessToken behaviour is unchanged; this helper
-// is the only entry point that orchestrates "force refresh" semantics.
+// ForceRefreshAccessToken preserves the original force-refresh entry point.
+// New recovery paths should pass the token rejected by the server to
+// ForceRefreshRejectedToken so concurrent refreshes can be deduplicated.
 func ForceRefreshAccessToken(ctx context.Context, configDir string) (string, error) {
 	if strings.TrimSpace(configDir) == "" {
 		return "", fmt.Errorf("config directory is empty")
 	}
-	if err := authpkg.MarkAccessTokenStale(configDir); err != nil {
-		return "", fmt.Errorf("mark access token stale: %w", err)
+	data, err := authpkg.LoadTokenData(configDir)
+	if err != nil {
+		return "", err
+	}
+	return ForceRefreshRejectedToken(ctx, configDir, data.AccessToken)
+}
+
+// ForceRefreshRejectedToken atomically refreshes rejectedAccessToken, or
+// reuses the persisted token if another goroutine/process already rotated it.
+func ForceRefreshRejectedToken(ctx context.Context, configDir, rejectedAccessToken string) (string, error) {
+	if strings.TrimSpace(configDir) == "" {
+		return "", fmt.Errorf("config directory is empty")
 	}
 	disc := slog.New(slog.NewTextHandler(io.Discard, nil))
 	provider := authpkg.NewOAuthProvider(configDir, disc)
 	configureOAuthProviderCompatibility(provider, configDir)
-	tok, err := provider.GetAccessToken(ctx)
+	tok, err := provider.ForceRefreshRejectedToken(ctx, rejectedAccessToken)
 	if err != nil {
 		return "", err
 	}

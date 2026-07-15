@@ -103,6 +103,9 @@ type Hooks struct {
 	AuthClientFromMCP bool   // true → fetch client ID from MCP at runtime
 	OnAuthError       func(configDir string, err error) error
 	TokenProvider     func(ctx context.Context, fallback func() (string, error)) (string, error)
+	// InvalidateAuthCaches clears edition-owned token and discovery header
+	// snapshots after persisted credentials change. It must not log token data.
+	InvalidateAuthCaches func()
 
 	// --- token persistence (overlay-managed keychain / encrypted storage) ---
 	SaveToken   func(configDir string, data []byte) error // persist token blob
