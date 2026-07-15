@@ -7,17 +7,57 @@ DIST_DIR="${DIST_DIR:-dist}"
 GITEE_API="${GITEE_API:-https://gitee.com/api/v5}"
 GITEE_CURL_CONNECT_TIMEOUT="${GITEE_CURL_CONNECT_TIMEOUT:-15}"
 GITEE_CURL_MAX_TIME="${GITEE_CURL_MAX_TIME:-120}"
-GITEE_UPLOAD_MAX_TIME="${GITEE_UPLOAD_MAX_TIME:-180}"
+GITEE_LIST_MAX_TIME="${GITEE_LIST_MAX_TIME:-20}"
+GITEE_VERIFY_MAX_TIME="${GITEE_VERIFY_MAX_TIME:-60}"
+GITEE_MUTATION_MAX_TIME="${GITEE_MUTATION_MAX_TIME:-20}"
+GITEE_UPLOAD_MAX_TIME="${GITEE_UPLOAD_MAX_TIME:-120}"
 GITEE_UPLOAD_RETRIES="${GITEE_UPLOAD_RETRIES:-2}"
 GITEE_UPLOAD_RETRY_DELAY="${GITEE_UPLOAD_RETRY_DELAY:-5}"
-GITEE_EXISTING_VERIFY_ATTEMPTS="${GITEE_EXISTING_VERIFY_ATTEMPTS:-2}"
-GITEE_POST_UPLOAD_VERIFY_ATTEMPTS="${GITEE_POST_UPLOAD_VERIFY_ATTEMPTS:-6}"
+GITEE_EXISTING_VERIFY_ATTEMPTS="${GITEE_EXISTING_VERIFY_ATTEMPTS:-1}"
+GITEE_POST_UPLOAD_VERIFY_ATTEMPTS="${GITEE_POST_UPLOAD_VERIFY_ATTEMPTS:-2}"
 GITEE_VERIFY_RETRY_DELAY="${GITEE_VERIFY_RETRY_DELAY:-5}"
+GITEE_ASSET_TIMEOUT_SECONDS="${GITEE_ASSET_TIMEOUT_SECONDS:-600}"
+GITEE_OVERALL_TIMEOUT_SECONDS="${GITEE_OVERALL_TIMEOUT_SECONDS:-4920}"
 
 err() {
   printf 'error: %s\n' "$*" >&2
   exit 1
 }
+
+require_positive_integer() {
+  local name="$1" value="$2"
+  case "$value" in
+    ''|*[!0-9]*) err "${name} must be a positive integer: ${value}" ;;
+  esac
+  [ "$value" -gt 0 ] || err "${name} must be greater than zero"
+}
+
+require_nonnegative_integer() {
+  local name="$1" value="$2"
+  case "$value" in
+    ''|*[!0-9]*) err "${name} must be a non-negative integer: ${value}" ;;
+  esac
+}
+
+for setting in \
+  GITEE_CURL_CONNECT_TIMEOUT \
+  GITEE_CURL_MAX_TIME \
+  GITEE_LIST_MAX_TIME \
+  GITEE_VERIFY_MAX_TIME \
+  GITEE_MUTATION_MAX_TIME \
+  GITEE_UPLOAD_MAX_TIME \
+  GITEE_UPLOAD_RETRIES \
+  GITEE_EXISTING_VERIFY_ATTEMPTS \
+  GITEE_POST_UPLOAD_VERIFY_ATTEMPTS \
+  GITEE_ASSET_TIMEOUT_SECONDS \
+  GITEE_OVERALL_TIMEOUT_SECONDS; do
+  require_positive_integer "$setting" "${!setting}"
+done
+for setting in \
+  GITEE_UPLOAD_RETRY_DELAY \
+  GITEE_VERIFY_RETRY_DELAY; do
+  require_nonnegative_integer "$setting" "${!setting}"
+done
 
 [ -n "${GITEE_TOKEN:-}" ] || err "GITEE_TOKEN is required"
 [ -n "${GITEE_REPO:-}" ] || err "GITEE_REPO is required"
@@ -28,6 +68,49 @@ OWNER="${GITEE_REPO%%/*}"
 NAME="${GITEE_REPO##*/}"
 base="${GITEE_API}/repos/${OWNER}/${NAME}"
 release_id="$GITEE_RELEASE_ID"
+
+now_seconds() {
+  date +%s
+}
+
+overall_deadline=$(( $(now_seconds) + GITEE_OVERALL_TIMEOUT_SECONDS ))
+active_deadline="$overall_deadline"
+
+deadline_remaining() {
+  local remaining=$(( active_deadline - $(now_seconds) ))
+  [ "$remaining" -gt 0 ] || return 1
+  printf '%s\n' "$remaining"
+}
+
+bounded_max_time() {
+  local configured="$1" remaining
+  remaining="$(deadline_remaining)" || return 1
+  if [ "$configured" -lt "$remaining" ]; then
+    printf '%s\n' "$configured"
+  else
+    printf '%s\n' "$remaining"
+  fi
+}
+
+start_asset_deadline() {
+  local now candidate
+  now="$(now_seconds)"
+  [ "$now" -lt "$overall_deadline" ] || return 1
+  candidate=$(( now + GITEE_ASSET_TIMEOUT_SECONDS ))
+  if [ "$candidate" -lt "$overall_deadline" ]; then
+    active_deadline="$candidate"
+  else
+    active_deadline="$overall_deadline"
+  fi
+}
+
+sleep_within_deadline() {
+  local seconds="$1" remaining
+  [ "$seconds" -gt 0 ] || return 0
+  remaining="$(deadline_remaining)" || return 1
+  [ "$seconds" -lt "$remaining" ] || return 1
+  sleep "$seconds"
+}
 
 required_assets=(
   dws-darwin-amd64.tar.gz
@@ -49,12 +132,16 @@ if [ "${#missing_assets[@]}" -gt 0 ]; then
 fi
 
 api_get() {
+  local configured_max_time="$1" max_time
+  shift
+  max_time="$(bounded_max_time "$configured_max_time")" || return 1
   curl -fsSL --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
-    --max-time "$GITEE_CURL_MAX_TIME" "$@"
+    --max-time "$max_time" "$@"
 }
 
 list_assets() {
-  api_get "${base}/releases/${release_id}/attach_files?access_token=${GITEE_TOKEN}" \
+  api_get "$GITEE_LIST_MAX_TIME" \
+    "${base}/releases/${release_id}/attach_files?access_token=${GITEE_TOKEN}" \
     | python3 -c 'import json,sys
 data=json.load(sys.stdin)
 rows=data if isinstance(data,list) else data.get("attach_files",[])
@@ -102,7 +189,7 @@ verify_asset_once() {
   [ "$count" -eq 1 ] || return 1
   url="$(asset_url "$assets_map" "$name")"
   [ -n "$url" ] || return 1
-  if ! remote_sha="$(api_get "$url" | sha256_of)"; then
+  if ! remote_sha="$(api_get "$GITEE_VERIFY_MAX_TIME" "$url" | sha256_of)"; then
     return 1
   fi
   [ "$remote_sha" = "$local_sha" ]
@@ -115,15 +202,18 @@ verify_asset_with_retries() {
       return 0
     fi
     attempt=$((attempt + 1))
-    [ "$attempt" -le "$attempts" ] && sleep "$GITEE_VERIFY_RETRY_DELAY"
+    if [ "$attempt" -le "$attempts" ]; then
+      sleep_within_deadline "$GITEE_VERIFY_RETRY_DELAY" || return 1
+    fi
   done
   return 1
 }
 
 delete_asset() {
-  local asset_id="$1"
+  local asset_id="$1" max_time
+  max_time="$(bounded_max_time "$GITEE_MUTATION_MAX_TIME")" || return 1
   curl -fsS --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
-    --max-time "$GITEE_CURL_MAX_TIME" \
+    --max-time "$max_time" \
     -X DELETE "${base}/releases/${release_id}/attach_files/${asset_id}?access_token=${GITEE_TOKEN}" \
     >/dev/null
 }
@@ -142,13 +232,14 @@ delete_named_assets() {
 }
 
 gitee_attach() {
-  local file="$1" name attempt response status
+  local file="$1" name attempt response status max_time
   name="$(basename "$file")"
   attempt=1
   while [ "$attempt" -le "$GITEE_UPLOAD_RETRIES" ]; do
     status=0
+    max_time="$(bounded_max_time "$GITEE_UPLOAD_MAX_TIME")" || return 1
     if response="$(curl -fsS --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
-      --max-time "$GITEE_UPLOAD_MAX_TIME" \
+      --max-time "$max_time" \
       -X POST "${base}/releases/${release_id}/attach_files" \
       -F "access_token=${GITEE_TOKEN}" -F "file=@${file}" 2>&1)"; then
       status=0
@@ -171,7 +262,7 @@ gitee_attach() {
       # Remove any partial, stale, or duplicate attachment before the one
       # explicit retry. There is deliberately no nested curl retry layer.
       delete_named_assets "$name" || return 1
-      sleep "$GITEE_UPLOAD_RETRY_DELAY"
+      sleep_within_deadline "$GITEE_UPLOAD_RETRY_DELAY" || return 1
     fi
   done
   return 1
@@ -187,8 +278,15 @@ total="${#required_assets[@]}"
 for name in "${required_assets[@]}"; do
   index=$((index + 1))
   file="${DIST_DIR}/${name}"
+  if ! start_asset_deadline; then
+    err "overall Gitee reconciliation deadline exhausted before ${name}"
+  fi
   if ! assets_map="$(list_assets)"; then
-    echo "   ❌ could not list Gitee assets before reconciling ${name}" >&2
+    if deadline_remaining >/dev/null; then
+      echo "   ❌ could not list Gitee assets before reconciling ${name}" >&2
+    else
+      echo "   ❌ ${name} exceeded its Gitee reconciliation deadline" >&2
+    fi
     failed=$((failed + 1))
     continue
   fi
@@ -219,11 +317,17 @@ for name in "${required_assets[@]}"; do
       replaced=$((replaced + 1))
     fi
   else
-    echo "   ❌ upload failed for ${name}" >&2
+    if deadline_remaining >/dev/null; then
+      echo "   ❌ upload failed for ${name}" >&2
+    else
+      echo "   ❌ upload failed for ${name}: per-asset or overall deadline exhausted" >&2
+    fi
     failed=$((failed + 1))
   fi
 done
 
+active_deadline="$overall_deadline"
+deadline_remaining >/dev/null || err "overall Gitee reconciliation deadline exhausted before final verification"
 if ! final_assets_map="$(list_assets)"; then
   err "could not list Gitee assets for final verification"
 fi

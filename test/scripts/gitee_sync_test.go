@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 var requiredGiteeAssets = []string{
@@ -73,13 +74,49 @@ func TestSyncGiteeTagRefusesToMoveAnExistingTag(t *testing.T) {
 	}
 }
 
+func TestSyncGiteeTagRejectsAMissingLocalTagWithoutInventingACommit(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+
+	output := runGiteeTagSync(t, scriptPath, workDir, remoteDir, "v9.9.9", false)
+	if !strings.Contains(output, "could not resolve local release tag v9.9.9") {
+		t.Fatalf("missing tag did not report a local resolution failure:\n%s", output)
+	}
+	for _, misleading := range []string{"refusing to move it", "v9.9.9^{commit}"} {
+		if strings.Contains(output, misleading) {
+			t.Fatalf("missing tag output contains misleading commit information %q:\n%s", misleading, output)
+		}
+	}
+}
+
+func TestSyncGiteeTagReportsFetchFailureWhenItCannotRecoverAMissingTag(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+
+	output := runGiteeTagSync(
+		t, scriptPath, workDir, remoteDir, "v9.9.9", false,
+		"GITEE_SOURCE_REMOTE=missing-source-remote",
+	)
+	if !strings.Contains(output, "source tag fetch failed") ||
+		!strings.Contains(output, "local release tag v9.9.9 could not be resolved") {
+		t.Fatalf("fetch failure did not preserve the actionable cause:\n%s", output)
+	}
+}
+
 func TestReconcileGiteeAssetsRecoversACommittedUploadWithLostResponse(t *testing.T) {
 	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
 	distDir := seedGiteeDist(t)
 	fake := newFakeGiteeRelease(true, false)
 	server := httptest.NewServer(fake)
 	defer server.Close()
-	fake.baseURL = server.URL
 
 	cmd := exec.Command("bash", scriptPath)
 	cmd.Env = giteeAssetEnv(distDir, server.URL, "2")
@@ -119,7 +156,6 @@ func TestReconcileGiteeAssetsFailsWhenAnyUploadIsMissing(t *testing.T) {
 	fake := newFakeGiteeRelease(false, true)
 	server := httptest.NewServer(fake)
 	defer server.Close()
-	fake.baseURL = server.URL
 
 	cmd := exec.Command("bash", scriptPath)
 	cmd.Env = giteeAssetEnv(distDir, server.URL, "1")
@@ -137,6 +173,34 @@ func TestReconcileGiteeAssetsFailsWhenAnyUploadIsMissing(t *testing.T) {
 		if got := fake.uploadCalls[name]; got != 1 {
 			t.Errorf("upload calls for %s = %d, want exactly the configured single attempt", name, got)
 		}
+	}
+}
+
+func TestReconcileGiteeAssetsHonorsTheOverallDeadline(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	distDir := seedGiteeDist(t)
+	fake := newFakeGiteeRelease(false, false)
+	fake.uploadDelay = 5 * time.Second
+	server := httptest.NewServer(fake)
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(giteeAssetEnv(distDir, server.URL, "2"),
+		"GITEE_ASSET_TIMEOUT_SECONDS=1",
+		"GITEE_OVERALL_TIMEOUT_SECONDS=3",
+		"GITEE_UPLOAD_MAX_TIME=10",
+	)
+	started := time.Now()
+	output, err := cmd.CombinedOutput()
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatalf("reconcile unexpectedly succeeded after the overall deadline:\n%s", output)
+	}
+	if elapsed > 8*time.Second {
+		t.Fatalf("overall deadline took %s, want no more than 8s\noutput:\n%s", elapsed, output)
+	}
+	if !strings.Contains(string(output), "deadline") {
+		t.Fatalf("deadline failure was not reported clearly:\n%s", output)
 	}
 }
 
@@ -164,8 +228,48 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(%s) error = %v", manualPath, err)
 	}
-	if !strings.Contains(string(manualData), "timeout-minutes: 90") {
-		t.Fatal("manual Gitee repair workflow must exceed the bounded per-file retry budget")
+
+	reconcilerPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	reconcilerData, err := os.ReadFile(reconcilerPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", reconcilerPath, err)
+	}
+	reconciler := string(reconcilerData)
+	perAssetSeconds := shellDefaultInt(t, reconciler, "GITEE_ASSET_TIMEOUT_SECONDS")
+	overallSeconds := shellDefaultInt(t, reconciler, "GITEE_OVERALL_TIMEOUT_SECONDS")
+	finalListSeconds := shellDefaultInt(t, reconciler, "GITEE_LIST_MAX_TIME")
+	completeAssetBudget := perAssetSeconds*len(requiredGiteeAssets) + finalListSeconds
+	if completeAssetBudget > overallSeconds {
+		t.Fatalf(
+			"complete asset budget = %ds (%d assets x %ds + %ds final list), exceeds overall deadline %ds",
+			completeAssetBudget, len(requiredGiteeAssets), perAssetSeconds, finalListSeconds, overallSeconds,
+		)
+	}
+
+	manualWorkflowSeconds := firstWorkflowTimeoutMinutes(t, string(manualData)) * 60
+	const workflowReserveSeconds = 5 * 60
+	if overallSeconds+workflowReserveSeconds > manualWorkflowSeconds {
+		t.Fatalf(
+			"overall deadline %ds plus %ds workflow reserve exceeds manual workflow budget %ds",
+			overallSeconds, workflowReserveSeconds, manualWorkflowSeconds,
+		)
+	}
+
+	releasePath := mustAbs(t, filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	releaseData, err := os.ReadFile(releasePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", releasePath, err)
+	}
+	releaseStepMinutes := workflowTimeoutMinutesAfter(
+		t,
+		string(releaseData),
+		"name: Mirror release to Gitee (China)",
+	)
+	if overallSeconds+workflowReserveSeconds > releaseStepMinutes*60 {
+		t.Fatalf(
+			"overall deadline %ds plus %ds workflow reserve exceeds release fallback step budget %ds",
+			overallSeconds, workflowReserveSeconds, releaseStepMinutes*60,
+		)
 	}
 
 	localBuildPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "build-and-publish-gitee.sh"))
@@ -198,7 +302,7 @@ func seedTaggedRepository(t *testing.T, workDir, tag string) {
 	mustRun(t, workDir, "git", "tag", "-a", tag, "-m", tag)
 }
 
-func runGiteeTagSync(t *testing.T, scriptPath, workDir, remoteDir, tag string, wantSuccess bool) string {
+func runGiteeTagSync(t *testing.T, scriptPath, workDir, remoteDir, tag string, wantSuccess bool, extraEnv ...string) string {
 	t.Helper()
 	cmd := exec.Command("bash", scriptPath)
 	cmd.Dir = workDir
@@ -211,6 +315,7 @@ func runGiteeTagSync(t *testing.T, scriptPath, workDir, remoteDir, tag string, w
 		"GITEE_TAG_VERIFY_DELAY=0",
 		"GITEE_GIT_TIMEOUT_SECONDS=10",
 	)
+	cmd.Env = append(cmd.Env, extraEnv...)
 	output, err := cmd.CombinedOutput()
 	if wantSuccess && err != nil {
 		t.Fatalf("sync-gitee-tag.sh error = %v\noutput:\n%s", err, output)
@@ -219,6 +324,56 @@ func runGiteeTagSync(t *testing.T, scriptPath, workDir, remoteDir, tag string, w
 		t.Fatalf("sync-gitee-tag.sh unexpectedly succeeded:\n%s", output)
 	}
 	return string(output)
+}
+
+func shellDefaultInt(t *testing.T, content, name string) int {
+	t.Helper()
+	prefix := name + `="${` + name + `:-`
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, prefix) || !strings.HasSuffix(line, `}"`) {
+			continue
+		}
+		raw := strings.TrimSuffix(strings.TrimPrefix(line, prefix), `}"`)
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			t.Fatalf("parse %s default %q: %v", name, raw, err)
+		}
+		return value
+	}
+	t.Fatalf("shell default %s not found", name)
+	return 0
+}
+
+func firstWorkflowTimeoutMinutes(t *testing.T, content string) int {
+	t.Helper()
+	return workflowTimeoutMinutesAfter(t, content, "")
+}
+
+func workflowTimeoutMinutesAfter(t *testing.T, content, marker string) int {
+	t.Helper()
+	if marker != "" {
+		index := strings.Index(content, marker)
+		if index < 0 {
+			t.Fatalf("workflow marker %q not found", marker)
+		}
+		content = content[index+len(marker):]
+	}
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		const prefix = "timeout-minutes:"
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			t.Fatalf("parse workflow timeout %q: %v", raw, err)
+		}
+		return value
+	}
+	t.Fatal("workflow timeout-minutes not found")
+	return 0
 }
 
 func peeledRemoteTag(t *testing.T, workDir, remoteDir, tag string) string {
@@ -266,13 +421,13 @@ type fakeGiteeAsset struct {
 
 type fakeGiteeRelease struct {
 	mu                sync.Mutex
-	baseURL           string
 	nextID            int
 	assets            map[int]fakeGiteeAsset
 	uploadCalls       map[string]int
 	dropFirstResponse bool
 	droppedResponse   bool
 	failUploads       bool
+	uploadDelay       time.Duration
 }
 
 func newFakeGiteeRelease(dropFirstResponse, failUploads bool) *fakeGiteeRelease {
@@ -289,7 +444,7 @@ func (f *fakeGiteeRelease) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	const attachPath = "/repos/owner/repo/releases/1/attach_files"
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == attachPath:
-		f.list(w)
+		f.list(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == attachPath:
 		f.upload(w, r)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, attachPath+"/"):
@@ -301,15 +456,16 @@ func (f *fakeGiteeRelease) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *fakeGiteeRelease) list(w http.ResponseWriter) {
+func (f *fakeGiteeRelease) list(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	baseURL := requestBaseURL(r)
 	rows := make([]map[string]any, 0, len(f.assets))
 	for _, asset := range f.assets {
 		rows = append(rows, map[string]any{
 			"id":                   asset.id,
 			"name":                 asset.name,
-			"browser_download_url": fmt.Sprintf("%s/download/%d", f.baseURL, asset.id),
+			"browser_download_url": fmt.Sprintf("%s/download/%d", baseURL, asset.id),
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -332,6 +488,10 @@ func (f *fakeGiteeRelease) upload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if f.uploadDelay > 0 {
+		time.Sleep(f.uploadDelay)
+	}
+	baseURL := requestBaseURL(r)
 
 	f.mu.Lock()
 	f.uploadCalls[header.Filename]++
@@ -366,8 +526,16 @@ func (f *fakeGiteeRelease) upload(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"id":                   id,
 		"name":                 header.Filename,
-		"browser_download_url": fmt.Sprintf("%s/download/%d", f.baseURL, id),
+		"browser_download_url": fmt.Sprintf("%s/download/%d", baseURL, id),
 	})
+}
+
+func requestBaseURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
 }
 
 func (f *fakeGiteeRelease) delete(w http.ResponseWriter, rawID string) {

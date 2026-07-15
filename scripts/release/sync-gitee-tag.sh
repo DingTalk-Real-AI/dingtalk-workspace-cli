@@ -42,12 +42,18 @@ run_bounded() {
 
 # A tag checkout already has the local ref. The fetch repairs shallow/manual
 # checkouts, while the rev-parse below remains the authoritative requirement.
+fetch_failed=0
 if [ -n "$GITEE_SOURCE_REMOTE" ]; then
   git fetch --force --tags "$GITEE_SOURCE_REMOTE" \
-    "refs/tags/${VERSION}:refs/tags/${VERSION}" >/dev/null 2>&1 || true
+    "refs/tags/${VERSION}:refs/tags/${VERSION}" >/dev/null 2>&1 || fetch_failed=1
 fi
-target_commit="$(git rev-parse "${VERSION}^{commit}" 2>/dev/null || true)"
-[ -n "$target_commit" ] || err "could not resolve local release tag ${VERSION}"
+target_commit="$(git rev-parse --verify "${VERSION}^{commit}" 2>/dev/null || true)"
+if [ -z "$target_commit" ]; then
+  if [ "$fetch_failed" -eq 1 ]; then
+    err "source tag fetch failed and local release tag ${VERSION} could not be resolved"
+  fi
+  err "could not resolve local release tag ${VERSION}"
+fi
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
