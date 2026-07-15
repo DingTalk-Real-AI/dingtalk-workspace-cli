@@ -252,13 +252,29 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  mirror-gitee-release:
+    # Keep the optional cross-border fallback out of publish-release so all
+    # pre-sync work has an independently provable budget.
+    if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
+    needs:
+      - release
+      - publish-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+
+      - name: Restore finalized distribution files
+        uses: actions/download-artifact@v4
+        timeout-minutes: 10
+        with:
+          name: finalized-release-dist
+          path: dist
+
       - name: Mirror release to Gitee (China)
-        # 把 release 附件（二进制/校验和/skills 包）镜像到 Gitee release，供 install.sh
-        # 的 DWS_GITEE_REPO 开关消费（仓库代码由 Gitee 仓库镜像功能自动同步，附件不在其内）。
-        # 默认关闭：国内 release 应由 Gitee 侧本地构建发布，避免 GitHub -> Gitee 跨境传大包卡住。
-        # 仅在需要临时补救时设置 repo variable ENABLE_GITEE_UPLOAD_FALLBACK=true。
-        if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
-        timeout-minutes: 90
+        timeout-minutes: 100
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ github.ref_name }}

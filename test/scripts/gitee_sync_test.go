@@ -111,6 +111,176 @@ func TestSyncGiteeTagReportsFetchFailureWhenItCannotRecoverAMissingTag(t *testin
 	}
 }
 
+func TestSyncGiteeTagHonorsItsDeadlineDuringFetch(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("LookPath(git) error = %v", err)
+	}
+	wrapperDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(wrapperDir, "git"), []byte(fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "fetch" ]; then
+  sleep 5
+  exit 1
+fi
+exec %q "$@"
+`, realGit)), 0o755)
+
+	started := time.Now()
+	output := runGiteeTagSync(
+		t, scriptPath, workDir, remoteDir, "v1.2.3", false,
+		"PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GITEE_SOURCE_REMOTE=origin",
+		"GITEE_TAG_TIMEOUT_SECONDS=1",
+		"GITEE_GIT_TIMEOUT_SECONDS=10",
+	)
+	elapsed := time.Since(started)
+	if elapsed > 6*time.Second {
+		t.Fatalf("tag deadline took %s, want no more than 6s\noutput:\n%s", elapsed, output)
+	}
+	if !strings.Contains(output, "deadline exhausted") {
+		t.Fatalf("tag deadline failure was not reported clearly:\n%s", output)
+	}
+}
+
+func TestSyncGiteeTagAndReleasePathShareOneOverallDeadline(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-to-gitee.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	mustRun(t, workDir, "git", "push", remoteDir, "refs/tags/v1.2.3:refs/tags/v1.2.3")
+	distDir := seedGiteeDist(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(10 * time.Second)
+		http.Error(w, "slow Gitee API", http.StatusGatewayTimeout)
+	}))
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		"VERSION=v1.2.3",
+		"DIST_DIR="+distDir,
+		"GITEE_API="+server.URL,
+		"GITEE_TOKEN=test-token",
+		"GITEE_USER=test-user",
+		"GITEE_REPO=owner/repo",
+		"GITEE_SOURCE_REMOTE=",
+		"GITEE_GIT_REMOTE="+remoteDir,
+		"GITEE_PUBLIC_GIT_REMOTE="+remoteDir,
+		"GITEE_SYNC_TIMEOUT_SECONDS=6",
+		"GITEE_TAG_TIMEOUT_SECONDS=3",
+		"GITEE_GIT_TIMEOUT_SECONDS=3",
+		"GITEE_RELEASE_LOOKUP_MAX_TIME=10",
+		"GITEE_RELEASE_CREATE_MAX_TIME=10",
+		"GITEE_RECONCILE_TIMEOUT_SECONDS=10",
+	)
+	started := time.Now()
+	output, err := cmd.CombinedOutput()
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatalf("full Gitee sync unexpectedly succeeded after its deadline:\n%s", output)
+	}
+	if elapsed > 12*time.Second {
+		t.Fatalf("full Gitee sync deadline took %s, want no more than 12s\noutput:\n%s", elapsed, output)
+	}
+	if !strings.Contains(string(output), "overall Gitee sync deadline exhausted") {
+		t.Fatalf("full-path deadline failure was not reported clearly:\n%s", output)
+	}
+}
+
+func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-to-gitee.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	mustRun(t, workDir, "git", "push", remoteDir, "refs/tags/v1.2.3:refs/tags/v1.2.3")
+	distDir := seedGiteeDist(t)
+
+	fake := newFakeGiteeRelease(false, false)
+	var releaseMu sync.Mutex
+	releaseLookups := 0
+	releaseCreates := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/releases/tags/v1.2.3":
+			releaseMu.Lock()
+			releaseLookups++
+			releaseMu.Unlock()
+			http.NotFound(w, r)
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/releases":
+			releaseMu.Lock()
+			releaseCreates++
+			releaseMu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
+		default:
+			fake.ServeHTTP(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		"VERSION=v1.2.3",
+		"DIST_DIR="+distDir,
+		"GITEE_API="+server.URL,
+		"GITEE_TOKEN=test-token",
+		"GITEE_USER=test-user",
+		"GITEE_REPO=owner/repo",
+		"GITEE_SOURCE_REMOTE=",
+		"GITEE_GIT_REMOTE="+remoteDir,
+		"GITEE_PUBLIC_GIT_REMOTE="+remoteDir,
+		"GITEE_SYNC_TIMEOUT_SECONDS=30",
+		"GITEE_TAG_TIMEOUT_SECONDS=5",
+		"GITEE_GIT_TIMEOUT_SECONDS=3",
+		"GITEE_RELEASE_LOOKUP_MAX_TIME=2",
+		"GITEE_RELEASE_CREATE_MAX_TIME=2",
+		"GITEE_RECONCILE_TIMEOUT_SECONDS=20",
+		"GITEE_CHILD_DEADLINE_RESERVE_SECONDS=1",
+		"GITEE_CURL_CONNECT_TIMEOUT=2",
+		"GITEE_CURL_MAX_TIME=2",
+		"GITEE_UPLOAD_MAX_TIME=2",
+		"GITEE_UPLOAD_RETRIES=1",
+		"GITEE_UPLOAD_RETRY_DELAY=0",
+		"GITEE_EXISTING_VERIFY_ATTEMPTS=1",
+		"GITEE_POST_UPLOAD_VERIFY_ATTEMPTS=1",
+		"GITEE_VERIFY_RETRY_DELAY=0",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("full Gitee sync error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "all 8 verified") {
+		t.Fatalf("full Gitee sync did not reconcile every release asset:\n%s", output)
+	}
+
+	releaseMu.Lock()
+	if releaseLookups != 1 || releaseCreates != 1 {
+		t.Errorf("release lookup/create calls = %d/%d, want 1/1", releaseLookups, releaseCreates)
+	}
+	releaseMu.Unlock()
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	for _, name := range requiredGiteeAssets {
+		if got := fake.uploadCalls[name]; got != 1 {
+			t.Errorf("upload calls for %s = %d, want 1", name, got)
+		}
+	}
+}
+
 func TestReconcileGiteeAssetsRecoversACommittedUploadWithLostResponse(t *testing.T) {
 	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
 	distDir := seedGiteeDist(t)
@@ -229,6 +399,18 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 		t.Fatalf("ReadFile(%s) error = %v", manualPath, err)
 	}
 
+	syncPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-to-gitee.sh"))
+	syncData, err := os.ReadFile(syncPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", syncPath, err)
+	}
+	syncScript := string(syncData)
+	syncSeconds := shellDefaultInt(t, syncScript, "GITEE_SYNC_TIMEOUT_SECONDS")
+	tagSeconds := shellDefaultInt(t, syncScript, "GITEE_TAG_TIMEOUT_SECONDS")
+	lookupSeconds := shellDefaultInt(t, syncScript, "GITEE_RELEASE_LOOKUP_MAX_TIME")
+	createSeconds := shellDefaultInt(t, syncScript, "GITEE_RELEASE_CREATE_MAX_TIME")
+	reconcileSeconds := shellDefaultInt(t, syncScript, "GITEE_RECONCILE_TIMEOUT_SECONDS")
+
 	reconcilerPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
 	reconcilerData, err := os.ReadFile(reconcilerPath)
 	if err != nil {
@@ -245,13 +427,40 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 			completeAssetBudget, len(requiredGiteeAssets), perAssetSeconds, finalListSeconds, overallSeconds,
 		)
 	}
-
-	manualWorkflowSeconds := firstWorkflowTimeoutMinutes(t, string(manualData)) * 60
-	const workflowReserveSeconds = 5 * 60
-	if overallSeconds+workflowReserveSeconds > manualWorkflowSeconds {
+	if completeAssetBudget > reconcileSeconds || reconcileSeconds > overallSeconds {
 		t.Fatalf(
-			"overall deadline %ds plus %ds workflow reserve exceeds manual workflow budget %ds",
-			overallSeconds, workflowReserveSeconds, manualWorkflowSeconds,
+			"asset budget nesting invalid: complete=%ds configured-reconcile=%ds reconciler-overall=%ds",
+			completeAssetBudget, reconcileSeconds, overallSeconds,
+		)
+	}
+
+	completeSyncBudget := tagSeconds + lookupSeconds + createSeconds + reconcileSeconds
+	if completeSyncBudget > syncSeconds {
+		t.Fatalf(
+			"complete sync budget = %ds (tag=%d + lookup=%d + create=%d + reconcile=%d), exceeds sync deadline %ds",
+			completeSyncBudget, tagSeconds, lookupSeconds, createSeconds, reconcileSeconds, syncSeconds,
+		)
+	}
+
+	const workflowReserveMinutes = 5
+	assertWorkflowBudget(
+		t,
+		string(manualData),
+		"sync-gitee:",
+		[]string{
+			"name: Check out repository",
+			"name: Download GitHub release assets",
+			"name: Mirror release to Gitee (China)",
+		},
+		workflowReserveMinutes,
+	)
+	manualSyncStepSeconds := workflowTimeoutMinutesAfter(
+		t, string(manualData), "name: Mirror release to Gitee (China)",
+	) * 60
+	if syncSeconds+workflowReserveMinutes*60 > manualSyncStepSeconds {
+		t.Fatalf(
+			"sync deadline %ds plus reserve exceeds manual sync step %ds",
+			syncSeconds, manualSyncStepSeconds,
 		)
 	}
 
@@ -260,15 +469,24 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(%s) error = %v", releasePath, err)
 	}
-	releaseStepMinutes := workflowTimeoutMinutesAfter(
+	assertWorkflowBudget(
 		t,
 		string(releaseData),
-		"name: Mirror release to Gitee (China)",
+		"mirror-gitee-release:",
+		[]string{
+			"name: Check out repository",
+			"name: Restore finalized distribution files",
+			"name: Mirror release to Gitee (China)",
+		},
+		workflowReserveMinutes,
 	)
-	if overallSeconds+workflowReserveSeconds > releaseStepMinutes*60 {
+	releaseSyncStepSeconds := workflowTimeoutMinutesAfter(
+		t, string(releaseData), "mirror-gitee-release:", "name: Mirror release to Gitee (China)",
+	) * 60
+	if syncSeconds+workflowReserveMinutes*60 > releaseSyncStepSeconds {
 		t.Fatalf(
-			"overall deadline %ds plus %ds workflow reserve exceeds release fallback step budget %ds",
-			overallSeconds, workflowReserveSeconds, releaseStepMinutes*60,
+			"sync deadline %ds plus reserve exceeds release fallback step %ds",
+			syncSeconds, releaseSyncStepSeconds,
 		)
 	}
 
@@ -345,14 +563,9 @@ func shellDefaultInt(t *testing.T, content, name string) int {
 	return 0
 }
 
-func firstWorkflowTimeoutMinutes(t *testing.T, content string) int {
+func workflowTimeoutMinutesAfter(t *testing.T, content string, markers ...string) int {
 	t.Helper()
-	return workflowTimeoutMinutesAfter(t, content, "")
-}
-
-func workflowTimeoutMinutesAfter(t *testing.T, content, marker string) int {
-	t.Helper()
-	if marker != "" {
+	for _, marker := range markers {
 		index := strings.Index(content, marker)
 		if index < 0 {
 			t.Fatalf("workflow marker %q not found", marker)
@@ -374,6 +587,22 @@ func workflowTimeoutMinutesAfter(t *testing.T, content, marker string) int {
 	}
 	t.Fatal("workflow timeout-minutes not found")
 	return 0
+}
+
+func assertWorkflowBudget(t *testing.T, content, jobMarker string, stepMarkers []string, reserveMinutes int) {
+	t.Helper()
+	jobMinutes := workflowTimeoutMinutesAfter(t, content, jobMarker)
+	stepMinutes := 0
+	jobContent := content[strings.Index(content, jobMarker)+len(jobMarker):]
+	for _, marker := range stepMarkers {
+		stepMinutes += workflowTimeoutMinutesAfter(t, jobContent, marker)
+	}
+	if stepMinutes+reserveMinutes > jobMinutes {
+		t.Fatalf(
+			"workflow budget for %s = %d step minutes + %d reserve, exceeds %d-minute job",
+			jobMarker, stepMinutes, reserveMinutes, jobMinutes,
+		)
+	}
 }
 
 func peeledRemoteTag(t *testing.T, workDir, remoteDir, tag string) string {

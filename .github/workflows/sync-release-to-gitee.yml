@@ -21,14 +21,16 @@ permissions:
 jobs:
   sync-gitee:
     runs-on: ubuntu-latest
-    # Gitee's attachment API can take several minutes per large archive. The
-    # script has bounded per-file retries; keep the job budget above that bound.
-    timeout-minutes: 90
+    # Each step has its own ceiling. Their 115-minute sum leaves five minutes
+    # for runner scheduling/teardown inside this 120-minute job deadline.
+    timeout-minutes: 120
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        timeout-minutes: 5
 
       - name: Download GitHub release assets
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -44,6 +46,7 @@ jobs:
 
       - name: Mirror release to Gitee (China)
         # Idempotent: uploads only assets not already present on the Gitee release.
+        timeout-minutes: 100
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ inputs.version }}
