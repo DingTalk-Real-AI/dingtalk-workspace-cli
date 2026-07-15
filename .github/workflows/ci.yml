@@ -100,10 +100,11 @@ jobs:
       - name: Build Windows CLI
         run: go build -o dws.exe ./cmd
 
-      - name: Test Windows auth and DPAPI paths
-        run: |
-          go test -v -count=1 -timeout=10m ./internal/keychain ./internal/auth
-          go test -v -count=1 -timeout=5m ./internal/app -run '^TestAuth(MigrateKeychain|StatusDiagnosticReportsCiphertextKeyMismatch)'
+      - name: Test Windows auth and DPAPI packages
+        run: go test -v -count=1 -timeout=10m ./internal/keychain ./internal/auth
+
+      - name: Test Windows auth migration diagnostics
+        run: go test -v -count=1 -timeout=5m ./internal/app -run '^TestAuth(MigrateKeychain|StatusDiagnosticReportsCiphertextKeyMismatch)'
 
   coverage:
     name: Coverage
@@ -241,12 +242,23 @@ jobs:
             base_ref="$(git rev-parse HEAD^)"
           fi
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          stable_ref="$(git tag --merged "$base_ref" --list 'v[0-9]*' --sort=-version:refname | awk 'index($0, "-") == 0 { print; exit }')"
+          if [ -z "$stable_ref" ]; then
+            echo "No stable release tag is reachable from compatibility base $base_ref" >&2
+            exit 1
+          fi
+          git rev-parse --verify "${stable_ref}^{commit}" >/dev/null
           echo "COMPATIBILITY_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+          echo "COMPATIBILITY_STABLE_REF=$stable_ref" >> "$GITHUB_ENV"
 
       - name: Check historical commands and help compatibility
         run: |
           make authoritative-interface-integrity \
             BASE_REF="$COMPATIBILITY_BASE_REF"
+          if [ "$(git rev-parse "${COMPATIBILITY_BASE_REF}^{commit}")" != "$(git rev-parse "${COMPATIBILITY_STABLE_REF}^{commit}")" ]; then
+            make authoritative-interface-integrity \
+              BASE_REF="$COMPATIBILITY_STABLE_REF"
+          fi
 
       - name: Check complete Schema compatibility
         run: make schema-compatibility BASE_REF="$COMPATIBILITY_BASE_REF"

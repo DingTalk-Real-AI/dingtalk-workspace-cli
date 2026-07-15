@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 
-# Compare the candidate command tree against its Git-owned PR merge-base (or
-# the previous main SHA on push). A fixture from the candidate branch is never
-# used as CI authority.
+# Compare the candidate command tree against a Git-owned historical source
+# revision. CI invokes this for both the PR merge-base and latest stable tag; a
+# fixture from the candidate branch is never used as authority.
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BASE_REF=""
@@ -87,5 +87,5 @@ generate_reference "$BASE_REF" "$BASE_WORKTREE" "$BASELINE" "$TMP_ROOT/base-home
 mkdir -p "$CANDIDATE_HOME"
 go build -o "$CANDIDATE_BIN" ./scripts/policy/interface-baseline
 
-printf 'checking candidate against PR merge-base %s\n' "$BASE_REF"
+printf 'checking candidate against authoritative interface ref %s\n' "$BASE_REF"
 HOME="$CANDIDATE_HOME" DWS_LANG=zh "$CANDIDATE_BIN" --check "$BASELINE"

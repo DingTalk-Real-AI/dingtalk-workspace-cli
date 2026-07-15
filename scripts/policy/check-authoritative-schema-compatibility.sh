@@ -70,9 +70,9 @@ go build -o "$CHECKER" ./scripts/policy/schema-compat
 
 mkdir -p "$TMP_ROOT/base-home" "$TMP_ROOT/candidate-home"
 HOME="$TMP_ROOT/base-home" DWS_LANG=zh \
-	"$BASE_BIN" schema --all --compact --format json >"$BASE_RAW"
+	"$BASE_BIN" schema --all --format json >"$BASE_RAW"
 HOME="$TMP_ROOT/candidate-home" DWS_LANG=zh \
-	"$BIN" schema --all --compact --format json >"$CANDIDATE_RAW"
+	"$BIN" schema --all --format json >"$CANDIDATE_RAW"
 
 "$CHECKER" --normalize "$BASE_RAW" >"$BASELINE"
 printf 'checking complete Schema contract against PR merge-base %s\n' "$BASE_REF"

@@ -6,10 +6,10 @@ The repository defines five focused checks in addition to its existing CI:
   command path and alias must still resolve, every historical command must
   still render `-h`, and historical flags must keep their type and shorthand.
   New commands, aliases, and flags are allowed. The same job compares the full
-  `dws schema --all --compact` contract with the PR merge-base, blocking removed
-  products/tools/parameters, changed parameter types, and newly required
-  parameters. It also checks that executable `dws ...` references in
-  `skills/**/*.md` resolve to real commands.
+  complete `dws schema --all` contract with the PR merge-base, blocking removed
+  products/tools/parameters, incompatible parameter or interface mappings,
+  constraint drift, and safety-semantic drift. It also checks that executable
+  `dws ...` references in `skills/**/*.md` resolve to real commands.
   Help compatibility covers command/alias/flag spelling, flag type and
   shorthand; descriptive prose may evolve without breaking the gate.
 - **Coverage** runs unit tests on every pull request and prints both overall and
@@ -45,10 +45,12 @@ make cli-smoke
 make coverage-gate BASE_REF=<merge-base>
 ```
 
-CI derives the authoritative Interface and Schema snapshots from the PR
-merge-base. The candidate branch cannot bless a breaking change by editing a
+CI derives the authoritative Interface snapshots from both the PR merge-base
+and the latest reachable stable release tag. The complete Schema snapshot comes
+from the PR merge-base, which contains the registry-first Schema introduced on
+`main`. The candidate branch cannot bless a breaking change by editing a
 fixture. Schema additions are allowed; historical products, tools, parameters,
-parameter types, and optionality remain protected.
+parameter mappings, constraints, and safety semantics remain protected.
 
 `make update-interface-baseline` still extends the local checked-in Interface
 fixture used by `make interface-integrity`. Updates are monotonic: they add new

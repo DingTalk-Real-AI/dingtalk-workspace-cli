@@ -2,10 +2,11 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 
 // Command schema-compat normalizes and checks the backwards-compatible
-// product/tool surface returned by `dws schema --all --compact --format json`.
+// execution contract returned by `dws schema --all --format json`.
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"sort"
 	"strings"
 )
+
+const schemaContractVersion = 2
 
 type schemaContract struct {
 	Version  int                      `json:"version"`
@@ -25,8 +28,31 @@ type productSchema struct {
 }
 
 type toolSchema struct {
-	Parameters map[string]string `json:"parameters,omitempty"`
-	Required   []string          `json:"required,omitempty"`
+	PrimaryCLIPath string                     `json:"primary_cli_path"`
+	InterfaceMode  string                     `json:"interface_mode"`
+	InterfaceRef   string                     `json:"interface_ref,omitempty"`
+	Availability   string                     `json:"availability"`
+	Parameters     map[string]parameterSchema `json:"parameters"`
+	Constraints    string                     `json:"constraints,omitempty"`
+	Positionals    string                     `json:"positionals,omitempty"`
+	DryRun         string                     `json:"dry_run,omitempty"`
+	Effect         string                     `json:"effect"`
+	Risk           string                     `json:"risk"`
+	Confirmation   string                     `json:"confirmation"`
+	Idempotency    string                     `json:"idempotency"`
+}
+
+type parameterSchema struct {
+	Type             string   `json:"type"`
+	Property         string   `json:"property,omitempty"`
+	InterfaceType    string   `json:"interface_type,omitempty"`
+	Required         bool     `json:"required,omitempty"`
+	CLIRequired      bool     `json:"cli_required,omitempty"`
+	RequiredWhen     string   `json:"required_when,omitempty"`
+	Default          string   `json:"default,omitempty"`
+	InterfaceDefault string   `json:"interface_default,omitempty"`
+	Format           string   `json:"format,omitempty"`
+	Enum             []string `json:"enum,omitempty"`
 }
 
 func main() {
@@ -130,7 +156,7 @@ func normalizeRawFile(path string) (schemaContract, error) {
 	if payload.Products == nil {
 		return schemaContract{}, fmt.Errorf("products array is missing")
 	}
-	contract := schemaContract{Version: 1, Products: map[string]productSchema{}}
+	contract := schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{}}
 	for _, rawProduct := range payload.Products {
 		var product struct {
 			ID    string            `json:"id"`
@@ -158,44 +184,195 @@ func normalizeRawFile(path string) (schemaContract, error) {
 		}
 		contract.Products[product.ID] = normalized
 	}
+	if len(contract.Products) == 0 {
+		return schemaContract{}, fmt.Errorf("complete Schema contract contains no products")
+	}
+	totalTools := 0
+	for _, product := range contract.Products {
+		totalTools += len(product.Tools)
+	}
+	if totalTools == 0 {
+		return schemaContract{}, fmt.Errorf("complete Schema contract contains no tools")
+	}
 	return contract, nil
 }
 
 func normalizeTool(raw json.RawMessage) (string, toolSchema, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", toolSchema{}, err
+	}
+	for _, field := range []string{
+		"canonical_path",
+		"primary_cli_path",
+		"parameters",
+		"effect",
+		"risk",
+		"confirmation",
+		"idempotency",
+		"interface_mode",
+		"availability",
+		"field_provenance",
+	} {
+		if _, ok := fields[field]; !ok {
+			return "", toolSchema{}, fmt.Errorf("tool is not a complete schema --all leaf: missing %s", field)
+		}
+	}
+
 	var tool struct {
-		CanonicalPath string                     `json:"canonical_path"`
-		Name          string                     `json:"name"`
-		CLIName       string                     `json:"cli_name"`
-		Parameters    map[string]json.RawMessage `json:"parameters"`
-		Required      []string                   `json:"required"`
+		CanonicalPath  string                     `json:"canonical_path"`
+		PrimaryCLIPath string                     `json:"primary_cli_path"`
+		InterfaceMode  string                     `json:"interface_mode"`
+		InterfaceRef   json.RawMessage            `json:"interface_ref"`
+		Availability   string                     `json:"availability"`
+		Parameters     map[string]json.RawMessage `json:"parameters"`
+		Required       []string                   `json:"required"`
+		Constraints    json.RawMessage            `json:"constraints"`
+		Positionals    json.RawMessage            `json:"positionals"`
+		DryRun         json.RawMessage            `json:"dry_run"`
+		Effect         string                     `json:"effect"`
+		Risk           string                     `json:"risk"`
+		Confirmation   string                     `json:"confirmation"`
+		Idempotency    string                     `json:"idempotency"`
 	}
 	if err := json.Unmarshal(raw, &tool); err != nil {
 		return "", toolSchema{}, err
 	}
-	id := firstNonEmpty(tool.CanonicalPath, tool.Name, tool.CLIName)
+	id := strings.TrimSpace(tool.CanonicalPath)
 	if id == "" {
-		return "", toolSchema{}, fmt.Errorf("tool without canonical_path/name/cli_name")
+		return "", toolSchema{}, fmt.Errorf("tool without canonical_path")
 	}
-	parameters := map[string]string{}
-	requiredParameters := append([]string(nil), tool.Required...)
+	if strings.TrimSpace(tool.PrimaryCLIPath) == "" {
+		return "", toolSchema{}, fmt.Errorf("tool %s without primary_cli_path", id)
+	}
+	if tool.Parameters == nil {
+		return "", toolSchema{}, fmt.Errorf("tool %s parameters must be an object", id)
+	}
+	requiredParameters := stringSet(tool.Required)
+	parameters := map[string]parameterSchema{}
 	for name, rawSchema := range tool.Parameters {
-		var schema map[string]any
-		if err := json.Unmarshal(rawSchema, &schema); err != nil {
+		parameter, err := normalizeParameter(rawSchema)
+		if err != nil {
 			return "", toolSchema{}, fmt.Errorf("parameter %s: %w", name, err)
 		}
-		parameters[name] = schemaType(schema)
-		if value, exists := schema["required"]; exists {
-			required, ok := value.(bool)
-			if !ok {
-				return "", toolSchema{}, fmt.Errorf("parameter %s: required must be a boolean", name)
-			}
-			if required {
-				requiredParameters = append(requiredParameters, name)
-			}
+		if requiredParameters[name] {
+			parameter.Required = true
+		}
+		parameters[name] = parameter
+	}
+	for required := range requiredParameters {
+		if _, ok := parameters[required]; !ok {
+			return "", toolSchema{}, fmt.Errorf("required parameter %q is missing", required)
 		}
 	}
-	required := uniqueSorted(requiredParameters)
-	return id, toolSchema{Parameters: parameters, Required: required}, nil
+
+	interfaceRef, err := canonicalRawJSON(tool.InterfaceRef)
+	if err != nil {
+		return "", toolSchema{}, fmt.Errorf("interface_ref: %w", err)
+	}
+	constraints, err := canonicalRawJSON(tool.Constraints)
+	if err != nil {
+		return "", toolSchema{}, fmt.Errorf("constraints: %w", err)
+	}
+	positionals, err := canonicalRawJSON(tool.Positionals)
+	if err != nil {
+		return "", toolSchema{}, fmt.Errorf("positionals: %w", err)
+	}
+	dryRun, err := canonicalRawJSON(tool.DryRun)
+	if err != nil {
+		return "", toolSchema{}, fmt.Errorf("dry_run: %w", err)
+	}
+
+	return id, toolSchema{
+		PrimaryCLIPath: strings.TrimSpace(tool.PrimaryCLIPath),
+		InterfaceMode:  strings.TrimSpace(tool.InterfaceMode),
+		InterfaceRef:   interfaceRef,
+		Availability:   strings.TrimSpace(tool.Availability),
+		Parameters:     parameters,
+		Constraints:    constraints,
+		Positionals:    positionals,
+		DryRun:         dryRun,
+		Effect:         strings.TrimSpace(tool.Effect),
+		Risk:           strings.TrimSpace(tool.Risk),
+		Confirmation:   strings.TrimSpace(tool.Confirmation),
+		Idempotency:    strings.TrimSpace(tool.Idempotency),
+	}, nil
+}
+
+func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return parameterSchema{}, err
+	}
+	for _, field := range []string{"type", "required", "field_provenance"} {
+		if _, ok := fields[field]; !ok {
+			return parameterSchema{}, fmt.Errorf("not a complete schema --all parameter: missing %s", field)
+		}
+	}
+
+	var parameter struct {
+		Required         bool            `json:"required"`
+		CLIRequired      bool            `json:"cli_required"`
+		RequiredWhen     string          `json:"required_when"`
+		Property         string          `json:"property"`
+		InterfaceType    string          `json:"interface_type"`
+		Default          json.RawMessage `json:"default"`
+		InterfaceDefault json.RawMessage `json:"interface_default"`
+		Format           string          `json:"format"`
+		Enum             []string        `json:"enum"`
+	}
+	if err := json.Unmarshal(raw, &parameter); err != nil {
+		return parameterSchema{}, err
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return parameterSchema{}, err
+	}
+	parameterType := schemaType(schema)
+	if parameterType == "unspecified" {
+		return parameterSchema{}, fmt.Errorf("type is missing")
+	}
+	defaultValue, err := canonicalRawJSON(parameter.Default)
+	if err != nil {
+		return parameterSchema{}, fmt.Errorf("default: %w", err)
+	}
+	interfaceDefault, err := canonicalRawJSON(parameter.InterfaceDefault)
+	if err != nil {
+		return parameterSchema{}, fmt.Errorf("interface_default: %w", err)
+	}
+	enum := append([]string(nil), parameter.Enum...)
+	sort.Strings(enum)
+
+	return parameterSchema{
+		Type:             parameterType,
+		Property:         strings.TrimSpace(parameter.Property),
+		InterfaceType:    strings.TrimSpace(parameter.InterfaceType),
+		Required:         parameter.Required,
+		CLIRequired:      parameter.CLIRequired,
+		RequiredWhen:     strings.TrimSpace(parameter.RequiredWhen),
+		Default:          defaultValue,
+		InterfaceDefault: interfaceDefault,
+		Format:           strings.TrimSpace(parameter.Format),
+		Enum:             enum,
+	}, nil
+}
+
+func canonicalRawJSON(raw json.RawMessage) (string, error) {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return "", nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }
 
 func schemaType(schema map[string]any) string {
@@ -221,11 +398,11 @@ func readContract(path string) (schemaContract, error) {
 	if err := json.Unmarshal(data, &contract); err != nil {
 		return schemaContract{}, err
 	}
-	if contract.Version != 1 {
+	if contract.Version != schemaContractVersion {
 		return schemaContract{}, fmt.Errorf("unsupported schema contract version %d", contract.Version)
 	}
-	if contract.Products == nil {
-		contract.Products = map[string]productSchema{}
+	if len(contract.Products) == 0 {
+		return schemaContract{}, fmt.Errorf("historical schema contract contains no products")
 	}
 	return contract, nil
 }
@@ -244,66 +421,108 @@ func checkCompatibility(baseline, current schemaContract) []string {
 				failures = append(failures, fmt.Sprintf("historical schema tool %q is missing", productID+"/"+toolID))
 				continue
 			}
-			for parameter, oldType := range oldTool.Parameters {
-				newType, ok := newTool.Parameters[parameter]
-				if !ok {
-					failures = append(failures, fmt.Sprintf("schema tool %q lost parameter %q", productID+"/"+toolID, parameter))
-				} else if newType != oldType {
-					failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed type", productID+"/"+toolID, parameter))
-				}
-			}
-			oldRequired := stringSet(oldTool.Required)
-			for _, required := range newTool.Required {
-				if !oldRequired[required] {
-					failures = append(failures, fmt.Sprintf("schema tool %q made parameter %q newly required", productID+"/"+toolID, required))
-				}
-			}
+			toolPath := productID + "/" + toolID
+			failures = append(failures, checkToolCompatibility(toolPath, oldTool, newTool)...)
 		}
 	}
 	sort.Strings(failures)
 	return failures
 }
 
-func mergeContracts(historical, current schemaContract) (schemaContract, []string) {
-	merged := cloneContract(historical)
+func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
 	var failures []string
-	for productID, newProduct := range current.Products {
-		oldProduct, exists := merged.Products[productID]
-		if !exists {
-			merged.Products[productID] = newProduct
+	for _, field := range []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{name: "primary_cli_path", old: oldTool.PrimaryCLIPath, new: newTool.PrimaryCLIPath},
+		{name: "interface_mode", old: oldTool.InterfaceMode, new: newTool.InterfaceMode},
+		{name: "interface_ref", old: oldTool.InterfaceRef, new: newTool.InterfaceRef},
+		{name: "availability", old: oldTool.Availability, new: newTool.Availability},
+		{name: "constraints", old: oldTool.Constraints, new: newTool.Constraints},
+		{name: "positionals", old: oldTool.Positionals, new: newTool.Positionals},
+		{name: "effect", old: oldTool.Effect, new: newTool.Effect},
+		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
+		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
+		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
+	} {
+		if field.old != field.new {
+			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
+		}
+	}
+	if oldTool.DryRun != "" && oldTool.DryRun != newTool.DryRun {
+		failures = append(failures, fmt.Sprintf("schema tool %q changed or removed dry_run", toolPath))
+	}
+
+	for parameter, oldParameter := range oldTool.Parameters {
+		newParameter, ok := newTool.Parameters[parameter]
+		if !ok {
+			failures = append(failures, fmt.Sprintf("schema tool %q lost parameter %q", toolPath, parameter))
 			continue
 		}
-		if oldProduct.Tools == nil {
-			oldProduct.Tools = map[string]toolSchema{}
-		}
-		for toolID, newTool := range newProduct.Tools {
-			oldTool, exists := oldProduct.Tools[toolID]
-			if !exists {
-				oldProduct.Tools[toolID] = newTool
-				continue
-			}
-			oldRequired := stringSet(oldTool.Required)
-			for _, required := range newTool.Required {
-				if !oldRequired[required] {
-					failures = append(failures, fmt.Sprintf("schema tool %q made parameter %q newly required", productID+"/"+toolID, required))
-				}
-			}
-			if oldTool.Parameters == nil {
-				oldTool.Parameters = map[string]string{}
-			}
-			for parameter, newType := range newTool.Parameters {
-				if oldType, exists := oldTool.Parameters[parameter]; exists && oldType != newType {
-					failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed type", productID+"/"+toolID, parameter))
-					continue
-				}
-				oldTool.Parameters[parameter] = newType
-			}
-			oldProduct.Tools[toolID] = oldTool
-		}
-		merged.Products[productID] = oldProduct
+		failures = append(failures, checkParameterCompatibility(toolPath, parameter, oldParameter, newParameter)...)
 	}
 	sort.Strings(failures)
-	return merged, failures
+	return failures
+}
+
+func checkParameterCompatibility(toolPath, name string, oldParameter, newParameter parameterSchema) []string {
+	var failures []string
+	for _, field := range []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{name: "type", old: oldParameter.Type, new: newParameter.Type},
+		{name: "property", old: oldParameter.Property, new: newParameter.Property},
+		{name: "interface_type", old: oldParameter.InterfaceType, new: newParameter.InterfaceType},
+		{name: "default", old: oldParameter.Default, new: newParameter.Default},
+		{name: "interface_default", old: oldParameter.InterfaceDefault, new: newParameter.InterfaceDefault},
+		{name: "format", old: oldParameter.Format, new: newParameter.Format},
+	} {
+		if field.old != field.new {
+			failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed %s", toolPath, name, field.name))
+		}
+	}
+	if !oldParameter.Required && newParameter.Required {
+		failures = append(failures, fmt.Sprintf("schema tool %q made parameter %q newly required", toolPath, name))
+	}
+	if !oldParameter.CLIRequired && newParameter.CLIRequired {
+		failures = append(failures, fmt.Sprintf("schema tool %q made parameter %q newly cli_required", toolPath, name))
+	}
+	if oldParameter.RequiredWhen != newParameter.RequiredWhen && newParameter.RequiredWhen != "" {
+		failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed required_when", toolPath, name))
+	}
+	if enumNarrowed(oldParameter.Enum, newParameter.Enum) {
+		failures = append(failures, fmt.Sprintf("schema tool %q parameter %q narrowed enum", toolPath, name))
+	}
+	sort.Strings(failures)
+	return failures
+}
+
+func enumNarrowed(oldValues, newValues []string) bool {
+	if len(oldValues) == 0 {
+		return len(newValues) > 0
+	}
+	if len(newValues) == 0 {
+		return false
+	}
+	current := stringSet(newValues)
+	for _, value := range oldValues {
+		if !current[value] {
+			return true
+		}
+	}
+	return false
+}
+
+func mergeContracts(historical, current schemaContract) (schemaContract, []string) {
+	failures := checkCompatibility(historical, current)
+	if len(failures) > 0 {
+		return cloneContract(historical), failures
+	}
+	return cloneContract(current), nil
 }
 
 func cloneContract(source schemaContract) schemaContract {
@@ -314,32 +533,13 @@ func cloneContract(source schemaContract) schemaContract {
 }
 
 func writeContract(w io.Writer, contract schemaContract) error {
-	contract.Version = 1
+	contract.Version = schemaContractVersion
 	if contract.Products == nil {
 		contract.Products = map[string]productSchema{}
 	}
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(contract)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func uniqueSorted(values []string) []string {
-	set := stringSet(values)
-	result := make([]string, 0, len(set))
-	for value := range set {
-		result = append(result, value)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func stringSet(values []string) map[string]bool {
