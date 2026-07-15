@@ -120,6 +120,7 @@ type rotatingWriter struct {
 	mu      sync.Mutex
 	file    *os.File
 	written int64
+	closed  bool
 }
 
 func newRotatingWriter(path string, maxSize int64, maxBackups int) *rotatingWriter {
@@ -133,6 +134,9 @@ func newRotatingWriter(path string, maxSize int64, maxBackups int) *rotatingWrit
 func (w *rotatingWriter) open() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.closed {
+		return os.ErrClosed
+	}
 
 	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, config.FilePerm)
 	if err != nil {
@@ -151,6 +155,9 @@ func (w *rotatingWriter) open() error {
 func (w *rotatingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.closed {
+		return 0, os.ErrClosed
+	}
 
 	// Attempt to recover if file was lost (e.g. rotation failed due to full disk).
 	if w.file == nil {
@@ -175,6 +182,9 @@ func (w *rotatingWriter) Write(p []byte) (int, error) {
 
 // reopenLocked tries to reopen the log file. Caller must hold w.mu.
 func (w *rotatingWriter) reopenLocked() error {
+	if w.closed {
+		return os.ErrClosed
+	}
 	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, config.FilePerm)
 	if err != nil {
 		return err
@@ -197,6 +207,10 @@ func (w *rotatingWriter) close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	if w.closed {
+		return nil
+	}
+	w.closed = true
 	if w.file == nil {
 		return nil
 	}

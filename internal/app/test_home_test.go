@@ -15,6 +15,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -35,10 +36,30 @@ func TestConfigureLogLevelReleasesPreviousFileLogger(t *testing.T) {
 
 	t.Setenv("DWS_CONFIG_DIR", firstConfig)
 	configureLogLevel(&GlobalFlags{})
+	firstLogger := FileLoggerInstance()
 	t.Setenv("DWS_CONFIG_DIR", secondConfig)
 	configureLogLevel(&GlobalFlags{})
 
-	if err := os.RemoveAll(firstConfig); err != nil {
-		t.Fatalf("remove previous logger directory: %v", err)
+	firstLogPath := filepath.Join(firstConfig, "logs", "dws.log")
+	if err := os.Remove(firstLogPath); err != nil {
+		t.Fatalf("remove previous logger file: %v", err)
+	}
+	firstLogger.Info("late write to replaced logger")
+	if _, err := os.Stat(firstLogPath); !os.IsNotExist(err) {
+		t.Fatalf("replaced logger recreated its log file: %v", err)
+	}
+
+	previousSameDirLogger := FileLoggerInstance()
+	configureLogLevel(&GlobalFlags{})
+	currentLogger := FileLoggerInstance()
+	CloseFileLogger()
+	secondLogPath := filepath.Join(secondConfig, "logs", "dws.log")
+	if err := os.Remove(secondLogPath); err != nil {
+		t.Fatalf("remove current logger file: %v", err)
+	}
+	previousSameDirLogger.Info("late write to same-directory replaced logger")
+	currentLogger.Info("late write to closed current logger")
+	if _, err := os.Stat(secondLogPath); !os.IsNotExist(err) {
+		t.Fatalf("closed logger recreated same-directory log file: %v", err)
 	}
 }
