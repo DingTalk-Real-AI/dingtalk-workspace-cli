@@ -1,0 +1,54 @@
+name: Verify Gitee release
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to verify; defaults to the latest stable GitHub release"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          version="$INPUT_VERSION"
+          if [ -z "$version" ]; then
+            version="$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download GitHub release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          mkdir -p dist
+          gh release download "${{ steps.release.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+
+      - name: Verify matching Gitee release
+        run: ./scripts/release/verify-gitee-release.sh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          GITEE_REPO: DingTalk-Real-AI/dingtalk-workspace-cli

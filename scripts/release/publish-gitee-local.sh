@@ -142,3 +142,6 @@ done
 
 [ "$failed" -eq 0 ] || err "Gitee publish finished with ${failed} failed upload(s)"
 echo "✅ Gitee release ${VERSION}: uploaded ${uploaded}, replaced ${replaced}, skipped ${skipped}"
+VERSION="$VERSION" GITEE_REPO="$GITEE_REPO" GITEE_API="$GITEE_API" \
+  GITEE_TOKEN="$GITEE_TOKEN" DIST_DIR="$DIST_DIR" \
+  ./scripts/release/verify-gitee-release.sh

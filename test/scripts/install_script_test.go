@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -187,6 +189,104 @@ func TestInstallScriptsUseGitHubReleaseSkillsAsset(t *testing.T) {
 		}
 		if strings.Contains(text, "archive/refs/heads/main.tar.gz") || strings.Contains(text, "archive/refs/tags/") {
 			t.Fatalf("%s should not download skills from repository archive refs", scriptPath)
+		}
+	}
+}
+
+func TestInstallScriptGiteeLatestUsesNewestCompleteRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell installer test is for unix-like hosts")
+	}
+
+	root := t.TempDir()
+	installDir := filepath.Join(root, "bin")
+	stubRoot := filepath.Join(root, "stubs")
+	releaseDir := filepath.Join(root, "release")
+	archiveName := "dws-linux-amd64.tar.gz"
+	archivePath := filepath.Join(releaseDir, archiveName)
+	writeTarGz(t, archivePath, map[string]string{
+		"dws": "#!/bin/sh\nprintf 'Version: v1.0.49\\n'\n",
+	})
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", archivePath, err)
+	}
+	checksum := fmt.Sprintf("%x  %s\n", sha256.Sum256(archiveData), archiveName)
+	mustWriteFile(t, filepath.Join(releaseDir, "checksums.txt"), []byte(checksum), 0o644)
+
+	scriptData, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatalf("ReadFile(install.sh) error = %v", err)
+	}
+	scriptPath := filepath.Join(root, "standalone", "install.sh")
+	mustWriteFile(t, scriptPath, scriptData, 0o755)
+	writeFakeGiteeCurl(t, filepath.Join(stubRoot, "curl"))
+	mustWriteFile(t, filepath.Join(stubRoot, "uname"), []byte(`#!/bin/sh
+case "${1:-}" in
+  -s) echo Linux ;;
+  -m) echo x86_64 ;;
+  *) echo Linux ;;
+esac
+`), 0o755)
+
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"HOME="+filepath.Join(root, "home"),
+		"PATH="+stubRoot+":"+os.Getenv("PATH"),
+		"DWS_INSTALL_DIR="+installDir,
+		"DWS_GITEE_REPO=example/dws",
+		"DWS_VERSION=latest",
+		"DWS_NO_SKILLS=1",
+		"FAKE_RELEASE_DIR="+releaseDir,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))
+	}
+	got := string(output)
+	if !strings.Contains(got, "Gitee tag v1.0.51 has no complete release assets; using v1.0.49") {
+		t.Fatalf("install output missing incomplete-release fallback:\n%s", got)
+	}
+	installed := filepath.Join(installDir, "dws")
+	versionOutput, err := exec.Command(installed).CombinedOutput()
+	if err != nil {
+		t.Fatalf("installed dws error = %v\noutput:\n%s", err, string(versionOutput))
+	}
+	if !strings.Contains(string(versionOutput), "Version: v1.0.49") {
+		t.Fatalf("installed version output = %q, want v1.0.49", string(versionOutput))
+	}
+}
+
+func TestInstallersRequireCompleteGiteeReleaseAssets(t *testing.T) {
+	t.Parallel()
+
+	checks := []struct {
+		relPath string
+		wants   []string
+	}{
+		{
+			relPath: filepath.Join("..", "..", "scripts", "install.sh"),
+			wants:   []string{"resolve_gitee_latest_version", `resolve_version "$archive_name" checksums.txt dws-skills.zip`, `resolve_version "$skills_archive"`},
+		},
+		{
+			relPath: filepath.Join("..", "..", "scripts", "install-skills.sh"),
+			wants:   []string{"resolve_gitee_latest_version", "resolve_version dws-skills.zip"},
+		},
+		{
+			relPath: filepath.Join("..", "..", "scripts", "install.ps1"),
+			wants:   []string{"Test-GiteeReleaseAssets", `$requiredAssets += "dws-skills.zip"`, `Resolve-LatestVersion @("dws-skills.zip")`},
+		},
+	}
+
+	for _, tc := range checks {
+		data, err := os.ReadFile(tc.relPath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", tc.relPath, err)
+		}
+		for _, want := range tc.wants {
+			if !strings.Contains(string(data), want) {
+				t.Fatalf("%s missing %q", tc.relPath, want)
+			}
 		}
 	}
 }
@@ -819,6 +919,47 @@ esac
 func writeFakeGH(t *testing.T, path, version string) {
 	t.Helper()
 	script := "#!/bin/sh\nprintf '%s\\n' '" + version + "'\n"
+	mustWriteFile(t, path, []byte(script), 0o755)
+}
+
+func writeFakeGiteeCurl(t *testing.T, path string) {
+	t.Helper()
+	const script = `#!/bin/sh
+set -eu
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+case "$url" in
+  */tags)
+    printf '%s' '[{"name":"v1.0.49"},{"name":"v1.0.51"},{"name":"v1.0.50"}]'
+    ;;
+  */releases/tags/v1.0.51)
+    printf '%s' 'null'
+    ;;
+  */releases/tags/v1.0.50)
+    printf '%s' '{"tag_name":"v1.0.50","assets":[{"name":"checksums.txt","browser_download_url":"https://assets.invalid/checksums.txt"}]}'
+    ;;
+  */releases/tags/v1.0.49)
+    printf '%s' '{"tag_name":"v1.0.49","assets":[{"name":"dws-linux-amd64.tar.gz","browser_download_url":"https://assets.invalid/dws-linux-amd64.tar.gz"},{"name":"checksums.txt","browser_download_url":"https://assets.invalid/checksums.txt"}]}'
+    ;;
+  https://assets.invalid/dws-linux-amd64.tar.gz)
+    cp "$FAKE_RELEASE_DIR/dws-linux-amd64.tar.gz" "$out"
+    ;;
+  https://assets.invalid/checksums.txt)
+    cp "$FAKE_RELEASE_DIR/checksums.txt" "$out"
+    ;;
+  *)
+    echo "fake curl: unexpected URL $url" >&2
+    exit 1
+    ;;
+esac
+`
 	mustWriteFile(t, path, []byte(script), 0o755)
 }
 
