@@ -15,6 +15,8 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
@@ -100,12 +102,16 @@ func TestCrossPlatformCoverageRecordingToolCaller(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageRootPublishesShortcutCommands(t *testing.T) {
-	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
 	root := NewRootCommand(context.Background())
 	for _, path := range [][]string{{"shortcut", "list"}, {"calendar", "+today"}} {
 		cmd, remaining, err := root.Find(path)
 		if err != nil || len(remaining) != 0 || cmd == nil {
 			t.Fatalf("root.Find(%v) = cmd=%v remaining=%v err=%v", path, cmd, remaining, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "audit", ".audit.lock")); !os.IsNotExist(err) {
+		t.Fatalf("constructing the root command opened an audit lock: %v", err)
 	}
 }
