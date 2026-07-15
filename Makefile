@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -14,6 +14,7 @@ help:
 	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
 	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
 	@printf "  make coverage-gate BASE_REF=<ref> - Enforce overall non-regression and changed-code coverage\n"
+	@printf "  make coverage-gate-platform BASE_REF=<ref> PROFILE=<file> - Enforce native-platform changed-code coverage\n"
 	@printf "  make update-interface-baseline - Add new CLI contracts without removing history\n"
 	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
 	@printf "  make schema-compatibility BASE_REF=<ref> - Check the complete Schema contract against the PR merge-base\n"
@@ -62,7 +63,10 @@ authoritative-interface-integrity:
 	@./scripts/policy/check-authoritative-interface-baselines.sh --base-ref "$(BASE_REF)"
 
 coverage-gate:
-	@./scripts/policy/check-coverage-gate.sh --base-ref "$(BASE_REF)"
+	@./scripts/policy/check-coverage-gate.sh --base-ref "$(BASE_REF)" --scope-buildable
+
+coverage-gate-platform:
+	@./scripts/policy/run-platform-coverage-gate.sh --base-ref "$(BASE_REF)" --profile "$(PROFILE)"
 
 update-interface-baseline:
 	@./scripts/policy/check-interface-baseline.sh --update

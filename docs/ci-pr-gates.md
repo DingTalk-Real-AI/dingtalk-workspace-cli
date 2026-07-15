@@ -16,8 +16,11 @@ The repository defines five focused checks in addition to its existing CI:
   changed-code statement coverage. During the migration to the 80% repository
   target, overall coverage may not regress from a profile generated from the
   merge-base with the same test command, while changed production Go
-  statements must meet 80%. Overall non-regression allows 0.1 percentage point
-  of measurement variance to avoid failing unchanged code on test-path noise. Set
+  statements must meet 80%. Linux, Windows, and macOS each generate a native
+  coverage profile for changed packages and enforce the threshold against
+  changed files buildable on that platform, so build-tagged source cannot be
+  hidden by an Ubuntu-only profile. Overall non-regression allows 0.1 percentage point of measurement
+  variance to avoid failing unchanged code on test-path noise. Set
   `COVERAGE_ENFORCE_OVERALL=true` once repository coverage reaches 80% to make
   the overall target fail closed as well.
 - **CLI Smoke** builds the release binary and renders offline help for the root
@@ -43,6 +46,8 @@ make schema-compatibility BASE_REF=<merge-base>
 make skill-command-integrity
 make cli-smoke
 make coverage-gate BASE_REF=<merge-base>
+# Run on the corresponding native runner with its generated profile:
+make coverage-gate-platform BASE_REF=<merge-base> PROFILE=<coverage-profile>
 ```
 
 CI derives the authoritative Interface snapshots from both the PR merge-base
@@ -50,7 +55,9 @@ and the latest reachable stable release tag. The complete Schema snapshot comes
 from the PR merge-base, which contains the registry-first Schema introduced on
 `main`. The candidate branch cannot bless a breaking change by editing a
 fixture. Schema additions are allowed; historical products, tools, parameters,
-parameter mappings, constraints, and safety semantics remain protected.
+parameter mappings, positional execution fields, constraints, and safety
+semantics remain protected. Positional descriptions are documentation and may
+change without breaking compatibility.
 
 `make update-interface-baseline` still extends the local checked-in Interface
 fixture used by `make interface-integrity`. Updates are monotonic: they add new
@@ -70,9 +77,9 @@ then mark these aggregate status checks as required:
 - `AI Behavior Check`
 
 `CI Gate` fails closed unless every first-layer CI job succeeds, including
-lint, tests, coverage, policy, Interface/Schema/Skill integrity, and smoke
-tests. Requiring the aggregate check keeps repository rules stable when an
-internal job is renamed or split.
+lint, tests, native Linux/Windows/macOS coverage, policy,
+Interface/Schema/Skill integrity, and smoke tests. Requiring the aggregate
+check keeps repository rules stable when an internal job is renamed or split.
 
 The `ai-generated` label must be applied by the PR-creation automation or by a
 maintainer; GitHub cannot infer reliably whether a human-authored PR contains

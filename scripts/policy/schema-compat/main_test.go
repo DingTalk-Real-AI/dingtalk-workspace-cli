@@ -44,6 +44,13 @@ const completeSchemaJSON = `{
         }
       },
       "constraints":{"require_one_of":[["title","format"]]},
+      "positionals":[{
+        "name":"content",
+        "index":0,
+        "type":"string",
+        "required":false,
+        "description":"original prose"
+      }],
       "effect":"write",
       "risk":"medium",
       "confirmation":"not_required",
@@ -154,11 +161,34 @@ func TestNormalizeCompleteSchemaPayload(t *testing.T) {
 	if tool.PrimaryCLIPath != "doc create" || tool.Constraints == "" || tool.Effect != "write" {
 		t.Fatalf("normalized tool contract is incomplete: %#v", tool)
 	}
+	if len(tool.Positionals) != 1 || tool.Positionals[0].Name != "content" {
+		t.Fatalf("normalized positionals = %#v", tool.Positionals)
+	}
 	if got := tool.Parameters["title"]; got.Type != `"string"` || !got.Required || got.Property != "title" || got.InterfaceType != "string" {
 		t.Fatalf("title parameter = %#v", got)
 	}
 	if got := tool.Parameters["format"]; got.Type != `["string","null"]` || got.Default != `"markdown"` {
 		t.Fatalf("format parameter = %#v", got)
+	}
+}
+
+func TestSchemaCompatibilityIgnoresPositionalDescription(t *testing.T) {
+	directory := t.TempDir()
+	baselinePath := filepath.Join(directory, "baseline.json")
+	currentPath := filepath.Join(directory, "current.json")
+	writeTestFile(t, baselinePath, completeSchemaJSON)
+	writeTestFile(t, currentPath, strings.Replace(completeSchemaJSON, "original prose", "edited prose only", 1))
+
+	baseline, err := normalizeRawFile(baselinePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := normalizeRawFile(currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := checkCompatibility(baseline, current); len(failures) != 0 {
+		t.Fatalf("positional description edit should be compatible: %v", failures)
 	}
 }
 
@@ -250,7 +280,7 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 			mutateTool(contract, func(tool *toolSchema) { tool.Constraints = `{}` })
 		}},
 		{name: "changed positionals", want: "changed positionals", mutate: func(contract *schemaContract) {
-			mutateTool(contract, func(tool *toolSchema) { tool.Positionals = `[{"name":"id"}]` })
+			mutateTool(contract, func(tool *toolSchema) { tool.Positionals[0].Name = "id" })
 		}},
 		{name: "changed interface mapping", want: "changed interface_ref", mutate: func(contract *schemaContract) {
 			mutateTool(contract, func(tool *toolSchema) { tool.InterfaceRef = `{"transport":"mcp"}` })
@@ -324,7 +354,12 @@ func baselineContract() schemaContract {
 						Enum:          []string{"markdown", "text"},
 					},
 				},
-				Constraints:  `{"require_one_of":[["title","format"]]}`,
+				Constraints: `{"require_one_of":[["title","format"]]}`,
+				Positionals: []positionalSchema{{
+					Name:  "content",
+					Index: 0,
+					Type:  "string",
+				}},
 				DryRun:       `{"mode":"native"}`,
 				Effect:       "write",
 				Risk:         "medium",

@@ -9,9 +9,11 @@ DIFF_PROFILE="coverage-policy.txt"
 TARGET="${COVERAGE_TARGET:-80}"
 OVERALL_TOLERANCE="${COVERAGE_OVERALL_TOLERANCE:-0.1}"
 ENFORCE_OVERALL="${COVERAGE_ENFORCE_OVERALL:-false}"
+CHANGED_ONLY="false"
+SCOPE_BUILDABLE="false"
 
 usage() {
-  printf '%s\n' "usage: $0 --base-ref <ref> [--overall-profile <file>] [--baseline-profile <file>] [--diff-profile <file>]" >&2
+  printf '%s\n' "usage: $0 --base-ref <ref> [--changed-only] [--scope-buildable] [--overall-profile <file>] [--baseline-profile <file>] [--diff-profile <file>]" >&2
 }
 
 while [ "$#" -gt 0 ]; do
@@ -36,6 +38,14 @@ while [ "$#" -gt 0 ]; do
       DIFF_PROFILE="$2"
       shift 2
       ;;
+    --changed-only)
+      CHANGED_ONLY="true"
+      shift
+      ;;
+    --scope-buildable)
+      SCOPE_BUILDABLE="true"
+      shift
+      ;;
     *)
       printf 'error: unknown argument: %s\n' "$1" >&2
       usage
@@ -51,20 +61,29 @@ git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null || {
   exit 2
 }
 
-baseline="$(go tool cover -func="$BASELINE_PROFILE" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')"
-[ -n "$baseline" ] || {
-  printf 'error: cannot parse authoritative coverage from %s\n' "$BASELINE_PROFILE" >&2
-  exit 2
-}
-
 module="$(go list -m -f '{{.Path}}')"
-go run ./scripts/policy/coverage-gate \
-  --overall-profile "$OVERALL_PROFILE" \
-  --diff-profile "$OVERALL_PROFILE" \
+set -- go run ./scripts/policy/coverage-gate \
   --diff-profile "$DIFF_PROFILE" \
   --base-ref "$BASE_REF" \
   --module "$module" \
-  --baseline-overall "$baseline" \
   --overall-tolerance "$OVERALL_TOLERANCE" \
   --target "$TARGET" \
   --enforce-overall-target="$ENFORCE_OVERALL"
+
+if [ "$CHANGED_ONLY" = "true" ]; then
+  set -- "$@" --changed-only
+else
+  baseline="$(go tool cover -func="$BASELINE_PROFILE" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')"
+  [ -n "$baseline" ] || {
+    printf 'error: cannot parse authoritative coverage from %s\n' "$BASELINE_PROFILE" >&2
+    exit 2
+  }
+  set -- "$@" \
+    --overall-profile "$OVERALL_PROFILE" \
+    --diff-profile "$OVERALL_PROFILE" \
+    --baseline-overall "$baseline"
+fi
+if [ "$SCOPE_BUILDABLE" = "true" ]; then
+  set -- "$@" --scope-buildable
+fi
+"$@"

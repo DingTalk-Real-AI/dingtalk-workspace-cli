@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-const schemaContractVersion = 2
+const schemaContractVersion = 3
 
 type schemaContract struct {
 	Version  int                      `json:"version"`
@@ -34,12 +34,20 @@ type toolSchema struct {
 	Availability   string                     `json:"availability"`
 	Parameters     map[string]parameterSchema `json:"parameters"`
 	Constraints    string                     `json:"constraints,omitempty"`
-	Positionals    string                     `json:"positionals,omitempty"`
+	Positionals    []positionalSchema         `json:"positionals,omitempty"`
 	DryRun         string                     `json:"dry_run,omitempty"`
 	Effect         string                     `json:"effect"`
 	Risk           string                     `json:"risk"`
 	Confirmation   string                     `json:"confirmation"`
 	Idempotency    string                     `json:"idempotency"`
+}
+
+type positionalSchema struct {
+	Name     string `json:"name"`
+	Index    int    `json:"index"`
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+	Variadic bool   `json:"variadic,omitempty"`
 }
 
 type parameterSchema struct {
@@ -274,7 +282,7 @@ func normalizeTool(raw json.RawMessage) (string, toolSchema, error) {
 	if err != nil {
 		return "", toolSchema{}, fmt.Errorf("constraints: %w", err)
 	}
-	positionals, err := canonicalRawJSON(tool.Positionals)
+	positionals, err := normalizePositionals(tool.Positionals)
 	if err != nil {
 		return "", toolSchema{}, fmt.Errorf("positionals: %w", err)
 	}
@@ -297,6 +305,39 @@ func normalizeTool(raw json.RawMessage) (string, toolSchema, error) {
 		Confirmation:   strings.TrimSpace(tool.Confirmation),
 		Idempotency:    strings.TrimSpace(tool.Idempotency),
 	}, nil
+}
+
+func normalizePositionals(raw json.RawMessage) ([]positionalSchema, error) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, nil
+	}
+	var positionals []positionalSchema
+	if err := json.Unmarshal(raw, &positionals); err != nil {
+		return nil, err
+	}
+	seenIndexes := map[int]bool{}
+	for index := range positionals {
+		positional := &positionals[index]
+		positional.Name = strings.TrimSpace(positional.Name)
+		positional.Type = strings.TrimSpace(positional.Type)
+		if positional.Name == "" {
+			return nil, fmt.Errorf("positional at index %d has no name", positional.Index)
+		}
+		if positional.Index < 0 {
+			return nil, fmt.Errorf("positional %q has negative index", positional.Name)
+		}
+		if positional.Type == "" {
+			return nil, fmt.Errorf("positional %q has no type", positional.Name)
+		}
+		if seenIndexes[positional.Index] {
+			return nil, fmt.Errorf("duplicate positional index %d", positional.Index)
+		}
+		seenIndexes[positional.Index] = true
+	}
+	sort.Slice(positionals, func(i, j int) bool {
+		return positionals[i].Index < positionals[j].Index
+	})
+	return positionals, nil
 }
 
 func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
@@ -441,7 +482,6 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		{name: "interface_ref", old: oldTool.InterfaceRef, new: newTool.InterfaceRef},
 		{name: "availability", old: oldTool.Availability, new: newTool.Availability},
 		{name: "constraints", old: oldTool.Constraints, new: newTool.Constraints},
-		{name: "positionals", old: oldTool.Positionals, new: newTool.Positionals},
 		{name: "effect", old: oldTool.Effect, new: newTool.Effect},
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
@@ -450,6 +490,9 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		if field.old != field.new {
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
+	}
+	if !equalPositionals(oldTool.Positionals, newTool.Positionals) {
+		failures = append(failures, fmt.Sprintf("schema tool %q changed positionals", toolPath))
 	}
 	if oldTool.DryRun != "" && oldTool.DryRun != newTool.DryRun {
 		failures = append(failures, fmt.Sprintf("schema tool %q changed or removed dry_run", toolPath))
@@ -465,6 +508,18 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	}
 	sort.Strings(failures)
 	return failures
+}
+
+func equalPositionals(oldPositionals, newPositionals []positionalSchema) bool {
+	if len(oldPositionals) != len(newPositionals) {
+		return false
+	}
+	for index := range oldPositionals {
+		if oldPositionals[index] != newPositionals[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func checkParameterCompatibility(toolPath, name string, oldParameter, newParameter parameterSchema) []string {

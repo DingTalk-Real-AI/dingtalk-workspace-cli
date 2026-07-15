@@ -8,6 +8,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -55,6 +57,7 @@ type gateInput struct {
 	OverallTolerance float64
 	Target           float64
 	EnforceOverall   bool
+	ChangedOnly      bool
 }
 
 type gateResult struct {
@@ -65,10 +68,15 @@ type gateResult struct {
 }
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, gitChangedLines))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, gitChangedLines, goListBuildableFiles))
 }
 
-func run(args []string, stdout, stderr io.Writer, changedLoader func(string) (map[string][]lineRange, error)) int {
+func run(
+	args []string,
+	stdout, stderr io.Writer,
+	changedLoader func(string) (map[string][]lineRange, error),
+	buildableLoader func() (map[string]bool, error),
+) int {
 	var overallPath string
 	var diffPaths stringList
 	var baseRef string
@@ -77,6 +85,8 @@ func run(args []string, stdout, stderr io.Writer, changedLoader func(string) (ma
 	var overallTolerance float64
 	var target float64
 	var enforceOverall bool
+	var changedOnly bool
+	var scopeBuildable bool
 	flags := flag.NewFlagSet("coverage-gate", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&overallPath, "overall-profile", "", "coverage profile used for overall coverage")
@@ -87,18 +97,24 @@ func run(args []string, stdout, stderr io.Writer, changedLoader func(string) (ma
 	flags.Float64Var(&overallTolerance, "overall-tolerance", 0.1, "allowed overall coverage measurement variance in percentage points")
 	flags.Float64Var(&target, "target", 80, "required changed-code and eventual overall coverage percentage")
 	flags.BoolVar(&enforceOverall, "enforce-overall-target", false, "require overall coverage to reach target")
+	flags.BoolVar(&changedOnly, "changed-only", false, "enforce changed-code coverage without an overall baseline")
+	flags.BoolVar(&scopeBuildable, "scope-buildable", false, "only evaluate changed files buildable on the current platform")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 
-	if overallPath == "" || len(diffPaths) == 0 || baseRef == "" || modulePath == "" || baselineOverall < 0 {
-		fmt.Fprintln(stderr, "coverage-gate requires --overall-profile, --diff-profile, --base-ref, --module, and --baseline-overall")
+	if len(diffPaths) == 0 || baseRef == "" || modulePath == "" || (!changedOnly && (overallPath == "" || baselineOverall < 0)) {
+		fmt.Fprintln(stderr, "coverage-gate requires --diff-profile, --base-ref, and --module; overall mode also requires --overall-profile and --baseline-overall")
 		return 2
 	}
-	overall, err := readProfiles([]string{overallPath}, modulePath)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+	var overall []coverageBlock
+	if !changedOnly {
+		var err error
+		overall, err = readProfiles([]string{overallPath}, modulePath)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
 	}
 	diff, err := readProfiles(diffPaths, modulePath)
 	if err != nil {
@@ -110,6 +126,14 @@ func run(args []string, stdout, stderr io.Writer, changedLoader func(string) (ma
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	if scopeBuildable {
+		buildable, err := buildableLoader()
+		if err != nil {
+			fmt.Fprintf(stderr, "resolve buildable Go files: %v\n", err)
+			return 2
+		}
+		changed = filterChangedFiles(changed, buildable)
+	}
 	result := evaluate(gateInput{
 		Overall:          overall,
 		Diff:             diff,
@@ -118,13 +142,16 @@ func run(args []string, stdout, stderr io.Writer, changedLoader func(string) (ma
 		OverallTolerance: overallTolerance,
 		Target:           target,
 		EnforceOverall:   enforceOverall,
+		ChangedOnly:      changedOnly,
 	})
 
-	mode := "transition: non-regression"
-	if enforceOverall {
-		mode = "required"
+	if !changedOnly {
+		mode := "transition: non-regression"
+		if enforceOverall {
+			mode = "required"
+		}
+		fmt.Fprintf(stdout, "overall coverage: %.1f%% (merge-base %.1f%%; tolerance %.1fpp; target %.1f%%; %s)\n", result.Overall, baselineOverall, overallTolerance, target, mode)
 	}
-	fmt.Fprintf(stdout, "overall coverage: %.1f%% (merge-base %.1f%%; tolerance %.1fpp; target %.1f%%; %s)\n", result.Overall, baselineOverall, overallTolerance, target, mode)
 	if result.ChangedStatements == 0 {
 		fmt.Fprintf(stdout, "changed code coverage: n/a (no changed executable statements; target %.1f%%)\n", target)
 	} else {
@@ -142,14 +169,16 @@ func run(args []string, stdout, stderr io.Writer, changedLoader func(string) (ma
 
 func evaluate(input gateInput) gateResult {
 	result := gateResult{Failures: []string{}}
-	result.Overall = coveragePercent(input.Overall)
-	baselineRounded := roundOne(input.BaselineOverall)
-	overallRounded := roundOne(result.Overall)
-	if overallRounded+input.OverallTolerance+1e-9 < baselineRounded {
-		result.Failures = append(result.Failures, fmt.Sprintf("overall coverage regressed from %.1f%% to %.1f%%", baselineRounded, overallRounded))
-	}
-	if input.EnforceOverall && overallRounded < input.Target {
-		result.Failures = append(result.Failures, fmt.Sprintf("overall coverage %.1f%% is below target %.1f%%", overallRounded, input.Target))
+	if !input.ChangedOnly {
+		result.Overall = coveragePercent(input.Overall)
+		baselineRounded := roundOne(input.BaselineOverall)
+		overallRounded := roundOne(result.Overall)
+		if overallRounded+input.OverallTolerance+1e-9 < baselineRounded {
+			result.Failures = append(result.Failures, fmt.Sprintf("overall coverage regressed from %.1f%% to %.1f%%", baselineRounded, overallRounded))
+		}
+		if input.EnforceOverall && overallRounded < input.Target {
+			result.Failures = append(result.Failures, fmt.Sprintf("overall coverage %.1f%% is below target %.1f%%", overallRounded, input.Target))
+		}
 	}
 
 	profiledFiles := map[string]bool{}
@@ -188,6 +217,16 @@ func evaluate(input gateInput) gateResult {
 		}
 	}
 	return result
+}
+
+func filterChangedFiles(changed map[string][]lineRange, allowed map[string]bool) map[string][]lineRange {
+	filtered := map[string][]lineRange{}
+	for path, ranges := range changed {
+		if allowed[path] {
+			filtered[path] = ranges
+		}
+	}
+	return filtered
 }
 
 func readProfiles(paths []string, modulePath string) ([]coverageBlock, error) {
@@ -247,6 +286,52 @@ func gitChangedLines(baseRef string) (map[string][]lineRange, error) {
 		return nil, fmt.Errorf("run git diff: %w", err)
 	}
 	return parseChangedLines(output)
+}
+
+func goListBuildableFiles() (map[string]bool, error) {
+	rootCommand := exec.Command("git", "rev-parse", "--show-toplevel")
+	rootOutput, err := rootCommand.Output()
+	if err != nil {
+		return nil, fmt.Errorf("resolve repository root: %w", err)
+	}
+	root := strings.TrimSpace(string(rootOutput))
+
+	command := exec.Command("go", "list", "-json", "./...")
+	output, err := command.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return nil, fmt.Errorf("go list failed: %s", strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return nil, fmt.Errorf("run go list: %w", err)
+	}
+
+	buildable := map[string]bool{}
+	decoder := json.NewDecoder(bytes.NewReader(output))
+	for {
+		var packageInfo struct {
+			Dir      string
+			GoFiles  []string
+			CgoFiles []string
+		}
+		if err := decoder.Decode(&packageInfo); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("decode go list output: %w", err)
+		}
+		for _, name := range append(packageInfo.GoFiles, packageInfo.CgoFiles...) {
+			relative, err := filepath.Rel(root, filepath.Join(packageInfo.Dir, name))
+			if err != nil {
+				return nil, fmt.Errorf("normalize buildable file %s: %w", name, err)
+			}
+			relative = filepath.ToSlash(relative)
+			if relative != ".." && !strings.HasPrefix(relative, "../") && isProductionGo(relative) {
+				buildable[relative] = true
+			}
+		}
+	}
+	return buildable, nil
 }
 
 func parseChangedLines(diff []byte) (map[string][]lineRange, error) {

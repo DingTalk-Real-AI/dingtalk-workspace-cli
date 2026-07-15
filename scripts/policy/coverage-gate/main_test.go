@@ -36,7 +36,7 @@ func TestRun(t *testing.T) {
 		return map[string][]lineRange{"internal/a.go": {{Start: 10, End: 12}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run(args, &stdout, &stderr, loader); code != 0 {
+	if code := run(args, &stdout, &stderr, loader, nil); code != 0 {
 		t.Fatalf("run code=%d stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "overall coverage: 100.0%") || !strings.Contains(stdout.String(), "changed code coverage: 100.0%") {
@@ -44,13 +44,61 @@ func TestRun(t *testing.T) {
 	}
 
 	stderr.Reset()
-	if code := run(nil, &stdout, &stderr, loader); code != 2 {
+	if code := run(nil, &stdout, &stderr, loader, nil); code != 2 {
 		t.Fatalf("missing arguments code=%d, want 2", code)
 	}
 	stderr.Reset()
 	badLoader := func(string) (map[string][]lineRange, error) { return nil, errors.New("diff failed") }
-	if code := run(args, &stdout, &stderr, badLoader); code != 2 || !strings.Contains(stderr.String(), "diff failed") {
+	if code := run(args, &stdout, &stderr, badLoader, nil); code != 2 || !strings.Contains(stderr.String(), "diff failed") {
 		t.Fatalf("loader failure code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestRunChangedOnlyWithBuildableScope(t *testing.T) {
+	profile := filepath.Join(t.TempDir(), "coverage.out")
+	body := "mode: atomic\nexample.com/project/internal/a.go:10.1,12.2 5 1\n"
+	if err := os.WriteFile(profile, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{
+		"--changed-only",
+		"--scope-buildable",
+		"--diff-profile", profile,
+		"--base-ref", "base",
+		"--module", "example.com/project",
+		"--target", "80",
+	}
+	loader := func(string) (map[string][]lineRange, error) {
+		return map[string][]lineRange{
+			"internal/a.go":         {{Start: 10, End: 12}},
+			"internal/a_windows.go": {{Start: 1, End: 3}},
+		}, nil
+	}
+	buildableLoader := func() (map[string]bool, error) {
+		return map[string]bool{"internal/a.go": true}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(args, &stdout, &stderr, loader, buildableLoader); code != 0 {
+		t.Fatalf("run code=%d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "overall coverage") || !strings.Contains(stdout.String(), "changed code coverage: 100.0%") {
+		t.Fatalf("unexpected changed-only output %q", stdout.String())
+	}
+
+	missingProfileScope := func() (map[string]bool, error) {
+		return map[string]bool{"internal/a.go": true, "internal/a_windows.go": true}, nil
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(args, &stdout, &stderr, loader, missingProfileScope); code != 1 || !strings.Contains(stderr.String(), "internal/a_windows.go") {
+		t.Fatalf("missing native profile code=%d stderr=%q", code, stderr.String())
+	}
+
+	brokenScope := func() (map[string]bool, error) { return nil, errors.New("go list failed") }
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(args, &stdout, &stderr, loader, brokenScope); code != 2 || !strings.Contains(stderr.String(), "go list failed") {
+		t.Fatalf("scope failure code=%d stderr=%q", code, stderr.String())
 	}
 }
 
@@ -133,6 +181,18 @@ func TestParseChangedLines(t *testing.T) {
 	want := map[string][]lineRange{"internal/a.go": {{Start: 2, End: 4}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("parseChangedLines() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFilterChangedFiles(t *testing.T) {
+	changed := map[string][]lineRange{
+		"internal/a.go":         {{Start: 1, End: 2}},
+		"internal/a_windows.go": {{Start: 3, End: 4}},
+	}
+	got := filterChangedFiles(changed, map[string]bool{"internal/a_windows.go": true})
+	want := map[string][]lineRange{"internal/a_windows.go": {{Start: 3, End: 4}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("filterChangedFiles() = %#v, want %#v", got, want)
 	}
 }
 

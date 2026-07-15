@@ -106,6 +106,92 @@ jobs:
       - name: Test Windows auth migration diagnostics
         run: go test -v -count=1 -timeout=5m ./internal/app -run '^TestAuth(MigrateKeychain|StatusDiagnosticReportsCiphertextKeyMismatch)'
 
+  coverage-darwin:
+    name: Coverage (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve authoritative coverage base
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          base_ref="$PUSH_BEFORE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
+          fi
+          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            base_ref="$(git rev-parse HEAD^)"
+          fi
+          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+
+      - name: Run and enforce macOS changed-code coverage
+        run: make coverage-gate-platform BASE_REF="$COVERAGE_BASE_REF" PROFILE=coverage-darwin.txt
+
+      - name: Upload macOS coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-darwin
+          path: coverage-darwin.txt
+
+  coverage-windows:
+    name: Coverage (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve authoritative coverage base
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          base_ref="$PUSH_BEFORE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
+          fi
+          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            base_ref="$(git rev-parse HEAD^)"
+          fi
+          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+
+      - name: Run and enforce Windows changed-code coverage
+        shell: bash
+        run: ./scripts/policy/run-platform-coverage-gate.sh --base-ref "$COVERAGE_BASE_REF" --profile coverage-windows.txt
+
+      - name: Upload Windows coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-windows
+          path: coverage-windows.txt
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
@@ -148,7 +234,7 @@ jobs:
       - name: Run current and baseline unit tests with coverage
         run: |
           set -eu
-          go test -count=1 -coverprofile=coverage.txt -covermode=atomic ./cmd/... ./internal/...
+          go test -count=1 -coverprofile=coverage.txt -covermode=atomic ./ ./cmd/... ./internal/... ./skills/...
           go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic ./pkg/... ./scripts/policy/...
 
           base_worktree="$(mktemp -d "${RUNNER_TEMP}/dws-coverage-base.XXXXXX")"
@@ -163,7 +249,7 @@ jobs:
             go test -count=1 \
               -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
               -covermode=atomic \
-              ./cmd/... ./internal/...
+              ./ ./cmd/... ./internal/... ./skills/...
           )
           go tool cover -func=coverage.txt
 
@@ -325,6 +411,8 @@ jobs:
       - test-darwin
       - test-windows
       - coverage
+      - coverage-darwin
+      - coverage-windows
       - policy
       - interface-integrity
       - cli-smoke
@@ -342,6 +430,8 @@ jobs:
           TEST_DARWIN_RESULT: ${{ needs.test-darwin.result }}
           TEST_WINDOWS_RESULT: ${{ needs.test-windows.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
+          COVERAGE_DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
+          COVERAGE_WINDOWS_RESULT: ${{ needs.coverage-windows.result }}
           POLICY_RESULT: ${{ needs.policy.result }}
           INTERFACE_INTEGRITY_RESULT: ${{ needs.interface-integrity.result }}
           CLI_SMOKE_RESULT: ${{ needs.cli-smoke.result }}
@@ -355,6 +445,8 @@ jobs:
             "Test (macOS auth/keychain):$TEST_DARWIN_RESULT" \
             "Test (Windows):$TEST_WINDOWS_RESULT" \
             "Coverage:$COVERAGE_RESULT" \
+            "Coverage (macOS):$COVERAGE_DARWIN_RESULT" \
+            "Coverage (Windows):$COVERAGE_WINDOWS_RESULT" \
             "Policy Check:$POLICY_RESULT" \
             "Interface Integrity:$INTERFACE_INTEGRITY_RESULT" \
             "CLI Smoke:$CLI_SMOKE_RESULT" \
