@@ -398,6 +398,40 @@ func TestDevAppGetBuildsDetailParams(t *testing.T) {
 	}
 }
 
+func TestDevAppGetBuildsDetailParamsByAppKey(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppCommand(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"get", "--app-key", "dingxxx"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if got := runner.last.Tool; got != "get_dev_app" {
+		t.Fatalf("Tool = %q, want get_dev_app", got)
+	}
+	want := map[string]any{"appKey": "dingxxx"}
+	if !reflect.DeepEqual(runner.last.Params, want) {
+		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)
+	}
+}
+
+func TestDevAppGetRequiresLocator(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppCommand(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"get"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--unified-app-id 或 --app-key") {
+		t.Fatalf("error = %v, want locator validation", err)
+	}
+}
+
 func TestDevAppCreateUsesCurrentInnerToolAndWriteGuard(t *testing.T) {
 	runner := &captureRunner{}
 	root := newDevAppCommand(runner)
