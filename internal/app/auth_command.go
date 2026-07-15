@@ -631,6 +631,10 @@ func pushRuntimeProfile(selector string) func() {
 }
 
 func newAuthExportCommand() *cobra.Command {
+	return newAuthExportCommandWithSupport(authpkg.PortableExportSupportError)
+}
+
+func newAuthExportCommandWithSupport(supportError func() error) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "导出可迁移认证包",
@@ -655,11 +659,8 @@ func newAuthExportCommand() *cobra.Command {
 			if !asBase64 && output == "" {
 				return apperrors.NewValidation("--output is required unless --base64 is used")
 			}
-			if !authpkg.PortableExportSupported() {
-				return apperrors.NewValidation(fmt.Sprintf(
-					"macOS 导出认证包需要 file-DEK 模式；请先设置 %s=1 并运行 dws auth status 验证，只有提示密钥不匹配且确认可丢弃旧登录态时，才执行 dws auth reset 后重新登录",
-					keychain.DisableKeychainEnv,
-				))
+			if err := supportError(); err != nil {
+				return apperrors.NewValidation(err.Error())
 			}
 			if !authpkg.PortableAuthSourceReady() {
 				return apperrors.NewValidation("尚未登录，请先运行 dws auth login --recommend")

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,19 +26,63 @@ import (
 )
 
 func TestPortableExportSupported(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		if !PortableExportSupported() {
-			t.Fatal("PortableExportSupported() should be true on non-darwin")
+	switch runtime.GOOS {
+	case "windows":
+		if PortableExportSupported() {
+			t.Fatal("PortableExportSupported() should be false for the Windows DPAPI backend")
+		}
+		var bundle bytes.Buffer
+		err := ExportPortableAuthBundle(t.TempDir(), &bundle)
+		if err == nil || !strings.Contains(err.Error(), "DPAPI") {
+			t.Fatalf("ExportPortableAuthBundle() error = %v, want Windows DPAPI unsupported error", err)
+		}
+		if bundle.Len() != 0 {
+			t.Fatalf("ExportPortableAuthBundle() wrote %d bytes on unsupported Windows backend", bundle.Len())
 		}
 		return
+	case "darwin":
+		t.Setenv(keychain.DisableKeychainEnv, "")
+		if PortableExportSupported() {
+			t.Fatal("PortableExportSupported() should be false on darwin without file DEK")
+		}
+		t.Setenv(keychain.DisableKeychainEnv, "1")
+		if !PortableExportSupported() {
+			t.Fatal("PortableExportSupported() should be true when file DEK is enabled")
+		}
+		return
+	default:
+		if !PortableExportSupported() {
+			t.Fatal("PortableExportSupported() should be true for file-DEK platforms")
+		}
 	}
-	t.Setenv(keychain.DisableKeychainEnv, "")
-	if PortableExportSupported() {
-		t.Fatal("PortableExportSupported() should be false on darwin without file DEK")
+}
+
+func TestPortableExportSupportError(t *testing.T) {
+	tests := []struct {
+		name            string
+		goos            string
+		disableKeychain string
+		wantError       string
+	}{
+		{name: "windows dpapi", goos: "windows", disableKeychain: "1", wantError: "DPAPI"},
+		{name: "darwin keychain", goos: "darwin", wantError: keychain.DisableKeychainEnv},
+		{name: "darwin file dek", goos: "darwin", disableKeychain: "1"},
+		{name: "linux file dek", goos: "linux"},
 	}
-	t.Setenv(keychain.DisableKeychainEnv, "1")
-	if !PortableExportSupported() {
-		t.Fatal("PortableExportSupported() should be true when file DEK is enabled")
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := portableExportSupportError(test.goos, test.disableKeychain)
+			if test.wantError == "" {
+				if err != nil {
+					t.Fatalf("portableExportSupportError() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("portableExportSupportError() error = %v, want substring %q", err, test.wantError)
+			}
+		})
 	}
 }
 

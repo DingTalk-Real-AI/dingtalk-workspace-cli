@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -94,6 +95,52 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 	}
 	if !loaded.IsRefreshTokenValid() {
 		t.Fatal("refresh token should remain valid after CLI import")
+	}
+}
+
+func TestAuthExportUnsupportedBackendIsValidationError(t *testing.T) {
+	exportCmd := newAuthExportCommandWithSupport(func() error {
+		return errors.New("portable auth export is unavailable for the test backend")
+	})
+	exportCmd.SetOut(&bytes.Buffer{})
+	exportCmd.SetErr(&bytes.Buffer{})
+	exportCmd.SetArgs([]string{"--base64"})
+
+	err := exportCmd.Execute()
+	if err == nil {
+		t.Fatal("auth export should reject an unsupported credential backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "test backend") {
+		t.Fatalf("error = %v, want backend-specific reason", err)
+	}
+}
+
+func TestAuthExportRejectsWindowsDPAPIBackend(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows DPAPI contract requires a native Windows runner")
+	}
+
+	exportCmd := NewRootCommand()
+	exportCmd.SetOut(&bytes.Buffer{})
+	exportCmd.SetErr(&bytes.Buffer{})
+	exportCmd.SetArgs([]string{"auth", "export", "--base64"})
+
+	err := exportCmd.Execute()
+	if err == nil {
+		t.Fatal("auth export should reject the Windows DPAPI backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	for _, want := range []string{"Windows", "DPAPI", "HKCU"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want substring %q", err, want)
+		}
 	}
 }
 

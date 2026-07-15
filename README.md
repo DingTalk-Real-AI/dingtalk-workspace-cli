@@ -323,6 +323,9 @@ dws auth status   # confirm "Refresh Token: valid"
 ```
 
 The bundle includes the encrypted keychain under `~/.local/share/dws-cli` (with `auth-token.enc` and `dek`) plus required `~/.dws` config files.
+Windows export is intentionally rejected before credentials are read: Windows
+stores them as DPAPI-protected HKCU Registry values, and the current file-DEK
+bundle has no safe DPAPI-to-portable conversion.
 
 </details>
 

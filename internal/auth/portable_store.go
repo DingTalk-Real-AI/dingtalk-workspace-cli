@@ -37,13 +37,30 @@ type PortableImportReport struct {
 	OSMismatch bool
 }
 
-// PortableExportSupported reports whether the current platform can produce a
-// bundle that includes the file-based DEK required for import elsewhere.
+// PortableExportSupported reports whether the current credential backend can
+// produce a bundle that includes the file-based DEK required for import
+// elsewhere.
 func PortableExportSupported() bool {
-	if runtime.GOOS != "darwin" {
-		return true
+	return PortableExportSupportError() == nil
+}
+
+// PortableExportSupportError explains why the current credential backend
+// cannot produce a portable auth bundle. A nil error means export is
+// supported.
+func PortableExportSupportError() error {
+	return portableExportSupportError(runtime.GOOS, os.Getenv(keychain.DisableKeychainEnv))
+}
+
+func portableExportSupportError(goos, disableKeychain string) error {
+	switch goos {
+	case "windows":
+		return fmt.Errorf("portable auth export is not supported on Windows because credentials are stored as DPAPI-protected HKCU Registry values; a portable conversion is not implemented")
+	case "darwin":
+		if disableKeychain == "" {
+			return fmt.Errorf("portable export requires file-DEK mode on macOS; set %s=1 and verify auth first, resetting and re-logging in only if the existing token cannot be decrypted", keychain.DisableKeychainEnv)
+		}
 	}
-	return os.Getenv(keychain.DisableKeychainEnv) != ""
+	return nil
 }
 
 // PortableAuthTargetPopulated reports whether local auth files would be
@@ -96,8 +113,8 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 	if w == nil {
 		return fmt.Errorf("missing output writer")
 	}
-	if !PortableExportSupported() {
-		return fmt.Errorf("portable export requires file-DEK mode on macOS; set %s=1 and verify auth first, resetting and re-logging in only if the existing token cannot be decrypted", keychain.DisableKeychainEnv)
+	if err := PortableExportSupportError(); err != nil {
+		return err
 	}
 	keychainDir := keychain.StorageDir(keychain.Service)
 	if _, err := os.Stat(keychainDir); err != nil {
