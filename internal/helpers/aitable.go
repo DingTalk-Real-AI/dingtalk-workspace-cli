@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -79,6 +80,44 @@ func resolveRecordsFlag(cmd *cobra.Command) (string, error) {
 	}
 
 	return "", fmt.Errorf("missing required flag(s): --records (example: --records '[{\"cells\":{\"fldTextId\":\"文本内容\"}}]')\n  hint: for large payloads or Windows, use --records-file ./path/to/records.json")
+}
+
+// resolveWorkflowDSL reads --dsl from inline JSON, @file, or stdin (-), then
+// decodes the MCP-facing workflow-dsl/v1 object. Detailed DSL validation stays
+// on the workflow service so callers receive its structured issues response.
+func resolveWorkflowDSL(cmd *cobra.Command) (map[string]any, error) {
+	raw := mustGetFlag(cmd, "dsl")
+	switch {
+	case raw == "-":
+		data, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return nil, fmt.Errorf("--dsl stdin read failed: %w", err)
+		}
+		raw = string(data)
+	case strings.HasPrefix(raw, "@"):
+		path := strings.TrimSpace(strings.TrimPrefix(raw, "@"))
+		if path == "" {
+			return nil, fmt.Errorf("--dsl file path must not be empty\n  hint: use --dsl @workflow.json")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("--dsl file read failed: %w\n  hint: ensure the file exists and contains a workflow-dsl/v1 JSON object", err)
+		}
+		raw = string(data)
+	}
+
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("--dsl must not be empty\n  hint: pass inline JSON, @workflow.json, or - for stdin")
+	}
+
+	var dsl map[string]any
+	if err := json.Unmarshal([]byte(raw), &dsl); err != nil {
+		return nil, fmt.Errorf("--dsl JSON parse failed: %w\n  hint: --dsl must be a workflow-dsl/v1 JSON object", err)
+	}
+	if dsl == nil {
+		return nil, fmt.Errorf("--dsl must be a JSON object, got null")
+	}
+	return dsl, nil
 }
 
 // recordQueryFetchAll implements --all auto-pagination for record query.
@@ -3204,8 +3243,79 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	workflowCmd := &cobra.Command{
 		Use:   "workflow",
-		Short: "自动化工作流管理（启停 / 查看 / 列表）",
+		Short: "自动化工作流管理（创建 / 更新 / 启停 / 查看 / 列表）",
 		RunE:  groupRunE,
+	}
+
+	workflowCreateCmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建并发布自动化工作流",
+		Long: `在指定 Base 中创建并发布自动化工作流。
+--dsl 必须是完整的 workflow-dsl/v1 JSON 对象；涉及数据表、字段或视图的节点应使用真实的 sheetId / fieldId / viewId。
+
+--dsl 支持内联 JSON、@文件路径，或 - 从 stdin 读取。创建属于非幂等操作，CLI 不会自动重试。
+返回 data.valid、flowId、flowSchema、stepNodeIds、referenceMap、issues；即使 status=success，
+valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正后再调用。`,
+		Example: `  dws aitable workflow create --base-id BASE_ID --dsl @workflow.json --locale zh-CN
+  cat workflow.json | dws aitable workflow create --base-id BASE_ID --dsl -`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "dsl"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			dsl, err := resolveWorkflowDSL(cmd)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId": baseID,
+				"dsl":    dsl,
+			}
+			if locale, _ := cmd.Flags().GetString("locale"); strings.TrimSpace(locale) != "" {
+				toolArgs["locale"] = locale
+			}
+			// create_workflow is non-idempotent. Bypass the retry wrapper to
+			// prevent an uncertain first response from creating a duplicate.
+			return callMCPToolOnServer("aitable", "create_workflow", toolArgs)
+		},
+	}
+
+	workflowUpdateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "更新并发布已有自动化工作流",
+		Long: `在指定 Base 中更新并发布已有自动化工作流。
+建议先用 workflow get 留底当前详情；--dsl 必须是完整的 workflow-dsl/v1 JSON 对象，而不是局部 patch。
+
+--dsl 支持内联 JSON、@文件路径，或 - 从 stdin 读取。更新会发布传入的目标 DSL；请提供完整、可独立校验的 workflow-dsl/v1 对象。
+返回 data.valid、flowId、flowSchema、stepNodeIds、referenceMap、issues；即使 status=success，
+valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正后再调用。`,
+		Example: `  dws aitable workflow update --base-id BASE_ID --workflow-id WORKFLOW_ID --dsl @workflow.json --locale zh-CN
+  cat workflow.json | dws aitable workflow update --base-id BASE_ID --workflow-id WORKFLOW_ID --dsl -`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "workflow-id", "dsl"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			dsl, err := resolveWorkflowDSL(cmd)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId":     baseID,
+				"workflowId": mustGetFlag(cmd, "workflow-id"),
+				"dsl":        dsl,
+			}
+			if locale, _ := cmd.Flags().GetString("locale"); strings.TrimSpace(locale) != "" {
+				toolArgs["locale"] = locale
+			}
+			return callAitableTool("update_workflow", toolArgs)
+		},
 	}
 
 	workflowEnableCmd := &cobra.Command{
@@ -3213,7 +3323,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "启用指定工作流",
 		Long: `启用指定 Base 中的自动化工作流。启用后工作流将按配置的触发条件自动执行。
 返回 {workflowId, enabled} 用于确认操作结果（enabled 为动作确认而非状态查询）。
-当前不支持通过 CLI 新建工作流，请在 AI 表格 Web 端配置好后用 workflow list 拿到 workflowId 再启停。`,
+可用 workflow create 创建工作流，或用 workflow list 获取已有 workflowId。`,
 		Example: `  dws aitable workflow enable --base-id BASE_ID --workflow-id WORKFLOW_ID
   # 查询 workflowId: dws aitable workflow list --base-id <baseId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -4750,6 +4860,13 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	formCmd.AddCommand(formListCmd, formGetCmd, formCreateCmd, formDeleteCmd, formUpdateCmd, formFieldCmd, formShareCmd, formQuestionsCmd)
 
 	// workflow
+	workflowCreateCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
+	workflowCreateCmd.Flags().String("dsl", "", "workflow-dsl/v1 JSON 对象；支持内联 JSON、@文件路径或 - 从 stdin 读取 (必填)")
+	workflowCreateCmd.Flags().String("locale", "", "请求语言，例如 zh-CN 或 zh_CN (可选)")
+	workflowUpdateCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
+	workflowUpdateCmd.Flags().String("workflow-id", "", "目标工作流 ID (必填)")
+	workflowUpdateCmd.Flags().String("dsl", "", "workflow-dsl/v1 JSON 对象；支持内联 JSON、@文件路径或 - 从 stdin 读取 (必填)")
+	workflowUpdateCmd.Flags().String("locale", "", "请求语言，例如 zh-CN 或 zh_CN (可选)")
 	workflowEnableCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
 	workflowEnableCmd.Flags().String("workflow-id", "", "目标工作流 ID (必填)")
 	workflowDisableCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
@@ -4759,7 +4876,11 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	workflowListCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
 	workflowListCmd.Flags().Int("limit", 0, "分页大小 [1, 100]，不传走服务端默认 20")
 	workflowListCmd.Flags().Int("offset", 0, "分页偏移量，>= 0，不传走服务端默认 0")
-	workflowCmd.AddCommand(workflowEnableCmd, workflowDisableCmd, workflowGetCmd, workflowListCmd)
+	workflowCmd.AddCommand(
+		workflowCreateCmd, workflowUpdateCmd,
+		workflowEnableCmd, workflowDisableCmd,
+		workflowGetCmd, workflowListCmd,
+	)
 
 	// dashboard
 	dashboardGetCmd.Flags().String("base-id", "", "所属 Base ID (必填)")

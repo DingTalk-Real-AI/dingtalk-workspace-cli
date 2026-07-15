@@ -108,6 +108,7 @@ func TestForwarderProviderBaseURLDropsHaiku(t *testing.T) {
 // agent that prints "API Error: 422 ..." to stdout (and exits 0) must NOT have
 // that raw error forwarded as the answer; forward returns an actionable hint.
 func TestForwardReturnsHintOnAPIError(t *testing.T) {
+	requirePOSIXShell(t)
 	stub := t.TempDir()
 	bin := filepath.Join(stub, "fakeagent")
 	// Print a provider 422 to stdout and exit 0, exactly like claude does when
