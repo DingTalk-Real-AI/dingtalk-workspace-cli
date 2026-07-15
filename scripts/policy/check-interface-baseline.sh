@@ -7,12 +7,17 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BASELINE="${INTERFACE_BASELINE:-$ROOT/test/fixtures/cli-interface-baseline.txt}"
-SNAPSHOT_HOME="$(mktemp -d)"
-SNAPSHOT_BIN="$(mktemp)"
-CURRENT="$(mktemp)"
-trap 'rm -rf "$CURRENT" "$SNAPSHOT_HOME" "$SNAPSHOT_BIN"' EXIT
-
 cd "$ROOT"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
+
+TMP_ROOT="$(policy_runtime_mktemp_dir dws-interface-baseline)"
+SNAPSHOT_HOME="$TMP_ROOT/home"
+SNAPSHOT_BIN="$TMP_ROOT/interface-baseline"
+CURRENT="$TMP_ROOT/current.txt"
+mkdir -p "$SNAPSHOT_HOME"
+trap 'rm -rf "$TMP_ROOT"' EXIT HUP INT TERM
+
 # Compile with the caller's normal Go cache, then isolate only the execution
 # HOME so user-installed DWS plugins cannot alter the public command tree.
 go build -o "$SNAPSHOT_BIN" ./scripts/policy/interface-baseline

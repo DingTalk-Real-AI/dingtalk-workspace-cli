@@ -291,9 +291,6 @@ jobs:
       - name: Policy
         run: make policy
 
-      - name: Generated Drift
-        run: ./scripts/policy/check-generated-drift.sh
-
   interface-integrity:
     name: Interface Integrity
     runs-on: ubuntu-latest

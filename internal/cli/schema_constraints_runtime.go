@@ -89,6 +89,7 @@ func init() {
 	registerRequireOneOf("sheet.update_filter_view", "name", "range", "criteria")
 	registerRequireOneOf("sheet.update_float_image", "src", "range", "width", "height", "offset-x", "offset-y")
 	registerRequireOneOf("sheet.update_sheet", "name", "index", "hidden", "frozen-row-count", "frozen-column-count", "tab-color")
+	registerRequireOneOf("sheet.import", "folder-token", "workspace")
 	registerRequireOneOf("wiki.search_wikiSpaces", "query", "type")
 }
 

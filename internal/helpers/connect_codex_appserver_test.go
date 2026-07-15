@@ -19,7 +19,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -27,13 +26,7 @@ import (
 
 func writeShellExecutable(t *testing.T, dir, name, body string) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		path := filepath.Join(dir, name+".exe")
-		if err := os.WriteFile(path, nil, 0o755); err != nil {
-			t.Fatalf("write stub %s: %v", name, err)
-		}
-		return path
-	}
+	requirePOSIXShell(t)
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatalf("write stub %s: %v", name, err)
@@ -41,18 +34,13 @@ func writeShellExecutable(t *testing.T, dir, name, body string) string {
 	return path
 }
 
-func requirePOSIXExecutableFixture(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("test fixture executes a POSIX script; Windows behavior is covered by native unit tests")
-	}
-}
-
 func TestForwarderForChannelCodexPrefersAppServer(t *testing.T) {
 	clearChannelEnv(t)
 	t.Setenv("DWS_CONNECT_NO_INSTALL", "1")
 	stub := t.TempDir()
-	writeShellExecutable(t, stub, "codex", "exit 0\n")
+	if err := writeExecStub(stub, "codex"); err != nil {
+		t.Fatalf("write codex stub: %v", err)
+	}
 	t.Setenv("PATH", stub)
 
 	fwd, err := forwarderForChannel("codex", "", connectAgentOptions{Memory: true})
@@ -113,7 +101,6 @@ func TestCodexConnectPlanIgnoresAgentCmdOverride(t *testing.T) {
 }
 
 func TestCodexAppServerForwarderStreamsAndRemembersThread(t *testing.T) {
-	requirePOSIXExecutableFixture(t)
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "requests.log")
 	codex := writeShellExecutable(t, dir, "codex", `
@@ -177,7 +164,6 @@ while IFS= read -r line; do
 }
 
 func TestCodexAppServerForwarderReturnsAppServerError(t *testing.T) {
-	requirePOSIXExecutableFixture(t)
 	dir := t.TempDir()
 	codex := writeShellExecutable(t, dir, "codex", `
 while IFS= read -r line; do

@@ -1,4 +1,7 @@
 GO ?= go
+DWS_POLICY_TMPDIR ?= $(CURDIR)/.worktrees/policy-tmp
+POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
+POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 
 .PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
 
@@ -10,7 +13,7 @@ help:
 	@printf "  make test          - Run the Go test suite\n"
 	@printf "  make lint          - Run formatting checks and golangci-lint when available\n"
 	@printf "  make fmt           - Format Go source files\n"
-	@printf "  make policy        - Run open-source asset and Schema registry checks\n"
+	@printf "  make policy        - Check the built dws plus open-source and Schema policies\n"
 	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
 	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
 	@printf "  make coverage-gate BASE_REF=<ref> - Enforce overall non-regression and changed-code coverage\n"
@@ -45,13 +48,14 @@ fmt:
 	@find cmd internal test scripts/policy -name '*.go' -print0 2>/dev/null | xargs -0r gofmt -w
 
 policy:
-	@./scripts/policy/check-open-source-assets.sh
-	@./scripts/policy/check-schema-command-registry.sh
-	@./scripts/policy/check-command-surface.sh --strict
-	@./scripts/policy/check-generated-drift.sh
-	@./scripts/policy/check-schema-catalog.sh
-	@./scripts/policy/check-schema-binary.sh
-	@$(MAKE) test-schema-agent-examples
+	@mkdir -p "$(POLICY_GOTMPDIR)"
+	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
+	@$(POLICY_ENV) ./scripts/policy/check-schema-command-registry.sh
+	@$(POLICY_ENV) ./scripts/policy/check-command-surface.sh --strict
+	@$(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
+	@$(POLICY_ENV) ./scripts/policy/check-schema-catalog.sh
+	@$(POLICY_ENV) ./scripts/policy/check-schema-binary.sh
+	@$(POLICY_ENV) $(MAKE) test-schema-agent-examples
 
 edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...

@@ -90,12 +90,14 @@ func TestStageDaemonExecutable(t *testing.T) {
 	if string(got) != "test-binary" {
 		t.Fatalf("content = %q, want test-binary", got)
 	}
-	info, err := os.Stat(dst)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != daemonExecutablePerm {
-		t.Fatalf("mode = %o, want %o", info.Mode().Perm(), daemonExecutablePerm)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(dst)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != daemonExecutablePerm {
+			t.Fatalf("mode = %o, want %o", info.Mode().Perm(), daemonExecutablePerm)
+		}
 	}
 }
 

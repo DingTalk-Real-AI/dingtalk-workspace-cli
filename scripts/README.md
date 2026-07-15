@@ -6,6 +6,7 @@ These repo-local entrypoints are the supported shell entrypoints for building, t
 - `make test`: run `go test ./...`
 - `make lint`: run formatting checks and required `golangci-lint`
 - `make fmt`: format Go source files under `cmd/`, `internal/`, and `test/`
+- `make policy`: reuse the current `dws` binary and run the complete policy suite (`make build` first)
 - `make package`: build all release artifacts locally via `goreleaser --snapshot`
 - `make release`: build and publish a release via `goreleaser`
 
@@ -15,4 +16,5 @@ Script groups:
 - Product convenience installers: `./scripts/install-devapp.sh`, `./scripts/install-devapp.ps1`, `./scripts/install-event.sh`
 - Dev helpers: `./scripts/dev/build.sh`, `./scripts/dev/lint.sh`, `./scripts/dev/ci-local.sh`, `./scripts/dev/run-mock-e2e.sh`, `./scripts/dev/coverage.sh`
 - Policy checks: `./scripts/policy/check-schema-command-registry.sh`, `./scripts/policy/check-generated-drift.sh`, `./scripts/policy/check-command-surface.sh`, `./scripts/policy/check-schema-catalog.sh`, `./scripts/policy/check-schema-binary.sh`, `./scripts/policy/check-open-source-assets.sh`
+- Policy runtime files: set `DWS_POLICY_TMPDIR` to override the default `.worktrees/policy-tmp` workspace
 - Release helpers: `./scripts/release/post-goreleaser.sh`, `./scripts/release/verify-package-managers.sh`, `./scripts/release/publish-homebrew-formula.sh`

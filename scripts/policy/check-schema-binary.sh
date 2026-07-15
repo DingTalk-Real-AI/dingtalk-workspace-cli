@@ -2,16 +2,26 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+BIN="${DWS_BIN:-$ROOT/dws}"
 cd "$ROOT"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
+
+if [ ! -x "$BIN" ]; then
+	printf 'error: dws binary not found at %s (run make build first)\n' "$BIN" >&2
+	exit 2
+fi
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+exec_tmp="$(policy_runtime_mktemp_dir dws-schema-binary)"
+smoke_generator="$exec_tmp/schema-registry-smoke"
+trap 'rm -rf "$tmp" "$exec_tmp"' EXIT HUP INT TERM
 
-go build -o "$tmp/dws" ./cmd
-go run ./internal/generator/cmd_schema_registry_smoke >"$tmp/smoke-vector.json"
+go build -o "$smoke_generator" ./internal/generator/cmd_schema_registry_smoke
+"$smoke_generator" >"$tmp/smoke-vector.json"
 
-"$tmp/dws" schema list --format json >"$tmp/list.json"
-"$tmp/dws" schema --all --format json >"$tmp/all.json"
+"$BIN" schema list --format json >"$tmp/list.json"
+"$BIN" schema --all --format json >"$tmp/all.json"
 
 if ! jq -e '
   .version == 1 and
@@ -111,8 +121,8 @@ while IFS= read -r command; do
 	canonical="$(printf '%s\n' "$command" | jq -r '.canonical_path')"
 	primary="$(printf '%s\n' "$command" | jq -r '.primary_cli_path')"
 
-	"$tmp/dws" schema "$canonical" --format json >"$tmp/canonical.json"
-	"$tmp/dws" schema --cli-path "$primary" --format json >"$tmp/primary.json"
+	"$BIN" schema "$canonical" --format json >"$tmp/canonical.json"
+	"$BIN" schema --cli-path "$primary" --format json >"$tmp/primary.json"
 	jq -S --arg canonical "$canonical" '
       [.products[].tools[] | select(.canonical_path == $canonical)] |
       if length == 1 then .[0] else null end
@@ -132,8 +142,8 @@ alias_command="$(jq -c 'first(.commands[] | select((.alias_cli_paths | length) >
 if [ -n "$alias_command" ]; then
 	canonical="$(printf '%s\n' "$alias_command" | jq -r '.canonical_path')"
 	alias_path="$(printf '%s\n' "$alias_command" | jq -r '.alias_cli_paths[0]')"
-	"$tmp/dws" schema "$canonical" --format json >"$tmp/canonical.json"
-	"$tmp/dws" schema --cli-path "$alias_path" --format json >"$tmp/alias.json"
+	"$BIN" schema "$canonical" --format json >"$tmp/canonical.json"
+	"$BIN" schema --cli-path "$alias_path" --format json >"$tmp/alias.json"
 	jq -S 'del(.cli_path, .is_alias)' "$tmp/canonical.json" >"$tmp/canonical-content.json"
 	jq -S 'del(.cli_path, .is_alias)' "$tmp/alias.json" >"$tmp/alias-content.json"
 	if ! cmp -s "$tmp/canonical-content.json" "$tmp/alias-content.json"; then

@@ -56,13 +56,21 @@ done
 
 [ -n "$BASE_REF" ] || { usage; exit 2; }
 cd "$ROOT"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
+
 git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null || {
   printf 'error: coverage base ref is not available locally: %s\n' "$BASE_REF" >&2
   exit 2
 }
 
+TMP_ROOT="$(policy_runtime_mktemp_dir dws-coverage-gate)"
+CHECKER="$TMP_ROOT/coverage-gate"
+trap 'rm -rf "$TMP_ROOT"' EXIT HUP INT TERM
+go build -o "$CHECKER" ./scripts/policy/coverage-gate
+
 module="$(go list -m -f '{{.Path}}')"
-set -- go run ./scripts/policy/coverage-gate \
+set -- "$CHECKER" \
   --diff-profile "$DIFF_PROFILE" \
   --base-ref "$BASE_REF" \
   --module "$module" \

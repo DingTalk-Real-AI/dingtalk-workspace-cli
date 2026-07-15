@@ -11251,6 +11251,581 @@
         "需要关闭指定工作表的网格线显示时"
       ]
     },
+    "sheet import create": {
+      "agent_summary": "将本地 xlsx/xls 文件导入为新的钉钉在线电子表格。",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "读取或修改已有在线表格时应使用 sheet list/info/range 等命令",
+        "查询已提交导入任务的状态时使用 sheet import get，不要重复创建导入任务"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet import create --file ./report.xlsx --folder-token \u003cFOLDER_TOKEN\u003e --format json",
+        "dws sheet import create --file ./data.xls --workspace \u003cWORKSPACE_ID\u003e --name \"月度报表\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "将本地 xlsx/xls 文件导入为新的钉钉在线电子表格。",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。",
+          "candidates": [
+            {
+              "value": "将本地 xlsx/xls 文件导入为新的钉钉在线电子表格。",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "读取或修改已有在线表格时应使用 sheet list/info/range 等命令",
+            "查询已提交导入任务的状态时使用 sheet import get，不要重复创建导入任务"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。",
+          "candidates": [
+            {
+              "value": [
+                "读取或修改已有在线表格时应使用 sheet list/info/range 等命令",
+                "查询已提交导入任务的状态时使用 sheet import get，不要重复创建导入任务"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet import create --file ./report.xlsx --folder-token \u003cFOLDER_TOKEN\u003e --format json",
+            "dws sheet import create --file ./data.xls --workspace \u003cWORKSPACE_ID\u003e --name \"月度报表\" --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet import create --file ./report.xlsx --folder-token \u003cFOLDER_TOKEN\u003e --format json",
+                "dws sheet import create --file ./data.xls --workspace \u003cWORKSPACE_ID\u003e --name \"月度报表\" --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "该 CLI 导入流程包含本地文件校验、创建导入会话、OSS 上传、确认转换和任务轮询，不能绑定为单一 interface_ref。",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": "该 CLI 导入流程包含本地文件校验、创建导入会话、OSS 上传、确认转换和任务轮询，不能绑定为单一 interface_ref。",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：导入会新建在线电子表格，不修改已有文档；重复执行会创建多个文档，因此标记为 non_idempotent。"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户要把本地 Excel 文件转换为可在线编辑的钉钉表格时"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。",
+          "candidates": [
+            {
+              "value": [
+                "用户要把本地 Excel 文件转换为可在线编辑的钉钉表格时"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "该 CLI 导入流程包含本地文件校验、创建导入会话、OSS 上传、确认转换和任务轮询，不能绑定为单一 interface_ref。",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "cobra-help:dws sheet import create --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)",
+        "skills/mono/references/products/sheet/sheet-import.md"
+      ],
+      "use_when": [
+        "用户要把本地 Excel 文件转换为可在线编辑的钉钉表格时"
+      ]
+    },
+    "sheet import get": {
+      "agent_summary": "根据 taskId 查询表格导入任务结果。",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "发起新的 xlsx/xls 导入应使用 sheet import；不要用本命令代替导入",
+        "状态仍为 processing 时不要重新提交 import，稍后继续查询同一 taskId"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet import get --task-id \u003cTASK_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "根据 taskId 查询表格导入任务结果。",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。",
+          "candidates": [
+            {
+              "value": "根据 taskId 查询表格导入任务结果。",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "发起新的 xlsx/xls 导入应使用 sheet import；不要用本命令代替导入",
+            "状态仍为 processing 时不要重新提交 import，稍后继续查询同一 taskId"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。",
+          "candidates": [
+            {
+              "value": [
+                "发起新的 xlsx/xls 导入应使用 sheet import；不要用本命令代替导入",
+                "状态仍为 processing 时不要重新提交 import，稍后继续查询同一 taskId"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet import get --task-id \u003cTASK_ID\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet import get --task-id \u003cTASK_ID\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "该 CLI 续查命令显式复用 doc server 的 query_import_task；当前 Sheet 静态接口快照没有可直接绑定的单一 interface_ref。",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": "该 CLI 续查命令显式复用 doc server 的 query_import_task；当前 Sheet 静态接口快照没有可直接绑定的单一 interface_ref。",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导入任务，不创建、覆盖或删除文档。"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已有 sheet import 返回的 taskId，需要在导入超时或中断后续查转换状态时"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。",
+          "candidates": [
+            {
+              "value": [
+                "已有 sheet import 返回的 taskId，需要在导入超时或中断后续查转换状态时"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "该 CLI 续查命令显式复用 doc server 的 query_import_task；当前 Sheet 静态接口快照没有可直接绑定的单一 interface_ref。",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws sheet import get --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)",
+        "skills/mono/references/products/sheet/sheet-import.md"
+      ],
+      "use_when": [
+        "已有 sheet import 返回的 taskId，需要在导入超时或中断后续查转换状态时"
+      ]
+    },
     "sheet info": {
       "agent_summary": "获取指定工作表详情（行列数、非空范围、合并区等）。",
       "agent_summary_source": "dws-agent-selection/sheet",

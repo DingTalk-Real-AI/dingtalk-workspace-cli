@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	eventprocess "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/process"
 )
 
 // connectLockDir is a var so tests can isolate lock files.
@@ -63,4 +65,10 @@ func sanitizeLockID(s string) string {
 		}
 		return '_'
 	}, s)
+}
+
+// processAlive reports whether pid refers to a live process using the shared
+// Unix signal-0 / Windows OpenProcess implementation.
+func processAlive(pid int) bool {
+	return eventprocess.Alive(pid)
 }

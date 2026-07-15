@@ -22,14 +22,23 @@ import (
 	"testing"
 )
 
-// writeExecStub drops a platform-recognized executable placeholder into dir so
-// PATH lookups resolve without the real CLI installed.
+// writeExecStub drops an executable shell stub named name into dir so PATH
+// lookups resolve without the real CLI installed.
 func writeExecStub(dir, name string) error {
+	path := filepath.Join(dir, name)
+	body := []byte("#!/bin/sh\n")
 	if runtime.GOOS == "windows" {
-		name += ".exe"
-		return os.WriteFile(filepath.Join(dir, name), nil, 0o755)
+		path += ".exe"
+		body = nil
 	}
-	return os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755)
+	return os.WriteFile(path, body, 0o755)
+}
+
+func requirePOSIXShell(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("test fixture requires a POSIX shell executable")
+	}
 }
 
 // TestConvSessions covers the per-conversation session contract: first message

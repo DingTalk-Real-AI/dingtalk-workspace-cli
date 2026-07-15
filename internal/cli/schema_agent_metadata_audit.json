@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:eb390d1bff847da0bac8b034996a7e85dbe124eebc2b26416659773ce925cd72",
-  "surface_hash": "sha256:2e2c4a5a159f2d681fc2e65c7be18651449d9ebfd8d37e4bd0a9ad3732987cd2",
-  "source_files": 149,
+  "source_hash": "sha256:ebc1888357746b24185ac8b75f7e67129112c068e30b212e0d9936d5fe119068",
+  "surface_hash": "sha256:631b73b174f48cb0cca7c8449e80920739010d0db223dac2855101f4dbd0eda6",
+  "source_files": 150,
   "hint_files": 46,
   "hint_products": 39,
-  "hint_tools": 1282,
+  "hint_tools": 1290,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -29,13 +29,13 @@
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 565,
-    "tools_with_metadata": 565,
-    "tools_with_agent_summary": 565,
-    "tools_with_use_when": 565,
-    "tools_with_avoid_when": 565,
-    "tools_with_examples": 565,
-    "tools_with_interface_mode": 565,
+    "surface_tools": 569,
+    "tools_with_metadata": 569,
+    "tools_with_agent_summary": 569,
+    "tools_with_use_when": 569,
+    "tools_with_avoid_when": 569,
+    "tools_with_examples": 569,
+    "tools_with_interface_mode": 569,
     "unmatched_skill_tools": 124,
     "unreviewed_skill_tools": 7
   },
@@ -3877,7 +3877,7 @@
     {
       "tool_path": "sheet range",
       "source": "skills/mono/references/products/sheet.md",
-      "line": 65,
+      "line": 66,
       "candidates": [
         "sheet range batch-clear",
         "sheet range batch-set-style",
@@ -3891,7 +3891,7 @@
     {
       "tool_path": "sheet filter-view",
       "source": "skills/mono/references/products/sheet.md",
-      "line": 66,
+      "line": 67,
       "candidates": [
         "sheet filter-view create",
         "sheet filter-view delete",

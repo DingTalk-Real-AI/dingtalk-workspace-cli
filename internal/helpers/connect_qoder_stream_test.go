@@ -26,6 +26,7 @@ import (
 
 func writeQoderStreamStub(t *testing.T, dir string) string {
 	t.Helper()
+	requirePOSIXShell(t)
 	logPath := filepath.Join(dir, "qoder-starts.log")
 	script := `#!/usr/bin/env python3
 import json
@@ -75,7 +76,6 @@ else:
 }
 
 func TestQoderForwarderUsesNativeAttachmentFlag(t *testing.T) {
-	requirePOSIXExecutableFixture(t)
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	stubDir := t.TempDir()
 	logPath := writeQoderStreamStub(t, stubDir)
@@ -105,7 +105,6 @@ func TestQoderForwarderUsesNativeAttachmentFlag(t *testing.T) {
 }
 
 func TestQoderForwarderKeepsStreamJSONProcessAlive(t *testing.T) {
-	requirePOSIXExecutableFixture(t)
 	t.Setenv("DWS_CONNECT_NO_INSTALL", "1")
 	t.Setenv("DWS_AGENT_CMD", "")
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())

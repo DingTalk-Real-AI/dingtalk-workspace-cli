@@ -466,6 +466,10 @@
           "cli_path": "aitable view update visible-fields"
         },
         {
+          "canonical_path": "aitable.workflow_create",
+          "cli_path": "aitable workflow create"
+        },
+        {
           "canonical_path": "aitable.workflow_disable",
           "cli_path": "aitable workflow disable"
         },
@@ -480,6 +484,10 @@
         {
           "canonical_path": "aitable.workflow_list",
           "cli_path": "aitable workflow list"
+        },
+        {
+          "canonical_path": "aitable.workflow_update",
+          "cli_path": "aitable workflow update"
         }
       ]
     },
@@ -2109,6 +2117,14 @@
         {
           "canonical_path": "sheet.info",
           "cli_path": "sheet info"
+        },
+        {
+          "canonical_path": "sheet.import",
+          "cli_path": "sheet import create"
+        },
+        {
+          "canonical_path": "sheet.import_get",
+          "cli_path": "sheet import get"
         },
         {
           "canonical_path": "sheet.insert_dimension",

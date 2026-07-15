@@ -223,7 +223,9 @@ func TestResolveAgentYoloMode(t *testing.T) {
 func TestForwarderForChannel(t *testing.T) {
 	clearChannelEnv(t)
 	stub := t.TempDir()
-	writeShellExecutable(t, stub, "codex", "exit 0\n")
+	if err := writeExecStub(stub, "codex"); err != nil {
+		t.Fatalf("write codex stub: %v", err)
+	}
 	t.Setenv("PATH", stub)
 	// DWS_AGENT_CMD covers ordinary stream-bridge channels so the test does not
 	// depend on those binaries being installed. Codex ignores it and stays on

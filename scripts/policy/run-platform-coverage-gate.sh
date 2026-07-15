@@ -39,12 +39,15 @@ done
 
 [ -n "$BASE_REF" ] && [ -n "$PROFILE" ] || { usage; exit 2; }
 cd "$ROOT"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
+
 git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null || {
 	printf 'error: coverage base ref is not available locally: %s\n' "$BASE_REF" >&2
 	exit 2
 }
 
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dws-platform-coverage.XXXXXX")"
+TMP_ROOT="$(policy_runtime_mktemp_dir dws-platform-coverage)"
 PACKAGES="$TMP_ROOT/packages"
 SORTED_PACKAGES="$TMP_ROOT/packages.sorted"
 cleanup() {

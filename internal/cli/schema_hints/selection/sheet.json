@@ -849,6 +849,49 @@
         "dws-schema-live:sheet.get_sheet"
       ]
     },
+    "sheet.import": {
+      "agent_summary": "将本地 xlsx/xls 文件导入为新的钉钉在线电子表格。",
+      "use_when": [
+        "用户要把本地 Excel 文件转换为可在线编辑的钉钉表格时"
+      ],
+      "avoid_when": [
+        "读取或修改已有在线表格时应使用 sheet list/info/range 等命令",
+        "查询已提交导入任务的状态时使用 sheet import get，不要重复创建导入任务"
+      ],
+      "examples": [
+        "dws sheet import create --file ./report.xlsx --folder-token <FOLDER_TOKEN> --format json",
+        "dws sheet import create --file ./data.xls --workspace <WORKSPACE_ID> --name \"月度报表\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：公开 leaf 与兼容入口 sheet import 复用同一导入流程，使 Agent Schema 能发现并调用真正的导入动作。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet import create --help",
+        "skills/mono/references/products/sheet/sheet-import.md",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "sheet.import_get": {
+      "agent_summary": "根据 taskId 查询表格导入任务结果。",
+      "use_when": [
+        "已有 sheet import 返回的 taskId，需要在导入超时或中断后续查转换状态时"
+      ],
+      "avoid_when": [
+        "发起新的 xlsx/xls 导入应使用 sheet import；不要用本命令代替导入",
+        "状态仍为 processing 时不要重新提交 import，稍后继续查询同一 taskId"
+      ],
+      "examples": [
+        "dws sheet import get --task-id <TASK_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：该命令与 Wukong sheet import get 契约一致，复用 doc 导入任务查询工具，仅用于已有任务续查。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet import get --help",
+        "skills/mono/references/products/sheet/sheet-import.md",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
     "sheet.insert_dimension": {
       "agent_summary": "在指定位置之前插入空行或空列。",
       "use_when": [
@@ -1552,12 +1595,14 @@
   },
   "products": {
     "sheet": {
-      "agent_summary": "创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+      "agent_summary": "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
       "use_when": [
-        "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时"
+        "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时",
+        "用户要把本地 xlsx/xls 转换为新的钉钉在线电子表格时"
       ],
       "avoid_when": [
-        "目标是 AI 表格 Base 的结构化记录、钉钉文档正文或本地 Excel 文件时不要使用 sheet"
+        "目标是 AI 表格 Base 的结构化记录或钉钉文档正文时不要使用 sheet",
+        "只读取已上传但未转换的 xlsx/xls 节点时先用 doc download；不要把文件节点直接传给单元格命令"
       ],
       "reviewed": true,
       "review_reason": "人工结合实时 MCP/Skill/Cobra 审阅产品级选择边界。",
