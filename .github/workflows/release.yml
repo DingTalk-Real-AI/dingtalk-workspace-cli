@@ -650,20 +650,24 @@ jobs:
               echo "Cannot reconcile npm $npm_tag=$current with $GITHUB_REF_NAME" >&2
               exit 1
             fi
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "advance_channel=$advance_channel" >> "$GITHUB_OUTPUT"
-            echo "npm_tag=$npm_tag" >> "$GITHUB_OUTPUT"
-            echo "semver=$semver" >> "$GITHUB_OUTPUT"
+            {
+              echo "published=true"
+              echo "advance_channel=$advance_channel"
+              echo "npm_tag=$npm_tag"
+              echo "semver=$semver"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ -n "$current" ] && ! release_version_is_greater "$GITHUB_REF_NAME" "v$current"; then
             echo "$GITHUB_REF_NAME would move npm $npm_tag backwards from v$current" >&2
             exit 1
           fi
-          echo "published=false" >> "$GITHUB_OUTPUT"
-          echo "advance_channel=false" >> "$GITHUB_OUTPUT"
-          echo "npm_tag=$npm_tag" >> "$GITHUB_OUTPUT"
-          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          {
+            echo "published=false"
+            echo "advance_channel=false"
+            echo "npm_tag=$npm_tag"
+            echo "semver=$semver"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Publish missing version to npm channel
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && steps.npm-state.outputs.published != 'true' }}
