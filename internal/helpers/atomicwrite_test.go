@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -27,13 +28,15 @@ func TestAtomicWrite_Basic(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, data)
 	}
 
-	// Check permissions
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat() error = %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0600 {
-		t.Fatalf("permissions = %o, want 0600", perm)
+	// Windows does not expose POSIX permission bits.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat() error = %v", err)
+		}
+		if perm := info.Mode().Perm(); perm != 0600 {
+			t.Fatalf("permissions = %o, want 0600", perm)
+		}
 	}
 }
 
@@ -149,12 +152,14 @@ func TestAtomicWriteJSON_Basic(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, data)
 	}
 
-	// Check permissions are 0600
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat() error = %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0600 {
-		t.Fatalf("permissions = %o, want 0600", perm)
+	// Windows does not expose POSIX permission bits.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat() error = %v", err)
+		}
+		if perm := info.Mode().Perm(); perm != 0600 {
+			t.Fatalf("permissions = %o, want 0600", perm)
+		}
 	}
 }
