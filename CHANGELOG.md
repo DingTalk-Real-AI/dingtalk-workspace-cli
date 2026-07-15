@@ -13,6 +13,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 ### Fixed
 
 - **Sheet and Todo invalid-target failures** — `sheet range read/get` now rejects a null cell-info response instead of printing `null` and exiting successfully, while Todo completion and attachment listing verify that a task exists before calling lenient backend endpoints. Attachment listing is also published through Runtime Schema for schema-first Agent discovery.
+- **Windows connector process detection** — connector locks and health checks now use native Windows process handles instead of the unsupported signal-zero probe, and platform-specific test fixtures no longer break Windows changed-code coverage.
 
 ## [1.0.52] - 2026-07-14
 

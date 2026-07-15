@@ -14,13 +14,11 @@
 package helpers
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // connectLockDir is a var so tests can isolate lock files.
@@ -65,18 +63,4 @@ func sanitizeLockID(s string) string {
 		}
 		return '_'
 	}, s)
-}
-
-// processAlive reports whether pid refers to a live process (unix signal-0
-// probe; a permission error still means "alive").
-func processAlive(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	if err == nil {
-		return true
-	}
-	return errors.Is(err, syscall.EPERM)
 }

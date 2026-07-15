@@ -40,6 +40,7 @@ func TestForwardConnectTurnPreservesAttachmentsForCapableAgent(t *testing.T) {
 }
 
 func TestExecForwarderAllowsOnlyAttachmentDirectory(t *testing.T) {
+	requirePOSIXExecutableFixture(t)
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "args.log")
 	stub := filepath.Join(dir, "agent")

@@ -75,6 +75,7 @@ else:
 }
 
 func TestQoderForwarderUsesNativeAttachmentFlag(t *testing.T) {
+	requirePOSIXExecutableFixture(t)
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	stubDir := t.TempDir()
 	logPath := writeQoderStreamStub(t, stubDir)
@@ -104,6 +105,7 @@ func TestQoderForwarderUsesNativeAttachmentFlag(t *testing.T) {
 }
 
 func TestQoderForwarderKeepsStreamJSONProcessAlive(t *testing.T) {
+	requirePOSIXExecutableFixture(t)
 	t.Setenv("DWS_CONNECT_NO_INSTALL", "1")
 	t.Setenv("DWS_AGENT_CMD", "")
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())

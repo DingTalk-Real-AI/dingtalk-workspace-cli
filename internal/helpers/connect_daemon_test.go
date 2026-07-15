@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +94,7 @@ func TestStageDaemonExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != daemonExecutablePerm {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != daemonExecutablePerm {
 		t.Fatalf("mode = %o, want %o", info.Mode().Perm(), daemonExecutablePerm)
 	}
 }

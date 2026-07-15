@@ -17,13 +17,18 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
-// writeExecStub drops an executable shell stub named name into dir so PATH
-// lookups resolve without the real CLI installed.
+// writeExecStub drops a platform-recognized executable placeholder into dir so
+// PATH lookups resolve without the real CLI installed.
 func writeExecStub(dir, name string) error {
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+		return os.WriteFile(filepath.Join(dir, name), nil, 0o755)
+	}
 	return os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755)
 }
 
