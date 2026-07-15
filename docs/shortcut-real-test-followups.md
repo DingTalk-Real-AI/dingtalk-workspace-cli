@@ -1,14 +1,14 @@
-# 本期隐藏、下期修复的 shortcut 清单
+# Shortcut 真实测试跟进清单
 
-生成时间：`2026-07-15T16:44:43`
+生成时间：`2026-07-15T16:58:39`
 
 来源：`docs/shortcut-real-read-results.json` 与 `docs/shortcut-real-write-results.json`。
 
-口径：最新真实后端测试结果不是 `real-ok` 的 shortcut，本期不对外 release；代码保留，并通过 `internal/shortcut/release_hidden_generated.go` 标记为 Hidden，后续补 fixture / 修后端 / 修 CLI 后再放开。
+口径：记录真实后端测试中需要继续定位的 case，用于 CR 和问题分派；Agent 使用入口以公开 shortcut catalog 和产品 skill 为准。
 
 总计：156 条。
 
-| # | suite | shortcut | risk | status | category | fixability | 下期处理依据 |
+| # | suite | shortcut | risk | status | category | fixability | 处理依据 |
 |---:|---|---|---|---|---|---|---|
 | 1 | read | `aitable +base-get-primary-doc-id` | read | real-error | backend-or-mcp-error | not-cli-fixable-first | 后端/MCP 服务返回内部错误；CLI 无法直接修复，但报告保留 trace/stdout 供服务端排查。 |
 | 2 | read | `aitable +chart-share-get` | read | real-error | auth-or-permission | not-cli-fixable | 真实账号、应用 scope 或资源权限不足；CLI 只能如实暴露，不能在本仓库内修复权限。 |

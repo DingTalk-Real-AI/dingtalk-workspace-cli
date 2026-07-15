@@ -48,24 +48,20 @@ func newListCommand() *cobra.Command {
 		Short: "列出内建 shortcut",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			svc, _ := cmd.Flags().GetString("service")
-			includeHidden, _ := cmd.Flags().GetBool("include-hidden")
 			type row struct {
-				Service      string `json:"service"`
-				Command      string `json:"command"`
-				Product      string `json:"product"`
-				Risk         string `json:"risk"`
-				Description  string `json:"description"`
-				Intent       string `json:"intent,omitempty"`
-				Hidden       bool   `json:"hidden,omitempty"`
-				HiddenReason string `json:"hiddenReason,omitempty"`
+				Service     string `json:"service"`
+				Command     string `json:"command"`
+				Product     string `json:"product"`
+				Risk        string `json:"risk"`
+				Description string `json:"description"`
+				Intent      string `json:"intent,omitempty"`
 			}
 			var rows []row
 			for _, s := range shortcut.All() {
 				if svc != "" && s.Service != svc {
 					continue
 				}
-				hiddenReason, hiddenByRelease := shortcut.ReleaseHiddenReason(s.Service, s.Command)
-				if s.Hidden && !includeHidden {
+				if s.Hidden {
 					continue
 				}
 				product := s.Product
@@ -83,10 +79,6 @@ func newListCommand() *cobra.Command {
 					Risk:        risk,
 					Description: s.Description,
 					Intent:      s.Intent,
-					Hidden:      s.Hidden,
-				}
-				if hiddenByRelease {
-					item.HiddenReason = hiddenReason
 				}
 				rows = append(rows, item)
 			}
@@ -97,7 +89,6 @@ func newListCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("service", "", "只列出指定服务的 shortcut")
-	cmd.Flags().Bool("include-hidden", false, "包含本期隐藏、仅内部复测用的 shortcut")
 	return cmd
 }
 

@@ -29,7 +29,7 @@ var allShortcuts []Shortcut
 // service package's init().
 func Register(shortcuts ...Shortcut) {
 	for i := range shortcuts {
-		shortcuts[i] = applyReleaseGate(shortcuts[i])
+		shortcuts[i] = applyPublicCatalog(shortcuts[i])
 	}
 	allShortcuts = append(allShortcuts, shortcuts...)
 }

@@ -18,15 +18,15 @@ metadata:
 
 <!-- SAFETY_PREAMBLE_INJECT -->
 
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。本期真实测试未通过的 shortcut 会从 `--help` 和 `dws shortcut list` 默认视图隐藏；Agent 不应主动推荐隐藏命令，内部排查 / 下期修复才使用 `dws shortcut list --include-hidden`。
+> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 
 > 命令参考：[oa.md](references/oa.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
-## Shortcuts（本期可见，优先使用）
+## Shortcuts（优先使用）
 
-以下 shortcut 已通过本期真实测试并在默认 `dws oa --help` / `dws shortcut list --service oa` 中可见。用户意图命中时优先使用 shortcut；具体 flags 以 `dws oa <shortcut> --help` 为准。未列出的同产品 shortcut 属于本期隐藏项，不在业务执行时主动推荐。
+以下 shortcut 来自当前公开 catalog，并可通过 `dws oa --help` / `dws shortcut list --service oa` 发现。用户意图命中时优先使用 shortcut；具体 flags 以 `dws oa <shortcut> --help` 为准。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

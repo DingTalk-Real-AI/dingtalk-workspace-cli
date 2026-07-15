@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Generate visible shortcut sections for DWS skills.
+"""Generate shortcut sections for DWS skills.
 
 The skill should teach agents which high-level shortcut entries are available
-for the current release, while `dws <service> --help` remains the source of
-truth for flags.  Hidden shortcuts are intentionally omitted from product skill
-tables and remain documented in docs/shortcut-next-release-hidden.md for CR /
-next-release repair.
+in the public catalog, while `dws <service> --help` remains the source of truth
+for flags.
 """
 
 from __future__ import annotations
@@ -22,7 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import gen_shortcut_comparison as shortcut_source  # noqa: E402
 
-HIDDEN_PATH = ROOT / "docs" / "shortcut-next-release-hidden.json"
+CATALOG_PATH = ROOT / "docs" / "shortcut-public-catalog.json"
 MONO_SKILL = ROOT / "skills" / "mono" / "SKILL.md"
 
 SERVICE_TO_SKILL = {
@@ -55,10 +53,10 @@ def md_escape(value: Any) -> str:
     return text.replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ")
 
 
-def load_hidden() -> set[tuple[str, str]]:
-    if not HIDDEN_PATH.exists():
+def load_public_catalog() -> set[tuple[str, str]]:
+    if not CATALOG_PATH.exists():
         return set()
-    data = json.loads(HIDDEN_PATH.read_text(encoding="utf-8"))
+    data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     return {
         (str(row["service"]), str(row["command"]))
         for row in data.get("results", [])
@@ -66,11 +64,11 @@ def load_hidden() -> set[tuple[str, str]]:
 
 
 def collect_visible() -> list[dict[str, Any]]:
-    hidden = load_hidden()
+    public_catalog = load_public_catalog()
     items = [
         item
         for item in shortcut_source.collect()
-        if (item["service"], item["command"]) not in hidden
+        if (item["service"], item["command"]) in public_catalog
     ]
     return sorted(items, key=lambda item: (item["service"], item["command"]))
 
@@ -94,11 +92,11 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
         rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws {md_escape(service)} --help` / `dws shortcut list --service {md_escape(service)} --format json` |")
     body = "\n".join(rows)
     return f"""{MONO_START}
-## 本期可见 Shortcut 总览
+## Shortcut 总览
 
-下面只统计本期真实测试通过、默认 `--help` / `dws shortcut list` 可见的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws <service> --help` 查看 flags。multi 模式的各产品 skill 会展开该产品的可见 shortcut 表。
+下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws <service> --help` 查看 flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
 
-| 服务 | 可见 shortcut 数 | multi skill | 发现命令 |
+| 服务 | shortcut 数 | multi skill | 发现命令 |
 |---|---:|---|---|
 {body}
 {MONO_END}"""
@@ -112,9 +110,9 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
             f"{md_escape(item['risk'])} | {md_escape(item['desc'])} |"
         )
     return f"""{PRODUCT_START}
-## Shortcuts（本期可见，优先使用）
+## Shortcuts（优先使用）
 
-以下 shortcut 已通过本期真实测试并在默认 `dws {service} --help` / `dws shortcut list --service {service}` 中可见。用户意图命中时优先使用 shortcut；具体 flags 以 `dws {service} <shortcut> --help` 为准。未列出的同产品 shortcut 属于本期隐藏项，不在业务执行时主动推荐。
+以下 shortcut 来自当前公开 catalog，并可通过 `dws {service} --help` / `dws shortcut list --service {service}` 发现。用户意图命中时优先使用 shortcut；具体 flags 以 `dws {service} <shortcut> --help` 为准。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

@@ -9,7 +9,7 @@ cli_version: ">=1.0.15"
 通过 `dws` 命令管理钉钉产品能力。
 
 
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。本期真实测试未通过的 shortcut 会从 `--help` 和 `dws shortcut list` 默认视图隐藏；Agent 不应主动推荐隐藏命令，内部排查 / 下期修复才使用 `dws shortcut list --include-hidden`。
+> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 ## 严格禁止 (NEVER DO)
 - 不要使用 dws 命令以外的方式操作（禁止 curl、HTTP API、浏览器）
@@ -30,17 +30,16 @@ cli_version: ">=1.0.15"
 
 - 用户意图可由可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`。
 - 调用前用 `dws <service> --help` 或 `dws shortcut list --service <service> --format json` 确认可见命令；不要凭文档或记忆猜测 shortcut。
-- 如果 shortcut 没出现在默认 help / list 中，视为本期未对外 release：不要主动推荐或调用隐藏 shortcut，改用已验证的原子命令、脚本、参考流程，或说明该能力本期未开放。
-- 只有在内部 CR、真实测试复盘、下期修复时，才使用 `dws shortcut list --include-hidden --format json` 查看隐藏项及 `hiddenReason`。
-- shortcut 失败时按“错误处理”流程先加 `--verbose` 复查；若仍失败，不要自行换成隐藏 shortcut 兜底，应记录具体输入、输出、trace / endpoint / tool 信息。
+- 如果 shortcut 不在 help / list 中，改用产品参考里的原子命令、脚本或标准流程；不要猜测未展示的 `+` 命令。
+- shortcut 失败时按“错误处理”流程先加 `--verbose` 复查；若仍失败，应记录具体输入、输出、trace / endpoint / tool 信息。
 
 
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->
-## 本期可见 Shortcut 总览
+## Shortcut 总览
 
-下面只统计本期真实测试通过、默认 `--help` / `dws shortcut list` 可见的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws <service> --help` 查看 flags。multi 模式的各产品 skill 会展开该产品的可见 shortcut 表。
+下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws <service> --help` 查看 flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
 
-| 服务 | 可见 shortcut 数 | multi skill | 发现命令 |
+| 服务 | shortcut 数 | multi skill | 发现命令 |
 |---|---:|---|---|
 | `aitable` | 29 | `dingtalk-aitable` | `dws aitable --help` / `dws shortcut list --service aitable --format json` |
 | `attendance` | 19 | `dingtalk-attendance` | `dws attendance --help` / `dws shortcut list --service attendance --format json` |

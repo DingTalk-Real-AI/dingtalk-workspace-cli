@@ -27,9 +27,9 @@ metadata:
 10. `robot result` 若缺 `unifiedAppId` 或返回 `completionState=BLOCKED_BY_MISSING_UNIFIED_APP_ID`，必须停下要求明确的 `unifiedAppId`；禁止用 `clientId/appKey` 自动反查后继续执行版本写操作
 
 <!-- VISIBLE_SHORTCUTS_START -->
-## Shortcuts（本期可见，优先使用）
+## Shortcuts（优先使用）
 
-以下 shortcut 已通过本期真实测试并在默认 `dws devapp --help` / `dws shortcut list --service devapp` 中可见。用户意图命中时优先使用 shortcut；具体 flags 以 `dws devapp <shortcut> --help` 为准。未列出的同产品 shortcut 属于本期隐藏项，不在业务执行时主动推荐。
+以下 shortcut 来自当前公开 catalog，并可通过 `dws devapp --help` / `dws shortcut list --service devapp` 发现。用户意图命中时优先使用 shortcut；具体 flags 以 `dws devapp <shortcut> --help` 为准。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
