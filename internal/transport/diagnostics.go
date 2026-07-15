@@ -45,11 +45,41 @@ func ExtractServerDiagnosticsFromMap(content map[string]any) apperrors.ServerDia
 		TraceID:         stringFromMap(content, "trace_id", "traceId"),
 		ServerErrorCode: serverErrorCodeFromMap(content, 0),
 		TechnicalDetail: stringFromMap(content, "technical_detail"),
+		FriendlyHint:    stringFromMapRecursive(content, 0, "friendly_hint", "friendlyHint"),
+		ActionURL:       stringFromMapRecursive(content, 0, "action_url", "actionUrl"),
 	}
 	if v, ok := content["retryable"].(bool); ok {
 		diag.ServerRetryable = &v
 	}
 	return diag
+}
+
+func stringFromMapRecursive(content map[string]any, depth int, keys ...string) string {
+	if content == nil || depth > 8 {
+		return ""
+	}
+	if value := stringFromMap(content, keys...); value != "" {
+		return value
+	}
+	for _, key := range []string{"content", "result", "data"} {
+		switch child := content[key].(type) {
+		case map[string]any:
+			if value := stringFromMapRecursive(child, depth+1, keys...); value != "" {
+				return value
+			}
+		case []any:
+			for _, item := range child {
+				childMap, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if value := stringFromMapRecursive(childMap, depth+1, keys...); value != "" {
+					return value
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // ExtractTraceIDFromHeaders reads a trace ID from standard HTTP response

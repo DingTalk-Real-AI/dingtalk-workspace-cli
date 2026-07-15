@@ -378,9 +378,9 @@
       ]
     },
     "chat.list_conversation_message_v2": {
-      "agent_summary": "分页读取指定群聊或单聊的消息",
+      "agent_summary": "分页读取指定会话消息及其引用上下文",
       "use_when": [
-        "用户明确指定某个会话并要查看其消息记录时"
+        "用户明确指定某个会话，并要读取消息或追溯引用回复中的原消息上下文时"
       ],
       "avoid_when": [
         "跨全部会话按时间查询时使用 chat message list-all"
@@ -389,7 +389,7 @@
         "dws chat message list --group <openConversationId> --time \"2026-07-01 00:00:00\" --limit 50"
       ],
       "reviewed": true,
-      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "review_reason": "复核 dws-wukong 2026-07-14 读取能力同步：指定会话查询应保留 quotedMessage，并覆盖被引用的合并转发与图片内容；不改写执行、安全或接口事实。",
       "source_refs": [
         "internal/cli/schema_command_registry.json#chat.list_conversation_message_v2",
         "cobra-help:dws chat message list",
@@ -1073,7 +1073,7 @@
       ]
     },
     "chat.search_messages_by_time_range": {
-      "agent_summary": "按时间范围查询当前用户的跨会话消息",
+      "agent_summary": "按时间范围搜索跨会话消息并保留权益指引",
       "use_when": [
         "需要汇总一段时间内所有可见会话消息时"
       ],
@@ -1084,7 +1084,7 @@
         "dws chat message list-all --start \"2026-07-01 00:00:00\" --end \"2026-07-02 00:00:00\" --limit 50"
       ],
       "reviewed": true,
-      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "review_reason": "复核 dws-wukong 2026-07-14 搜索能力同步：跨会话消息搜索遇到权益限制时应向用户展示服务端指引，而不是解释为空结果；不改写执行、安全或接口事实。",
       "source_refs": [
         "internal/cli/schema_command_registry.json#chat.search_messages_by_time_range",
         "cobra-help:dws chat message list-all",

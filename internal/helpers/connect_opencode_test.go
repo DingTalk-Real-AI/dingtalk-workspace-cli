@@ -19,11 +19,52 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestOpencodeForwarderSendsNativeFileParts(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "evidence.png")
+	if err := os.WriteFile(path, []byte("png-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var gotParts []map[string]any
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/global/health":
+			_, _ = w.Write([]byte(`{"healthy":true}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session":
+			_, _ = w.Write([]byte(`{"id":"ses_media"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session/ses_media/message":
+			var body struct {
+				Parts []map[string]any `json:"parts"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			gotParts = body.Parts
+			_, _ = w.Write([]byte(`{"parts":[{"type":"text","text":"ok"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+	f := &opencodeForwarder{
+		bin: "opencode", timeout: 5 * time.Second, workDir: dir,
+		sessions: newOpencodeSessions(""),
+		server:   &opencodeServer{baseURL: ts.URL, httpClient: ts.Client()},
+	}
+	_, err := f.forwardWithAttachments(context.Background(), "conv", "看图", []connectMediaAttachment{{LocalPath: path, FileName: "evidence.png", MediaType: "image"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotParts) != 2 || gotParts[1]["type"] != "file" || gotParts[1]["filename"] != "evidence.png" || !strings.HasPrefix(fmt.Sprint(gotParts[1]["url"]), "file://") {
+		t.Fatalf("parts = %#v", gotParts)
+	}
+}
 
 func TestOpencodeForwarderUsesServerSessionAPI(t *testing.T) {
 	dir := t.TempDir()

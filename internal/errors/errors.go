@@ -294,15 +294,16 @@ func PrintJSON(w io.Writer, err error) error {
 			}
 			if typed.ServerDiag.ServerErrorCode != "" {
 				errorPayload["server_error_code"] = typed.ServerDiag.ServerErrorCode
-				// Add user-friendly hint for specific server error codes
-				switch typed.ServerDiag.ServerErrorCode {
-				case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
-					errorPayload["friendly_hint"] = "该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。"
-					errorPayload["action_url"] = config.GetDeveloperSettingsURL()
-				}
 			}
 			if typed.ServerDiag.TechnicalDetail != "" {
 				errorPayload["technical_detail"] = typed.ServerDiag.TechnicalDetail
+			}
+			friendlyHint, actionURL := serverGuidance(typed.ServerDiag)
+			if friendlyHint != "" {
+				errorPayload["friendly_hint"] = friendlyHint
+			}
+			if actionURL != "" {
+				errorPayload["action_url"] = actionURL
 			}
 		}
 		if typed.Cause != nil {
@@ -360,11 +361,13 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 		lines = append(lines, tui.Cyan(fmt.Sprintf("Hint: %s", typed.Hint)))
 	}
 
-	// Add user-friendly hint for specific server error codes
-	switch typed.ServerDiag.ServerErrorCode {
-	case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
-		lines = append(lines, tui.Cyan("Hint: 该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。"))
-		lines = append(lines, tui.White("Action: 开启地址: "+config.GetDeveloperSettingsURL()))
+	if friendlyHint, actionURL := serverGuidance(typed.ServerDiag); friendlyHint != "" || actionURL != "" {
+		if friendlyHint != "" {
+			lines = append(lines, tui.Cyan("Hint: "+friendlyHint))
+		}
+		if actionURL != "" {
+			lines = append(lines, tui.White("Action: 开启地址: "+actionURL))
+		}
 	}
 
 	if len(typed.Actions) > 0 {
@@ -424,6 +427,23 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 
 	_, writeErr := fmt.Fprintln(w, strings.Join(lines, "\n"))
 	return writeErr
+}
+
+func serverGuidance(diag ServerDiagnostics) (string, string) {
+	friendlyHint := strings.TrimSpace(diag.FriendlyHint)
+	actionURL := strings.TrimSpace(diag.ActionURL)
+	if friendlyHint == "" || actionURL == "" {
+		switch diag.ServerErrorCode {
+		case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
+			if friendlyHint == "" {
+				friendlyHint = "该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。"
+			}
+			if actionURL == "" {
+				actionURL = config.GetDeveloperSettingsURL()
+			}
+		}
+	}
+	return friendlyHint, actionURL
 }
 
 func category(err error) string {

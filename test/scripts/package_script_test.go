@@ -114,7 +114,7 @@ func postGoreleaserEnv(t *testing.T, distDir, releaseBaseURL string) []string {
 
 	return append(os.Environ(),
 		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"DWS_PACKAGE_VERSION=v0.0.0-test",
+		"DWS_PACKAGE_VERSION=v0.0.0",
 		"DWS_PACKAGE_DIST_DIR="+distDir,
 		"DWS_RELEASE_BASE_URL="+releaseBaseURL,
 	)
@@ -138,8 +138,25 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 		archiveName = "dws-" + hostOS + "-" + hostArch + ".zip"
 	}
 
-	// Seed dist/ with fake goreleaser archives (simulate goreleaser output)
-	seedDistArtifacts(t, distDir, []string{archiveName})
+	// Seed every archive referenced by the public multi-platform Homebrew formula.
+	// The local verification formula still selects the current host archive.
+	targets := []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"dws-linux-amd64.tar.gz",
+		"dws-linux-arm64.tar.gz",
+	}
+	foundHost := false
+	for _, target := range targets {
+		if target == archiveName {
+			foundHost = true
+			break
+		}
+	}
+	if !foundHost {
+		targets = append(targets, archiveName)
+	}
+	seedDistArtifacts(t, distDir, targets)
 
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v1.2.3")
@@ -170,7 +187,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	for _, want := range []string{
 		"class DingtalkWorkspaceCliLocal < Formula",
 		"resource \"skills\" do",
-		"DingTalk Workspace CLI",
+		"Install locally built DingTalk workspace CLI artifacts for verification",
 	} {
 		if !strings.Contains(formulaText, want) {
 			t.Fatalf("formula missing %q:\n%s", want, formulaText)
@@ -185,7 +202,14 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	releaseFormulaText := string(releaseFormulaData)
 	for _, want := range []string{
 		"class DingtalkWorkspaceCli < Formula",
-		"https://downloads.example.com/dws/releases/v1.2.3/" + archiveName,
+		`desc "Automate DingTalk workspace tasks from the terminal"`,
+		`version "0.0.0"`,
+		"on_macos do",
+		"on_linux do",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-darwin-amd64.tar.gz",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-darwin-arm64.tar.gz",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-linux-amd64.tar.gz",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-linux-arm64.tar.gz",
 		"https://downloads.example.com/dws/releases/v1.2.3/dws-skills.zip",
 	} {
 		if !strings.Contains(releaseFormulaText, want) {
@@ -221,9 +245,17 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 		}
 	}
 
-	for _, target := range expectedPackagedSkillTargets {
-		if !strings.Contains(releaseFormulaText, target) {
-			t.Fatalf("release formula missing %q:\n%s", target, releaseFormulaText)
+	for _, want := range []string{"Agent Skills are bundled", "dws skill setup"} {
+		if !strings.Contains(releaseFormulaText, want) {
+			t.Fatalf("release formula missing caveat %q:\n%s", want, releaseFormulaText)
+		}
+	}
+	if strings.Contains(releaseFormulaText, "Dir.home") {
+		t.Fatalf("release formula must not mutate the user's home directory:\n%s", releaseFormulaText)
+	}
+	for _, forbidden := range []string{`require "fileutils"`, "FileUtils.", "__DESCRIPTION__"} {
+		if strings.Contains(releaseFormulaText, forbidden) {
+			t.Fatalf("release formula contains forbidden text %q:\n%s", forbidden, releaseFormulaText)
 		}
 	}
 
@@ -234,6 +266,148 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	}
 	if !strings.Contains(string(checksumsData), "dws-skills.zip") {
 		t.Fatalf("checksums.txt missing dws-skills.zip entry:\n%s", string(checksumsData))
+	}
+}
+
+func TestCheckedInHomebrewFormulaIsStableAndSideEffectFree(t *testing.T) {
+	t.Parallel()
+
+	formulaPath := filepath.Join("..", "..", "Formula", "dingtalk-workspace-cli.rb")
+	data, err := os.ReadFile(formulaPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", formulaPath, err)
+	}
+	formula := string(data)
+	versionPrefix := `version "`
+	versionStart := strings.Index(formula, versionPrefix)
+	if versionStart == -1 {
+		t.Fatal("checked-in Homebrew formula has no explicit version")
+	}
+	versionStart += len(versionPrefix)
+	versionEnd := strings.Index(formula[versionStart:], `"`)
+	if versionEnd == -1 {
+		t.Fatal("checked-in Homebrew formula has an invalid version declaration")
+	}
+	version := formula[versionStart : versionStart+versionEnd]
+	if strings.Contains(version, "-") {
+		t.Fatalf("checked-in Homebrew formula must be stable, got version %q", version)
+	}
+	releaseBase := "releases/download/v" + version + "/"
+	for _, required := range []string{
+		releaseBase + "dws-darwin-amd64.tar.gz",
+		releaseBase + "dws-darwin-arm64.tar.gz",
+		releaseBase + "dws-linux-amd64.tar.gz",
+		releaseBase + "dws-linux-arm64.tar.gz",
+		releaseBase + "dws-skills.zip",
+		"dws skill setup",
+	} {
+		if !strings.Contains(formula, required) {
+			t.Errorf("checked-in Homebrew formula is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"-beta.", "Dir.home", "def post_install", `require "fileutils"`, "FileUtils."} {
+		if strings.Contains(formula, forbidden) {
+			t.Errorf("checked-in Homebrew formula contains forbidden text %q", forbidden)
+		}
+	}
+}
+
+func TestCheckedInHomebrewBetaFormulaIsSeparateAndKegOnly(t *testing.T) {
+	t.Parallel()
+
+	formulaPath := filepath.Join("..", "..", "Formula", "dingtalk-workspace-cli-beta.rb")
+	data, err := os.ReadFile(formulaPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", formulaPath, err)
+	}
+	formula := string(data)
+	versionPrefix := `version "`
+	versionStart := strings.Index(formula, versionPrefix)
+	if versionStart == -1 {
+		t.Fatal("checked-in Homebrew beta formula is missing a version declaration")
+	}
+	versionStart += len(versionPrefix)
+	versionEnd := strings.Index(formula[versionStart:], `"`)
+	if versionEnd == -1 {
+		t.Fatal("checked-in Homebrew beta formula has an invalid version declaration")
+	}
+	version := formula[versionStart : versionStart+versionEnd]
+	if !strings.Contains(version, "-") {
+		t.Fatalf("checked-in Homebrew beta formula must be a prerelease, got version %q", version)
+	}
+	releaseBase := "releases/download/v" + version + "/"
+	for _, required := range []string{
+		"class DingtalkWorkspaceCliBeta < Formula",
+		`desc "Automate DingTalk workspace tasks from the terminal (beta channel)"`,
+		`keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"`,
+		releaseBase + "dws-darwin-amd64.tar.gz",
+		releaseBase + "dws-darwin-arm64.tar.gz",
+		releaseBase + "dws-linux-amd64.tar.gz",
+		releaseBase + "dws-linux-arm64.tar.gz",
+		releaseBase + "dws-skills.zip",
+		"This beta is keg-only",
+	} {
+		if !strings.Contains(formula, required) {
+			t.Errorf("checked-in Homebrew beta formula is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"Dir.home", "def post_install", `require "fileutils"`, "FileUtils."} {
+		if strings.Contains(formula, forbidden) {
+			t.Errorf("checked-in Homebrew beta formula contains forbidden text %q", forbidden)
+		}
+	}
+}
+
+func TestPostGoreleaserBuildsVersionedBetaFormula(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
+	if err != nil {
+		t.Fatalf("Abs(post-goreleaser.sh) error = %v", err)
+	}
+	distDir := filepath.Join(t.TempDir(), "dist")
+	seedDistArtifacts(t, distDir, []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"dws-linux-amd64.tar.gz",
+		"dws-linux-arm64.tar.gz",
+	})
+	env := postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v1.2.3-beta.4")
+	for i, value := range env {
+		if strings.HasPrefix(value, "DWS_PACKAGE_VERSION=") {
+			env[i] = "DWS_PACKAGE_VERSION=v1.2.3-beta.4"
+		}
+	}
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = env
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, output)
+	}
+
+	formulaPath := filepath.Join(distDir, "homebrew", "dingtalk-workspace-cli-beta.rb")
+	data, err := os.ReadFile(formulaPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", formulaPath, err)
+	}
+	formula := string(data)
+	for _, required := range []string{
+		"class DingtalkWorkspaceCliBeta < Formula",
+		`desc "Automate DingTalk workspace tasks from the terminal (beta channel)"`,
+		`version "1.2.3-beta.4"`,
+		`keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"`,
+		"This beta is keg-only",
+	} {
+		if !strings.Contains(formula, required) {
+			t.Errorf("generated beta formula is missing %q", required)
+		}
+	}
+	if strings.Contains(formula, "__") {
+		t.Fatalf("generated beta formula contains an unresolved placeholder:\n%s", formula)
+	}
+	for _, forbidden := range []string{`require "fileutils"`, "FileUtils."} {
+		if strings.Contains(formula, forbidden) {
+			t.Fatalf("generated beta formula contains forbidden text %q:\n%s", forbidden, formula)
+		}
 	}
 }
 
@@ -335,7 +509,23 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	if hostOS == "windows" {
 		archiveName = "dws-" + hostOS + "-" + hostArch + ".zip"
 	}
-	seedDistArtifacts(t, distDir, []string{archiveName})
+	targets := []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"dws-linux-amd64.tar.gz",
+		"dws-linux-arm64.tar.gz",
+	}
+	foundHost := false
+	for _, target := range targets {
+		if target == archiveName {
+			foundHost = true
+			break
+		}
+	}
+	if !foundHost {
+		targets = append(targets, archiveName)
+	}
+	seedDistArtifacts(t, distDir, targets)
 
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v0.0.0")
@@ -598,10 +788,108 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 		"Publish verified Draft release",
 		"Publish stable to npm",
 		"Publish prerelease to npm beta",
+		"Open stable Homebrew formula PR",
+		"Open beta Homebrew formula PR",
+		"DingTalk-Real-AI/dingtalk-workspace-cli.git",
+		"secrets.GITHUB_TOKEN",
 	} {
 		if !strings.Contains(publishSection, required) {
 			t.Errorf("post-verification publication stage is missing %q", required)
 		}
+	}
+}
+
+func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+	if strings.Contains(workflow, "pull-requests: write") {
+		t.Fatal("the built-in GITHUB_TOKEN must not receive pull-request write permission")
+	}
+	for _, required := range []string{
+		"Check Homebrew PR automation token",
+		"secrets.HOMEBREW_PR_TOKEN",
+		"HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release workflow is missing Homebrew PR token preflight %q", required)
+		}
+	}
+
+	start := strings.Index(workflow, "- name: Open stable Homebrew formula PR")
+	if start == -1 {
+		t.Fatal("release workflow is missing the stable Homebrew PR step")
+	}
+	end := strings.Index(workflow[start:], "- name: Mirror release to Gitee")
+	if end == -1 {
+		t.Fatal("release workflow is missing the post-Homebrew Gitee step")
+	}
+	section := workflow[start : start+end]
+	for _, required := range []string{
+		"github.repository_owner == 'DingTalk-Real-AI'",
+		"!contains(github.ref_name, '-')",
+		"./scripts/release/publish-homebrew-formula.sh",
+		"secrets.HOMEBREW_PR_TOKEN",
+		"DWS_TAP_PR_REPOSITORY",
+		"automation/homebrew-${{ github.ref_name }}",
+	} {
+		if !strings.Contains(section, required) {
+			t.Errorf("Homebrew publication step is missing %q", required)
+		}
+	}
+	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
+		t.Error("Homebrew Formula PRs must use the dedicated token so their CI is triggered")
+	}
+	stableNPM := strings.Index(workflow, "- name: Publish stable to npm")
+	if stableNPM == -1 || start > stableNPM {
+		t.Fatal("Homebrew PR creation must run before npm so a failure is safely rerunnable")
+	}
+}
+
+func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+
+	start := strings.Index(workflow, "- name: Open beta Homebrew formula PR")
+	if start == -1 {
+		t.Fatal("release workflow is missing the beta Homebrew PR step")
+	}
+	end := strings.Index(workflow[start:], "- name: Sync release to China OSS mirror")
+	if end == -1 {
+		t.Fatal("release workflow is missing the post-Homebrew OSS step")
+	}
+	section := workflow[start : start+end]
+	for _, required := range []string{
+		"github.repository_owner == 'DingTalk-Real-AI'",
+		"contains(github.ref_name, '-')",
+		"dist/homebrew/dingtalk-workspace-cli-beta.rb",
+		"Formula/dingtalk-workspace-cli-beta.rb",
+		"secrets.HOMEBREW_PR_TOKEN",
+		"automation/homebrew-beta-${{ github.ref_name }}",
+	} {
+		if !strings.Contains(section, required) {
+			t.Errorf("beta Homebrew PR step is missing %q", required)
+		}
+	}
+	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
+		t.Error("Homebrew beta Formula PRs must use the dedicated token so their CI is triggered")
 	}
 }
 

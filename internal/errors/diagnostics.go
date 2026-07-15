@@ -22,13 +22,16 @@ type ServerDiagnostics struct {
 	TraceID         string `json:"trace_id,omitempty"`
 	ServerErrorCode string `json:"server_error_code,omitempty"`
 	TechnicalDetail string `json:"technical_detail,omitempty"`
+	FriendlyHint    string `json:"friendly_hint,omitempty"`
+	ActionURL       string `json:"action_url,omitempty"`
 	ServerRetryable *bool  `json:"server_retryable,omitempty"`
 }
 
 // IsEmpty returns true when no diagnostic field has been populated.
 func (d ServerDiagnostics) IsEmpty() bool {
 	return d.TraceID == "" && d.ServerErrorCode == "" &&
-		d.TechnicalDetail == "" && d.ServerRetryable == nil
+		d.TechnicalDetail == "" && d.FriendlyHint == "" &&
+		d.ActionURL == "" && d.ServerRetryable == nil
 }
 
 // WithServerDiag attaches server diagnostics to the error.

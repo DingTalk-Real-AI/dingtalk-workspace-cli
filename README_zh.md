@@ -93,6 +93,30 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 npm install -g dingtalk-workspace-cli
 ```
 
+安装最新 beta：
+
+```bash
+npm install -g dingtalk-workspace-cli@beta
+```
+
+**Homebrew**（macOS / Linux）：
+
+```bash
+brew tap DingTalk-Real-AI/dingtalk-workspace-cli https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
+brew install dingtalk-workspace-cli
+```
+
+> Formula 与代码位于同一个仓库，因此首次 `tap` 需要显式指定仓库 URL。后续可直接使用 `brew upgrade dingtalk-workspace-cli`。
+
+安装 Homebrew beta（keg-only，不覆盖稳定版）：
+
+```bash
+brew install dingtalk-workspace-cli-beta
+$(brew --prefix dingtalk-workspace-cli-beta)/bin/dws version
+```
+
+如需让 beta 的 `dws` 成为当前 shell 默认版本，将 `$(brew --prefix dingtalk-workspace-cli-beta)/bin` 放到 PATH 最前面。
+
 **预编译二进制文件**：从 [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) 下载。
 
 > **macOS 用户注意**：如果提示“无法打开，因为 Apple 无法检查其是否包含恶意软件”，请执行：
@@ -164,6 +188,18 @@ dws upgrade -y                 # 跳过确认直接升级
 ```
 
 默认情况下，`dws upgrade` 只跟随正式 release 轨道。只有显式传入 `--beta` 时，才会选择 GitHub pre-release 里的 beta 构建。
+
+### 六渠道发布后验证
+
+维护者和验证同学可按发版质量保障 SOP，对 curl、PowerShell、npm stable、npm beta、Homebrew、`dws upgrade` 执行安装与冒烟验证：
+
+```bash
+git clone https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git /tmp/dws-verify
+cd /tmp/dws-verify/verify
+bash verify-all-channels.sh
+```
+
+脚本使用隔离目录，不会替换当前 PATH 中的 `dws`；输出 `PASS`、`FAIL`、`SKIP` 汇总。跨平台渠道必须由对应平台补测，`SKIP` 不计为通过。验证范围和平台矩阵见 [`verify/README.md`](verify/README.md)。
 
 <details>
 <summary><strong>工作原理</strong></summary>

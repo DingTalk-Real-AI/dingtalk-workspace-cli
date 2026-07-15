@@ -65,17 +65,42 @@ if "--input-format" in sys.argv:
             }), flush=True)
 else:
     prompt = sys.argv[-1] if len(sys.argv) > 1 else ""
-    print(json.dumps({
-        "type": "result",
-        "subtype": "success",
-        "message": {"content": [{"type": "text", "text": "one-shot " + prompt}]},
-    }))
+    print("one-shot " + prompt)
 `
 	path := filepath.Join(dir, "qodercli")
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("write qoder stub: %v", err)
 	}
 	return logPath
+}
+
+func TestQoderForwarderUsesNativeAttachmentFlag(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	stubDir := t.TempDir()
+	logPath := writeQoderStreamStub(t, stubDir)
+	t.Setenv("DWS_QODER_STUB_LOG", logPath)
+	attachmentPath := filepath.Join(t.TempDir(), "forwarded.mov")
+	if err := os.WriteFile(attachmentPath, []byte("video-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f := &qoderStreamForwarder{
+		name: "qoderwork", bin: filepath.Join(stubDir, "qodercli"),
+		timeout: 5 * time.Second, sessions: newConvSessions(""),
+	}
+	reply, err := f.forwardWithAttachments(context.Background(), "conv", "分析视频", []connectMediaAttachment{{LocalPath: attachmentPath, FileName: "forwarded.mov", MediaType: "video"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply != "one-shot 分析视频" {
+		t.Fatalf("reply = %q", reply)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"--attachment", "`+attachmentPath+`"`) || !strings.Contains(string(raw), `"-p", "分析视频"`) {
+		t.Fatalf("qoder args missing attachment: %s", raw)
+	}
 }
 
 func TestQoderForwarderKeepsStreamJSONProcessAlive(t *testing.T) {

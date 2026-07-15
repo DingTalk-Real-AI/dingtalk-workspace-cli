@@ -15,9 +15,12 @@ package helpers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -41,6 +44,75 @@ func TestGeminiChannelUsesAPIWithoutLocalCLI(t *testing.T) {
 	}
 	if gf.baseURL != "https://gemini-proxy.example/v1beta" {
 		t.Fatalf("baseURL = %q", gf.baseURL)
+	}
+}
+
+func TestGeminiAPIForwarderSendsSmallAttachmentInline(t *testing.T) {
+	clearChannelEnv(t)
+	path := filepath.Join(t.TempDir(), "voice.mp3")
+	wantBytes := []byte("real-audio-bytes")
+	if err := os.WriteFile(path, wantBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var got geminiPart
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req geminiGenerateContentRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		if len(req.Contents) == 1 && len(req.Contents[0].Parts) == 2 {
+			got = req.Contents[0].Parts[1]
+		}
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}`))
+	}))
+	defer ts.Close()
+	f := &geminiAPIForwarder{model: "gemini-test", apiKey: "key", baseURL: ts.URL, httpClient: ts.Client()}
+	_, err := f.forwardWithAttachments(context.Background(), "conv", "转写", []connectMediaAttachment{{LocalPath: path, FileName: "voice.mp3", MediaType: "audio"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.InlineData == nil || got.InlineData.MIMEType != "audio/mpeg" {
+		t.Fatalf("inlineData = %#v", got.InlineData)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(got.InlineData.Data)
+	if err != nil || string(decoded) != string(wantBytes) {
+		t.Fatalf("inline bytes = %q, err=%v", decoded, err)
+	}
+}
+
+func TestGeminiAPIForwarderUploadsLargeAttachment(t *testing.T) {
+	clearChannelEnv(t)
+	path := filepath.Join(t.TempDir(), "video.mp4")
+	if err := os.WriteFile(path, make([]byte, geminiInlineRawLimit+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var started, uploaded, generated bool
+	var ts *httptest.Server
+	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/upload/v1beta/files":
+			started = r.Header.Get("X-Goog-Upload-Command") == "start"
+			w.Header().Set("X-Goog-Upload-URL", ts.URL+"/upload-session")
+		case "/upload-session":
+			uploaded = r.Header.Get("X-Goog-Upload-Command") == "upload, finalize"
+			_, _ = w.Write([]byte(`{"file":{"name":"files/1","uri":"https://files.example/1","mimeType":"video/mp4","state":"ACTIVE"}}`))
+		case "/v1beta/models/gemini-test:generateContent":
+			var req geminiGenerateContentRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			generated = len(req.Contents) == 1 && len(req.Contents[0].Parts) == 2 && req.Contents[0].Parts[1].FileData != nil && req.Contents[0].Parts[1].FileData.FileURI == "https://files.example/1"
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+	f := &geminiAPIForwarder{model: "gemini-test", apiKey: "key", baseURL: ts.URL + "/v1beta", httpClient: ts.Client()}
+	_, err := f.forwardWithAttachments(context.Background(), "conv", "分析", []connectMediaAttachment{{LocalPath: path, FileName: "video.mp4", MediaType: "video"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !started || !uploaded || !generated {
+		t.Fatalf("started=%v uploaded=%v generated=%v", started, uploaded, generated)
 	}
 }
 

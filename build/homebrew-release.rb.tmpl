@@ -1,0 +1,63 @@
+class __CLASS_NAME__ < Formula
+  desc "__DESCRIPTION__"
+  homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
+  version "__VERSION__"
+  license "Apache-2.0"
+__KEG_ONLY_LINE__
+
+  on_macos do
+    if Hardware::CPU.arm?
+      url "__DARWIN_ARM64_URL__"
+      sha256 "__DARWIN_ARM64_SHA256__"
+    else
+      url "__DARWIN_AMD64_URL__"
+      sha256 "__DARWIN_AMD64_SHA256__"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "__LINUX_ARM64_URL__"
+      sha256 "__LINUX_ARM64_SHA256__"
+    else
+      url "__LINUX_AMD64_URL__"
+      sha256 "__LINUX_AMD64_SHA256__"
+    end
+  end
+
+  resource "skills" do
+    url "__SKILLS_URL__"
+    sha256 "__SKILLS_SHA256__"
+  end
+
+  def install
+    root = Dir["dws-*"].find { |entry| File.directory?(entry) } || "."
+    binary = File.join(root, "dws")
+    raise "binary not found: #{binary}" unless File.exist?(binary)
+
+    bin.install binary => "dws"
+
+    %w[LICENSE NOTICE README.md CHANGELOG.md].each do |name|
+      source = File.join(root, name)
+      pkgshare.install source if File.exist?(source)
+    end
+
+    skill_dest = pkgshare/"skills/dws"
+    skill_dest.mkpath
+    resource("skills").stage do
+      cp_r(Dir["*"], skill_dest)
+    end
+  end
+
+  def caveats
+    <<~EOS
+      Agent Skills are bundled in #{pkgshare}/skills/dws.
+      Run `dws skill setup` to install them into your Agent directories.
+__CHANNEL_CAVEAT__
+    EOS
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/dws version")
+  end
+end

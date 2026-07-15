@@ -93,6 +93,83 @@ func TestPublishHomebrewFormulaSkipsWhenFormulaUnchanged(t *testing.T) {
 	}
 }
 
+func TestPublishHomebrewFormulaOpensPRWithoutWritingMain(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "publish-homebrew-formula.sh"))
+	if err != nil {
+		t.Fatalf("Abs(publish-homebrew-formula.sh) error = %v", err)
+	}
+
+	root := t.TempDir()
+	remoteDir := filepath.Join(root, "repo.git")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	oldFormula := "class OldFormula < Formula\nend\n"
+	seedTapRepo(t, remoteDir, "main", oldFormula)
+
+	sourceFormula := filepath.Join(root, "dingtalk-workspace-cli.rb")
+	newFormula := "class DingtalkWorkspaceCli < Formula\n  desc \"DingTalk Workspace CLI\"\nend\n"
+	mustWriteFile(t, sourceFormula, []byte(newFormula), 0o644)
+
+	fakeBin := filepath.Join(root, "bin")
+	ghLog := filepath.Join(root, "gh.log")
+	mustWriteFile(t, filepath.Join(fakeBin, "gh"), []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+if [ "$1 $2" = "pr create" ]; then
+  printf '%s\n' 'https://github.example/pr/1'
+fi
+`), 0o755)
+
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GH_LOG="+ghLog,
+		"DWS_TAP_REPO_URL="+remoteDir,
+		"DWS_TAP_BRANCH=main",
+		"DWS_FORMULA_SOURCE="+sourceFormula,
+		"DWS_TAP_GITHUB_TOKEN=test-token",
+		"DWS_TAP_PR_REPOSITORY=DingTalk-Real-AI/dingtalk-workspace-cli",
+		"DWS_TAP_PR_BRANCH=automation/homebrew-v1.2.3",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("publish-homebrew-formula.sh error = %v\noutput:\n%s", err, string(output))
+	}
+	if !strings.Contains(string(output), "Opened Homebrew formula PR: https://github.example/pr/1") {
+		t.Fatalf("publish output missing PR URL:\n%s", string(output))
+	}
+
+	mainClone := filepath.Join(root, "main-check")
+	mustRun(t, root, "git", "clone", "--branch", "main", remoteDir, mainClone)
+	mainFormula, err := os.ReadFile(filepath.Join(mainClone, "Formula", "dingtalk-workspace-cli.rb"))
+	if err != nil {
+		t.Fatalf("ReadFile(main formula) error = %v", err)
+	}
+	if string(mainFormula) != oldFormula {
+		t.Fatalf("publisher wrote main directly: %q", string(mainFormula))
+	}
+
+	prClone := filepath.Join(root, "pr-check")
+	mustRun(t, root, "git", "clone", "--branch", "automation/homebrew-v1.2.3", remoteDir, prClone)
+	prFormula, err := os.ReadFile(filepath.Join(prClone, "Formula", "dingtalk-workspace-cli.rb"))
+	if err != nil {
+		t.Fatalf("ReadFile(PR formula) error = %v", err)
+	}
+	if string(prFormula) != newFormula {
+		t.Fatalf("PR formula = %q, want %q", string(prFormula), newFormula)
+	}
+
+	ghCalls, err := os.ReadFile(ghLog)
+	if err != nil {
+		t.Fatalf("ReadFile(gh log) error = %v", err)
+	}
+	for _, want := range []string{"pr list", "pr create"} {
+		if !strings.Contains(string(ghCalls), want) {
+			t.Errorf("gh calls missing %q:\n%s", want, ghCalls)
+		}
+	}
+}
+
 func seedTapRepo(t *testing.T, remoteDir, branch, formulaContent string) {
 	t.Helper()
 
