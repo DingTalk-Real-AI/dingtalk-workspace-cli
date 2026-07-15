@@ -41,6 +41,9 @@ type ContentBlock struct {
 // ToolResult holds the response from an MCP tool call.
 type ToolResult struct {
 	Content []ContentBlock
+	// IsError preserves the MCP tools/call protocol bit for callers that must
+	// render a server challenge verbatim without invoking mutable classifiers.
+	IsError bool
 }
 
 // ToolCaller abstracts MCP tool invocation so private overlays can call MCP
@@ -185,10 +188,12 @@ func Override(h *Hooks) {
 	current = h
 }
 
-// ClawType returns the claw identity for the active edition, falling back
-// to DefaultOSSClawType when the overlay does not set one. Message-send
-// helpers attach this value as the clawType tool argument so the IM server
-// can label delivered messages as sent via AI.
+// ClawType returns the declarative claw identity for the active edition,
+// falling back to DefaultOSSClawType when the overlay does not set one. Unlike
+// MergeHeaders, this lookup cannot run arbitrary credential/header hooks, so
+// strict read-only requests may safely use it for the required claw-type wire
+// header. Message-send helpers also attach this value as the clawType tool
+// argument so the IM server can label delivered messages as sent via AI.
 func ClawType() string {
 	if v := Get().ClawTypeValue; v != "" {
 		return v

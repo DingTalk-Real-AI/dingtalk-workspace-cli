@@ -62,7 +62,21 @@ func init() {
 	registerRequireOneOf("doc.insert_document_block", "text", "heading", "element")
 	registerExclusiveOneOf("doc.update_document", "content", "content-file")
 	registerRequireOneOf("doc.update_document_block", "text", "heading", "element")
-	registerRequireOneOf("pat.batch_grant", "scope", "product", "products", "domain", "domains", "recommend")
+	RegisterRuntimeSchemaConstraints("pat.batch_grant", RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"scope", "product", "products", "domain", "domains", "recommend", "all"}},
+		MutuallyExclusive: [][]string{
+			{"all", "scope"},
+			{"all", "recommend"},
+			{"all", "revoke"},
+			{"revoke", "product"},
+			{"revoke", "products"},
+			{"revoke", "domain"},
+			{"revoke", "domains"},
+			{"revoke", "recommend"},
+			{"revoke", "grant-type"},
+			{"revoke", "session-id"},
+		},
+	})
 	registerRequireOneOf("mail.search_mail_users", "keyword", "employee-no")
 	// --body is a hidden compatibility alias for the public --content flag.
 	// Schema constraints describe the reviewed public surface only.

@@ -265,7 +265,6 @@ func newRecoveryRuntime(loader cli.CatalogLoader, flags *GlobalFlags) *recoveryR
 		httpClient = &http.Client{Timeout: time.Duration(flags.Timeout) * time.Second}
 	}
 	client := transport.NewClient(httpClient)
-	client.ExtraHeaders = resolveIdentityHeaders()
 	return &recoveryRuntime{
 		loader:    loader,
 		transport: client,

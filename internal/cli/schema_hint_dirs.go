@@ -47,15 +47,16 @@ type hintDirProduct struct {
 }
 
 type hintDirTool struct {
-	AgentSummary string                               `json:"agent_summary,omitempty"`
-	UseWhen      []string                             `json:"use_when,omitempty"`
-	AvoidWhen    []string                             `json:"avoid_when,omitempty"`
-	Examples     []string                             `json:"examples,omitempty"`
-	Reviewed     bool                                 `json:"reviewed,omitempty"`
-	ReviewReason string                               `json:"review_reason,omitempty"`
-	SourceRefs   []string                             `json:"source_refs,omitempty"`
-	CLIPath      string                               `json:"cli_path,omitempty"`
-	Parameters   map[string]ManualSchemaParameterHint `json:"parameters,omitempty"`
+	AgentSummary        string                               `json:"agent_summary,omitempty"`
+	UseWhen             []string                             `json:"use_when,omitempty"`
+	AvoidWhen           []string                             `json:"avoid_when,omitempty"`
+	Examples            []string                             `json:"examples,omitempty"`
+	ExampleDispositions []ManualAgentExampleDisposition      `json:"example_dispositions,omitempty"`
+	Reviewed            bool                                 `json:"reviewed,omitempty"`
+	ReviewReason        string                               `json:"review_reason,omitempty"`
+	SourceRefs          []string                             `json:"source_refs,omitempty"`
+	CLIPath             string                               `json:"cli_path,omitempty"`
+	Parameters          map[string]ManualSchemaParameterHint `json:"parameters,omitempty"`
 }
 
 func loadManualSchemaHintsFromHintDirs(metadataFS fs.FS, metadataGlob string, selectionFS fs.FS, selectionGlob string) (ManualSchemaHintSnapshot, error) {
@@ -197,14 +198,15 @@ func loadAgentHintsFromSelection(selectionFS fs.FS, globPattern string) (ManualA
 				evidence = []string{"schema_hints/selection/" + filepath.Base(name)}
 			}
 			hints.Tools[canonical] = ManualAgentToolHint{
-				AgentSummary: tool.AgentSummary,
-				UseWhen:      tool.UseWhen,
-				AvoidWhen:    tool.AvoidWhen,
-				Examples:     tool.Examples,
-				Reviewed:     true,
-				Revision:     selectionRevisionID,
-				Reason:       reason,
-				Evidence:     evidence,
+				AgentSummary:        tool.AgentSummary,
+				UseWhen:             tool.UseWhen,
+				AvoidWhen:           tool.AvoidWhen,
+				Examples:            tool.Examples,
+				ExampleDispositions: append([]ManualAgentExampleDisposition(nil), tool.ExampleDispositions...),
+				Reviewed:            true,
+				Revision:            selectionRevisionID,
+				Reason:              reason,
+				Evidence:            evidence,
 			}
 		}
 	}

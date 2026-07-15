@@ -9,31 +9,52 @@
   },
   "tools": {
     "pat.batch_grant": {
-      "agent_summary": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+      "agent_summary": "预览或执行 PAT 批量授权，或撤回一个显式 scope 授权",
       "use_when": [
-        "命令提示缺少行为授权，需要按产品或 scope 批量授权",
-        "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+        "命令提示缺少行为授权，需要按 scope、产品、域、推荐集合或 --all 生成授权计划",
+        "需要用一个位置 scope 加 --revoke 撤回对应的显式授权",
+        "先用 --dry-run 获取服务端只读计划；用户明确确认受保护写入后才改用 --yes 执行"
       ],
       "avoid_when": [
         "普通 OAuth 登录用 auth，不要用 pat",
-        "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+        "--all 不能与位置 scope 或 --recommend 组合；--revoke 不能与 --all、产品、域、推荐集合、grant-type 或 session-id 组合",
+        "--revoke 只接受一个位置 scope；不要把它扩展成批量撤回",
+        "不要把 --dry-run 当成本地回显：服务端 challenge/error 原样返回，且不得打开浏览器、轮询、认证重试或写入凭证/授权",
+        "不要把 --revoke 当成 OAuth logout 或永久 DENIED；它只撤回 ACTIVE 显式 grant 并恢复默认策略，能力缺失时失败关闭",
+        "授权范围、grant-type、session-id 或用户确认未明确时不要加 --yes 执行写入",
         "只要改本地浏览器打开策略时用 pat browser-policy"
       ],
       "examples": [
-        "dws pat chmod --products calendar,aitable --grant-type session --session-id <SESSION_ID> --dry-run --format json"
+        "dws pat chmod --product calendar --all --dry-run --format json",
+        "dws pat chmod calendar.event:read --revoke --dry-run --format json"
+      ],
+      "example_dispositions": [
+        {
+          "index": 0,
+          "mode": "contract_only",
+          "reason_code": "stateful_preflight",
+          "reason": "PAT dry-run intentionally performs one authenticated read-only server plan; the isolated Agent-example gate has no tenant authorization state.",
+          "reviewed": true
+        },
+        {
+          "index": 1,
+          "mode": "contract_only",
+          "reason_code": "stateful_preflight",
+          "reason": "PAT dry-run intentionally performs one authenticated read-only server plan; the isolated Agent-example gate has no tenant authorization state.",
+          "reviewed": true
+        }
       ],
       "reviewed": true,
-      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "review_reason": "人工依据 PAT composite 路由、Cobra 约束和 typed_yes 门禁审查；dry-run 示例只验证契约，因为运行时会发起一次需要租户状态的只读服务端计划；示例不含 --yes。",
       "source_refs": [
         "CommandRegistry:canonical_path=pat.batch_grant",
         "cobra-help:dws pat chmod",
         "Skill:skills/mono/references/products/pat.md",
-        "structured-hint:internal/cli/schema_hints/selection-review.json#pat.batch_grant",
         "internal/cli/schema_command_registry.json#pat.batch_grant",
         "skills/mono/references/products/pat.md",
-        "live-dws-schema:pat.batch_grant#FAILED",
-        "pinned-mcp:pat.batch_grant",
-        "helper:internal/pat/chmod.go#typed_yes"
+        "helper:internal/pat/chmod.go#all+revoke+typed_yes",
+        "guard:internal/app/tool_caller_adapter.go#strict-pat-preview",
+        "test:internal/pat/chmod_test.go#single-call-dry-run"
       ]
     },
     "pat.browser_policy": {
@@ -63,12 +84,12 @@
   },
   "products": {
     "pat": {
-      "agent_summary": "管理 Agent 的 PAT 行为授权与本地浏览器策略",
+      "agent_summary": "管理 Agent 的 PAT 行为授权、单 scope 授权撤回与本地浏览器策略",
       "use_when": [
-        "缺少行为授权需要预览/授予 scope，或配置授权是否打开浏览器"
+        "缺少行为授权需要预览/授予 scope、撤回一个显式 scope 授权，或配置授权是否打开浏览器"
       ],
       "avoid_when": [
-        "普通登录用 auth；不要与开放平台应用权限或具体业务写操作混用"
+        "普通登录用 auth；不要与开放平台应用权限、批量撤回、OAuth logout、永久 DENIED 或具体业务写操作混用"
       ],
       "reviewed": true,
       "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",

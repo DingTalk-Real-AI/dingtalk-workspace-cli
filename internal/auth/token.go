@@ -160,6 +160,122 @@ func LoadTokenData(configDir string) (*TokenData, error) {
 	return LoadTokenDataForProfile(configDir, RuntimeProfile())
 }
 
+// LoadValidAccessTokenReadOnly resolves an already-valid access token without
+// refreshing credentials, migrating legacy storage, repairing profiles.json,
+// or mutating the selected profile. It is intended for strict preview paths
+// whose authentication step must itself remain side-effect free.
+func LoadValidAccessTokenReadOnly(configDir, profile string) (string, error) {
+	data, err := LoadTokenDataForProfileReadOnly(configDir, profile)
+	if err != nil {
+		return "", err
+	}
+	return validAccessTokenReadOnly(data)
+}
+
+// LoadTokenDataForProfileReadOnly loads token data for audit/preview callers
+// without refreshing credentials, migrating storage, quarantining malformed
+// profiles, or changing the current profile.
+func LoadTokenDataForProfileReadOnly(configDir, profile string) (*TokenData, error) {
+	profile = strings.TrimSpace(profile)
+	if h := edition.Get(); h.LoadToken != nil {
+		if profile != "" {
+			return nil, fmt.Errorf("严格 dry-run 的当前鉴权后端不支持 --profile；请使用 --token 或先切换默认 profile")
+		}
+		jsonData, err := h.LoadToken(configDir)
+		if err != nil {
+			return nil, fmt.Errorf("严格 dry-run 无法只读加载登录凭证: %w", err)
+		}
+		var data TokenData
+		if err := json.Unmarshal(jsonData, &data); err != nil {
+			return nil, fmt.Errorf("严格 dry-run 无法解析登录凭证: %w", err)
+		}
+		return &data, nil
+	}
+
+	profiles, err := loadProfilesReadOnly(configDir)
+	if err != nil {
+		return nil, err
+	}
+	return loadTokenDataFromKeychainReadOnly(profiles, profile)
+}
+
+func validAccessTokenReadOnly(data *TokenData) (string, error) {
+	if data == nil || strings.TrimSpace(data.AccessToken) == "" {
+		return "", fmt.Errorf("未找到登录凭证；严格 dry-run 不会自动登录，请先执行 dws auth login")
+	}
+	if !data.IsAccessTokenValid() {
+		return "", fmt.Errorf("登录凭证已过期；严格 dry-run 不会自动刷新，请先执行 dws auth login")
+	}
+	return strings.TrimSpace(data.AccessToken), nil
+}
+
+// loadProfilesReadOnly deliberately avoids LoadProfiles: malformed profile
+// metadata is reported in place rather than quarantined/renamed.
+func loadProfilesReadOnly(configDir string) (*ProfilesConfig, error) {
+	profiles := &ProfilesConfig{Version: 1}
+	raw, err := os.ReadFile(ProfilesPath(configDir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return profiles, nil
+		}
+		return nil, fmt.Errorf("严格 dry-run 无法只读加载 profiles: %w", err)
+	}
+	if err := json.Unmarshal(raw, profiles); err != nil {
+		return nil, fmt.Errorf("严格 dry-run 无法解析 profiles（不会自动修复）: %w", err)
+	}
+	return profiles, nil
+}
+
+func loadTokenDataFromKeychainReadOnly(profiles *ProfilesConfig, selector string) (*TokenData, error) {
+	if selector != "" {
+		selected := findProfile(profiles, selector)
+		if selected == nil {
+			return nil, fmt.Errorf("profile %q not found", selector)
+		}
+		data, err := LoadTokenDataKeychainForCorpID(selected.CorpID)
+		if err != nil {
+			return nil, readOnlyTokenLoadError(err)
+		}
+		return data, nil
+	}
+
+	var fallbackProfile *Profile
+	seen := map[string]bool{}
+	for _, candidate := range []string{profiles.CurrentProfile, profiles.PrimaryProfile} {
+		selected := findProfile(profiles, candidate)
+		if selected == nil || seen[selected.CorpID] {
+			continue
+		}
+		seen[selected.CorpID] = true
+		if fallbackProfile == nil {
+			fallbackProfile = selected
+		}
+		data, err := LoadTokenDataKeychainForCorpID(selected.CorpID)
+		if err == nil {
+			return data, nil
+		}
+		if !errors.Is(err, ErrTokenDataNotFound) {
+			return nil, fmt.Errorf("严格 dry-run 无法只读加载 profile %q 的凭证: %w", selected.CorpID, err)
+		}
+	}
+
+	legacy, err := LoadTokenDataKeychain()
+	if err != nil {
+		return nil, readOnlyTokenLoadError(err)
+	}
+	if fallbackProfile != nil && strings.TrimSpace(legacy.CorpID) != strings.TrimSpace(fallbackProfile.CorpID) {
+		return nil, fmt.Errorf("当前 profile 没有登录凭证；严格 dry-run 不会切换到其他组织")
+	}
+	return legacy, nil
+}
+
+func readOnlyTokenLoadError(err error) error {
+	if errors.Is(err, ErrTokenDataNotFound) {
+		return fmt.Errorf("未找到登录凭证；严格 dry-run 不会迁移旧凭证，请先执行 dws auth login")
+	}
+	return fmt.Errorf("严格 dry-run 无法只读加载登录凭证: %w", err)
+}
+
 // LoadTokenDataForProfile reads TokenData for a profile selector without mutating
 // currentProfile. Empty selector follows the default resolution chain.
 func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {

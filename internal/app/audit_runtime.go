@@ -110,7 +110,34 @@ func auditIdentity() (audit.Actor, string) {
 	return actor, agentID
 }
 
-func emitAudit(sink audit.Sink, execID string, invokeStart time.Time, invocation executor.Invocation, endpoint string, retErr error, cliVersion string) {
+// auditIdentityReadOnly resolves attribution for a strict preview without
+// entering the normal token loader or populating its process cache. The audit
+// event is still emitted, but actor lookup cannot migrate/repair auth state.
+func auditIdentityReadOnly(omitPersistedActor bool) (audit.Actor, string) {
+	profile := auth.RuntimeProfile()
+	configDir := defaultConfigDir()
+	var actor audit.Actor
+	if !omitPersistedActor {
+		if td, err := auth.LoadTokenDataForProfileReadOnly(configDir, profile); err == nil && td != nil {
+			actor = audit.Actor{
+				UserID:   td.UserID,
+				Name:     td.UserName,
+				CorpID:   td.CorpID,
+				CorpName: td.CorpName,
+			}
+		} else if err != nil {
+			auditReport("resolve read-only actor for profile %q failed: %v", profile, err)
+		}
+	}
+
+	agentID := ""
+	if id := auth.Load(configDir); id != nil {
+		agentID = id.AgentID
+	}
+	return actor, agentID
+}
+
+func emitAudit(sink audit.Sink, execID string, invokeStart time.Time, invocation executor.Invocation, endpoint string, retErr error, cliVersion string, strictExplicitToken bool) {
 	if sink == nil {
 		return
 	}
@@ -118,7 +145,16 @@ func emitAudit(sink audit.Sink, execID string, invokeStart time.Time, invocation
 		return
 	}
 
-	actor, agentID := auditIdentity()
+	var actor audit.Actor
+	var agentID string
+	if isReadOnlyDryRunInvocation(invocation) {
+		// An explicit token may belong to a different account than the persisted
+		// profile. Keep the read-only agent identity, but do not misattribute the
+		// operation to an account whose credential was not used.
+		actor, agentID = auditIdentityReadOnly(strictExplicitToken)
+	} else {
+		actor, agentID = auditIdentity()
+	}
 
 	result := "success"
 	var errCat, errReason string

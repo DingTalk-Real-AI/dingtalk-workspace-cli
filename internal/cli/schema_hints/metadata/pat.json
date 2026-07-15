@@ -12,12 +12,9 @@
       "effect": "write",
       "risk": "high",
       "confirmation": "user_required",
-      "interface_ref": {
-        "product_id": "pat",
-        "rpc_name": "pat.batch_grant"
-      },
-      "interface_mode": "mcp",
+      "interface_mode": "composite",
       "availability": "available",
+      "interface_reason": "Reviewed composite PAT authorization workflow: grant planning/execution uses pat.batch_plan and pat.batch_grant, while --revoke routes one scope to pat.scope_revoke; no single pinned RPC represents every executable mode.",
       "reviewed": true,
       "runtime_gate": "typed_yes"
     },

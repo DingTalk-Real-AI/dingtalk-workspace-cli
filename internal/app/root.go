@@ -374,7 +374,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 
 	// --- Plugin loading: runs AFTER legacy commands so plugin endpoints can
 	// be appended on top of the static endpoint registry.
-	pluginCmds := loadPlugins(engine, runner)
+	pluginCmds := loadPlugins(engine, preparseExplicitTokenFlag(os.Args[1:]))
 	if len(pluginCmds) > 0 {
 		addPluginCommandsSafe(root, pluginCmds)
 	}
@@ -408,6 +408,19 @@ func preparseProfileFlag(args []string) string {
 		}
 	}
 	return ""
+}
+
+func preparseExplicitTokenFlag(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "--token" && i+1 < len(args):
+			return strings.TrimSpace(args[i+1]) != ""
+		case strings.HasPrefix(arg, "--token="):
+			return strings.TrimSpace(strings.TrimPrefix(arg, "--token=")) != ""
+		}
+	}
+	return false
 }
 
 func normalizeProcessProfileArgs() func() {
@@ -768,7 +781,7 @@ func CloseFileLogger() {
 // loadPlugins registers versioned plugin manifests, stdio clients, hooks, and
 // skills. It deliberately does not initialize MCP transports or call
 // tools/list while constructing the command tree.
-func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
+func loadPlugins(engine *pipeline.Engine, hasExplicitToken bool) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
 	// 0a. Inject plugin config values from settings.json as environment
@@ -777,8 +790,13 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 	// precedence (InjectPluginConfigEnv skips already-set keys).
 	pluginLoader.InjectPluginConfigEnv()
 
-	// Load TokenData once; reused for stdio injection below.
-	tokenData, _ := authpkg.LoadTokenData(defaultConfigDir())
+	// Load already-persisted TokenData once for stdio user-context injection.
+	// Command-tree construction must never migrate/repair credential state; an
+	// explicit --token also makes persisted account metadata untrustworthy.
+	var tokenData *authpkg.TokenData
+	if !hasExplicitToken {
+		tokenData, _ = authpkg.LoadTokenDataForProfileReadOnly(defaultConfigDir(), authpkg.RuntimeProfile())
+	}
 	var userCtx *plugin.UserContext
 	if tokenData != nil {
 		// Inject user context if either UserID or CorpID is present.

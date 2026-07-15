@@ -119,21 +119,11 @@ func logHostOwnedPATDecisionOnce() {
 }
 
 func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
-	// Ensure DWS_CLIENT_ID env is populated from persisted config before
-	// resolveIdentityHeaders reads it.  This covers fresh-process cold starts
-	// where no env var has been inherited from a parent process.
-	if os.Getenv("DWS_CLIENT_ID") == "" {
-		if cid := authpkg.ClientID(); cid != "" {
-			_ = os.Setenv("DWS_CLIENT_ID", cid)
-		}
-	}
-
 	var httpClient *http.Client
 	if flags != nil && flags.Timeout > 0 {
 		httpClient = &http.Client{Timeout: time.Duration(flags.Timeout) * time.Second}
 	}
 	transportClient := transport.NewClient(httpClient)
-	transportClient.ExtraHeaders = resolveIdentityHeaders()
 	transportClient.FileLogger = FileLoggerInstance()
 	return &runtimeRunner{
 		loader:             loader,
@@ -159,14 +149,18 @@ type runtimeRunner struct {
 }
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	r.stampGlobalDryRun(&invocation)
 	// Global dry-run is an execution barrier, not merely a transport option.
 	// Return a deterministic local preview before profile resolution, catalog
 	// discovery, Keychain/token prefetch, auth, stateful preflight or transport.
 	// Use the non-injectable EchoRunner rather than r.fallback so tests and
 	// edition overlays cannot accidentally turn this path into real execution.
-	if invocation.DryRun || (r != nil && r.globalFlags != nil && r.globalFlags.DryRun) {
-		invocation.DryRun = true
-		return (executor.EchoRunner{}).Run(ctx, invocation)
+	// The strict PAT read-only marker is the sole exception: batch planning and
+	// single-scope revoke previews need current server state to remain useful.
+	if invocation.DryRun {
+		if invocation.SkipExecutionDuringDryRun() {
+			return (executor.EchoRunner{}).Run(ctx, invocation)
+		}
 	}
 	if r == nil {
 		return executor.Result{}, fmt.Errorf("runtime runner is not configured")
@@ -176,6 +170,18 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	// slog level per --debug / --verbose. The Once guard makes repeat
 	// invocations within the same process free.
 	logHostOwnedPATDecisionOnce()
+
+	// A strict PAT preview is allowed exactly one read-only service request.
+	// Resolve it before the normal profile path so comma-separated profile
+	// expansion cannot turn one preview into multiple calls or trigger profile
+	// migration/self-healing writes. runSingle(false) also disables the
+	// background OAuth prefetch, whose normal path may refresh credentials.
+	if isReadOnlyDryRunInvocation(invocation) {
+		if strings.Contains(authpkg.RuntimeProfile(), ",") {
+			return executor.Result{}, apperrors.NewValidation("PAT strict dry-run supports exactly one --profile selector")
+		}
+		return r.runSingle(ctx, invocation, false)
+	}
 
 	selections, multi, err := resolveMultiProfileSelections(defaultConfigDir(), authpkg.RuntimeProfile())
 	if err != nil {
@@ -189,10 +195,16 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 }
 
 func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
+	r.stampGlobalDryRun(&invocation)
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
-	r.transport.ExtraHeaders = resolveIdentityHeaders()
+	if !isReadOnlyDryRunInvocation(invocation) {
+		// Preserve the normal cold-start contract, but do not resolve/cache app
+		// credentials while constructing the root command or running a strict
+		// PAT preview. Resolve them only after the dry-run boundary is known.
+		ensureRuntimeClientIDEnv()
+	}
 
 	// Mock mode: skip catalog validation, use a placeholder endpoint.
 	if r.globalFlags != nil && r.globalFlags.Mock {
@@ -237,17 +249,10 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 		// for the tool. If that also misses, fall through to handleCatalogMiss
 		// so stderr still carries the explicit not-resolved signal.
 		if endpoint, ok := directRuntimeEndpoint(invocation.CanonicalProduct, invocation.Tool); ok {
-			if r.globalFlags != nil && r.globalFlags.DryRun {
-				invocation.DryRun = true
-			}
 			return r.executeInvocation(ctx, endpoint, invocation)
 		}
 		return r.handleCatalogMiss(ctx, invocation, fmt.Sprintf("tool %q not declared by product %q in discovery catalog", invocation.Tool, invocation.CanonicalProduct))
 	}
-	if r.globalFlags != nil && r.globalFlags.DryRun {
-		invocation.DryRun = true
-	}
-
 	endpoint := product.Endpoint
 	if override, ok := productEndpointOverride(invocation.CanonicalProduct); ok {
 		endpoint = override
@@ -266,6 +271,21 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 		endpoint = toolEndpoint
 	}
 	return r.executeInvocation(ctx, endpoint, invocation)
+}
+
+func (r *runtimeRunner) stampGlobalDryRun(invocation *executor.Invocation) {
+	if invocation == nil {
+		return
+	}
+	if r != nil && r.globalFlags != nil && r.globalFlags.DryRun {
+		invocation.DryRun = true
+	}
+	// The capability bit is only a hint from an in-process caller. Revalidate
+	// the exact PAT read-only tuple at the final runtime boundary so a forged
+	// marker cannot turn another tool (or dryRun=false) into real execution.
+	if invocation.AllowReadOnlyDuringDryRun && !isPATReadOnlyDryRun(invocation.CanonicalProduct, invocation.Tool, invocation.Params) {
+		invocation.AllowReadOnlyDuringDryRun = false
+	}
 }
 
 type multiProfileSelection struct {
@@ -417,14 +437,14 @@ func multiProfileErrorPayload(err error) map[string]any {
 //
 // New contract:
 //   - Dry-run (invocation.DryRun or globalFlags.DryRun): keep EchoRunner so
-//     `--dry-run` still prints the planned payload without real execution.
+//     `--dry-run` still prints the planned payload without real execution,
+//     unless the invocation carries the explicit read-only execution marker.
 //   - Otherwise: return an explicit apperrors.NewAPI("endpoint_not_resolved")
 //     with the offending product/tool attached. This fails fast to stderr and
 //     makes missing envelopes / supplement gaps immediately visible.
 func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation executor.Invocation, detail string) (executor.Result, error) {
-	dryRun := invocation.DryRun || (r.globalFlags != nil && r.globalFlags.DryRun)
-	if dryRun {
-		invocation.DryRun = true
+	r.stampGlobalDryRun(&invocation)
+	if invocation.SkipExecutionDuringDryRun() {
 		return r.fallback.Run(ctx, invocation)
 	}
 	hint := "当前命令已注册，但静态端点目录中缺少对应 product/server endpoint。这通常是服务发现下线后的同步产物缺口，不是参数错误；请不要通过反复调整 flag 重试。"
@@ -451,6 +471,7 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	r.stampGlobalDryRun(&invocation)
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
 		return r.executeStdioInvocation(ctx, invocation)
@@ -468,6 +489,8 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	fl := r.transport.FileLogger
 
+	strictReadOnly := isReadOnlyDryRunInvocation(invocation)
+	strictExplicitToken := strictReadOnly && r.globalFlags != nil && strings.TrimSpace(r.globalFlags.Token) != ""
 	defer func() {
 		var errCat, errReason string
 		if retErr != nil {
@@ -483,19 +506,34 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
-		emitAudit(r.auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
+		emitAudit(r.auditSink, execID, invokeStart, invocation, endpoint, retErr, version, strictExplicitToken)
 	}()
 
 	// Check if this product has plugin-level auth credentials registered.
 	// If so, use the plugin's token instead of the default DingTalk OAuth token.
 	// This allows third-party MCP servers (e.g. Bailian) to use their own API keys.
-	pluginAuth, hasPluginAuth := LookupPluginAuth(invocation.CanonicalProduct)
+	var pluginAuth *PluginAuth
+	hasPluginAuth := false
+	if !strictReadOnly {
+		pluginAuth, hasPluginAuth = LookupPluginAuth(invocation.CanonicalProduct)
+	}
 
 	authToken := ""
-	if hasPluginAuth {
+	var authErr error
+	if strictReadOnly {
+		authToken, authErr = r.resolveReadOnlyDryRunAuthToken()
+	} else if hasPluginAuth {
 		authToken = pluginAuth.Token
 	} else {
 		authToken = r.resolveAuthToken(ctx)
+	}
+	if authErr != nil {
+		return executor.Result{}, apperrors.NewAuth(
+			authErr.Error(),
+			apperrors.WithReason("not_authenticated"),
+			apperrors.WithHint("严格 dry-run 不会自动刷新或迁移凭证；请先执行 'dws auth login'"),
+			apperrors.WithActions("dws auth login"),
+		)
 	}
 
 	var timeoutSec int
@@ -505,7 +543,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	logging.LogCommandStart(fl, execID,
 		invocation.CanonicalProduct, invocation.Tool, endpoint, version, authToken != "", timeoutSec)
 
-	if invocation.DryRun {
+	if invocation.SkipExecutionDuringDryRun() {
 		// Emit a wukong-aligned human-readable preview on stderr so the dry-run
 		// surface advertises the resolved MCP arguments without polluting the
 		// stdout payload (which stays valid JSON in --format json mode). Mirrors
@@ -560,7 +598,18 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		tc.TrustedDomains = pluginAuth.TrustedDomains
 	} else {
 		// Default path: use DingTalk OAuth token with identity headers.
-		tc = r.transport.WithAuth(authToken, resolveIdentityHeaders())
+		var identityHeaders map[string]string
+		if strictReadOnly {
+			identityHeaders = resolveReadOnlyIdentityHeaders()
+		} else {
+			identityHeaders = resolveIdentityHeaders()
+		}
+		tc = r.transport.WithAuth(authToken, identityHeaders)
+	}
+	if strictReadOnly {
+		// A preview is allowed exactly one read-only service call. Transport
+		// retries would violate that contract even before PAT auth handling runs.
+		tc.MaxRetries = 0
 	}
 
 	callCtx := ctx
@@ -585,6 +634,11 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	callResult, err := tc.CallTool(callCtx, endpoint, invocation.Tool, invocation.Params)
 	RecordTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
+		if strictReadOnly {
+			// Preserve the service/transport error and bypass every auth hook,
+			// recovery write, browser flow and retry for read-only previews.
+			return executor.Result{}, err
+		}
 		if isAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
 				if overrideErr := fn(defaultConfigDir(), err); overrideErr != nil {
@@ -601,6 +655,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		}
 		captureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
+	}
+	if strictReadOnly {
+		// A strict preview returns the server payload verbatim. Edition and
+		// framework classifiers may refresh/delete credentials or enter PAT
+		// recovery, so the read-only boundary must precede every classifier.
+		return readOnlyDryRunToolResult(invocation, endpoint, callResult), nil
 	}
 
 	// ---- Edition hook gets first dibs (preserves overlay PATError passthrough) ----
@@ -692,11 +752,39 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	return executor.Result{Invocation: invocation, Response: response}, nil
 }
 
+func isReadOnlyDryRunInvocation(invocation executor.Invocation) bool {
+	return invocation.DryRun && invocation.AllowReadOnlyDuringDryRun &&
+		isPATReadOnlyDryRun(invocation.CanonicalProduct, invocation.Tool, invocation.Params)
+}
+
+// readOnlyDryRunToolResult returns the service content without running the
+// normal PAT auth/error machinery. In particular, it deliberately does not
+// add success=true or rewrite a PAT challenge before the caller sees it.
+func readOnlyDryRunToolResult(invocation executor.Invocation, endpoint string, callResult transport.ToolCallResult) executor.Result {
+	invocation.Implemented = true
+	response := map[string]any{
+		"endpoint": transport.RedactURL(endpoint),
+		"content":  callResult.Content,
+		"is_error": callResult.IsError,
+	}
+	if len(callResult.Blocks) > 0 {
+		// Preserve the exact server text for final Cobra-layer challenge/error
+		// rendering. callResult.Content is a parsed convenience view and may lose
+		// whitespace/key ordering from MCP text blocks.
+		response["content_blocks"] = callResult.Blocks
+	}
+	return executor.Result{
+		Invocation: invocation,
+		Response:   response,
+	}
+}
+
 // executeStdioInvocation dispatches a tool call through a local StdioClient
 // subprocess instead of the HTTP transport. This is used for plugin stdio
 // servers whose endpoints use the stdio:// scheme.
 func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
-	if invocation.DryRun {
+	r.stampGlobalDryRun(&invocation)
+	if invocation.SkipExecutionDuringDryRun() {
 		return executor.Result{
 			Invocation: invocation,
 			Response: map[string]any{
@@ -771,6 +859,20 @@ func (r *runtimeRunner) resolveAuthToken(ctx context.Context) string {
 		return token
 	}
 	return getCachedRuntimeToken(ctx)
+}
+
+// resolveReadOnlyDryRunAuthToken resolves credentials without any refresh,
+// migration, profile repair, cache mutation, or generic TokenProvider hook.
+// The strict preview may use only an explicit token or an already-valid token
+// from the active edition's read-only loader / the existing keychain slots.
+func (r *runtimeRunner) resolveReadOnlyDryRunAuthToken() (string, error) {
+	if r != nil && r.globalFlags != nil {
+		if token := strings.TrimSpace(r.globalFlags.Token); token != "" {
+			return token, nil
+		}
+	}
+
+	return authpkg.LoadValidAccessTokenReadOnly(defaultConfigDir(), authpkg.RuntimeProfile())
 }
 
 func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
@@ -887,7 +989,22 @@ func productEndpointOverride(productID string) (string, bool) {
 // resolveIdentityHeaders loads or creates agent identity and returns HTTP
 // headers to inject into MCP requests. Best-effort: returns nil on failure.
 func resolveIdentityHeaders() map[string]string {
-	id := authpkg.EnsureExists(defaultConfigDir())
+	return resolveIdentityHeadersWithMode(false)
+}
+
+// resolveReadOnlyIdentityHeaders loads only already-persisted identity data.
+// It never creates identity.json or adds a first-seen agent entry.
+func resolveReadOnlyIdentityHeaders() map[string]string {
+	return resolveIdentityHeadersWithMode(true)
+}
+
+func resolveIdentityHeadersWithMode(readOnly bool) map[string]string {
+	var id *authpkg.Identity
+	if readOnly {
+		id = authpkg.Load(defaultConfigDir())
+	} else {
+		id = authpkg.EnsureExists(defaultConfigDir())
+	}
 	headers := id.Headers()
 	if headers == nil {
 		headers = make(map[string]string)
@@ -918,7 +1035,15 @@ func resolveIdentityHeaders() map[string]string {
 	//     sent only when x-dingtalk-dws-agent-code is non-empty.
 	// Note: x-dws-channel (DWS_CHANNEL) is a separate axis, untouched.
 	agentCode, agentCodeSig := authpkg.DetectAgentCode()
-	if agentInstanceID := id.ResolveAgentID(defaultConfigDir(), agentCode, agentCodeSig); agentInstanceID != "" {
+	agentInstanceID := ""
+	if id != nil && readOnly {
+		if entry := id.Agents[agentCode]; entry != nil {
+			agentInstanceID = strings.TrimSpace(entry.AgentID)
+		}
+	} else if id != nil {
+		agentInstanceID = id.ResolveAgentID(defaultConfigDir(), agentCode, agentCodeSig)
+	}
+	if agentInstanceID != "" {
 		headers["x-dws-agent-instance-id"] = agentInstanceID
 	}
 
@@ -947,13 +1072,28 @@ func resolveIdentityHeaders() map[string]string {
 		headers["x-dws-channel"] = v
 	}
 
-	if fn := edition.Get().MergeHeaders; fn != nil {
-		headers = fn(headers)
-	}
-	if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
-		headers = fn(headers)
+	if readOnly {
+		// claw-type is a required declarative routing/identity header. Resolve it
+		// without invoking arbitrary MergeHeaders/credential hooks.
+		headers["claw-type"] = edition.ClawType()
+	} else {
+		if fn := edition.Get().MergeHeaders; fn != nil {
+			headers = fn(headers)
+		}
+		if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
+			headers = fn(headers)
+		}
 	}
 	return headers
+}
+
+func ensureRuntimeClientIDEnv() {
+	if os.Getenv("DWS_CLIENT_ID") != "" {
+		return
+	}
+	if cid := authpkg.ClientID(); cid != "" {
+		_ = os.Setenv("DWS_CLIENT_ID", cid)
+	}
 }
 
 // detectBusinessError checks the MCP response content for DingTalk business

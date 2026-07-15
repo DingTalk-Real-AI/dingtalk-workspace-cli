@@ -30,7 +30,25 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/spf13/cobra"
 )
+
+func TestBindPersistentFlags_YesDescribesConfirmedPromptSkipping(t *testing.T) {
+	cmd := &cobra.Command{Use: "dws"}
+	flags := &GlobalFlags{}
+	bindPersistentFlags(cmd, flags)
+
+	yesFlag := cmd.PersistentFlags().Lookup("yes")
+	if yesFlag == nil {
+		t.Fatal("--yes flag is missing")
+	}
+	if !strings.Contains(yesFlag.Usage, "确认操作") || !strings.Contains(yesFlag.Usage, "跳过确认提示") {
+		t.Fatalf("--yes usage = %q, want confirmed prompt-skipping semantics", yesFlag.Usage)
+	}
+	if strings.Contains(yesFlag.Usage, "AI Agent") {
+		t.Fatalf("--yes usage must be caller-neutral, got %q", yesFlag.Usage)
+	}
+}
 
 func TestIsPatScopeError_MissingScope(t *testing.T) {
 	t.Parallel()
@@ -1125,7 +1143,7 @@ func TestHandlePatAuthCheck_JSONModeReturnsStructuredPATErrorWithoutRetry(t *tes
 	}
 }
 
-func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T) {
+func TestHandlePatAuthCheck_JSONModeYesStillCanOpenBrowserWithoutTextOutput(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
@@ -1150,7 +1168,7 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 
 	runner := &runtimeRunner{
 		fallback:    mock,
-		globalFlags: &GlobalFlags{Format: "json"},
+		globalFlags: &GlobalFlags{Format: "json", Yes: true},
 	}
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Df72437f040f04a8295988ff71e690b35%26userCode%3D98JV-JSBL#/personalAuthorization?flowId=f72437f040f04a8295988ff71e690b35&userCode=98JV-JSBL"
 	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-json","uri":"` + rawURI + `","clientId":"test-client-id"}}`
@@ -1202,7 +1220,7 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	}
 }
 
-func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
+func TestHandlePatAuthCheck_NonJSONModeYesStillPollsRetriesAndRespectsBrowserPolicy(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
@@ -1228,7 +1246,7 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 
 	runner := &runtimeRunner{
 		fallback:    mock,
-		globalFlags: &GlobalFlags{Format: "table"},
+		globalFlags: &GlobalFlags{Format: "table", Yes: true},
 	}
 	authURL := patTestAuthorizationURL(server)
 	raw := makePATErrorJSONWithAuthorizationURL("flow-approved", "test-client-id", authURL)

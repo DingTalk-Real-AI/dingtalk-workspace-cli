@@ -20,6 +20,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -37,11 +38,12 @@ func newToolCallerAdapter(runner executor.Runner, flags *GlobalFlags) edition.To
 
 func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	inv := executor.NewHelperInvocation("overlay."+productID+"."+toolName, productID, toolName, args)
+	inv.AllowReadOnlyDuringDryRun = a != nil && a.DryRun() && isPATReadOnlyDryRun(productID, toolName, args)
 	// Defense in depth for direct helper callers: global dry-run must never
 	// reach an injected/real Runner, even if a command bypasses the normal
-	// Schema leaf wrapper. EchoRunner produces the same stable dry_run envelope
-	// without catalog, auth, Keychain, endpoint or transport access.
-	if a != nil && a.DryRun() {
+	// Schema leaf wrapper. The only exception is the strict PAT read-only plan
+	// and revoke-preview contract, which must query the server for current state.
+	if a != nil && a.DryRun() && !inv.AllowReadOnlyDuringDryRun {
 		inv.DryRun = true
 		result, err := (executor.EchoRunner{}).Run(ctx, inv)
 		if err != nil {
@@ -57,6 +59,17 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 		return nil, err
 	}
 	return convertResult(result), nil
+}
+
+func isPATReadOnlyDryRun(productID, toolName string, args map[string]any) bool {
+	if productID != defaultPATProductID {
+		return false
+	}
+	dryRun, ok := args["dryRun"].(bool)
+	if !ok || !dryRun {
+		return false
+	}
+	return toolName == "pat.batch_plan" || toolName == "pat.scope_revoke"
 }
 
 func (a *toolCallerAdapter) Format() string {
@@ -102,6 +115,14 @@ func convertResult(r executor.Result) *edition.ToolResult {
 		)
 		return &edition.ToolResult{}
 	}
+	isError, _ := resp["is_error"].(bool)
+	if rawBlocks, ok := resp["content_blocks"].([]transport.ContentBlock); ok && len(rawBlocks) > 0 {
+		blocks := make([]edition.ContentBlock, 0, len(rawBlocks))
+		for _, block := range rawBlocks {
+			blocks = append(blocks, edition.ContentBlock{Type: block.Type, Text: block.Text})
+		}
+		return &edition.ToolResult{Content: blocks, IsError: isError}
+	}
 
 	// The runtime runner stores MCP response content under "content".
 	contentRaw, ok := resp["content"]
@@ -110,6 +131,7 @@ func convertResult(r executor.Result) *edition.ToolResult {
 		data, _ := jsonutil.Marshal(resp)
 		return &edition.ToolResult{
 			Content: []edition.ContentBlock{{Type: "text", Text: string(data)}},
+			IsError: isError,
 		}
 	}
 
@@ -126,16 +148,18 @@ func convertResult(r executor.Result) *edition.ToolResult {
 				})
 			}
 		}
-		return &edition.ToolResult{Content: blocks}
+		return &edition.ToolResult{Content: blocks, IsError: isError}
 	case map[string]any:
 		data, _ := jsonutil.Marshal(v)
 		return &edition.ToolResult{
 			Content: []edition.ContentBlock{{Type: "text", Text: string(data)}},
+			IsError: isError,
 		}
 	default:
 		data, _ := jsonutil.Marshal(contentRaw)
 		return &edition.ToolResult{
 			Content: []edition.ContentBlock{{Type: "text", Text: string(data)}},
+			IsError: isError,
 		}
 	}
 }

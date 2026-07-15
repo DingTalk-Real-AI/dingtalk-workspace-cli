@@ -562,7 +562,40 @@ func TestPATSchemaKeepsCLIContract(t *testing.T) {
 	root := NewRootCommand()
 	payload := schemaContractPayloadForBoundCanonicals(t, root, "pat.batch_grant")
 	tool := payload.Tools["pat.batch_grant"]
+	const interfaceReason = "Reviewed composite PAT authorization workflow: grant planning/execution uses pat.batch_plan and pat.batch_grant, while --revoke routes one scope to pat.scope_revoke; no single pinned RPC represents every executable mode."
+	if got := schemaContractString(tool["interface_mode"]); got != "composite" {
+		t.Fatalf("PAT interface_mode = %q, want composite", got)
+	}
+	if got := schemaContractString(tool["availability"]); got != "available" {
+		t.Fatalf("PAT availability = %q, want available", got)
+	}
+	if tool["interface_ref"] != nil {
+		t.Fatalf("PAT interface_ref = %#v, want nil for composite workflow", tool["interface_ref"])
+	}
+	if got := schemaContractString(tool["interface_reason"]); got != interfaceReason {
+		t.Fatalf("PAT interface_reason = %q, want %q", got, interfaceReason)
+	}
+	provenance := schemaContractMap(tool["field_provenance"])
+	for _, field := range []string{"interface_mode", "availability", "interface_ref", "interface_reason"} {
+		entry := provenance[field]
+		if entry == nil {
+			t.Fatalf("PAT missing %s provenance", field)
+		}
+		if got := schemaContractString(entry["precedence"]); got != "reviewed_explicit" {
+			t.Fatalf("PAT %s provenance precedence = %q, want reviewed_explicit", field, got)
+		}
+		if got := schemaContractString(entry["source"]); !strings.HasSuffix(got, "internal/cli/schema_hints/metadata/pat.json") {
+			t.Fatalf("PAT %s provenance source = %q, want PAT metadata source", field, got)
+		}
+	}
+	if got := provenance["interface_ref"]["value"]; got != nil {
+		t.Fatalf("PAT interface_ref provenance value = %#v, want explicit null", got)
+	}
 	parameters, _ := tool["parameters"].(map[string]any)
+	all, _ := parameters["all"].(map[string]any)
+	if all == nil || all["type"] != "boolean" || all["required"] == true {
+		t.Fatalf("--all must remain an optional boolean Schema parameter: %#v", parameters["all"])
+	}
 	grantType, _ := parameters["grant-type"].(map[string]any)
 	if grantType["default"] != "permanent" {
 		t.Fatalf("grant-type default = %#v", grantType["default"])
@@ -574,6 +607,38 @@ func TestPATSchemaKeepsCLIContract(t *testing.T) {
 	positional, _ := positionals[0].(map[string]any)
 	if positional["name"] != "scope" || positional["variadic"] != true {
 		t.Fatalf("PAT positionals = %#v", tool["positionals"])
+	}
+
+	// --all is both an executable Cobra selector and part of the truthful typed
+	// require_one_of contract.
+	constraints, _ := tool["constraints"].(map[string]any)
+	requireOneOf, _ := constraints["require_one_of"].([]any)
+	if len(requireOneOf) != 1 {
+		t.Fatalf("PAT require_one_of = %#v, want one executable selector group", constraints["require_one_of"])
+	}
+	if got, want := schemaContractStringSlice(requireOneOf[0]), []string{"scope", "product", "products", "domain", "domains", "recommend", "all"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("PAT require_one_of = %#v, want executable selector group %#v", got, want)
+	}
+	mutuallyExclusive, _ := constraints["mutually_exclusive"].([]any)
+	wantMutuallyExclusive := [][]string{
+		{"all", "scope"},
+		{"all", "recommend"},
+		{"all", "revoke"},
+		{"revoke", "product"},
+		{"revoke", "products"},
+		{"revoke", "domain"},
+		{"revoke", "domains"},
+		{"revoke", "recommend"},
+		{"revoke", "grant-type"},
+		{"revoke", "session-id"},
+	}
+	if len(mutuallyExclusive) != len(wantMutuallyExclusive) {
+		t.Fatalf("PAT mutually_exclusive = %#v, want %d reviewed pairs", constraints["mutually_exclusive"], len(wantMutuallyExclusive))
+	}
+	for index, want := range wantMutuallyExclusive {
+		if got := schemaContractStringSlice(mutuallyExclusive[index]); !schemaContractJSONEqual(got, want) {
+			t.Fatalf("PAT mutually_exclusive[%d] = %#v, want %#v", index, got, want)
+		}
 	}
 }
 
