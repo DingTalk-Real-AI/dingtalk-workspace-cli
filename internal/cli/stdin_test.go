@@ -16,6 +16,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -201,6 +202,9 @@ func TestReadFileBoundedEmptyFile(t *testing.T) {
 
 func TestReadFileBoundedPermissionDenied(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows os.Chmod does not remove read permission, so mode 000 cannot exercise this error path")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "noperm.txt")
 	writeTestFile(t, path, []byte("secret"))
