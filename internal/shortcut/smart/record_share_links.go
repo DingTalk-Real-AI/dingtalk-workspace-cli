@@ -56,9 +56,6 @@ var RecordShareLinks = shortcut.Shortcut{
 		`dws aitable +record-share-links --base B --table T --record-ids rec1,rec2,rec3`,
 		`dws aitable +record-share-links --base B --table T --record-ids rec1 --view-id viw_VIP`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("base", "table", "record-ids")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Dedup while preserving first-seen order.
 		ids := dedupStrings(rt.StrSlice("record-ids"))

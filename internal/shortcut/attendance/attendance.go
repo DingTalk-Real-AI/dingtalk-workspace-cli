@@ -1482,13 +1482,10 @@ var BossCheck = shortcut.Shortcut{
 		{Name: "absent-min", Type: shortcut.FlagInt, Desc: "缺勤时长（分钟），异常结果时传值"},
 		{Name: "remark", Type: shortcut.FlagString, Desc: "备注，最长 500 字符"},
 	},
-	Tips: []string{`dws attendance +boss-check --plan-id 123456 --time "2026-04-21 08:30"`},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if rt.Str("plan-id") == "" && rt.Str("result-id") == "" {
-			return fmt.Errorf("--plan-id 和 --result-id 至少传一个")
-		}
-		return nil
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"plan-id", "result-id"}},
 	},
+	Tips: []string{`dws attendance +boss-check --plan-id 123456 --time "2026-04-21 08:30"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		req := map[string]any{}
 		if resultID := rt.Str("result-id"); resultID != "" {

@@ -2,7 +2,7 @@ package helpers
 
 import "testing"
 
-func TestIsBusinessErrorRecognizesRealErrorEnvelopes(t *testing.T) {
+func TestCrossPlatformCoverageIsBusinessErrorRecognizesRealErrorEnvelopes(t *testing.T) {
 	cases := []map[string]any{
 		{"status": "error", "success": true, "error": map[string]any{"code": "INVALID_BASE_ID"}},
 		{"success": true, "errorCode": "1001"},
@@ -16,7 +16,7 @@ func TestIsBusinessErrorRecognizesRealErrorEnvelopes(t *testing.T) {
 	}
 }
 
-func TestIsBusinessErrorAllowsSuccessEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageIsBusinessErrorAllowsSuccessEnvelope(t *testing.T) {
 	body := map[string]any{
 		"success":   true,
 		"errorCode": nil,
@@ -28,7 +28,7 @@ func TestIsBusinessErrorAllowsSuccessEnvelope(t *testing.T) {
 	}
 }
 
-func TestIsBusinessErrorAllowsCodeZeroSuccessEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageIsBusinessErrorAllowsCodeZeroSuccessEnvelope(t *testing.T) {
 	body := map[string]any{
 		"success": true,
 		"code":    "0",

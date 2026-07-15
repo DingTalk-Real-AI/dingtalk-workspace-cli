@@ -53,7 +53,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 : >"$PACKAGES"
 
-git diff --name-only --diff-filter=ACMR "$BASE_REF...HEAD" -- '*.go' |
+git diff --name-only --diff-filter=ACMR "$BASE_REF" -- '*.go' |
 	while IFS= read -r file; do
 		case "$file" in
 		*_test.go|test/*) continue ;;
@@ -69,8 +69,16 @@ git diff --name-only --diff-filter=ACMR "$BASE_REF...HEAD" -- '*.go' |
 
 sort -u "$PACKAGES" >"$SORTED_PACKAGES"
 set --
+COVERPKG=""
 while IFS= read -r package; do
-	[ -n "$package" ] && set -- "$@" "$package"
+	if [ -n "$package" ]; then
+		set -- "$@" "$package"
+		if [ -z "$COVERPKG" ]; then
+			COVERPKG="$package"
+		else
+			COVERPKG="$COVERPKG,$package"
+		fi
+	fi
 done <"$SORTED_PACKAGES"
 
 if [ "$#" -eq 0 ]; then
@@ -79,7 +87,17 @@ else
 	printf 'native changed coverage packages:'
 	printf ' %s' "$@"
 	printf '\n'
-	go test -count=1 -timeout="$TIMEOUT" -coverprofile="$PROFILE" -covermode=atomic "$@"
+	# The shortcut integration harness lives in internal/shortcut/builtin but
+	# executes code from every product package. Cross-package instrumentation is
+	# required for those real executions to count toward the owning source file.
+	#
+	# Platform runners intentionally execute only the exhaustive shortcut
+	# harness and explicitly cross-platform tests. All changed production
+	# packages remain instrumented, so unexercised statements still count as
+	# uncovered. This keeps the native Windows gate independent of unrelated
+	# tests that require Unix permissions, shell scripts, or process semantics.
+	go test -count=1 -timeout="$TIMEOUT" -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
+		-coverpkg="$COVERPKG" -coverprofile="$PROFILE" -covermode=atomic "$@"
 fi
 
 ./scripts/policy/check-coverage-gate.sh \

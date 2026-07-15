@@ -52,9 +52,6 @@ var RespondEvent = shortcut.Shortcut{
 		`dws calendar +respond-event --event EVENT_ID --response decline`,
 		`dws calendar +respond-event --event EVENT_ID --response tentative`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("event", "response")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		eventID := strings.TrimSpace(rt.Str("event"))
 		if eventID == "" {

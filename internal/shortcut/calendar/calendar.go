@@ -540,14 +540,11 @@ var BusySearch = shortcut.Shortcut{
 		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间 ISO-8601", Required: true},
 		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间 ISO-8601", Required: true},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"users", "rooms"}},
+	},
 	Tips: []string{
 		`dws calendar +freebusy --users userId1,userId2 --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T18:00:00+08:00"`,
-	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if len(rt.StrSlice("users")) == 0 && len(rt.StrSlice("rooms")) == 0 {
-			return fmt.Errorf("--users 与 --rooms 至少指定其一")
-		}
-		return nil
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		startMs, err := parseMillis("start", rt.Str("start"))

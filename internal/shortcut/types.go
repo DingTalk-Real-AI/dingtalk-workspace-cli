@@ -54,19 +54,43 @@ const (
 // before the Execute hook runs.
 type Flag struct {
 	// Name is the long flag name (kebab-case), e.g. "user-ids".
-	Name string
+	Name string `json:"name"`
 	// Type is the value type; defaults to FlagString when empty.
-	Type FlagType
+	Type FlagType `json:"type"`
 	// Default is the default value rendered as a string.
-	Default string
+	Default string `json:"default"`
 	// Desc is the help text shown in --help.
-	Desc string
+	Desc string `json:"description"`
 	// Required, when true, makes the framework error if the flag is not set.
-	Required bool
+	Required bool `json:"required"`
 	// Enum, when non-empty, restricts the accepted values (string flags only).
-	Enum []string
+	Enum []string `json:"enum"`
 	// Hidden hides the flag from --help while keeping it usable.
-	Hidden bool
+	Hidden bool `json:"-"`
+}
+
+// ConstraintKind is a machine-readable cross-parameter or custom validation
+// rule published by `dws shortcut list` and rendered in leaf help.
+type ConstraintKind string
+
+const (
+	// ConstraintAtLeastOne requires one or more of Flags.
+	ConstraintAtLeastOne ConstraintKind = "at_least_one"
+	// ConstraintExactlyOne requires exactly one of Flags.
+	ConstraintExactlyOne ConstraintKind = "exactly_one"
+	// ConstraintMutuallyExclusive permits zero or one of Flags.
+	ConstraintMutuallyExclusive ConstraintKind = "mutually_exclusive"
+	// ConstraintCustom documents validation enforced by Shortcut.Validate.
+	ConstraintCustom ConstraintKind = "custom"
+)
+
+// Constraint declares a shortcut parameter relationship. Known kinds are
+// enforced by the runner; custom constraints are enforced by Validate and must
+// include a concrete Description.
+type Constraint struct {
+	Kind        ConstraintKind `json:"kind"`
+	Flags       []string       `json:"flags"`
+	Description string         `json:"description,omitempty"`
 }
 
 // Shortcut is the declarative definition of a single high-fidelity command.
@@ -95,6 +119,10 @@ type Shortcut struct {
 	Risk Risk
 	// Flags are the command-specific flags. Global flags are injected separately.
 	Flags []Flag
+	// Constraints publish and enforce relationships that individual flags cannot
+	// express, such as "exactly one of --group and --user". Custom constraints
+	// describe checks implemented by Validate.
+	Constraints []Constraint
 	// Tips are optional usage examples appended to --help.
 	Tips []string
 	// Hidden hides the command from listings while keeping it invocable.

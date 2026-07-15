@@ -52,9 +52,6 @@ var ThreadReplies = shortcut.Shortcut{
 		`dws chat +thread-replies --group <openconversationId> --topic-id <topicId>`,
 		`dws chat +thread-replies --group <openconversationId> --topic-id <topicId> --time "2025-03-01 00:00:00" --limit 20`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("group", "topic-id")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — fetch the topic replies. Param keys (openconversationId /
 		// topicId / startTime / pageSize) are copied verbatim from chat.go's

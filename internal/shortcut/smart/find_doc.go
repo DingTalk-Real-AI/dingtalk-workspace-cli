@@ -54,9 +54,6 @@ var FindDoc = shortcut.Shortcut{
 		`dws doc +find-doc --query 季度汇报`,
 		`dws doc +find-doc --query 合同 --limit 10`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("query")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// keyword / pageSize mirror the helpers doc search_documents path verbatim.
 		params := map[string]any{

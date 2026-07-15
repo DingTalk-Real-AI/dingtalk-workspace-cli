@@ -16,7 +16,6 @@ package smart
 import (
 	"strings"
 
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -52,12 +51,6 @@ var FindFile = shortcut.Shortcut{
 	Tips: []string{
 		`dws drive +find-file --query 季度汇报`,
 		`dws drive +find-file --query 合同`,
-	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if strings.TrimSpace(rt.Str("query")) == "" {
-			return apperrors.NewValidation("请用 --query 提供文件名关键词")
-		}
-		return nil
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		keyword := strings.TrimSpace(rt.Str("query"))

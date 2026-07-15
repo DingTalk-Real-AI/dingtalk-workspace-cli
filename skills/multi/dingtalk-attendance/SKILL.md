@@ -24,9 +24,9 @@ metadata:
 > 命令参考：[attendance.md](references/attendance.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
-## Shortcuts（优先使用）
+## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 来自当前公开 catalog，并可通过 `dws attendance --help` / `dws shortcut list --service attendance` 发现。用户意图命中时优先使用 shortcut；具体 flags 以 `dws attendance <shortcut> --help` 为准。
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service attendance --format json` 读取参数、约束、风险和示例，并以 `dws attendance <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

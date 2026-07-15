@@ -45,18 +45,12 @@ func NewShortcutCommand() *cobra.Command {
 func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "列出内建 shortcut",
+		Short: "列出内建 shortcut 及其完整参数契约",
+		Long: "列出独立于 Runtime Schema 的 shortcut catalog。每条记录包含公开参数、" +
+			"必填/枚举约束、跨参数约束与可执行示例；也可用 dws <service> +<command> --help 查看单条契约。",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			svc, _ := cmd.Flags().GetString("service")
-			type row struct {
-				Service     string `json:"service"`
-				Command     string `json:"command"`
-				Product     string `json:"product"`
-				Risk        string `json:"risk"`
-				Description string `json:"description"`
-				Intent      string `json:"intent,omitempty"`
-			}
-			var rows []row
+			rows := make([]shortcutListRow, 0)
 			for _, s := range shortcut.All() {
 				if svc != "" && s.Service != svc {
 					continue
@@ -64,32 +58,75 @@ func newListCommand() *cobra.Command {
 				if s.Hidden {
 					continue
 				}
-				product := s.Product
-				if product == "" {
-					product = s.Service
-				}
-				risk := string(s.Risk)
-				if risk == "" {
-					risk = string(shortcut.RiskRead)
-				}
-				item := row{
-					Service:     s.Service,
-					Command:     s.Command,
-					Product:     product,
-					Risk:        risk,
-					Description: s.Description,
-					Intent:      s.Intent,
-				}
-				rows = append(rows, item)
+				rows = append(rows, newShortcutListRow(s))
 			}
 			return output.WriteCommandPayload(cmd, map[string]any{
-				"count":     len(rows),
-				"shortcuts": rows,
+				"catalog":        "shortcut",
+				"runtime_schema": false,
+				"count":          len(rows),
+				"shortcuts":      rows,
 			}, output.FormatJSON)
 		},
 	}
 	cmd.Flags().String("service", "", "只列出指定服务的 shortcut")
 	return cmd
+}
+
+type shortcutListRow struct {
+	Service      string                `json:"service"`
+	Command      string                `json:"command"`
+	CLIPath      string                `json:"cli_path"`
+	Product      string                `json:"product"`
+	Risk         string                `json:"risk"`
+	Confirmation string                `json:"confirmation"`
+	Description  string                `json:"description"`
+	Intent       string                `json:"intent,omitempty"`
+	Flags        []shortcut.Flag       `json:"flags"`
+	Constraints  []shortcut.Constraint `json:"constraints"`
+	Examples     []string              `json:"examples"`
+}
+
+func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
+	product := s.Product
+	if product == "" {
+		product = s.Service
+	}
+	risk := string(s.Risk)
+	if risk == "" {
+		risk = string(shortcut.RiskRead)
+	}
+	confirmation := "not_required"
+	if risk != string(shortcut.RiskRead) {
+		confirmation = "user_required"
+	}
+	flags := make([]shortcut.Flag, 0, len(s.Flags))
+	for _, flag := range s.Flags {
+		if flag.Hidden {
+			continue
+		}
+		if flag.Type == "" {
+			flag.Type = shortcut.FlagString
+		}
+		if flag.Enum == nil {
+			flag.Enum = []string{}
+		}
+		flags = append(flags, flag)
+	}
+	constraints := append([]shortcut.Constraint{}, s.Constraints...)
+	examples := append([]string{}, s.Tips...)
+	return shortcutListRow{
+		Service:      s.Service,
+		Command:      s.Command,
+		CLIPath:      s.Service + " " + s.Command,
+		Product:      product,
+		Risk:         risk,
+		Confirmation: confirmation,
+		Description:  s.Description,
+		Intent:       s.Intent,
+		Flags:        flags,
+		Constraints:  constraints,
+		Examples:     examples,
+	}
 }
 
 func newStatsCommand() *cobra.Command {

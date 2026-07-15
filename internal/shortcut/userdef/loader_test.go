@@ -37,7 +37,7 @@ func (c *captureCaller) DryRun() bool   { return false }
 func (c *captureCaller) Fields() string { return "" }
 func (c *captureCaller) JQ() string     { return "" }
 
-func TestValidate(t *testing.T) {
+func TestCrossPlatformCoverageValidate(t *testing.T) {
 	cases := []struct {
 		name string
 		s    Spec
@@ -56,7 +56,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-func TestCompileFlagsAndDefaults(t *testing.T) {
+func TestCrossPlatformCoverageCompileFlagsAndDefaults(t *testing.T) {
 	s := Spec{
 		Service: "chat", Command: "+notify-team", Product: "chat",
 		Exec: ExecSpec{Tool: "send_message", Bind: map[string]string{
@@ -83,7 +83,7 @@ func TestCompileFlagsAndDefaults(t *testing.T) {
 	}
 }
 
-func TestFlagRef(t *testing.T) {
+func TestCrossPlatformCoverageFlagRef(t *testing.T) {
 	if n, ok := flagRef("${text}"); !ok || n != "text" {
 		t.Errorf("flagRef(${text}) = %q,%v", n, ok)
 	}
@@ -92,7 +92,7 @@ func TestFlagRef(t *testing.T) {
 	}
 }
 
-func TestCompileBindsOptionalDefault(t *testing.T) {
+func TestCrossPlatformCoverageCompileBindsOptionalDefault(t *testing.T) {
 	s := Spec{
 		Service: "defaulttest", Command: "+run", Product: "chat",
 		Exec:  ExecSpec{Tool: "send_message", Bind: map[string]string{"limit": "${limit}"}},
@@ -118,7 +118,7 @@ func TestCompileBindsOptionalDefault(t *testing.T) {
 	}
 }
 
-func TestFilePathRejectsTraversal(t *testing.T) {
+func TestCrossPlatformCoverageFilePathRejectsTraversal(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	if _, err := FilePath("../../outside", "+run"); err == nil {
 		t.Fatal("expected traversal service to be rejected")
@@ -136,7 +136,7 @@ func TestFilePathRejectsTraversal(t *testing.T) {
 	}
 }
 
-func TestLoadSkipsConflictAndParses(t *testing.T) {
+func TestCrossPlatformCoverageLoadSkipsConflictAndParses(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
 	scDir := filepath.Join(dir, "shortcuts")

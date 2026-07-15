@@ -49,9 +49,6 @@ var ListTables = shortcut.Shortcut{
 	Tips: []string{
 		`dws aitable +list-tables --base B`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("base")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// baseId mirrors helpers tableGetCmd (get_tables). Omitting tableIds
 		// asks the server for every table in the base.

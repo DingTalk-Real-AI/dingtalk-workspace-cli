@@ -15,10 +15,50 @@ package usage
 
 import (
 	"os"
+	"reflect"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
-func TestEnabledToggle(t *testing.T) {
+func TestCrossPlatformCoverageShortcutListRowPublishesCompleteContract(t *testing.T) {
+	row := newShortcutListRow(shortcut.Shortcut{
+		Service: "chat",
+		Command: "+messages",
+		Flags: []shortcut.Flag{
+			{Name: "group", Required: true},
+			{Name: "internal", Hidden: true},
+		},
+		Constraints: []shortcut.Constraint{
+			{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "user"}},
+		},
+		Tips: []string{"dws chat +messages --group cid"},
+	})
+	if row.CLIPath != "chat +messages" || row.Product != "chat" || row.Risk != "read" || row.Confirmation != "not_required" {
+		t.Fatalf("unexpected normalized identity: %#v", row)
+	}
+	if len(row.Flags) != 1 || row.Flags[0].Name != "group" || row.Flags[0].Type != shortcut.FlagString {
+		t.Fatalf("public normalized flags = %#v", row.Flags)
+	}
+	if row.Flags[0].Enum == nil {
+		t.Fatal("empty enum must publish as [] rather than null")
+	}
+	if !reflect.DeepEqual(row.Examples, []string{"dws chat +messages --group cid"}) {
+		t.Fatalf("examples = %#v", row.Examples)
+	}
+	if len(row.Constraints) != 1 || row.Constraints[0].Kind != shortcut.ConstraintExactlyOne {
+		t.Fatalf("constraints = %#v", row.Constraints)
+	}
+}
+
+func TestCrossPlatformCoverageShortcutListRowRequiresConfirmationForWrites(t *testing.T) {
+	row := newShortcutListRow(shortcut.Shortcut{Service: "chat", Command: "+send", Risk: shortcut.RiskWrite})
+	if row.Risk != "write" || row.Confirmation != "user_required" {
+		t.Fatalf("write shortcut safety = risk %q confirmation %q", row.Risk, row.Confirmation)
+	}
+}
+
+func TestCrossPlatformCoverageEnabledToggle(t *testing.T) {
 	for _, v := range []string{"", "0", "false", "off", "NO", "garbage"} {
 		t.Setenv("DWS_USAGE_TRACKING", v)
 		if Enabled() {
@@ -33,7 +73,7 @@ func TestEnabledToggle(t *testing.T) {
 	}
 }
 
-func TestSampleArgsRedaction(t *testing.T) {
+func TestCrossPlatformCoverageSampleArgsRedaction(t *testing.T) {
 	args := map[string]any{
 		"open_conversation_id": "cid_abc123",                   // ID-like → kept
 		"page":                 20,                             // number → kept
@@ -67,7 +107,7 @@ func TestSampleArgsRedaction(t *testing.T) {
 	}
 }
 
-func TestAggregateRequiresSampleOnEveryOccurrenceForFixedArg(t *testing.T) {
+func TestCrossPlatformCoverageAggregateRequiresSampleOnEveryOccurrenceForFixedArg(t *testing.T) {
 	recs := []Record{
 		{Product: "chat", Tool: "send", ArgKeys: []string{"conversationId"}, SampleArgs: map[string]string{"conversationId": "cid_x"}},
 		{Product: "chat", Tool: "send", ArgKeys: []string{"conversationId"}},
@@ -81,7 +121,7 @@ func TestAggregateRequiresSampleOnEveryOccurrenceForFixedArg(t *testing.T) {
 	}
 }
 
-func TestAppendAndAggregate(t *testing.T) {
+func TestCrossPlatformCoverageAppendAndAggregate(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
 	t.Setenv("DWS_USAGE_TRACKING", "1")
@@ -129,7 +169,7 @@ func TestAppendAndAggregate(t *testing.T) {
 	}
 }
 
-func TestDisabledSkipsWrite(t *testing.T) {
+func TestCrossPlatformCoverageDisabledSkipsWrite(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
 	t.Setenv("DWS_USAGE_TRACKING", "0")

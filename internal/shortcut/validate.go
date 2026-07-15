@@ -25,12 +25,30 @@ import (
 // AtLeastOne / ExactlyOne / range checks) so per-command validation reads the
 // same everywhere instead of being hand-rolled each time.
 
-// setFlags returns the subset of the given flag names the user actually set.
+// setFlags returns the subset of the given flag names for which the user
+// supplied a meaningful value. Empty strings and empty string slices do not
+// satisfy cross-field constraints merely because the flag token was present.
 func (rt *RuntimeContext) setFlags(flags ...string) []string {
 	var set []string
-	for _, f := range flags {
-		if rt.Changed(f) {
-			set = append(set, f)
+	for _, name := range flags {
+		if !rt.Changed(name) {
+			continue
+		}
+		provided := true
+		for _, flag := range rt.shortcut.Flags {
+			if flag.Name != name {
+				continue
+			}
+			switch flag.Type {
+			case FlagStringSlice:
+				provided = hasNonEmptyString(rt.StrSlice(name))
+			case FlagString, "":
+				provided = rt.Str(name) != ""
+			}
+			break
+		}
+		if provided {
+			set = append(set, name)
 		}
 	}
 	return set

@@ -3,6 +3,8 @@
 
 package shortcut
 
+var publicShortcutCatalog = generatedPublicShortcutCatalog()
+
 func publicCatalogKey(service, command string) string {
 	return service + "\x00" + command
 }

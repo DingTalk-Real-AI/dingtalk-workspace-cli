@@ -14,10 +14,8 @@
 package smart
 
 import (
-	"fmt"
 	"strings"
 
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -50,26 +48,13 @@ var MinutesDetail = shortcut.Shortcut{
 	Risk: shortcut.RiskRead,
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid（必填）", Required: true},
-		{Name: "artifacts", Type: shortcut.FlagStringSlice, Desc: "要拉取的产物子集: basic,summary,keywords,transcript,todos（默认全部）", Required: false},
-		{Name: "direction", Type: shortcut.FlagString, Desc: "逐字稿排序: 0=正序(默认), 1=倒序（可选）", Required: false},
+		{Name: "artifacts", Type: shortcut.FlagStringSlice, Desc: "要拉取的产物子集（默认全部）", Required: false, Enum: []string{"basic", "summary", "keywords", "transcript", "todos"}},
+		{Name: "direction", Type: shortcut.FlagString, Desc: "逐字稿排序: 0=正序(默认), 1=倒序（可选）", Required: false, Enum: []string{"0", "1"}},
 	},
 	Tips: []string{
 		`dws minutes +detail --id <taskUuid>`,
 		`dws minutes +detail --id <taskUuid> --artifacts summary,todos`,
 		`dws minutes +detail --id <taskUuid> --direction 1`,
-	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if err := rt.RequireAll("id"); err != nil {
-			return err
-		}
-		// Reject unknown artifact names early so the user gets a clear message
-		// rather than a silently empty bundle.
-		for _, a := range rt.StrSlice("artifacts") {
-			if _, ok := minutesArtifactTools[strings.ToLower(strings.TrimSpace(a))]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知的 --artifacts 取值 %q，可选: basic,summary,keywords,transcript,todos", a))
-			}
-		}
-		return nil
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		taskUUID := rt.Str("id")

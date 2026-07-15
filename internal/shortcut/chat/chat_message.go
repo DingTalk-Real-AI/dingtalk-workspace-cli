@@ -645,6 +645,9 @@ var MessagesSendCard = shortcut.Shortcut{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（与 --receiver 互斥）"},
 		{Name: "receiver", Type: shortcut.FlagString, Desc: "单聊接收者 userId（与 --group 互斥）"},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "receiver"}},
+	},
 	Tips: []string{`dws chat +messages-send-card --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		group := rt.Str("group")
