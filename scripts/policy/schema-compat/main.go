@@ -491,7 +491,7 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
-	if !equalPositionals(oldTool.Positionals, newTool.Positionals) {
+	if !compatiblePositionals(oldTool.Positionals, newTool.Positionals) {
 		failures = append(failures, fmt.Sprintf("schema tool %q changed positionals", toolPath))
 	}
 	if oldTool.DryRun != "" && oldTool.DryRun != newTool.DryRun {
@@ -510,12 +510,39 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	return failures
 }
 
-func equalPositionals(oldPositionals, newPositionals []positionalSchema) bool {
-	if len(oldPositionals) != len(newPositionals) {
+func compatiblePositionals(oldPositionals, newPositionals []positionalSchema) bool {
+	if len(newPositionals) < len(oldPositionals) {
 		return false
 	}
-	for index := range oldPositionals {
-		if oldPositionals[index] != newPositionals[index] {
+	for index, oldPositional := range oldPositionals {
+		newPositional := newPositionals[index]
+		if oldPositional.Name != newPositional.Name ||
+			oldPositional.Index != newPositional.Index ||
+			oldPositional.Type != newPositional.Type {
+			return false
+		}
+		if !oldPositional.Required && newPositional.Required {
+			return false
+		}
+		if oldPositional.Variadic && !newPositional.Variadic {
+			return false
+		}
+		if !oldPositional.Variadic && newPositional.Variadic && index != len(newPositionals)-1 {
+			return false
+		}
+	}
+
+	if len(newPositionals) == len(oldPositionals) {
+		return true
+	}
+	if len(oldPositionals) > 0 && newPositionals[len(oldPositionals)-1].Variadic {
+		return false
+	}
+	for index := len(oldPositionals); index < len(newPositionals); index++ {
+		if newPositionals[index].Required {
+			return false
+		}
+		if index > len(oldPositionals) && newPositionals[index-1].Variadic {
 			return false
 		}
 	}
