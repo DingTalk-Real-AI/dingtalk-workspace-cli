@@ -3,12 +3,16 @@ package auth
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestSaveSecureTokenData_FixesUnsafePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows enforces directory access through ACLs, not POSIX mode bits")
+	}
 	configDir := filepath.Join(t.TempDir(), "unsafe")
 	// Create directory with overly permissive mode.
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
