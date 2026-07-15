@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -127,6 +128,9 @@ func TestAcquireTokenLock_Contention(t *testing.T) {
 }
 
 func TestAcquireTokenLock_LockFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows enforces file access through ACLs, not POSIX mode bits")
+	}
 	t.Parallel()
 
 	configDir := t.TempDir()

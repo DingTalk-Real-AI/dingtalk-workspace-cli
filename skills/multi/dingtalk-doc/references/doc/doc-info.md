@@ -27,8 +27,8 @@ Flags:
 | contentType | extension | 操作 | 命令 |
 |-------------|-----------|------|------|
 | ALIDOC | adoc | 在线获取 Markdown 内容 | `dws doc read --node <ID>` |
-| ALIDOC | axls | 在线读取表格数据 | `dws sheet get-all-sheets` → `dws sheet get-range` |
-| ALIDOC | able | 在线查询多维表格记录 | `dws aitable get-tables` → `dws aitable query-records` |
+| ALIDOC | axls | 在线读取表格数据 | `dws sheet list` → `dws sheet range read` |
+| ALIDOC | able | 在线查询多维表格记录 | `dws aitable table list` → `dws aitable record query` |
 | 非 ALIDOC | — | **不支持在线分析** | 告知用户需下载到本地后查看 |
 
 **关键规则**：非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。

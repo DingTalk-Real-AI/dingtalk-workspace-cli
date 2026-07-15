@@ -1,0 +1,2672 @@
+[root]
+  commands: agoal, aisearch, aitable, api, attendance, auth, calendar, chat, completion, config, contact, dev, devdoc, ding, doc, doctor, drive, help, live, mail, minutes, oa, pat, plugin, profile, recovery, report, schema, sheet, skill, todo, upgrade, version, wiki
+  flags: --client-id:string, --client-secret:string, --debug:bool, --dry-run:bool, --fields:string, -f/--format:string, -h/--help:bool, --jq:string, --mock:bool, --profile:string, --timeout:int, -v/--verbose:bool, -y/--yes:bool
+
+[agoal]
+  commands: contract, obj-template, report, scorecard, strategy, user
+  flags: -h/--help:bool
+
+[agoal.contract]
+  commands: detail, fields, list, update
+  flags: -h/--help:bool
+
+[agoal.contract.detail]
+  flags: --contract-id:string, -h/--help:bool, --request-id:string
+
+[agoal.contract.fields]
+  flags: -h/--help:bool, --request-id:string
+
+[agoal.contract.list]
+  flags: -h/--help:bool, --request-id:string, --scope-id:string, --scope-type:string
+
+[agoal.contract.update]
+  flags: --audit-config:string, --contract-id:string, --dimensions:string, -h/--help:bool, --objective-template:string, --request-id:string
+
+[agoal.obj-template]
+  commands: create-or-update, list
+  flags: -h/--help:bool
+
+[agoal.obj-template.create-or-update]
+  flags: --compute-by-weight:bool, --dimension-weight:bool, --dimensions:string, -h/--help:bool, --objective-weight:bool, --request-id:string, --template-id:string, --title:string
+
+[agoal.obj-template.list]
+  flags: -h/--help:bool, --keyword:string, --page:int, --page-size:int, --request-id:string
+
+[agoal.report]
+  commands: list-statistics, submit-detail
+  flags: -h/--help:bool
+
+[agoal.report.list-statistics]
+  flags: -h/--help:bool, --keyword:string, --request-id:string
+
+[agoal.report.submit-detail]
+  flags: -h/--help:bool, --keyword:string, --page:int, --page-size:int, --query-date:string, --request-id:string, --submit-state:string, --template-id:string
+
+[agoal.scorecard]
+  commands: detail, entity-detail, update
+  flags: -h/--help:bool
+
+[agoal.scorecard.detail]
+  flags: --dept-id:string, -h/--help:bool, --request-id:string, --selected-time:string
+
+[agoal.scorecard.entity-detail]
+  flags: --entity-id:string, -h/--help:bool, --request-id:string, --sc-id:string
+
+[agoal.scorecard.update]
+  flags: --content:string, --dept-id:string, -h/--help:bool, --id:string, --request-id:string, --selected-time:string, --tracking-period-type:string
+
+[agoal.strategy]
+  commands: detail, list, update
+  flags: -h/--help:bool
+
+[agoal.strategy.detail]
+  flags: -h/--help:bool, --profile-id:string, --request-id:string
+
+[agoal.strategy.list]
+  flags: -h/--help:bool, --request-id:string, --scope-id:string, --scope-type:string
+
+[agoal.strategy.update]
+  flags: --content:string, -h/--help:bool, --profile-id:string, --request-id:string
+
+[agoal.user]
+  commands: objectives, rules
+  flags: -h/--help:bool
+
+[agoal.user.objectives]
+  flags: -h/--help:bool, --period-ids:string, --request-id:string, --rule-id:string, --user-id:string
+
+[agoal.user.rules]
+  flags: -h/--help:bool, --request-id:string, --user-id:string
+
+[aisearch]
+  commands: behavior, enterprise, person
+  flags: -d/--dimension:string, -h/--help:bool, -w/--keyword:string
+
+[aisearch.behavior]
+  flags: --behavior-type:string, --chat-scope:string, --direction:string, -h/--help:bool, --queries:string, --time-range:string, --types:string
+
+[aisearch.enterprise]
+  aliases: content, knowledge, search-enterprise, search_enterprise
+  flags: -h/--help:bool, --queries:string, --time-range:string, --types:string
+
+[aisearch.person]
+  aliases: ask, contact, find, lookup, people, query, search, search-person, search-user, user, user-search
+  flags: -h/--help:bool
+
+[aitable]
+  commands: advperm, attachment, base, chart, create, dashboard, export, field, form, import, info, list, record, search, section, table, template, view, workflow
+  flags: -h/--help:bool
+
+[aitable.advperm]
+  commands: disable, enable, role-create, role-delete, role-get, role-list, role-update
+  flags: -h/--help:bool
+
+[aitable.advperm.disable]
+  flags: --base-id:string, -h/--help:bool
+
+[aitable.advperm.enable]
+  flags: --base-id:string, -h/--help:bool
+
+[aitable.advperm.role-create]
+  flags: --base-id:string, --flow-type:string, -h/--help:bool, --name:string, --role-type:string, --sub-roles:string
+
+[aitable.advperm.role-delete]
+  flags: --base-id:string, -h/--help:bool, --role-id:string
+
+[aitable.advperm.role-get]
+  flags: --base-id:string, -h/--help:bool, --role-id:string
+
+[aitable.advperm.role-list]
+  flags: --base-id:string, -h/--help:bool
+
+[aitable.advperm.role-update]
+  flags: --base-id:string, --flow-type:string, -h/--help:bool, --name:string, --role-id:string, --role-type:string, --sub-roles:string
+
+[aitable.attachment]
+  commands: upload
+  flags: -h/--help:bool
+
+[aitable.attachment.upload]
+  flags: --base-id:string, --file-name:string, -h/--help:bool, --mime-type:string, --size:int64
+
+[aitable.base]
+  commands: copy, create, delete, get, get-primary-doc-id, list, search, update
+  flags: -h/--help:bool
+
+[aitable.base.copy]
+  flags: --base-id:string, -h/--help:bool, --only-struct:bool, --target-folder-id:string
+
+[aitable.base.create]
+  flags: --folder-id:string, -h/--help:bool, --name:string, --template-id:string
+
+[aitable.base.delete]
+  flags: --base-id:string, -h/--help:bool, --reason:string
+
+[aitable.base.get]
+  flags: --base-id:string, -h/--help:bool
+
+[aitable.base.get-primary-doc-id]
+  flags: --base-id:string, -h/--help:bool, --record-id:string, --table-id:string
+
+[aitable.base.list]
+  flags: --cursor:string, -h/--help:bool, --limit:int
+
+[aitable.base.search]
+  flags: --cursor:string, -h/--help:bool, --query:string
+
+[aitable.base.update]
+  flags: --base-id:string, --desc:string, -h/--help:bool, --name:string
+
+[aitable.chart]
+  commands: create, delete, get, share, update, widgets-example
+  flags: -h/--help:bool
+
+[aitable.chart.create]
+  flags: --base-id:string, --config:string, --dashboard-id:string, -h/--help:bool, --layout:string
+
+[aitable.chart.delete]
+  flags: --base-id:string, --chart-id:string, --dashboard-id:string, -h/--help:bool, --reason:string
+
+[aitable.chart.get]
+  flags: --base-id:string, --chart-id:string, --dashboard-id:string, -h/--help:bool
+
+[aitable.chart.share]
+  commands: get, update
+  flags: -h/--help:bool
+
+[aitable.chart.share.get]
+  flags: --base-id:string, --chart-id:string, --dashboard-id:string, -h/--help:bool
+
+[aitable.chart.share.update]
+  flags: --allow-back-to-doc:bool, --base-id:string, --chart-id:string, --dashboard-id:string, --enabled:string, -h/--help:bool, --share-type:string
+
+[aitable.chart.update]
+  flags: --base-id:string, --chart-id:string, --config:string, --dashboard-id:string, -h/--help:bool, --layout:string
+
+[aitable.chart.widgets-example]
+  flags: -h/--help:bool
+
+[aitable.create]
+  flags: --folder-id:string, -h/--help:bool, --name:string, --template-id:string
+
+[aitable.dashboard]
+  commands: arrange, config-example, create, delete, get, share, update
+  flags: -h/--help:bool
+
+[aitable.dashboard.arrange]
+  flags: --base-id:string, --dashboard-id:string, -h/--help:bool
+
+[aitable.dashboard.config-example]
+  flags: -h/--help:bool
+
+[aitable.dashboard.create]
+  flags: --base-id:string, --config:string, -h/--help:bool, --name:string
+
+[aitable.dashboard.delete]
+  flags: --base-id:string, --dashboard-id:string, -h/--help:bool, --reason:string
+
+[aitable.dashboard.get]
+  flags: --base-id:string, --dashboard-id:string, -h/--help:bool
+
+[aitable.dashboard.share]
+  commands: get, update
+  flags: -h/--help:bool
+
+[aitable.dashboard.share.get]
+  flags: --base-id:string, --dashboard-id:string, -h/--help:bool
+
+[aitable.dashboard.share.update]
+  flags: --allow-back-to-doc:bool, --base-id:string, --dashboard-id:string, --enabled:string, -h/--help:bool, --share-type:string
+
+[aitable.dashboard.update]
+  flags: --base-id:string, --config:string, --dashboard-id:string, -h/--help:bool, --name:string
+
+[aitable.export]
+  commands: data
+  flags: -h/--help:bool
+
+[aitable.export.data]
+  flags: --base-id:string, --format:string, -h/--help:bool, --scope:string, --table-id:string, --task-id:string, --timeout-ms:int, --view-id:string
+
+[aitable.field]
+  commands: create, delete, get, list, search-options, update
+  flags: -h/--help:bool
+
+[aitable.field.create]
+  flags: --ai-config:string, --base-id:string, --config:string, --fields:string, -h/--help:bool, --name:string, --table-id:string, --type:string
+
+[aitable.field.delete]
+  flags: --base-id:string, --field-id:string, -h/--help:bool, --table-id:string
+
+[aitable.field.get]
+  flags: --base-id:string, --field-ids:string, -h/--help:bool, --table-id:string
+
+[aitable.field.list]
+  flags: --base-id:string, --field-ids:string, -h/--help:bool, --table-id:string
+
+[aitable.field.search-options]
+  flags: --base-id:string, --field-id:string, -h/--help:bool, --keyword:string, --limit:int, --table-id:string
+
+[aitable.field.update]
+  flags: --ai-config:string, --base-id:string, --config:string, --field-id:string, -h/--help:bool, --name:string, --table-id:string
+
+[aitable.form]
+  commands: create, delete, field, get, list, questions, share, update
+  flags: -h/--help:bool
+
+[aitable.form.create]
+  flags: --base-id:string, --description:string, -h/--help:bool, --name:string, --table-id:string
+
+[aitable.form.delete]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.form.field]
+  commands: hide, list, update
+  flags: -h/--help:bool
+
+[aitable.form.field.hide]
+  flags: --base-id:string, --field-id:string, -h/--help:bool, --hidden:string, --table-id:string, --view-id:string
+
+[aitable.form.field.list]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.form.field.update]
+  flags: --base-id:string, --field-description:string, --field-id:string, -h/--help:bool, --required:string, --table-id:string, --view-id:string
+
+[aitable.form.get]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.form.list]
+  flags: --base-id:string, -h/--help:bool, --table-id:string
+
+[aitable.form.questions]
+  commands: create, delete
+  flags: -h/--help:bool
+
+[aitable.form.questions.create]
+  flags: --ai-config:string, --base-id:string, --config:string, --fields:string, -h/--help:bool, --name:string, --table-id:string, --type:string
+
+[aitable.form.questions.delete]
+  flags: --base-id:string, --field-id:string, -h/--help:bool, --table-id:string
+
+[aitable.form.share]
+  commands: get, update
+  flags: -h/--help:bool
+
+[aitable.form.share.get]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.form.share.update]
+  flags: --base-id:string, --enabled:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.form.update]
+  flags: --base-id:string, --description:string, -h/--help:bool, --name:string, --table-id:string, --title:string, --view-id:string
+
+[aitable.import]
+  commands: data, upload
+  flags: -h/--help:bool
+
+[aitable.import.data]
+  flags: --field-mapping:string, --header-row:int, -h/--help:bool, --import-id:string, --src-sheet-name:string, --table-id:string, --timeout:int
+
+[aitable.import.upload]
+  flags: --base-id:string, --file-name:string, --file-size:int64, -h/--help:bool
+
+[aitable.info]
+  flags: --base-id:string, -h/--help:bool
+
+[aitable.list]
+  flags: --cursor:string, -h/--help:bool, --limit:int
+
+[aitable.record]
+  commands: batch-update, create, delete, get, history-list, list, primary-doc-create, primary-doc-get, query, query-empty, share-url, update, upsert
+  flags: -h/--help:bool
+
+[aitable.record.batch-update]
+  flags: --base-id:string, --cells:string, -h/--help:bool, --record-ids:string, --table-id:string
+
+[aitable.record.create]
+  flags: --base-id:string, -h/--help:bool, --records:string, --records-file:string, --table-id:string
+
+[aitable.record.delete]
+  flags: --base-id:string, -h/--help:bool, --record-ids:string, --table-id:string
+
+[aitable.record.get]
+  flags: --base-id:string, --field-ids:string, -h/--help:bool, --record-ids:string, --table-id:string
+
+[aitable.record.history-list]
+  flags: --base-id:string, -h/--help:bool, --limit:int, --offset:int, --record-id:string, --table-id:string
+
+[aitable.record.list]
+  flags: --all:bool, --base-id:string, --cursor:string, --field-ids:string, --filters:string, -h/--help:bool, --limit:int, --page-limit:int, --query:string, --record-ids:string, --sort:string, --table-id:string
+
+[aitable.record.primary-doc-create]
+  flags: --base-id:string, --field-id:string, -h/--help:bool, --record-id:string, --table-id:string
+
+[aitable.record.primary-doc-get]
+  flags: --base-id:string, -h/--help:bool, --record-id:string, --table-id:string
+
+[aitable.record.query]
+  flags: --all:bool, --base-id:string, --cursor:string, --field-ids:string, --filters:string, -h/--help:bool, --limit:int, --page-limit:int, --query:string, --record-ids:string, --sort:string, --table-id:string
+
+[aitable.record.query-empty]
+  flags: --base-id:string, --cursor:string, -h/--help:bool, --limit:int, --table-id:string
+
+[aitable.record.share-url]
+  flags: --base-id:string, -h/--help:bool, --record-ids:string, --table-id:string, --view-id:string
+
+[aitable.record.update]
+  flags: --base-id:string, -h/--help:bool, --records:string, --records-file:string, --table-id:string
+
+[aitable.record.upsert]
+  flags: --base-id:string, -h/--help:bool, --records:string, --records-file:string, --table-id:string
+
+[aitable.search]
+  flags: --cursor:string, -h/--help:bool, --query:string
+
+[aitable.section]
+  commands: create, delete, list-empty, list-nodes, move-node, rename, reorder
+  flags: -h/--help:bool
+
+[aitable.section.create]
+  flags: --base-id:string, -h/--help:bool, --index:int, --name:string, --parent-section-id:string
+
+[aitable.section.delete]
+  flags: --base-id:string, -h/--help:bool, --section-id:string
+
+[aitable.section.list-empty]
+  flags: --base-id:string, -h/--help:bool
+
+[aitable.section.list-nodes]
+  flags: --base-id:string, -h/--help:bool
+
+[aitable.section.move-node]
+  flags: --base-id:string, -h/--help:bool, --new-parent-section-id:string, --node-id:string, --target-index:int
+
+[aitable.section.rename]
+  flags: --base-id:string, -h/--help:bool, --new-name:string, --section-id:string
+
+[aitable.section.reorder]
+  flags: --base-id:string, -h/--help:bool, --section-id:string, --target-index:int
+
+[aitable.table]
+  commands: create, delete, get, list, update
+  flags: -h/--help:bool
+
+[aitable.table.create]
+  flags: --base-id:string, --fields:string, -h/--help:bool, --name:string
+
+[aitable.table.delete]
+  flags: --base-id:string, -h/--help:bool, --reason:string, --table-id:string
+
+[aitable.table.get]
+  flags: --base-id:string, -h/--help:bool, --table-ids:string
+
+[aitable.table.list]
+  flags: --base-id:string, -h/--help:bool, --table-ids:string
+
+[aitable.table.update]
+  flags: --base-id:string, --description:string, -h/--help:bool, --name:string, --record-name-key:string, --table-id:string
+
+[aitable.template]
+  commands: search
+  flags: -h/--help:bool
+
+[aitable.template.search]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --query:string
+
+[aitable.view]
+  commands: create, delete, duplicate, get, list, lock, update
+  flags: -h/--help:bool
+
+[aitable.view.create]
+  flags: --base-id:string, --config:string, --desc:string, -h/--help:bool, --name:string, --table-id:string, --view-sub-type:string, --view-type:string
+
+[aitable.view.delete]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.duplicate]
+  flags: --base-id:string, -h/--help:bool, --new-name:string, --table-id:string, --view-id:string
+
+[aitable.view.get]
+  commands: aggregate, card, field-widths, fill-color-rule, filter, frozen-cols, group, lock, row-height, sort, timebar, visible-fields
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-ids:string
+
+[aitable.view.get.aggregate]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.card]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.field-widths]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.fill-color-rule]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.filter]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.frozen-cols]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.group]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.lock]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.row-height]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.sort]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.timebar]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.get.visible-fields]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.list]
+  flags: --base-id:string, -h/--help:bool, --table-id:string, --view-ids:string
+
+[aitable.view.lock]
+  flags: --base-id:string, -h/--help:bool, --off:bool, --table-id:string, --view-id:string
+
+[aitable.view.update]
+  commands: aggregate, card, field-widths, fill-color-rule, filter, frozen-cols, group, name, row-height, sort, timebar, visible-fields
+  flags: --base-id:string, --config:string, --desc:string, -h/--help:bool, --name:string, --table-id:string, --view-id:string
+
+[aitable.view.update.aggregate]
+  flags: --action:string, --base-id:string, --clear-field-id:string, --field-id:string, -h/--help:bool, --json:string, --table-id:string, --view-id:string
+
+[aitable.view.update.card]
+  flags: --base-id:string, --cover-field-id:string, --cover-mode:string, --cover-resize-mode:string, --display-field-name:bool, -h/--help:bool, --hidden-field-title:bool, --json:string, --no-cover:bool, --table-id:string, --view-id:string
+
+[aitable.view.update.field-widths]
+  flags: --base-id:string, --field-id:string, -h/--help:bool, --json:string, --table-id:string, --view-id:string, --width:int
+
+[aitable.view.update.fill-color-rule]
+  flags: --base-id:string, -h/--help:bool, --json:string, --table-id:string, --view-id:string
+
+[aitable.view.update.filter]
+  flags: --base-id:string, -h/--help:bool, --json:string, --table-id:string, --view-id:string
+
+[aitable.view.update.frozen-cols]
+  flags: --base-id:string, --count:int, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.update.group]
+  flags: --base-id:string, -h/--help:bool, --json:string, --table-id:string, --view-id:string
+
+[aitable.view.update.name]
+  flags: --base-id:string, -h/--help:bool, --name:string, --table-id:string, --view-id:string
+
+[aitable.view.update.row-height]
+  flags: --base-id:string, --cell-height:int, -h/--help:bool, --table-id:string, --view-id:string
+
+[aitable.view.update.sort]
+  flags: --base-id:string, -h/--help:bool, --json:string, --table-id:string, --view-id:string
+
+[aitable.view.update.timebar]
+  flags: --base-id:string, --color-configs:string, --display-field-id:string, --end-field:string, -h/--help:bool, --json:string, --official-holiday:bool, --start-field:string, --table-id:string, --timeline-scale:string, --view-id:string
+
+[aitable.view.update.visible-fields]
+  flags: --base-id:string, --field-ids:string, -h/--help:bool, --json:string, --table-id:string, --view-id:string
+
+[aitable.workflow]
+  commands: disable, enable, get, list
+  flags: -h/--help:bool
+
+[aitable.workflow.disable]
+  flags: --base-id:string, -h/--help:bool, --workflow-id:string
+
+[aitable.workflow.enable]
+  flags: --base-id:string, -h/--help:bool, --workflow-id:string
+
+[aitable.workflow.get]
+  flags: --base-id:string, -h/--help:bool, --workflow-id:string
+
+[aitable.workflow.list]
+  flags: --base-id:string, -h/--help:bool, --limit:int, --offset:int
+
+[api]
+  flags: --base-url:string, --data:string, -h/--help:bool, --page-all:bool, --page-delay:int, --page-limit:int, --params:string
+
+[attendance]
+  commands: adjustment, approve, boss-check, check, checkin, class, globalsetting, group, overtime, record, report, rules, schedule, selfsetting, shift, summary, vacation
+  flags: -h/--help:bool
+
+[attendance.adjustment]
+  commands: get, search
+  flags: -h/--help:bool
+
+[attendance.adjustment.get]
+  flags: --adjustment-id:int64, -h/--help:bool
+
+[attendance.adjustment.search]
+  flags: -h/--help:bool, --limit:int, --page:int, --query:string
+
+[attendance.approve]
+  commands: list, templates
+  flags: -h/--help:bool
+
+[attendance.approve.list]
+  flags: --end:string, -h/--help:bool, --start:string, --types:string, --users:string
+
+[attendance.approve.templates]
+  flags: -h/--help:bool, --type:string
+
+[attendance.boss-check]
+  flags: --absent-min:int, -h/--help:bool, --plan-id:string, --remark:string, --result:string, --result-id:string, --time:string, --user-say-yes:bool
+
+[attendance.check]
+  commands: record, result
+  flags: -h/--help:bool
+
+[attendance.check.record]
+  flags: --end:string, -h/--help:bool, --start:string, --users:string
+
+[attendance.check.result]
+  flags: --end:string, -h/--help:bool, --limit:int, --offset:int, --start:string, --users:string
+
+[attendance.checkin]
+  commands: records
+  flags: -h/--help:bool
+
+[attendance.checkin.records]
+  flags: --end:string, -h/--help:bool, --operator-corp-id:string, --operator-staff-id:string, --staff-ids:string, --start:string
+
+[attendance.class]
+  commands: create, get, search, update
+  flags: -h/--help:bool
+
+[attendance.class.create]
+  flags: --class-vo:string, -h/--help:bool, --name:string, --owner:string, --yes:bool
+
+[attendance.class.get]
+  flags: --class-id:int64, -h/--help:bool
+
+[attendance.class.search]
+  flags: --filter-type:string, -h/--help:bool, --limit:int, --page:int, --query:string
+
+[attendance.class.update]
+  flags: --class-id:int64, --class-vo:string, -h/--help:bool, --name:string, --owner:string, --yes:bool
+
+[attendance.globalsetting]
+  commands: get, save
+  flags: -h/--help:bool
+
+[attendance.globalsetting.get]
+  flags: -h/--help:bool, --scope:string, --setting-scene:string
+
+[attendance.globalsetting.save]
+  flags: --boss-daily-report-type:int, --boss-monthly-report-type:int, --boss-weekly-report-type:int, --check-remind-corp:bool, --check-remind-pc-corp:bool, --enable-check-cert-push:bool, --enable-personal-daily-report:bool, --enable-personal-monthly-report:bool, --enable-personal-weekly-report:bool, --enable-personal-weekly-report-card:bool, --fast-check-corp:bool, -h/--help:bool, --lack-remind-corp:bool, --scope:string, --setting-scene:string, --yes:bool
+
+[attendance.group]
+  commands: create, filtered-get, get, search, update, update-members
+  flags: -h/--help:bool
+
+[attendance.group.create]
+  flags: --corp-id:string, --group-vo:string, -h/--help:bool, --name:string, --owner:string, --type:string, --yes:bool
+
+[attendance.group.filtered-get]
+  flags: --bles:bool, --group-id:int64, -h/--help:bool, --member:bool, --position:bool, --wifi:bool
+
+[attendance.group.get]
+  flags: --group-id:int64, -h/--help:bool
+
+[attendance.group.search]
+  flags: -h/--help:bool, --limit:int, --page:int, --query:string, --query-ble:bool, --query-position:bool, --type:string
+
+[attendance.group.update]
+  flags: --classIds:string, --enable-outside-check:string, --group-id:int64, --group-vo:string, -h/--help:bool, --name:string, --owner:string, --type:string, --yes:bool
+
+[attendance.group.update-members]
+  flags: --add-depts:string, --add-extra-users:string, --add-users:string, --group-id:int64, -h/--help:bool, --remove-depts:string, --remove-extra-users:string, --remove-users:string, --yes:bool
+
+[attendance.overtime]
+  commands: get, search
+  flags: -h/--help:bool
+
+[attendance.overtime.get]
+  flags: -h/--help:bool, --overtime-id:int64
+
+[attendance.overtime.search]
+  flags: -h/--help:bool, --limit:int, --page:int, --query:string
+
+[attendance.record]
+  commands: get
+  flags: -h/--help:bool
+
+[attendance.record.get]
+  flags: --date:string, -h/--help:bool, --user:string
+
+[attendance.report]
+  commands: columns, query-data, query-leave
+  flags: -h/--help:bool
+
+[attendance.report.columns]
+  flags: -h/--help:bool
+
+[attendance.report.query-data]
+  flags: --columns:string, --end:string, -h/--help:bool, --start:string, --users:string
+
+[attendance.report.query-leave]
+  flags: --end:string, -h/--help:bool, --leave-names:string, --start:string, --users:string
+
+[attendance.rules]
+  flags: --date:string, -h/--help:bool
+
+[attendance.schedule]
+  commands: get, import
+  flags: -h/--help:bool
+
+[attendance.schedule.get]
+  flags: --end:string, -h/--help:bool, --start:string, --users:string
+
+[attendance.schedule.import]
+  flags: --groupId:string, -h/--help:bool, --scheduleVOS:string, --user-say-yes:bool
+
+[attendance.selfsetting]
+  commands: get, save
+  flags: -h/--help:bool
+
+[attendance.selfsetting.get]
+  flags: -h/--help:bool, --setting-scene:string, --user:string
+
+[attendance.selfsetting.save]
+  flags: --boss-month-report-type:int, --boss-push-start-min:int, --boss-week-report-type:int, --can-update-off-duty:bool, --check-remind-setting:string, --check-remind-user-off-duty:bool, --check-remind-user-on-duty:bool, --check-result-msg:int, --enable-offduty-check-remind-of-pc:bool, --enable-onduty-check-remind-of-pc:bool, --fast-check-late-need-confirm:bool, -h/--help:bool, --lack-remind-user:int, --lack-send-todo-msg:int, --offduty-check-type:int, --offduty-remind-end-min:int, --offduty-remind-start-min:int, --onduty-check-type:int, --onduty-remind-end-min:int, --onduty-remind-start-min:int, --person-daily-report-switch:int, --person-month-report-type:int, --person-week-report-type:int, --setting-scene:string, --user:string, --vibration-remind-switch:bool, --voice-remind-switch:bool, --yes:bool
+
+[attendance.shift]
+  commands: list
+  flags: -h/--help:bool
+
+[attendance.shift.list]
+  flags: --end:string, -h/--help:bool, --start:string, --users:string
+
+[attendance.summary]
+  flags: --date:string, -h/--help:bool, --stats-type:string, --tag-name:string, --user:string
+
+[attendance.vacation]
+  commands: balance, records, save-balance, types, update-type
+  flags: -h/--help:bool
+
+[attendance.vacation.balance]
+  flags: -h/--help:bool, --leave-code:string, --users:string
+
+[attendance.vacation.records]
+  flags: --end:string, -h/--help:bool, --leave-code:string, --start:string, --user:string
+
+[attendance.vacation.save-balance]
+  flags: --end:string, -h/--help:bool, --leave-code:string, --num:string, --reason:string, --start:string, --target:string, --user-say-yes:bool
+
+[attendance.vacation.types]
+  flags: -h/--help:bool
+
+[attendance.vacation.update-type]
+  flags: -h/--help:bool, --leave-code:string, --name:string, --paid:bool, --per-hours:int, --unit:string, --user-say-yes:bool, --visibility-rules:string, --when-can-leave:string
+
+[auth]
+  commands: export, import, login, logout, reset, status
+  flags: -h/--help:bool
+
+[auth.export]
+  flags: --base64:bool, -h/--help:bool, -o/--output:string
+
+[auth.import]
+  flags: --base64:bool, --force:bool, -h/--help:bool, -i/--input:string
+
+[auth.login]
+  flags: --device:bool, --force:bool, -h/--help:bool, --no-browser:bool, --recommend:bool, --token:string
+
+[auth.logout]
+  flags: -h/--help:bool, --profile:string
+
+[auth.reset]
+  flags: -h/--help:bool
+
+[auth.status]
+  flags: -h/--help:bool, --profile:string
+
+[calendar]
+  commands: acl, attachment, attendee, book, busy, event, room
+  flags: -h/--help:bool
+
+[calendar.acl]
+  commands: add, delete, list
+  flags: -h/--help:bool
+
+[calendar.acl.add]
+  flags: -h/--help:bool, --no-notification:bool, --privilege:string, --user:string
+
+[calendar.acl.delete]
+  flags: --acl-id:string, -h/--help:bool
+
+[calendar.acl.list]
+  flags: -h/--help:bool
+
+[calendar.attachment]
+  commands: add
+  flags: -h/--help:bool
+
+[calendar.attachment.add]
+  flags: --calendar-id:string, --event:string, --files:string, -h/--help:bool
+
+[calendar.attendee]
+  commands: add, delete, list
+  aliases: participant
+  flags: --calendar-id:string, --event:string, -h/--help:bool
+
+[calendar.attendee.add]
+  flags: --attendees:string, -h/--help:bool, --optional:bool
+
+[calendar.attendee.delete]
+  flags: --attendees:string, -h/--help:bool
+
+[calendar.attendee.list]
+  flags: -h/--help:bool
+
+[calendar.book]
+  commands: get, list, search, update
+  flags: -h/--help:bool
+
+[calendar.book.get]
+  flags: -h/--help:bool, --id:string
+
+[calendar.book.list]
+  flags: -h/--help:bool
+
+[calendar.book.search]
+  flags: -h/--help:bool, --query:string
+
+[calendar.book.update]
+  flags: --desc:string, -h/--help:bool, --id:string, --summary:string
+
+[calendar.busy]
+  commands: search
+  flags: -h/--help:bool
+
+[calendar.busy.search]
+  flags: --end:string, -h/--help:bool, --rooms:string, --start:string, --users:string
+
+[calendar.event]
+  commands: create, delete, get, list, respond, suggest, update
+  flags: -h/--help:bool
+
+[calendar.event.create]
+  flags: --attendees:string, --calendar-id:string, --desc:string, --end:string, --free-busy:string, -h/--help:bool, --location:string, --open-dingtalk-ids:string, --recurrence-count:int, --recurrence-day-of-month:int, --recurrence-days-of-week:string, --recurrence-end-date:string, --recurrence-first-day-of-week:string, --recurrence-index:string, --recurrence-interval:int, --recurrence-range-type:string, --recurrence-type:string, --remind-minutes:string, --rich-text-desc:string, --rooms:string, --start:string, --timezone:string, --title:string
+
+[calendar.event.delete]
+  flags: --calendar-id:string, -h/--help:bool, --id:string
+
+[calendar.event.get]
+  flags: --calendar-id:string, -h/--help:bool, --id:string
+
+[calendar.event.list]
+  flags: --calendar-id:string, --cursor:string, --end:string, -h/--help:bool, --limit:int, --start:string
+
+[calendar.event.respond]
+  flags: --calendar-id:string, -h/--help:bool, --id:string, --status:string
+
+[calendar.event.suggest]
+  flags: --duration:string, --end:string, -h/--help:bool, --start:string, --timezone:string, --users:string
+
+[calendar.event.update]
+  flags: --calendar-id:string, --desc:string, --end:string, --free-busy:string, -h/--help:bool, --id:string, --location:string, --recurrence-count:int, --recurrence-day-of-month:int, --recurrence-days-of-week:string, --recurrence-end-date:string, --recurrence-first-day-of-week:string, --recurrence-index:string, --recurrence-interval:int, --recurrence-range-type:string, --recurrence-type:string, --rich-text-desc:string, --start:string, --timezone:string, --title:string
+
+[calendar.room]
+  commands: add, delete, list-groups, search
+  flags: -h/--help:bool
+
+[calendar.room.add]
+  flags: --calendar-id:string, --event:string, -h/--help:bool, --rooms:string
+
+[calendar.room.delete]
+  flags: --calendar-id:string, --event:string, -h/--help:bool, --rooms:string
+
+[calendar.room.list-groups]
+  flags: -h/--help:bool, --limit:string, --page:string
+
+[calendar.room.search]
+  flags: --end:string, --group-id:string, -h/--help:bool, --limit:string, --page:string, --room-name:string, --start:string
+
+[chat]
+  commands: bot, category, chmod, clear-all-red-point, clear-messages, clear-red-point, conversation-info, data-auth, group, group-mute, group-mute-member, group-role, hide, list-all-conversations, list-top-conversations, mark-read, mark-unread, media, message, mute, mute-at-all, mute-red-envelope, search, search-common, set-top, text
+  aliases: im
+  flags: -h/--help:bool
+
+[chat.bot]
+  commands: find, search
+  flags: -h/--help:bool
+
+[chat.bot.find]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --query:string
+
+[chat.bot.search]
+  flags: -h/--help:bool, --name:string, --page:int, --size:int
+
+[chat.category]
+  commands: add-conv, create, create-smart, delete, list, list-conversations, remove-conv, rename
+  flags: -h/--help:bool
+
+[chat.category.add-conv]
+  flags: --category-ids:string, --group:string, -h/--help:bool
+
+[chat.category.create]
+  flags: -h/--help:bool, --title:string
+
+[chat.category.create-smart]
+  flags: -h/--help:bool, --keywords:string, --members:string, --name:string
+
+[chat.category.delete]
+  flags: --category-id:int64, -h/--help:bool
+
+[chat.category.list]
+  flags: -h/--help:bool
+
+[chat.category.list-conversations]
+  flags: --category-id:int, --exclude-muted:bool, -h/--help:bool
+
+[chat.category.remove-conv]
+  flags: --category-ids:string, --group:string, -h/--help:bool
+
+[chat.category.rename]
+  flags: --category-id:int64, -h/--help:bool, --title:string
+
+[chat.chmod]
+  flags: --agentCode:string, --conversation-id:string, --grant-type:string, -h/--help:bool, --open-dingtalk-id:string, --permParam:stringArray, --session-id:string, --ttl:string, --user:string
+
+[chat.clear-all-red-point]
+  flags: -h/--help:bool
+
+[chat.clear-messages]
+  flags: --conversation-id:string, -h/--help:bool
+
+[chat.clear-red-point]
+  flags: --conversation-id:string, -h/--help:bool
+
+[chat.conversation-info]
+  flags: --group:string, -h/--help:bool, --open-dingtalk-id:string, --user:string
+
+[chat.data-auth]
+  commands: cross-org
+  flags: -h/--help:bool
+
+[chat.data-auth.cross-org]
+  flags: --agentCode:string, --all:bool, --grant-type:string, -h/--help:bool, --session-id:string, --target-org-id:string, --ttl:string
+
+[chat.group]
+  commands: audit-join-validation, bots, create, dismiss, get-by-group-id, invite-url, list-all, list-join-validations, list-my-groups, members, notice, quit, rename, set-admin, set-history, share-invite, transfer-owner, update-alias, update-icon, update-nick, update-settings
+  flags: -h/--help:bool
+
+[chat.group-mute]
+  flags: --group:string, -h/--help:bool, --off:bool
+
+[chat.group-mute-member]
+  flags: --group:string, -h/--help:bool, --mute-time:int64, --off:bool, --user:string, --users:string
+
+[chat.group-role]
+  commands: add, list, query-user, remove, remove-user, set-user, update
+  flags: -h/--help:bool
+
+[chat.group-role.add]
+  flags: --group:string, -h/--help:bool, --name:string
+
+[chat.group-role.list]
+  flags: --group:string, -h/--help:bool
+
+[chat.group-role.query-user]
+  flags: --group:string, -h/--help:bool, --user:string
+
+[chat.group-role.remove]
+  flags: --group:string, -h/--help:bool, --role-id:string
+
+[chat.group-role.remove-user]
+  flags: --group:string, -h/--help:bool, --role-ids:string, --user:string
+
+[chat.group-role.set-user]
+  flags: --group:string, -h/--help:bool, --role-ids:string, --user:string
+
+[chat.group-role.update]
+  flags: --group:string, -h/--help:bool, --name:string, --role-id:string
+
+[chat.group.audit-join-validation]
+  flags: --applicant:string, --description:string, --group:string, -h/--help:bool, --inviter:string, --record-id:string, --status:string
+
+[chat.group.bots]
+  flags: --group:string, -h/--help:bool
+
+[chat.group.create]
+  flags: -h/--help:bool, --name:string, --thread:bool, --type:string, --users:string
+
+[chat.group.dismiss]
+  flags: --group:string, -h/--help:bool
+
+[chat.group.get-by-group-id]
+  flags: --group-id:int64, -h/--help:bool
+
+[chat.group.invite-url]
+  flags: --expires-seconds:int64, --group:string, -h/--help:bool
+
+[chat.group.list-all]
+  flags: --cursor:string, -h/--help:bool, --limit:int
+
+[chat.group.list-join-validations]
+  flags: --cursor:string, -h/--help:bool, --limit:int
+
+[chat.group.list-my-groups]
+  flags: --exclude-muted:bool, -h/--help:bool, --limit:int, --role:string
+
+[chat.group.members]
+  commands: add, add-bot, list-by-ids, remove, remove-bot
+  flags: --cursor:string, -h/--help:bool, --id:string
+
+[chat.group.members.add]
+  flags: -h/--help:bool, --id:string, --users:string
+
+[chat.group.members.add-bot]
+  flags: -h/--help:bool, --id:string, --robot-code:string
+
+[chat.group.members.list-by-ids]
+  flags: -h/--help:bool, --id:string, --users:string
+
+[chat.group.members.remove]
+  flags: -h/--help:bool, --id:string, --users:string
+
+[chat.group.members.remove-bot]
+  flags: --bot-id:string, -h/--help:bool, --id:string
+
+[chat.group.notice]
+  commands: create, edit, get, list
+  flags: -h/--help:bool
+
+[chat.group.notice.create]
+  flags: --content:string, --group:string, -h/--help:bool, --run-at:string, --send-ding:bool, --sticky:bool
+
+[chat.group.notice.edit]
+  flags: --content:string, --group:string, -h/--help:bool, --notice-id:string, --send-ding:bool, --sticky:bool
+
+[chat.group.notice.get]
+  flags: --group:string, -h/--help:bool, --notice-id:string
+
+[chat.group.notice.list]
+  flags: --cursor:string, --group:string, -h/--help:bool, --limit:int, --scheduled:bool
+
+[chat.group.quit]
+  flags: --group:string, -h/--help:bool
+
+[chat.group.rename]
+  flags: -h/--help:bool, --id:string, --name:string
+
+[chat.group.set-admin]
+  flags: --group:string, -h/--help:bool, --off:bool, --user:string, --users:string
+
+[chat.group.set-history]
+  flags: --group:string, -h/--help:bool, --option:string
+
+[chat.group.share-invite]
+  flags: --expires-seconds:int64, -h/--help:bool, --receiver:string, --source:string, --target:string, --uuid:string
+
+[chat.group.transfer-owner]
+  flags: --group:string, -h/--help:bool, --new-owner:string, --user:string
+
+[chat.group.update-alias]
+  flags: --alias-title:string, --group:string, -h/--help:bool
+
+[chat.group.update-icon]
+  flags: --group:string, -h/--help:bool, --icon-media-id:string
+
+[chat.group.update-nick]
+  flags: --group:string, -h/--help:bool, --nick:string
+
+[chat.group.update-settings]
+  flags: --group:string, -h/--help:bool, --setting-key:string, --status:int
+
+[chat.hide]
+  flags: --conversation-id:string, -h/--help:bool
+
+[chat.list-all-conversations]
+  flags: --cursor:int64, --exclude-muted:bool, -h/--help:bool, --limit:int
+
+[chat.list-top-conversations]
+  flags: --cursor:int64, --exclude-muted:bool, -h/--help:bool, --limit:int
+
+[chat.mark-read]
+  flags: --conversation-id:string, -h/--help:bool, --message-id:string
+
+[chat.mark-unread]
+  flags: --conversation-id:string, -h/--help:bool
+
+[chat.media]
+  commands: upload
+  flags: -h/--help:bool
+
+[chat.media.upload]
+  flags: --file:string, -h/--help:bool, --type:string
+
+[chat.message]
+  commands: add-emoji, add-text-emotion, combine-forward, create-text-emotion, download-media, forward, forward-topic, list, list-all, list-by-ids, list-by-sender, list-emotion-replies, list-focused, list-mentions, list-pin-msg, list-topic-replies, list-unread-conversations, query-send-status, read-status, recall, recall-by-bot, remove-emoji, remove-text-emotion, reply, search, search-advanced, send, send-by-bot, send-by-webhook, send-card, set-pin-msg, set-top-msg, unset-pin-msg, unset-top-msg, update-card
+  flags: -h/--help:bool
+
+[chat.message.add-emoji]
+  flags: --chat:string, --conversation-id:string, --emoji:string, --group:string, -h/--help:bool, --id:string, --msg-id:string
+
+[chat.message.add-text-emotion]
+  flags: --background-id:string, --chat:string, --conversation-id:string, --emotion-id:string, --emotion-name:string, --group:string, -h/--help:bool, --id:string, --msg-id:string, --text:string
+
+[chat.message.combine-forward]
+  flags: --dest-conversation-id:string, -h/--help:bool, --msg-ids:string, --src-conversation-id:string, --uuid:string
+
+[chat.message.create-text-emotion]
+  flags: --background-id:string, --emotion-name:string, -h/--help:bool, --text:string
+
+[chat.message.download-media]
+  flags: -h/--help:bool, --message-id:string, --open-conversation-id:string, --output:string, --resource-id:string, --type:string
+
+[chat.message.forward]
+  flags: --dest-conversation-id:string, -h/--help:bool, --msg-id:string, --src-conversation-id:string, --uuid:string
+
+[chat.message.forward-topic]
+  flags: --dest-conversation-id:string, -h/--help:bool, --src-conversation-id:string, --src-msg-id:string, --src-thread-id:string
+
+[chat.message.list]
+  flags: --direction:string, --group:string, -h/--help:bool, --limit:int, --open-dingtalk-id:string, --time:string, --user:string
+
+[chat.message.list-all]
+  flags: --cursor:string, --end:string, -h/--help:bool, --limit:int, --start:string
+
+[chat.message.list-by-ids]
+  flags: -h/--help:bool, --msg-ids:string
+
+[chat.message.list-by-sender]
+  flags: --cursor:string, --end:string, -h/--help:bool, --limit:int, --sender-open-dingtalk-id:string, --sender-user-id:string, --start:string
+
+[chat.message.list-emotion-replies]
+  flags: -h/--help:bool, --msg-ids:string
+
+[chat.message.list-focused]
+  flags: --cursor:int64, -h/--help:bool, --limit:int
+
+[chat.message.list-mentions]
+  flags: --cursor:string, --end:string, --group:string, -h/--help:bool, --limit:int, --start:string
+
+[chat.message.list-pin-msg]
+  flags: --cursor:string, -h/--help:bool, --open-conversation-id:string, --size:int
+
+[chat.message.list-topic-replies]
+  flags: --direction:string, --group:string, -h/--help:bool, --limit:int, --time:string, --topic-id:string
+
+[chat.message.list-unread-conversations]
+  flags: --count:int, --exclude-muted:bool, -h/--help:bool
+
+[chat.message.query-send-status]
+  flags: -h/--help:bool, --open-task-id:string
+
+[chat.message.read-status]
+  flags: --conversation-id:string, -h/--help:bool, --message-id:string, --target-open-dingtalk-ids:string, --user:string, --users:string
+
+[chat.message.recall]
+  flags: --conversation-id:string, -h/--help:bool, --msg-id:string
+
+[chat.message.recall-by-bot]
+  flags: --group:string, -h/--help:bool, --keys:string, --robot-code:string
+
+[chat.message.remove-emoji]
+  flags: --chat:string, --conversation-id:string, --emoji:string, --group:string, -h/--help:bool, --id:string, --msg-id:string
+
+[chat.message.remove-text-emotion]
+  flags: --background-id:string, --chat:string, --conversation-id:string, --emotion-id:string, --emotion-name:string, --group:string, -h/--help:bool, --id:string, --msg-id:string, --text:string
+
+[chat.message.reply]
+  flags: --ai-tag:bool, --conversation-id:string, -h/--help:bool, --ref-msg-id:string, --ref-sender:string, --text:string, --uuid:string
+
+[chat.message.search]
+  flags: --cursor:string, --end:string, --group:string, -h/--help:bool, --limit:int, --query:string, --start:string
+
+[chat.message.search-advanced]
+  flags: --at-ids:string, --at-me:bool, --conversation-ids:string, --cursor:string, --end:string, -h/--help:bool, --limit:int, --query:string, --sender-ids:string, --start:string, --user:string, --users:string
+
+[chat.message.send]
+  flags: --ai-tag:bool, --at-all:bool, --at-open-dingtalk-ids:string, --file-path:string, --group:string, -h/--help:bool, --media-id:string, --msg-type:string, --open-dingtalk-id:string, --text:string, --title:string, --user:string, --uuid:string
+
+[chat.message.send-by-bot]
+  flags: --at-all:bool, --at-open-dingtalk-ids:string, --at-user-ids:string, --group:string, -h/--help:bool, --open-dingtalk-ids:string, --robot-code:string, --text:string, --title:string, --users:string
+
+[chat.message.send-by-webhook]
+  flags: --at-all:bool, --at-mobiles:string, --at-users:string, -h/--help:bool, --text:string, --title:string, --token:string
+
+[chat.message.send-card]
+  flags: --group:string, -h/--help:bool, --receiver:string
+
+[chat.message.set-pin-msg]
+  flags: -h/--help:bool, --msg-id:string, --open-conversation-id:string
+
+[chat.message.set-top-msg]
+  flags: -h/--help:bool, --msg-id:string, --open-conversation-id:string
+
+[chat.message.unset-pin-msg]
+  flags: -h/--help:bool, --msg-id:string, --open-conversation-id:string
+
+[chat.message.unset-top-msg]
+  flags: -h/--help:bool, --msg-id:string, --open-conversation-id:string
+
+[chat.message.update-card]
+  flags: --biz-id:string, --content:string, --flow-status:int, -h/--help:bool
+
+[chat.mute]
+  flags: --chat:string, --conversation-id:string, -h/--help:bool, --id:string, --off:bool
+
+[chat.mute-at-all]
+  flags: --conversation-id:string, -h/--help:bool, --off:bool
+
+[chat.mute-red-envelope]
+  flags: --conversation-id:string, -h/--help:bool, --off:bool
+
+[chat.search]
+  flags: --cursor:string, --exclude-muted:bool, -h/--help:bool, --limit:int, --query:string
+
+[chat.search-common]
+  flags: --cursor:string, --exclude-muted:bool, -h/--help:bool, --limit:int, --match-mode:string, --nicks:string
+
+[chat.set-top]
+  flags: --conversation-id:string, -h/--help:bool, --off:bool
+
+[chat.text]
+  commands: translate
+  flags: -h/--help:bool
+
+[chat.text.translate]
+  flags: -h/--help:bool, --query:string, --to:string
+
+[completion]
+  flags: -h/--help:bool
+
+[config]
+  commands: list
+  flags: -h/--help:bool
+
+[config.list]
+  flags: --category:string, -h/--help:bool, --json:bool, --show-hidden:bool, --show-values:bool
+
+[contact]
+  commands: dept, label, relation, user
+  flags: -h/--help:bool
+
+[contact.dept]
+  commands: get-info, list-children, list-members, search
+  flags: -h/--help:bool
+
+[contact.dept.get-info]
+  flags: --dept:string, -h/--help:bool
+
+[contact.dept.list-children]
+  flags: --dept:string, -h/--help:bool
+
+[contact.dept.list-members]
+  flags: --depts:string, -h/--help:bool
+
+[contact.dept.search]
+  flags: -h/--help:bool, --query:string
+
+[contact.label]
+  commands: get, list, list-members
+  aliases: role
+  flags: -h/--help:bool
+
+[contact.label.get]
+  flags: -h/--help:bool, --names:string
+
+[contact.label.list]
+  flags: -h/--help:bool
+
+[contact.label.list-members]
+  flags: -h/--help:bool, --id:string
+
+[contact.relation]
+  commands: list-my-followings
+  flags: -h/--help:bool
+
+[contact.relation.list-my-followings]
+  flags: -h/--help:bool
+
+[contact.user]
+  commands: dismission, get, get-self, profile, search, search-mobile
+  flags: -h/--help:bool
+
+[contact.user.dismission]
+  commands: search
+  flags: -h/--help:bool
+
+[contact.user.dismission.search]
+  flags: --depts:string, --end:string, -h/--help:bool, --hide-partner:bool, --hide-retirement:bool, --limit:int, --name:string, --page:int, --start:string
+
+[contact.user.get]
+  flags: -h/--help:bool, --ids:string
+
+[contact.user.get-self]
+  aliases: current, me, self, whoami
+  flags: -h/--help:bool
+
+[contact.user.profile]
+  commands: fields, get
+  flags: -h/--help:bool
+
+[contact.user.profile.fields]
+  flags: -h/--help:bool
+
+[contact.user.profile.get]
+  flags: --fields:string, -h/--help:bool, --staff-id:string
+
+[contact.user.search]
+  flags: -h/--help:bool, --query:string
+
+[contact.user.search-mobile]
+  flags: -h/--help:bool, --mobile:string
+
+[dev]
+  commands: app, connect, doc
+  flags: -h/--help:bool
+
+[dev.app]
+  commands: create, credentials, delete, disable, enable, event, get, list, member, permission, robot, security, update, version, webapp
+  flags: -h/--help:bool
+
+[dev.app.create]
+  flags: --desc:string, -h/--help:bool, --icon-media-id:string, --name:string
+
+[dev.app.credentials]
+  commands: get
+  flags: -h/--help:bool
+
+[dev.app.credentials.get]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.delete]
+  flags: --confirm-name:string, -h/--help:bool, --unified-app-id:string
+
+[dev.app.disable]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.enable]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.event]
+  commands: list, subscribe, unsubscribe
+  flags: -h/--help:bool
+
+[dev.app.event.list]
+  flags: --cursor:string, -h/--help:bool, --keyword:string, --page-size:int, --unified-app-id:string
+
+[dev.app.event.subscribe]
+  flags: --event-codes:string, -h/--help:bool, --unified-app-id:string
+
+[dev.app.event.unsubscribe]
+  flags: --event-codes:string, -h/--help:bool, --unified-app-id:string
+
+[dev.app.get]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.list]
+  flags: --app-group-id:int, --app-key:string, --creator:string, --cursor:string, --develop-type:int, --filter-cool-app:int, -h/--help:bool, --name:string, --page-size:int, --robot-name:string, --sort-order:string, --sort-type:string
+
+[dev.app.member]
+  commands: add, list, remove
+  flags: -h/--help:bool
+
+[dev.app.member.add]
+  flags: -h/--help:bool, --member-type:string, --unified-app-id:string, --user-ids:string
+
+[dev.app.member.list]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.member.remove]
+  flags: -h/--help:bool, --member-type:string, --unified-app-id:string, --user-ids:string
+
+[dev.app.permission]
+  commands: add, list, remove
+  flags: -h/--help:bool
+
+[dev.app.permission.add]
+  flags: -h/--help:bool, --scope-values:string, --unified-app-id:string
+
+[dev.app.permission.list]
+  aliases: search
+  flags: --api-status:string, --auth-status:string, --cursor:string, -h/--help:bool, --keyword:string, --page-size:int, --scope-type:string, --scope-value:string, --unified-app-id:string
+
+[dev.app.permission.remove]
+  flags: -h/--help:bool, --scope-values:string, --unified-app-id:string
+
+[dev.app.robot]
+  commands: config, disable, enable, get, result, submit
+  flags: -h/--help:bool
+
+[dev.app.robot.config]
+  flags: --add-scope:bool, --brief:string, --desc:string, --disable-ssl-verify:bool, --event-callback-url:string, -h/--help:bool, --i18n-brief:string, --i18n-description:string, --i18n-name:string, --icon-media-id:string, --mode:string, --name:string, --outgoing-url:string, --skills:string, --unified-app-id:string
+
+[dev.app.robot.disable]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.robot.enable]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.robot.get]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.app.robot.result]
+  flags: -h/--help:bool, --task-id:string
+
+[dev.app.robot.submit]
+  flags: --desc:string, -h/--help:bool, --icon-media-id:string, --name:string, --preview-media-id:string, --robot-name:string, --task-id:string
+
+[dev.app.security]
+  commands: config
+  flags: -h/--help:bool
+
+[dev.app.security.config]
+  flags: -h/--help:bool, --ip-whitelist:string, --redirect-urls:string, --sso-urls:string, --unified-app-id:string
+
+[dev.app.update]
+  flags: --desc:string, -h/--help:bool, --icon-media-id:string, --name:string, --unified-app-id:string
+
+[dev.app.version]
+  commands: check-approval, create, get, list, publish, status
+  flags: -h/--help:bool
+
+[dev.app.version.check-approval]
+  flags: -h/--help:bool, --unified-app-id:string, --version-id:string
+
+[dev.app.version.create]
+  flags: --desc:string, -h/--help:bool, --unified-app-id:string, --version:string
+
+[dev.app.version.get]
+  flags: -h/--help:bool, --unified-app-id:string, --version-id:string
+
+[dev.app.version.list]
+  flags: --cursor:string, -h/--help:bool, --page-size:int, --unified-app-id:string
+
+[dev.app.version.publish]
+  flags: --approver-user-id:string, --confirmed-sensitive:bool, -h/--help:bool, --unified-app-id:string, --version-id:string
+
+[dev.app.version.status]
+  flags: -h/--help:bool, --unified-app-id:string, --version-id:string
+
+[dev.app.webapp]
+  commands: config, get
+  flags: -h/--help:bool
+
+[dev.app.webapp.config]
+  flags: --h5-page-type:string, -h/--help:bool, --homepage-url:string, --omp-url:string, --pc-homepage-url:string, --unified-app-id:string
+
+[dev.app.webapp.get]
+  flags: -h/--help:bool, --unified-app-id:string
+
+[dev.connect]
+  commands: list, restart, status, stop
+  flags: --agent-approval-mode:string, --agent-cmd:string, --agent-memory:bool, --agent-model:string, --agent-permission-mode:string, --agent-timeout:int, --agent-workdir:string, --allowed-groups:string, --allowed-users:string, --alwayson:bool, --approval-card-template:string, --audit-sheet:string, --audit-sheet-tab:string, --card-template:string, --channel:string, --daemon:bool, -h/--help:bool, --knowledge-dir:string, --knowledge-source:string, --notify-staff-id:string, --owner-user-id:string, --reply-card:bool, --robot-client-id:string, --robot-client-secret:string, --role-config:string, --unified-app-id:string, --user-rate-limit:int, --yolo:bool
+
+[dev.connect.list]
+  flags: -h/--help:bool, --json:bool
+
+[dev.connect.restart]
+  flags: -h/--help:bool, --robot-client-id:string, --unified-app-id:string
+
+[dev.connect.status]
+  flags: -h/--help:bool, --json:bool, --robot-client-id:string, --unified-app-id:string
+
+[dev.connect.stop]
+  flags: -h/--help:bool, --robot-client-id:string, --unified-app-id:string
+
+[dev.doc]
+  commands: search
+  flags: -h/--help:bool
+
+[dev.doc.search]
+  flags: -h/--help:bool, --page:string, --query:string, --size:string
+
+[devdoc]
+  commands: article
+  flags: -h/--help:bool
+
+[devdoc.article]
+  commands: search
+  flags: -h/--help:bool
+
+[devdoc.article.search]
+  flags: -h/--help:bool, --page:string, --query:string, --size:string
+
+[ding]
+  commands: message
+  flags: -h/--help:bool
+
+[ding.message]
+  commands: list, recall, recall-personal, receiver-status, send, send-by-message, send-personal
+  flags: -h/--help:bool
+
+[ding.message.list]
+  flags: --cursor:int64, -h/--help:bool, --type:string
+
+[ding.message.recall]
+  flags: -h/--help:bool, --id:string, --robot-code:string
+
+[ding.message.recall-personal]
+  flags: -h/--help:bool, --id:string
+
+[ding.message.receiver-status]
+  flags: --ding-id:string, -h/--help:bool
+
+[ding.message.send]
+  flags: --content:string, -h/--help:bool, --robot-code:string, --type:string, --users:string
+
+[ding.message.send-by-message]
+  flags: --group:string, -h/--help:bool, --message-id:string, --type:string, --users:string, --uuid:string
+
+[ding.message.send-personal]
+  flags: --content:string, -h/--help:bool, --type:string, --users:string, --uuid:string
+
+[doc]
+  commands: block, comment, create, export, file, import, info, media, read, template, update, version
+  flags: -h/--help:bool
+
+[doc.block]
+  commands: delete, insert, list, update
+  flags: -h/--help:bool
+
+[doc.block.delete]
+  flags: --block-id:string, -h/--help:bool, --node:string
+
+[doc.block.insert]
+  flags: --content-format:string, --element:string, --fix-jsonml:bool, --heading:string, -h/--help:bool, --index:int, --level:int, --node:string, --parent-block:string, --ref-block:string, --text:string, --where:string
+
+[doc.block.list]
+  flags: --block-id:string, --block-type:string, --content-format:string, --end-index:int, -h/--help:bool, --node:string, --start-index:int
+
+[doc.block.update]
+  flags: --block-id:string, --content-format:string, --element:string, --fix-jsonml:bool, --heading:string, -h/--help:bool, --level:int, --node:string, --text:string
+
+[doc.comment]
+  commands: create, create-inline, list, reply
+  flags: -h/--help:bool
+
+[doc.comment.create]
+  flags: --content:string, -h/--help:bool, --mention:string, --node:string
+
+[doc.comment.create-inline]
+  flags: --block-id:string, --content:string, --end:int, -h/--help:bool, --mention:string, --node:string, --selected-text:string, --start:int
+
+[doc.comment.list]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --node:string, --resolve-status:string, --type:string
+
+[doc.comment.reply]
+  flags: --comment-key:string, --content:string, --emoji:bool, -h/--help:bool, --mention:string, --node:string
+
+[doc.create]
+  flags: --content:string, --content-file:string, --content-format:string, --fix-jsonml:bool, --folder:string, -h/--help:bool, --name:string, --workspace:string
+
+[doc.export]
+  commands: get
+  flags: --export-format:string, -h/--help:bool, --node:string, --output:string
+
+[doc.export.get]
+  flags: -h/--help:bool, --job-id:string
+
+[doc.file]
+  commands: create
+  flags: -h/--help:bool
+
+[doc.file.create]
+  flags: --folder:string, -h/--help:bool, --name:string, --type:string, --workspace:string
+
+[doc.import]
+  commands: get
+  flags: --file:string, --folder:string, -h/--help:bool, -n/--name:string, --workspace:string
+
+[doc.import.get]
+  flags: -h/--help:bool, --task-id:string
+
+[doc.info]
+  flags: -h/--help:bool, --node:string
+
+[doc.media]
+  commands: download, insert
+  flags: -h/--help:bool
+
+[doc.media.download]
+  flags: -h/--help:bool, --node:string, --resource-id:string
+
+[doc.media.insert]
+  flags: --file:string, -h/--help:bool, --index:int, --mime-type:string, --name:string, --node:string, --ref-block:string, --where:string
+
+[doc.read]
+  flags: --content-format:string, -h/--help:bool, --node:string, --output:string
+
+[doc.template]
+  commands: apply, list, search
+  flags: -h/--help:bool
+
+[doc.template.apply]
+  flags: --folder:string, -h/--help:bool, --name:string, --template-id:string, --workspace:string
+
+[doc.template.list]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --source:string
+
+[doc.template.search]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --query:string, --source:string
+
+[doc.update]
+  flags: --content:string, --content-file:string, --content-format:string, --dry-run:bool, --fix-jsonml:bool, -h/--help:bool, --index:int, --mode:string, --node:string, --revision:int, --yes:bool
+
+[doc.version]
+  commands: list, revert, save
+  flags: -h/--help:bool
+
+[doc.version.list]
+  aliases: ls
+  flags: --cursor:string, -h/--help:bool, --limit:int, --node:string
+
+[doc.version.revert]
+  flags: -h/--help:bool, --node:string, --version:int
+
+[doc.version.save]
+  flags: -h/--help:bool, --node:string
+
+[doctor]
+  flags: -h/--help:bool, --json:bool, --perf:bool, --timeout:int
+
+[drive]
+  commands: commit, copy, delete, download, info, list, list-spaces, mkdir, move, permission, publish, recent, recycle, rename, search, upload, upload-info
+  flags: -h/--help:bool
+
+[drive.commit]
+  flags: --file-name:string, --file-size:int64, --folder:string, -h/--help:bool, --space-id:string, --upload-id:string
+
+[drive.copy]
+  flags: --folder:string, -h/--help:bool, --node:string, --workspace:string
+
+[drive.delete]
+  flags: -h/--help:bool, --node:string
+
+[drive.download]
+  flags: -h/--help:bool, --node:string, --output:string, --space-id:string
+
+[drive.info]
+  flags: -h/--help:bool, --node:string, --space-id:string
+
+[drive.list]
+  flags: --cursor:string, --folder:string, -h/--help:bool, --limit:int, --order:string, --order-by:string, --space-id:string, --thumbnail:bool, --workspace:string
+
+[drive.list-spaces]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --space-type:string
+
+[drive.mkdir]
+  flags: --folder:string, -h/--help:bool, --name:string, --space-id:string
+
+[drive.move]
+  flags: --folder:string, -h/--help:bool, --node:string, --workspace:string
+
+[drive.permission]
+  commands: add, list, remove, update
+  aliases: perm
+  flags: -h/--help:bool
+
+[drive.permission.add]
+  flags: -h/--help:bool, --node:string, --role:string, --users:string, --workspace:string
+
+[drive.permission.list]
+  aliases: ls
+  flags: --filter-role:string, -h/--help:bool, --limit:int, --node:string, --workspace:string
+
+[drive.permission.remove]
+  aliases: rm
+  flags: -h/--help:bool, --node:string, --users:string, --workspace:string
+
+[drive.permission.update]
+  flags: -h/--help:bool, --node:string, --role:string, --users:string, --workspace:string
+
+[drive.publish]
+  commands: get, set, unset
+  flags: -h/--help:bool
+
+[drive.publish.get]
+  aliases: status
+  flags: -h/--help:bool, --node:string
+
+[drive.publish.set]
+  flags: -h/--help:bool, --node:string, --permission:string
+
+[drive.publish.unset]
+  aliases: close, off
+  flags: -h/--help:bool, --node:string
+
+[drive.recent]
+  flags: --creator-type:int, --cursor:string, --file-types:intSlice, -h/--help:bool, --limit:int, --operate-type:intSlice, --org-ids:intSlice
+
+[drive.recycle]
+  commands: list, restore
+  flags: -h/--help:bool
+
+[drive.recycle.list]
+  aliases: ls
+  flags: --cursor:string, -h/--help:bool, --limit:int, --space-id:string
+
+[drive.recycle.restore]
+  flags: -h/--help:bool, --id:string
+
+[drive.rename]
+  flags: -h/--help:bool, --name:string, --node:string
+
+[drive.search]
+  flags: --created-from:int64, --created-to:int64, --creator-uids:stringSlice, --cursor:string, --extensions:stringSlice, --file-types:stringSlice, -h/--help:bool, --limit:int, --modified-from:int64, --modified-to:int64, --query:string, --target:string
+
+[drive.upload]
+  flags: --convert:bool, --file:string, --file-name:string, --folder:string, -h/--help:bool, --mime-type:string, --space-id:string, --workspace:string
+
+[drive.upload-info]
+  flags: --file-name:string, --file-size:int64, --folder:string, -h/--help:bool, --mime-type:string, --space-id:string
+
+[help]
+  flags: -h/--help:bool
+
+[live]
+  commands: stream
+  flags: -h/--help:bool
+
+[live.stream]
+  commands: list
+  flags: -h/--help:bool
+
+[live.stream.list]
+  flags: -h/--help:bool
+
+[mail]
+  commands: allow-list, attachment, auto-reply, block-list, contact, draft, folder, mailbox, message, rule, sent-message, tag, template, thread, user
+  flags: -h/--help:bool
+
+[mail.allow-list]
+  commands: add, list, remove
+  flags: -h/--help:bool
+
+[mail.allow-list.add]
+  flags: --email:string, --entries:string, -h/--help:bool
+
+[mail.allow-list.list]
+  flags: --email:string, -h/--help:bool
+
+[mail.allow-list.remove]
+  flags: --email:string, --entries:string, -h/--help:bool
+
+[mail.attachment]
+  commands: download, list
+  flags: -h/--help:bool
+
+[mail.attachment.download]
+  flags: --attachment-id:string, --email:string, -h/--help:bool, --message-id:string, --name:string, --output:string
+
+[mail.attachment.list]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.auto-reply]
+  commands: get, update
+  flags: -h/--help:bool
+
+[mail.auto-reply.get]
+  flags: --email:string, -h/--help:bool
+
+[mail.auto-reply.update]
+  flags: --content:string, --email:string, --enabled:string, --end:string, -h/--help:bool, --scope:string, --start:string
+
+[mail.block-list]
+  commands: add, list, remove
+  flags: -h/--help:bool
+
+[mail.block-list.add]
+  flags: --email:string, --entries:string, -h/--help:bool
+
+[mail.block-list.list]
+  flags: --email:string, -h/--help:bool
+
+[mail.block-list.remove]
+  flags: --email:string, --entries:string, -h/--help:bool
+
+[mail.contact]
+  commands: batch-delete, create, list, update
+  flags: -h/--help:bool
+
+[mail.contact.batch-delete]
+  flags: --contact-ids:string, --email:string, -h/--help:bool
+
+[mail.contact.create]
+  flags: --contact-email:string, --display-name:string, --email:string, --first-name:string, -h/--help:bool, --last-name:string, --middle-name:string
+
+[mail.contact.list]
+  flags: --cursor:string, --email:string, -h/--help:bool, --limit:string
+
+[mail.contact.update]
+  flags: --contact-email:string, --contact-id:string, --display-name:string, --email:string, --first-name:string, -h/--help:bool, --last-name:string, --middle-name:string
+
+[mail.draft]
+  commands: create, send, update
+  flags: -h/--help:bool
+
+[mail.draft.create]
+  flags: --attachment:stringArray, --cc:string, --content:string, --from:string, -h/--help:bool, --inline-attachment:stringArray, --subject:string, --to:string
+
+[mail.draft.send]
+  flags: --from:string, -h/--help:bool, --id:string
+
+[mail.draft.update]
+  flags: --attachment:stringArray, --cc:string, --content:string, --from:string, -h/--help:bool, --id:string, --inline-attachment:stringArray, --subject:string, --to:string
+
+[mail.folder]
+  commands: create, delete, list, update
+  flags: -h/--help:bool
+
+[mail.folder.create]
+  flags: --email:string, --folder:string, -h/--help:bool, --name:string
+
+[mail.folder.delete]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.folder.list]
+  flags: --email:string, --folder:string, -h/--help:bool
+
+[mail.folder.update]
+  flags: --email:string, -h/--help:bool, --id:string, --name:string
+
+[mail.mailbox]
+  commands: list, profile
+  flags: -h/--help:bool
+
+[mail.mailbox.list]
+  flags: -h/--help:bool
+
+[mail.mailbox.profile]
+  flags: --email:string, -h/--help:bool
+
+[mail.message]
+  commands: batch-delete, batch-get, batch-move, batch-update, forward, get, list, reply, reply-all, search, send, verify
+  flags: -h/--help:bool
+
+[mail.message.batch-delete]
+  flags: --email:string, -h/--help:bool, --ids:string
+
+[mail.message.batch-get]
+  flags: --email:string, -h/--help:bool, --ids:string
+
+[mail.message.batch-move]
+  flags: --email:string, --folder:string, -h/--help:bool, --ids:string
+
+[mail.message.batch-update]
+  flags: --action:string, --email:string, -h/--help:bool, --ids:string, --tags:string
+
+[mail.message.forward]
+  flags: --attachment:stringArray, --content:string, --from:string, -h/--help:bool, --id:string, --inline-attachment:stringArray, --subject:string, --to:string
+
+[mail.message.get]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.message.list]
+  flags: --cursor:string, --email:string, --folder-id:string, -h/--help:bool, --limit:string
+
+[mail.message.reply]
+  flags: --attachment:stringArray, --content:string, --from:string, -h/--help:bool, --id:string, --inline-attachment:stringArray, --subject:string, --to:string
+
+[mail.message.reply-all]
+  flags: --attachment:stringArray, --content:string, --from:string, -h/--help:bool, --id:string, --inline-attachment:stringArray, --subject:string, --to:string
+
+[mail.message.search]
+  flags: --cursor:string, --email:string, -h/--help:bool, --limit:string, --query:string
+
+[mail.message.send]
+  flags: --attachment:stringArray, --cc:string, --content:string, --from:string, -h/--help:bool, --inline-attachment:stringArray, --subject:string, --to:string
+
+[mail.message.verify]
+  flags: --email:string, -h/--help:bool, --internet-message-id:string
+
+[mail.rule]
+  commands: adjust, create, delete, list, update
+  flags: -h/--help:bool
+
+[mail.rule.adjust]
+  flags: --direction:string, --email:string, -h/--help:bool, --id:string
+
+[mail.rule.create]
+  flags: --actions:string, --conditions:string, --email:string, --enabled:string, -h/--help:bool, --name:string
+
+[mail.rule.delete]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.rule.list]
+  flags: --email:string, -h/--help:bool
+
+[mail.rule.update]
+  flags: --actions:string, --conditions:string, --email:string, --enabled:string, -h/--help:bool, --id:string, --name:string
+
+[mail.sent-message]
+  commands: recall, recall-detail
+  flags: -h/--help:bool
+
+[mail.sent-message.recall]
+  flags: --email:string, -h/--help:bool, --id:string, --subject:string, --yes:bool
+
+[mail.sent-message.recall-detail]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.tag]
+  commands: create, delete, list, update
+  flags: -h/--help:bool
+
+[mail.tag.create]
+  flags: --email:string, -h/--help:bool, --name:string, --parent-id:string
+
+[mail.tag.delete]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.tag.list]
+  flags: --email:string, -h/--help:bool
+
+[mail.tag.update]
+  flags: --email:string, -h/--help:bool, --id:string, --name:string
+
+[mail.template]
+  commands: create, delete, get, list, update
+  flags: -h/--help:bool
+
+[mail.template.create]
+  flags: --cc:string, --content:string, --email:string, --from:string, -h/--help:bool, --is-draft:bool, --name:string, --subject:string, --to:string
+
+[mail.template.delete]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.template.get]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.template.list]
+  flags: --cursor:string, --email:string, -h/--help:bool, --limit:string
+
+[mail.template.update]
+  flags: --cc:string, --content:string, --email:string, --from:string, -h/--help:bool, --id:string, --name:string, --subject:string, --to:string
+
+[mail.thread]
+  commands: batch-trash, batch-update, get, list, trash, update
+  flags: -h/--help:bool
+
+[mail.thread.batch-trash]
+  flags: --email:string, -h/--help:bool, --ids:string, --yes:bool
+
+[mail.thread.batch-update]
+  flags: --action:string, --email:string, -h/--help:bool, --ids:string, --tag-ids:string
+
+[mail.thread.get]
+  flags: --email:string, -h/--help:bool, --id:string
+
+[mail.thread.list]
+  flags: --ascending:bool, --cursor:string, --email:string, --end:string, --folder:string, -h/--help:bool, --limit:int, --start:string
+
+[mail.thread.trash]
+  flags: --email:string, -h/--help:bool, --id:string, --yes:bool
+
+[mail.thread.update]
+  flags: --action:string, --email:string, -h/--help:bool, --id:string, --tag-ids:string
+
+[mail.user]
+  commands: search
+  flags: -h/--help:bool
+
+[mail.user.search]
+  flags: --cursor:string, --email:string, --employee-no:string, -h/--help:bool, --keyword:string, --limit:string
+
+[minutes]
+  commands: get, hot-word, list, mind-graph, permission, record, replace-text, speaker, tag, update, upload
+  flags: -h/--help:bool
+
+[minutes.get]
+  commands: audio, batch, info, keywords, summary, todos, transcription
+  flags: -h/--help:bool
+
+[minutes.get.audio]
+  flags: -h/--help:bool, --id:string
+
+[minutes.get.batch]
+  flags: -h/--help:bool, --ids:string
+
+[minutes.get.info]
+  flags: -h/--help:bool, --id:string
+
+[minutes.get.keywords]
+  flags: -h/--help:bool, --id:string
+
+[minutes.get.summary]
+  flags: -h/--help:bool, --id:string
+
+[minutes.get.todos]
+  flags: -h/--help:bool, --id:string
+
+[minutes.get.transcription]
+  flags: --cursor:string, --direction:string, -h/--help:bool, --id:string
+
+[minutes.hot-word]
+  commands: add, list
+  flags: -h/--help:bool
+
+[minutes.hot-word.add]
+  flags: -h/--help:bool, --words:string
+
+[minutes.hot-word.list]
+  flags: -h/--help:bool
+
+[minutes.list]
+  commands: all, mine, shared
+  flags: -h/--help:bool
+
+[minutes.list.all]
+  flags: --cursor:string, --end:string, -h/--help:bool, --limit:float64, --query:string, --start:string
+
+[minutes.list.mine]
+  flags: --cursor:string, --end:string, -h/--help:bool, --limit:float64, --query:string, --start:string
+
+[minutes.list.shared]
+  flags: --cursor:string, --end:string, -h/--help:bool, --limit:float64, --query:string, --start:string
+
+[minutes.mind-graph]
+  commands: create, status
+  flags: -h/--help:bool
+
+[minutes.mind-graph.create]
+  flags: -h/--help:bool, --id:string
+
+[minutes.mind-graph.status]
+  flags: -h/--help:bool, --id:string
+
+[minutes.permission]
+  commands: add, remove
+  flags: -h/--help:bool
+
+[minutes.permission.add]
+  flags: --cover:bool, -h/--help:bool, --ids:string, --member-uids:string, --policy:string, --sub-resources:string
+
+[minutes.permission.remove]
+  flags: -h/--help:bool, --ids:string, --member-uids:string
+
+[minutes.record]
+  commands: pause, resume, start, stop
+  flags: -h/--help:bool
+
+[minutes.record.pause]
+  flags: -h/--help:bool, --id:string, --session-id:string
+
+[minutes.record.resume]
+  flags: -h/--help:bool, --id:string, --session-id:string
+
+[minutes.record.start]
+  flags: -h/--help:bool, --session-id:string
+
+[minutes.record.stop]
+  flags: -h/--help:bool, --id:string, --session-id:string
+
+[minutes.replace-text]
+  flags: -h/--help:bool, --id:string, --replace:string, --search:string
+
+[minutes.speaker]
+  commands: replace, summary
+  flags: -h/--help:bool
+
+[minutes.speaker.replace]
+  flags: --from:string, -h/--help:bool, --id:string, --target-uid:string, --to:string
+
+[minutes.speaker.summary]
+  commands: create, get
+  flags: -h/--help:bool
+
+[minutes.speaker.summary.create]
+  flags: -h/--help:bool, --ids:string
+
+[minutes.speaker.summary.get]
+  flags: -h/--help:bool, --ids:string
+
+[minutes.tag]
+  commands: list, query
+  flags: -h/--help:bool
+
+[minutes.tag.list]
+  flags: -h/--help:bool
+
+[minutes.tag.query]
+  flags: --cursor:string, -h/--help:bool, --limit:float64, --tag-id:string
+
+[minutes.update]
+  commands: summary, title
+  flags: -h/--help:bool
+
+[minutes.update.summary]
+  flags: --content:string, -h/--help:bool, --id:string
+
+[minutes.update.title]
+  flags: -h/--help:bool, --id:string, --title:string
+
+[minutes.upload]
+  commands: cancel, complete, create
+  flags: -h/--help:bool
+
+[minutes.upload.cancel]
+  flags: -h/--help:bool, --session-id:string
+
+[minutes.upload.complete]
+  flags: -h/--help:bool, --session-id:string
+
+[minutes.upload.create]
+  flags: --enable-message-card:bool, --file-name:string, --file-size:int64, -h/--help:bool, --input-language:string, --template-id:string, --title:string
+
+[oa]
+  commands: approval
+  flags: -h/--help:bool
+
+[oa.approval]
+  commands: append-task, approve, detail, ding-info, list-cc, list-executed, list-forms, list-initiated, list-pending, list-submitted, oa-cc-noticer, oa-comments, records, redirect-task, reject, revert-activities, revert-task, revoke, search-forms, tasks
+  flags: -h/--help:bool
+
+[oa.approval.append-task]
+  flags: --activate-type:string, --agree-all:string, --appender-user-ids:string, -h/--help:bool, --instance-id:string, --task-id:string, --type:string
+
+[oa.approval.approve]
+  flags: -h/--help:bool, --instance-id:string, --remark:string, --task-id:string
+
+[oa.approval.detail]
+  flags: -h/--help:bool, --instance-id:string
+
+[oa.approval.ding-info]
+  flags: -h/--help:bool, --task-id:string
+
+[oa.approval.list-cc]
+  flags: -h/--help:bool, --limit:string, --page:string, --query:string
+
+[oa.approval.list-executed]
+  flags: -h/--help:bool, --limit:string, --page:string, --query:string
+
+[oa.approval.list-forms]
+  flags: --cursor:string, -h/--help:bool, --limit:string
+
+[oa.approval.list-initiated]
+  flags: --cursor:string, --end:string, -h/--help:bool, --limit:string, --process-code:string, --start:string
+
+[oa.approval.list-pending]
+  flags: --end:string, -h/--help:bool, --limit:string, --page:string, --query:string, --start:string
+
+[oa.approval.list-submitted]
+  flags: -h/--help:bool, --limit:string, --page:string, --query:string
+
+[oa.approval.oa-cc-noticer]
+  flags: -h/--help:bool, --instance-id:string, --operator-id:string, --users:string
+
+[oa.approval.oa-comments]
+  flags: --content:string, -h/--help:bool, --instance-id:string
+
+[oa.approval.records]
+  flags: -h/--help:bool, --instance-id:string
+
+[oa.approval.redirect-task]
+  flags: -h/--help:bool, --remark:string, --task-id:string, --to-actioner-id:string
+
+[oa.approval.reject]
+  flags: -h/--help:bool, --instance-id:string, --remark:string, --task-id:string
+
+[oa.approval.revert-activities]
+  flags: -h/--help:bool, --task-id:string
+
+[oa.approval.revert-task]
+  flags: --action:string, -h/--help:bool, --instance-id:string, --remark:string, --target-activity-id:string, --task-id:string
+
+[oa.approval.revoke]
+  flags: -h/--help:bool, --instance-id:string, --remark:string
+
+[oa.approval.search-forms]
+  flags: -h/--help:bool, --query:string
+
+[oa.approval.tasks]
+  flags: -h/--help:bool, --instance-id:string
+
+[pat]
+  commands: browser-policy, chmod
+  flags: -h/--help:bool
+
+[pat.browser-policy]
+  flags: --agentCode:string, --enabled:bool, -h/--help:bool
+
+[pat.chmod]
+  flags: --agentCode:string, --domain:stringArray, --domains:stringSlice, --grant-type:string, -h/--help:bool, --product:stringArray, --products:stringSlice, --recommend:bool, --session-id:string
+
+[plugin]
+  commands: build, config, create, dev, disable, enable, info, install, list, remove, validate
+  flags: -h/--help:bool
+
+[plugin.build]
+  flags: -h/--help:bool
+
+[plugin.config]
+  commands: get, list, set, unset
+  flags: -h/--help:bool
+
+[plugin.config.get]
+  flags: -h/--help:bool
+
+[plugin.config.list]
+  flags: -h/--help:bool, --json:bool
+
+[plugin.config.set]
+  flags: -h/--help:bool
+
+[plugin.config.unset]
+  flags: -h/--help:bool
+
+[plugin.create]
+  flags: --description:string, -h/--help:bool
+
+[plugin.dev]
+  flags: -h/--help:bool, --off:bool
+
+[plugin.disable]
+  flags: -h/--help:bool
+
+[plugin.enable]
+  flags: -h/--help:bool
+
+[plugin.info]
+  flags: -h/--help:bool
+
+[plugin.install]
+  flags: --dir:string, --git:string, -h/--help:bool
+
+[plugin.list]
+  flags: -h/--help:bool, --json:bool
+
+[plugin.remove]
+  flags: -h/--help:bool, --keep-data:bool
+
+[plugin.validate]
+  flags: -h/--help:bool
+
+[profile]
+  commands: list, switch, use
+  flags: -h/--help:bool
+
+[profile.list]
+  aliases: ls
+  flags: -h/--help:bool
+
+[profile.switch]
+  flags: --corpId:string, -h/--help:bool, --name:string
+
+[profile.use]
+  flags: --corpId:string, -h/--help:bool, --name:string
+
+[recovery]
+  commands: execute, finalize, plan
+  flags: -h/--help:bool
+
+[recovery.execute]
+  flags: --event-id:string, -h/--help:bool, --last:bool
+
+[recovery.finalize]
+  flags: --event-id:string, --execution-file:string, -h/--help:bool, --outcome:string
+
+[recovery.plan]
+  flags: --event-id:string, -h/--help:bool, --last:bool
+
+[report]
+  commands: create, created, detail, entry, inbox, list, outbox, sent, stats, template
+  aliases: log
+  flags: -h/--help:bool
+
+[report.create]
+  flags: --contents:string, --contents-file:string, --dd-from:string, -h/--help:bool, --template-id:string, --to-chat:bool, --to-user-ids:string
+
+[report.created]
+  flags: --cursor:int, --end:string, -h/--help:bool, --modified-end:string, --modified-start:string, --size:int, --start:string, --template-name:string
+
+[report.detail]
+  flags: -h/--help:bool, --report-id:string
+
+[report.entry]
+  commands: get, stats, submit
+  flags: -h/--help:bool
+
+[report.entry.get]
+  flags: -h/--help:bool, --report-id:string
+
+[report.entry.stats]
+  flags: -h/--help:bool, --report-id:string
+
+[report.entry.submit]
+  flags: --contents:string, --contents-file:string, --dd-from:string, -h/--help:bool, --template-id:string, --to-chat:bool, --to-user-ids:string
+
+[report.inbox]
+  commands: list
+  flags: --cursor:int, --end:string, -h/--help:bool, --sender-user-ids:stringSlice, --size:int, --start:string
+
+[report.inbox.list]
+  flags: --cursor:int, --end:string, -h/--help:bool, --sender-user-ids:stringSlice, --size:int, --start:string
+
+[report.list]
+  flags: --cursor:int, --end:string, -h/--help:bool, --sender-user-ids:stringSlice, --size:int, --start:string
+
+[report.outbox]
+  commands: list
+  flags: -h/--help:bool
+
+[report.outbox.list]
+  flags: --cursor:int, --end:string, -h/--help:bool, --modified-end:string, --modified-start:string, --size:int, --start:string, --template-name:string
+
+[report.sent]
+  flags: --cursor:int, --end:string, -h/--help:bool, --modified-end:string, --modified-start:string, --size:int, --start:string, --template-name:string
+
+[report.stats]
+  flags: -h/--help:bool, --report-id:string
+
+[report.template]
+  commands: detail, get, list
+  flags: -h/--help:bool
+
+[report.template.detail]
+  flags: -h/--help:bool, --name:string
+
+[report.template.get]
+  flags: -h/--help:bool, --name:string
+
+[report.template.list]
+  flags: -h/--help:bool
+
+[schema]
+  flags: --cli-path:string, -h/--help:bool
+
+[sheet]
+  commands: add-dimension, append, batch-update, chart, cond-format, copy, create, create-float-image, csv-get, csv-put, delete-dimension, delete-dropdown, delete-float-image, delete-sheet, export, filter, filter-view, find, get-dropdown, get-float-image, group-dimension, info, insert-dimension, list, list-float-images, media-upload, merge-cells, move-dimension, new, range, replace, set-dropdown, template, ungroup-dimension, unmerge-cells, update, update-dimension, update-float-image, write-image
+  flags: -h/--help:bool
+
+[sheet.add-dimension]
+  flags: --dimension:string, -h/--help:bool, --length:int, --node:string, --sheet-id:string
+
+[sheet.append]
+  flags: -h/--help:bool, --node:string, --sheet-id:string, --values:string
+
+[sheet.batch-update]
+  flags: --continue-on-error:bool, -h/--help:bool, --node:string, --operations:string
+
+[sheet.chart]
+  commands: create, delete, list, update
+  flags: -h/--help:bool
+
+[sheet.chart.create]
+  flags: -h/--help:bool, --node:string, --properties:string, --sheet-id:string
+
+[sheet.chart.delete]
+  flags: --chart-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.chart.list]
+  flags: --chart-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.chart.update]
+  flags: --chart-id:string, -h/--help:bool, --node:string, --properties:string, --sheet-id:string
+
+[sheet.cond-format]
+  commands: create, delete, list, update
+  flags: -h/--help:bool
+
+[sheet.cond-format.create]
+  flags: --cell-style:string, --condition:string, --data-bar-style:string, -h/--help:bool, --node:string, --ranges:string, --sheet-id:string
+
+[sheet.cond-format.delete]
+  flags: -h/--help:bool, --node:string, --rule-id:string, --sheet-id:string, --yes:bool
+
+[sheet.cond-format.list]
+  flags: -h/--help:bool, --node:string, --rule-id:string, --sheet-id:string
+
+[sheet.cond-format.update]
+  flags: --cell-style:string, --condition:string, --data-bar-style:string, -h/--help:bool, --node:string, --ranges:string, --rule-id:string, --sheet-id:string
+
+[sheet.copy]
+  flags: -h/--help:bool, --index:int, --name:string, --node:string, --sheet-id:string, --title:string
+
+[sheet.create]
+  flags: --folder:string, -h/--help:bool, --name:string, --workspace:string
+
+[sheet.create-float-image]
+  flags: --height:int, -h/--help:bool, --node:string, --offset-x:int, --offset-y:int, --range:string, --sheet-id:string, --src:string, --width:int
+
+[sheet.csv-get]
+  flags: -h/--help:bool, --max-chars:int, --node:string, --range:string, --sheet-id:string, --value-render-option:string
+
+[sheet.csv-put]
+  flags: --allow-overwrite:bool, --csv:string, -h/--help:bool, --node:string, --sheet-id:string, --start-cell:string
+
+[sheet.delete-dimension]
+  flags: --dimension:string, -h/--help:bool, --length:string, --node:string, --position:string, --sheet-id:string
+
+[sheet.delete-dropdown]
+  flags: -h/--help:bool, --node:string, --range:string, --sheet-id:string
+
+[sheet.delete-float-image]
+  flags: --float-image-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.delete-sheet]
+  flags: -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.export]
+  flags: -h/--help:bool, --node:string, --output:string
+
+[sheet.filter]
+  commands: clear-criteria, create, delete, get, sort, update
+  flags: -h/--help:bool
+
+[sheet.filter-view]
+  commands: create, delete, delete-criteria, get-criteria, info, list, list-criteria, update, update-criteria
+  flags: -h/--help:bool
+
+[sheet.filter-view.create]
+  flags: --criteria:string, -h/--help:bool, --name:string, --node:string, --range:string, --sheet-id:string
+
+[sheet.filter-view.delete]
+  flags: --filter-view-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter-view.delete-criteria]
+  flags: --column:int, --filter-view-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter-view.get-criteria]
+  flags: --column:int, --filter-view-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter-view.info]
+  flags: --filter-view-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter-view.list]
+  flags: -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter-view.list-criteria]
+  flags: --filter-view-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter-view.update]
+  flags: --criteria:string, --filter-view-id:string, -h/--help:bool, --name:string, --node:string, --range:string, --sheet-id:string
+
+[sheet.filter-view.update-criteria]
+  flags: --column:int, --filter-criteria:string, --filter-view-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter.clear-criteria]
+  flags: --column:int, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter.create]
+  flags: --criteria:string, -h/--help:bool, --node:string, --range:string, --sheet-id:string
+
+[sheet.filter.delete]
+  flags: -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter.get]
+  flags: -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter.sort]
+  flags: --ascending:bool, --column:int, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.filter.update]
+  flags: --criteria:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.find]
+  flags: -h/--help:bool, --include-hidden:bool, --match-case:bool, --match-entire-cell:bool, --match-formula:bool, --node:string, --query:string, --range:string, --sheet-id:string, --use-regexp:bool
+
+[sheet.get-dropdown]
+  flags: -h/--help:bool, --node:string, --range:string, --sheet-id:string
+
+[sheet.get-float-image]
+  flags: --float-image-id:string, -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.group-dimension]
+  flags: --group-state:string, -h/--help:bool, --node:string, --range:string, --sheet-id:string
+
+[sheet.info]
+  flags: -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.insert-dimension]
+  flags: --dimension:string, -h/--help:bool, --length:string, --node:string, --position:string, --sheet-id:string
+
+[sheet.list]
+  flags: -h/--help:bool, --node:string
+
+[sheet.list-float-images]
+  flags: -h/--help:bool, --node:string, --sheet-id:string
+
+[sheet.media-upload]
+  flags: --file:string, -h/--help:bool, --mime-type:string, --name:string, --node:string
+
+[sheet.merge-cells]
+  flags: -h/--help:bool, --merge-type:string, --node:string, --range:string, --sheet-id:string
+
+[sheet.move-dimension]
+  flags: --destination-index:string, --dimension:string, --end-index:string, -h/--help:bool, --node:string, --sheet-id:string, --start-index:string
+
+[sheet.new]
+  flags: -h/--help:bool, --name:string, --node:string
+
+[sheet.range]
+  commands: batch-clear, batch-set-style, clear, copy-to, fill, move-to, read, set-style, sort, update
+  flags: -h/--help:bool
+
+[sheet.range.batch-clear]
+  flags: -h/--help:bool, --node:string, --ranges:string, --type:string
+
+[sheet.range.batch-set-style]
+  flags: --batch:string, --continue-on-error:bool, -h/--help:bool, --node:string
+
+[sheet.range.clear]
+  flags: -h/--help:bool, --node:string, --range:string, --sheet-id:string, --type:string
+
+[sheet.range.copy-to]
+  flags: -h/--help:bool, --node:string, --paste-type:string, --sheet-id:string, --source-range:string, --target-range:string, --target-sheet-id:string
+
+[sheet.range.fill]
+  flags: --fill-type:string, -h/--help:bool, --node:string, --sheet-id:string, --source-range:string, --target-range:string
+
+[sheet.range.move-to]
+  flags: -h/--help:bool, --node:string, --sheet-id:string, --source-range:string, --target-range:string, --target-sheet-id:string
+
+[sheet.range.read]
+  aliases: get
+  flags: -h/--help:bool, --node:string, --range:string, --sheet-id:string, --value-render-option:string
+
+[sheet.range.set-style]
+  flags: --bg-color:string, --bg-colors-json:string, --font-color:string, --font-colors-json:string, --font-size:int, --font-sizes-json:string, --font-weight:string, --font-weights-json:string, --h-align:string, --h-aligns-json:string, -h/--help:bool, --node:string, --number-format:string, --range:string, --sheet-id:string, --v-align:string, --v-aligns-json:string, --word-wrap:string
+
+[sheet.range.sort]
+  flags: --has-header:bool, -h/--help:bool, --node:string, --range:string, --sheet-id:string, --sort-keys:string
+
+[sheet.range.update]
+  flags: -h/--help:bool, --node:string, --range:string, --sheet-id:string, --values:string
+
+[sheet.replace]
+  flags: --find:string, -h/--help:bool, --include-hidden:bool, --match-case:bool, --match-entire-cell:bool, --node:string, --range:string, --replacement:string, --sheet-id:string, --use-regexp:bool
+
+[sheet.set-dropdown]
+  flags: -h/--help:bool, --multi-select:bool, --node:string, --options:string, --range:string, --sheet-id:string
+
+[sheet.template]
+  commands: apply, list, search
+  flags: -h/--help:bool
+
+[sheet.template.apply]
+  flags: --folder:string, -h/--help:bool, --name:string, --template-id:string, --workspace:string
+
+[sheet.template.list]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --source:string
+
+[sheet.template.search]
+  flags: --cursor:string, -h/--help:bool, --limit:int, --query:string, --source:string
+
+[sheet.ungroup-dimension]
+  flags: -h/--help:bool, --node:string, --range:string, --sheet-id:string
+
+[sheet.unmerge-cells]
+  flags: -h/--help:bool, --node:string, --range:string, --sheet-id:string
+
+[sheet.update]
+  flags: --frozen-column-count:int, --frozen-row-count:int, -h/--help:bool, --hidden:bool, --index:int, --name:string, --node:string, --sheet-id:string, --tab-color:string, --title:string
+
+[sheet.update-dimension]
+  flags: --dimension:string, -h/--help:bool, --hidden:bool, --length:string, --node:string, --pixel-size:int, --sheet-id:string, --start-index:string
+
+[sheet.update-float-image]
+  flags: --float-image-id:string, --height:int, -h/--help:bool, --node:string, --offset-x:int, --offset-y:int, --range:string, --sheet-id:string, --src:string, --width:int
+
+[sheet.write-image]
+  flags: --file:string, --height:int, -h/--help:bool, --mime-type:string, --name:string, --node:string, --range:string, --sheet-id:string, --width:int
+
+[skill]
+  commands: get, install, search, setup
+  flags: -h/--help:bool
+
+[skill.get]
+  flags: -h/--help:bool, --skill-id:string
+
+[skill.install]
+  flags: -h/--help:bool
+
+[skill.search]
+  flags: -h/--help:bool, --query:string, --source:string
+
+[skill.setup]
+  flags: -x/--exclude:stringSlice, -h/--help:bool, --mode:string, -s/--skill:stringSlice, --source:string, --target:string, --yes:bool
+
+[todo]
+  commands: comment, task
+  flags: -h/--help:bool
+
+[todo.comment]
+  commands: add, delete, list
+  flags: -h/--help:bool
+
+[todo.comment.add]
+  flags: --content:string, -h/--help:bool, --task-id:string
+
+[todo.comment.delete]
+  flags: --comment-id:string, -h/--help:bool, --task-id:string
+
+[todo.comment.list]
+  flags: -h/--help:bool, --page:string, --size:string, --task-id:string
+
+[todo.task]
+  commands: add-attachment, add-executor, add-participant, add-reminder, create, create-sub, delete, done, get, list, list-attachment, list-sub, remove-attachment, remove-executor, remove-participant, reset-reminder, update
+  flags: -h/--help:bool
+
+[todo.task.add-attachment]
+  flags: --file-path:string, -h/--help:bool, --task-id:string
+
+[todo.task.add-executor]
+  flags: --executors:string, -h/--help:bool, --task-id:string
+
+[todo.task.add-participant]
+  flags: -h/--help:bool, --participants:string, --task-id:string
+
+[todo.task.add-reminder]
+  flags: --base-time:string, --due-date-offset:string, -h/--help:bool, --reminder-time-stamp:string, --task-id:string
+
+[todo.task.create]
+  flags: --due:string, --executors:string, -h/--help:bool, --priority:string, --recurrence:string, --title:string
+
+[todo.task.create-sub]
+  flags: --due:string, --executors:string, -h/--help:bool, --parent-id:string, --priority:string, --recurrence:string, --title:string
+
+[todo.task.delete]
+  flags: -h/--help:bool, --task-id:string
+
+[todo.task.done]
+  flags: -h/--help:bool, --status:string, --task-id:string
+
+[todo.task.get]
+  flags: -h/--help:bool, --task-id:string
+
+[todo.task.list]
+  flags: -h/--help:bool, --page:string, --plan-finish-date-end:string, --plan-finish-date-start:string, --priority:string, --role-types:string, --size:string, --status:string
+
+[todo.task.list-attachment]
+  flags: -h/--help:bool, --task-id:string
+
+[todo.task.list-sub]
+  flags: -h/--help:bool, --task-id:string
+
+[todo.task.remove-attachment]
+  flags: --attachment-id:string, -h/--help:bool, --task-id:string
+
+[todo.task.remove-executor]
+  flags: --executors:string, -h/--help:bool, --task-id:string
+
+[todo.task.remove-participant]
+  flags: -h/--help:bool, --participants:string, --task-id:string
+
+[todo.task.reset-reminder]
+  flags: -h/--help:bool, --reminder-rules:string, --task-id:string
+
+[todo.task.update]
+  flags: --done:string, --due:string, -h/--help:bool, --priority:string, --task-id:string, --title:string
+
+[upgrade]
+  flags: --all:bool, --beta:bool, --check:bool, --force:bool, -h/--help:bool, --list:bool, --rollback:bool, --skip-skills:bool, --version:string
+
+[version]
+  flags: -h/--help:bool
+
+[wiki]
+  commands: member, node, space
+  flags: -h/--help:bool
+
+[wiki.member]
+  commands: add, list, remove, update
+  flags: -h/--help:bool
+
+[wiki.member.add]
+  flags: -h/--help:bool, --role:string, --users:string, --workspace:string
+
+[wiki.member.list]
+  aliases: ls
+  flags: --filter-role:string, -h/--help:bool, --limit:int, --workspace:string
+
+[wiki.member.remove]
+  flags: -h/--help:bool, --users:string, --workspace:string
+
+[wiki.member.update]
+  flags: -h/--help:bool, --role:string, --users:string, --workspace:string
+
+[wiki.node]
+  commands: copy, create, delete, list, move, search
+  flags: -h/--help:bool
+
+[wiki.node.copy]
+  flags: --folder:string, -h/--help:bool, --node:string, --workspace:string
+
+[wiki.node.create]
+  flags: --folder:string, -h/--help:bool, --name:string, --type:string, --workspace:string
+
+[wiki.node.delete]
+  flags: -h/--help:bool, --node:string, --workspace:string
+
+[wiki.node.list]
+  aliases: ls
+  flags: --cursor:string, --folder:string, -h/--help:bool, --limit:int, --workspace:string
+
+[wiki.node.move]
+  flags: --folder:string, -h/--help:bool, --node:string, --workspace:string
+
+[wiki.node.search]
+  flags: --cursor:string, --extensions:stringSlice, -h/--help:bool, --limit:int, --query:string, --workspace:string
+
+[wiki.space]
+  commands: create, delete, get, list, search
+  flags: -h/--help:bool
+
+[wiki.space.create]
+  flags: --desc:string, -h/--help:bool, --icon:string, --name:string
+
+[wiki.space.delete]
+  flags: -h/--help:bool, --workspace:string
+
+[wiki.space.get]
+  flags: -h/--help:bool, --workspace:string
+
+[wiki.space.list]
+  flags: --cursor:string, -h/--help:bool, --limit:string, --type:string
+
+[wiki.space.search]
+  flags: -h/--help:bool, --limit:string, --query:string, --type:string

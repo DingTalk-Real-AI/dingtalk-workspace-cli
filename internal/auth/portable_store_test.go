@@ -61,6 +61,7 @@ func TestExportPortableAuthBundleRequiresAuthToken(t *testing.T) {
 }
 
 func TestPortableAuthTargetPopulated(t *testing.T) {
+	requirePortableFileBackend(t)
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	root := t.TempDir()
 	configDir := filepath.Join(root, ".dws")
@@ -82,6 +83,7 @@ func TestPortableAuthTargetPopulated(t *testing.T) {
 }
 
 func TestPortableAuthBundleRoundTripPreservesRefreshToken(t *testing.T) {
+	requirePortableFileBackend(t)
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	sourceKeychain := filepath.Join(t.TempDir(), "source-keychain")
 	t.Setenv(keychain.StorageDirEnv, sourceKeychain)
@@ -140,6 +142,7 @@ func TestPortableAuthBundleRoundTripPreservesRefreshToken(t *testing.T) {
 }
 
 func TestPortableAuthBundleRoundTripPreservesProfiles(t *testing.T) {
+	requirePortableFileBackend(t)
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	SetRuntimeProfile("")
 	t.Cleanup(func() { SetRuntimeProfile("") })
@@ -209,5 +212,12 @@ func TestPortableAuthBundleRoundTripPreservesProfiles(t *testing.T) {
 	}
 	if loadedB.AccessToken != "access-b" {
 		t.Fatalf("profile B token = %q, want access-b", loadedB.AccessToken)
+	}
+}
+
+func requirePortableFileBackend(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("portable bundle round trips require a file-DEK backend; Windows uses DPAPI registry storage")
 	}
 }

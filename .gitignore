@@ -19,6 +19,7 @@ test/cli_compat/testdata/
 /internal/compat/testdata/*
 .gitignore
 .worktrees/
+.qoder/
 
 # Secrets & credentials
 .env
@@ -47,4 +48,9 @@ test/dev_functional/results.jsonl
 /.qoder/
 .vercel
 .env*
+# Local Go coverage output
+/coverage.txt
+/coverage-base.txt
+/coverage-policy.txt
+/coverage.html
 dwsbin

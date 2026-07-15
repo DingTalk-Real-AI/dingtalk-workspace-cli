@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all help build rebuild test lint fmt policy edition-test test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -11,6 +11,16 @@ help:
 	@printf "  make lint          - Run formatting checks and golangci-lint when available\n"
 	@printf "  make fmt           - Format Go source files\n"
 	@printf "  make policy        - Run open-source asset and Schema registry checks\n"
+	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
+	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
+	@printf "  make coverage-gate BASE_REF=<ref> - Enforce overall non-regression and changed-code coverage\n"
+	@printf "  make coverage-gate-platform BASE_REF=<ref> PROFILE=<file> - Enforce native-platform changed-code coverage\n"
+	@printf "  make update-interface-baseline - Add new CLI contracts without removing history\n"
+	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
+	@printf "  make schema-compatibility BASE_REF=<ref> - Check the complete Schema contract against the PR merge-base\n"
+	@printf "  make skill-command-integrity - Check dws commands referenced by skills exist\n"
+	@printf "  make cli-smoke     - Verify help for every public top-level command\n"
+	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
 	@printf "  make test-schema-agent-examples - Contract-check all Agent examples and dry-run the eligible subset\n"
 	@printf "  make generate-schema - Regenerate embedded Agent metadata and the release Catalog\n"
 	@printf "  make generate-schema-agent-metadata - Regenerate versioned Agent metadata\n"
@@ -32,7 +42,7 @@ lint:
 	@./scripts/dev/lint.sh
 
 fmt:
-	@find cmd internal test -name '*.go' -print0 2>/dev/null | xargs -0r gofmt -w
+	@find cmd internal test scripts/policy -name '*.go' -print0 2>/dev/null | xargs -0r gofmt -w
 
 policy:
 	@./scripts/policy/check-open-source-assets.sh
@@ -45,6 +55,36 @@ policy:
 
 edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
+
+interface-integrity:
+	@./scripts/policy/check-interface-baseline.sh
+
+authoritative-interface-integrity:
+	@./scripts/policy/check-authoritative-interface-baselines.sh --base-ref "$(BASE_REF)"
+
+coverage-gate:
+	@./scripts/policy/check-coverage-gate.sh --base-ref "$(BASE_REF)" --scope-buildable
+
+coverage-gate-platform:
+	@./scripts/policy/run-platform-coverage-gate.sh --base-ref "$(BASE_REF)" --profile "$(PROFILE)"
+
+update-interface-baseline:
+	@./scripts/policy/check-interface-baseline.sh --update
+
+reset-interface-baseline:
+	@./scripts/policy/check-interface-baseline.sh --reset
+
+schema-compatibility:
+	@./scripts/policy/check-authoritative-schema-compatibility.sh --base-ref "$(BASE_REF)"
+
+skill-command-integrity:
+	@./scripts/policy/check-skill-commands.sh
+
+cli-smoke:
+	@./scripts/policy/check-cli-smoke.sh
+
+mock-mcp-smoke:
+	$(GO) test -v -count=1 -run '^(TestHTTPClientEndToEnd|TestStdioClientEndToEnd)$$' ./internal/transport
 
 test-schema-agent-examples:
 	DWS_AGENT_EXAMPLES_DRY_RUN=1 $(GO) test -v -count=1 ./internal/app -run '^TestManualAgentExamplesDryRun$$'
