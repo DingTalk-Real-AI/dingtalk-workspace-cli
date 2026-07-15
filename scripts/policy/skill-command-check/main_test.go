@@ -80,8 +80,9 @@ func TestShellFieldsAndFailureFormatting(t *testing.T) {
 	}
 	root := t.TempDir()
 	ref := commandRef{File: filepath.Join(root, "skills", "SKILL.md"), Line: 7, Text: "dws bogus"}
-	if got := formatFailure(root, ref, "missing"); got != "skills/SKILL.md:7: `dws bogus`: missing" {
-		t.Fatalf("formatFailure()=%q", got)
+	wantFailure := filepath.Join("skills", "SKILL.md") + ":7: `dws bogus`: missing"
+	if got := formatFailure(root, ref, "missing"); got != wantFailure {
+		t.Fatalf("formatFailure()=%q, want %q", got, wantFailure)
 	}
 	if !isAntiPatternLine("这是错误命令 dws bogus") || isAntiPatternLine("dws auth login") {
 		t.Fatal("anti-pattern marker detection is incorrect")
