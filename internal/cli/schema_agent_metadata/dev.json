@@ -2263,7 +2263,8 @@
       "effect": "read",
       "effect_source": "agent-hint",
       "examples": [
-        "dws dev app get --unified-app-id \u003cunifiedAppId\u003e --format json"
+        "dws dev app get --unified-app-id \u003cunifiedAppId\u003e --format json",
+        "dws dev app get --app-key \u003cappKey\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -2356,7 +2357,8 @@
         },
         "examples": {
           "value": [
-            "dws dev app get --unified-app-id \u003cunifiedAppId\u003e --format json"
+            "dws dev app get --unified-app-id \u003cunifiedAppId\u003e --format json",
+            "dws dev app get --app-key \u003cappKey\u003e --format json"
           ],
           "source": "internal/cli/schema_hints/selection/dev.json",
           "precedence": "reviewed_explicit",
@@ -2365,7 +2367,8 @@
           "candidates": [
             {
               "value": [
-                "dws dev app get --unified-app-id \u003cunifiedAppId\u003e --format json"
+                "dws dev app get --unified-app-id \u003cunifiedAppId\u003e --format json",
+                "dws dev app get --app-key \u003cappKey\u003e --format json"
               ],
               "source": "internal/cli/schema_hints/selection/dev.json",
               "precedence": "reviewed_explicit",
@@ -2483,7 +2486,7 @@
         },
         "use_when": {
           "value": [
-            "已知 unifiedAppId 并需要核对应用配置或状态时"
+            "已知 unifiedAppId 或 appKey 并需要核对应用配置或状态时"
           ],
           "source": "internal/cli/schema_hints/selection/dev.json",
           "precedence": "reviewed_explicit",
@@ -2492,7 +2495,7 @@
           "candidates": [
             {
               "value": [
-                "已知 unifiedAppId 并需要核对应用配置或状态时"
+                "已知 unifiedAppId 或 appKey 并需要核对应用配置或状态时"
               ],
               "source": "internal/cli/schema_hints/selection/dev.json",
               "precedence": "reviewed_explicit",
@@ -2516,7 +2519,7 @@
         "skills/mono/references/products/dev.md"
       ],
       "use_when": [
-        "已知 unifiedAppId 并需要核对应用配置或状态时"
+        "已知 unifiedAppId 或 appKey 并需要核对应用配置或状态时"
       ]
     },
     "dev app list": {
