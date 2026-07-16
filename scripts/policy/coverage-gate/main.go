@@ -77,7 +77,7 @@ func run(
 	changedLoader func(string) (map[string][]lineRange, error),
 	buildableLoader func() (map[string]bool, error),
 ) int {
-	var overallPath string
+	var overallPaths stringList
 	var diffPaths stringList
 	var baseRef string
 	var modulePath string
@@ -89,7 +89,7 @@ func run(
 	var scopeBuildable bool
 	flags := flag.NewFlagSet("coverage-gate", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&overallPath, "overall-profile", "", "coverage profile used for overall coverage")
+	flags.Var(&overallPaths, "overall-profile", "coverage profile used for overall coverage (repeatable)")
 	flags.Var(&diffPaths, "diff-profile", "coverage profile used for changed-code coverage (repeatable)")
 	flags.StringVar(&baseRef, "base-ref", "", "Git merge-base or previous main SHA")
 	flags.StringVar(&modulePath, "module", "", "Go module path used to normalize profile filenames")
@@ -103,14 +103,14 @@ func run(
 		return 2
 	}
 
-	if len(diffPaths) == 0 || baseRef == "" || modulePath == "" || (!changedOnly && (overallPath == "" || baselineOverall < 0)) {
+	if len(diffPaths) == 0 || baseRef == "" || modulePath == "" || (!changedOnly && (len(overallPaths) == 0 || baselineOverall < 0)) {
 		fmt.Fprintln(stderr, "coverage-gate requires --diff-profile, --base-ref, and --module; overall mode also requires --overall-profile and --baseline-overall")
 		return 2
 	}
 	var overall []coverageBlock
 	if !changedOnly {
 		var err error
-		overall, err = readProfiles([]string{overallPath}, modulePath)
+		overall, err = readProfiles(overallPaths, modulePath)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
@@ -183,17 +183,11 @@ func evaluate(input gateInput) gateResult {
 
 	profiledFiles := map[string]bool{}
 	covered, total := 0, 0
-	seen := map[string]bool{}
-	for _, block := range input.Diff {
+	for _, block := range mergeCoverageBlocks(input.Diff) {
 		profiledFiles[block.File] = true
 		if !intersectsAny(block, input.Changed[block.File]) {
 			continue
 		}
-		key := fmt.Sprintf("%s:%d:%d:%d", block.File, block.StartLine, block.EndLine, block.Statements)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
 		total += block.Statements
 		if block.Count > 0 {
 			covered += block.Statements
@@ -276,7 +270,7 @@ func readProfiles(paths []string, modulePath string) ([]coverageBlock, error) {
 }
 
 func gitChangedLines(baseRef string) (map[string][]lineRange, error) {
-	command := exec.Command("git", "diff", "--unified=0", "--no-color", baseRef+"...HEAD", "--", "*.go")
+	command := exec.Command("git", "diff", "--unified=0", "--no-color", baseRef, "--", "*.go")
 	output, err := command.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -389,7 +383,7 @@ func intersectsAny(block coverageBlock, ranges []lineRange) bool {
 
 func coveragePercent(blocks []coverageBlock) float64 {
 	covered, total := 0, 0
-	for _, block := range blocks {
+	for _, block := range mergeCoverageBlocks(blocks) {
 		total += block.Statements
 		if block.Count > 0 {
 			covered += block.Statements
@@ -399,6 +393,31 @@ func coveragePercent(blocks []coverageBlock) float64 {
 		return 0
 	}
 	return float64(covered) * 100 / float64(total)
+}
+
+// mergeCoverageBlocks unions duplicate blocks emitted by cross-package
+// coverage. A block is covered when any instrumented test binary executed it;
+// counting the same source block once per binary would both dilute the overall
+// percentage and make the result depend on package execution order.
+func mergeCoverageBlocks(blocks []coverageBlock) []coverageBlock {
+	merged := make(map[string]coverageBlock, len(blocks))
+	for _, block := range blocks {
+		key := fmt.Sprintf("%s:%d:%d:%d", block.File, block.StartLine, block.EndLine, block.Statements)
+		current, ok := merged[key]
+		if !ok || block.Count > current.Count {
+			merged[key] = block
+		}
+	}
+	keys := make([]string, 0, len(merged))
+	for key := range merged {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]coverageBlock, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, merged[key])
+	}
+	return result
 }
 
 func roundOne(value float64) float64 { return math.Round(value*10) / 10 }

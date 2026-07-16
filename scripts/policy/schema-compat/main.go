@@ -16,7 +16,10 @@ import (
 	"strings"
 )
 
-const schemaContractVersion = 3
+const (
+	schemaContractVersion              = 3
+	approvedInterfaceMigrationsVersion = 1
+)
 
 type schemaContract struct {
 	Version  int                      `json:"version"`
@@ -63,18 +66,66 @@ type parameterSchema struct {
 	Enum             []string `json:"enum,omitempty"`
 }
 
+type approvedInterfaceMigrationManifest struct {
+	Version    int                          `json:"version"`
+	Migrations []approvedInterfaceMigration `json:"migrations"`
+}
+
+type approvedInterfaceMigration struct {
+	Tool           string                     `json:"tool"`
+	Old            interfaceMigrationEndpoint `json:"old"`
+	New            interfaceMigrationEndpoint `json:"new"`
+	OldConstraints json.RawMessage            `json:"old_constraints,omitempty"`
+	NewConstraints json.RawMessage            `json:"new_constraints,omitempty"`
+	Reason         string                     `json:"reason"`
+}
+
+type interfaceMigrationEndpoint struct {
+	InterfaceMode string          `json:"interface_mode"`
+	InterfaceRef  json.RawMessage `json:"interface_ref"`
+}
+
+type normalizedInterfaceMigration struct {
+	Tool           string
+	Old            interfaceState
+	New            interfaceState
+	HasConstraints bool
+	OldConstraints string
+	NewConstraints string
+	Reason         string
+}
+
+type interfaceState struct {
+	Mode string
+	Ref  string
+}
+
+type approvedInterfaceRef struct {
+	ProductID string `json:"product_id"`
+	RPCName   string `json:"rpc_name"`
+}
+
+type constraintContract struct {
+	OtherFields     string
+	RequireOneOf    [][]string
+	HasRequireOneOf bool
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
+	var approvedMigrationsPath, candidateMigrationsPath string
 	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&normalizePath, "normalize", "", "normalize a raw complete Schema response")
 	flags.StringVar(&checkPath, "check", "", "check against a normalized historical baseline")
 	flags.StringVar(&mergePath, "merge", "", "merge additions into a normalized historical baseline")
 	flags.StringVar(&currentPath, "current", "", "raw current complete Schema response")
+	flags.StringVar(&approvedMigrationsPath, "approved-interface-migrations", "", "base-owned exact interface migration manifest")
+	flags.StringVar(&candidateMigrationsPath, "candidate-interface-migrations", "", "candidate manifest used only to verify approval retention and consumption")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -87,6 +138,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if modes != 1 {
 		fmt.Fprintln(stderr, "exactly one of --normalize, --check, or --merge is required")
+		return 2
+	}
+	if approvedMigrationsPath != "" && checkPath == "" {
+		fmt.Fprintln(stderr, "--approved-interface-migrations is only valid with --check")
+		return 2
+	}
+	if candidateMigrationsPath != "" && approvedMigrationsPath == "" {
+		fmt.Fprintln(stderr, "--candidate-interface-migrations requires --approved-interface-migrations")
 		return 2
 	}
 
@@ -115,7 +174,32 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "read schema baseline: %v\n", err)
 			return 2
 		}
-		failures := checkCompatibility(baseline, current)
+		migrations := map[string]normalizedInterfaceMigration{}
+		candidateMigrations := map[string]normalizedInterfaceMigration{}
+		if approvedMigrationsPath != "" {
+			migrations, err = readApprovedInterfaceMigrations(approvedMigrationsPath)
+			if err != nil {
+				fmt.Fprintf(stderr, "read approved interface migrations: %v\n", err)
+				return 2
+			}
+			if candidateMigrationsPath != "" {
+				candidateMigrations, err = readApprovedInterfaceMigrations(candidateMigrationsPath)
+				if err != nil {
+					fmt.Fprintf(stderr, "read candidate interface migrations: %v\n", err)
+					return 2
+				}
+			}
+		}
+		failures, err := checkCompatibilityWithMigrationManifests(
+			baseline,
+			current,
+			migrations,
+			candidateMigrations,
+		)
+		if err != nil {
+			fmt.Fprintf(stderr, "validate approved interface migrations: %v\n", err)
+			return 2
+		}
 		if len(failures) > 0 {
 			fmt.Fprintln(stderr, "Schema backwards-compatibility check failed:")
 			for _, failure := range failures {
@@ -430,6 +514,372 @@ func schemaType(schema map[string]any) string {
 	return "unspecified"
 }
 
+// readApprovedInterfaceMigrations accepts only explicit, versioned endpoints;
+// the authoritative shell decides which merge-base-owned file is passed here.
+func readApprovedInterfaceMigrations(path string) (map[string]normalizedInterfaceMigration, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var manifest approvedInterfaceMigrationManifest
+	if err := decodeStrictJSON(data, &manifest); err != nil {
+		return nil, err
+	}
+	if manifest.Version != approvedInterfaceMigrationsVersion {
+		return nil, fmt.Errorf("unsupported approved interface migrations version %d", manifest.Version)
+	}
+	if len(manifest.Migrations) == 0 {
+		return nil, fmt.Errorf("approved interface migrations manifest contains no migrations")
+	}
+
+	migrations := make(map[string]normalizedInterfaceMigration, len(manifest.Migrations))
+	for index, migration := range manifest.Migrations {
+		tool := strings.TrimSpace(migration.Tool)
+		if err := validateApprovedToolPath(tool); err != nil {
+			return nil, fmt.Errorf("migration %d: %w", index, err)
+		}
+		if tool != migration.Tool {
+			return nil, fmt.Errorf("migration %d tool path must not contain surrounding whitespace", index)
+		}
+		if _, exists := migrations[tool]; exists {
+			return nil, fmt.Errorf("migration %d duplicates tool %q", index, tool)
+		}
+		reason := strings.TrimSpace(migration.Reason)
+		if reason == "" {
+			return nil, fmt.Errorf("migration %d for %q has no review reason", index, tool)
+		}
+		oldState, err := normalizeMigrationEndpoint("old", migration.Old)
+		if err != nil {
+			return nil, fmt.Errorf("migration %d for %q: %w", index, tool, err)
+		}
+		newState, err := normalizeMigrationEndpoint("new", migration.New)
+		if err != nil {
+			return nil, fmt.Errorf("migration %d for %q: %w", index, tool, err)
+		}
+		oldConstraints, hasOldConstraints, err := normalizeMigrationConstraints("old_constraints", migration.OldConstraints)
+		if err != nil {
+			return nil, fmt.Errorf("migration %d for %q: %w", index, tool, err)
+		}
+		newConstraints, hasNewConstraints, err := normalizeMigrationConstraints("new_constraints", migration.NewConstraints)
+		if err != nil {
+			return nil, fmt.Errorf("migration %d for %q: %w", index, tool, err)
+		}
+		if hasOldConstraints != hasNewConstraints {
+			return nil, fmt.Errorf(
+				"migration %d for %q must provide old_constraints and new_constraints together",
+				index,
+				tool,
+			)
+		}
+		if hasOldConstraints {
+			if _, err := parseConstraintContract(oldConstraints); err != nil {
+				return nil, fmt.Errorf("migration %d for %q: old_constraints is invalid: %w", index, tool, err)
+			}
+			if _, err := parseConstraintContract(newConstraints); err != nil {
+				return nil, fmt.Errorf("migration %d for %q: new_constraints is invalid: %w", index, tool, err)
+			}
+		}
+		if oldState == newState {
+			return nil, fmt.Errorf("migration %d for %q does not change the interface contract", index, tool)
+		}
+		migrations[tool] = normalizedInterfaceMigration{
+			Tool:           tool,
+			Old:            oldState,
+			New:            newState,
+			HasConstraints: hasOldConstraints,
+			OldConstraints: oldConstraints,
+			NewConstraints: newConstraints,
+			Reason:         reason,
+		}
+	}
+	return migrations, nil
+}
+
+func decodeStrictJSON(data []byte, target any) error {
+	// encoding/json otherwise accepts duplicate object keys with last-value-wins.
+	if err := rejectDuplicateJSONKeys(data); err != nil {
+		return err
+	}
+	if err := rejectNonCanonicalApprovedJSONKeys(data, target); err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("multiple JSON values")
+		}
+		return fmt.Errorf("decode trailing JSON: %w", err)
+	}
+	return nil
+}
+
+func rejectNonCanonicalApprovedJSONKeys(data []byte, target any) error {
+	switch target.(type) {
+	case *approvedInterfaceMigrationManifest:
+		return validateApprovedMigrationManifestKeys(data)
+	case *approvedInterfaceRef:
+		if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+			return nil
+		}
+		fields, err := decodeStrictJSONObject(data, "interface_ref")
+		if err != nil {
+			return err
+		}
+		return requireCanonicalJSONFields("interface_ref", fields, "product_id", "rpc_name")
+	default:
+		return nil
+	}
+}
+
+func validateApprovedMigrationManifestKeys(data []byte) error {
+	fields, err := decodeStrictJSONObject(data, "manifest")
+	if err != nil {
+		return err
+	}
+	if err := requireCanonicalJSONFields("manifest", fields, "version", "migrations"); err != nil {
+		return err
+	}
+	migrationsRaw, ok := fields["migrations"]
+	if !ok {
+		return nil
+	}
+	var migrations []json.RawMessage
+	if err := json.Unmarshal(migrationsRaw, &migrations); err != nil {
+		return err
+	}
+	for index, migrationRaw := range migrations {
+		path := fmt.Sprintf("manifest.migrations[%d]", index)
+		migration, err := decodeStrictJSONObject(migrationRaw, path)
+		if err != nil {
+			return err
+		}
+		if err := requireCanonicalJSONFields(
+			path,
+			migration,
+			"tool",
+			"old",
+			"new",
+			"old_constraints",
+			"new_constraints",
+			"reason",
+		); err != nil {
+			return err
+		}
+		for _, endpointName := range []string{"old", "new"} {
+			endpointRaw, ok := migration[endpointName]
+			if !ok {
+				continue
+			}
+			endpointPath := path + "." + endpointName
+			endpoint, err := decodeStrictJSONObject(endpointRaw, endpointPath)
+			if err != nil {
+				return err
+			}
+			if err := requireCanonicalJSONFields(endpointPath, endpoint, "interface_mode", "interface_ref"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func decodeStrictJSONObject(data []byte, path string) (map[string]json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, fmt.Errorf("%s must be a JSON object: %w", path, err)
+	}
+	if fields == nil {
+		return nil, fmt.Errorf("%s must be a JSON object", path)
+	}
+	return fields, nil
+}
+
+func requireCanonicalJSONFields(path string, fields map[string]json.RawMessage, allowed ...string) error {
+	canonical := stringSet(allowed)
+	for field := range fields {
+		if !canonical[field] {
+			return fmt.Errorf("unknown field %q at %s (field names must use canonical case)", field, path)
+		}
+	}
+	return nil
+}
+
+func rejectDuplicateJSONKeys(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := consumeJSONValue(decoder, "$"); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("multiple JSON values")
+		}
+		return fmt.Errorf("decode trailing JSON: %w", err)
+	}
+	return nil
+}
+
+func consumeJSONValue(decoder *json.Decoder, path string) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+
+	switch delimiter {
+	case '{':
+		seen := map[string]bool{}
+		seenFolded := map[string]string{}
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return fmt.Errorf("JSON object key at %s is not a string", path)
+			}
+			if seen[key] {
+				return fmt.Errorf("duplicate JSON key %q at %s", key, path)
+			}
+			seen[key] = true
+			folded := strings.ToLower(key)
+			if previous, exists := seenFolded[folded]; exists {
+				return fmt.Errorf("duplicate JSON keys %q and %q at %s differ only by case", previous, key, path)
+			}
+			seenFolded[folded] = key
+			if err := consumeJSONValue(decoder, path+"."+key); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim('}') {
+			return fmt.Errorf("JSON object at %s is not closed", path)
+		}
+	case '[':
+		index := 0
+		for decoder.More() {
+			if err := consumeJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index)); err != nil {
+				return err
+			}
+			index++
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim(']') {
+			return fmt.Errorf("JSON array at %s is not closed", path)
+		}
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q at %s", delimiter, path)
+	}
+	return nil
+}
+
+func validateApprovedToolPath(tool string) error {
+	if strings.Count(tool, "/") != 1 {
+		return fmt.Errorf("approved tool %q must be an exact product/canonical path", tool)
+	}
+	productID, canonical, _ := strings.Cut(tool, "/")
+	if !exactMigrationToken(productID) || !exactMigrationToken(canonical) {
+		return fmt.Errorf("approved tool %q contains an empty, wildcard, or unsupported token", tool)
+	}
+	return nil
+}
+
+func exactMigrationToken(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		switch {
+		case character >= 'a' && character <= 'z':
+		case character >= 'A' && character <= 'Z':
+		case character >= '0' && character <= '9':
+		case character == '.', character == '_', character == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeMigrationEndpoint(label string, endpoint interfaceMigrationEndpoint) (interfaceState, error) {
+	mode := strings.TrimSpace(endpoint.InterfaceMode)
+	if mode != endpoint.InterfaceMode {
+		return interfaceState{}, fmt.Errorf("%s interface_mode must not contain surrounding whitespace", label)
+	}
+	refRaw := bytes.TrimSpace(endpoint.InterfaceRef)
+	if len(refRaw) == 0 {
+		return interfaceState{}, fmt.Errorf("%s interface_ref is missing", label)
+	}
+
+	switch mode {
+	case "mcp":
+		var ref approvedInterfaceRef
+		if err := decodeStrictJSON(refRaw, &ref); err != nil {
+			return interfaceState{}, fmt.Errorf("%s mcp interface_ref: %w", label, err)
+		}
+		if ref.ProductID != strings.TrimSpace(ref.ProductID) || ref.RPCName != strings.TrimSpace(ref.RPCName) {
+			return interfaceState{}, fmt.Errorf("%s mcp interface_ref values must not contain surrounding whitespace", label)
+		}
+		if !exactMigrationToken(ref.ProductID) || !exactMigrationToken(ref.RPCName) {
+			return interfaceState{}, fmt.Errorf("%s mcp interface_ref must contain exact product_id and rpc_name", label)
+		}
+		encoded, err := json.Marshal(ref)
+		if err != nil {
+			return interfaceState{}, fmt.Errorf("%s mcp interface_ref: %w", label, err)
+		}
+		return interfaceState{Mode: mode, Ref: string(encoded)}, nil
+	case "local", "composite":
+		if !bytes.Equal(refRaw, []byte("null")) {
+			return interfaceState{}, fmt.Errorf("%s %s interface_ref must be explicit null", label, mode)
+		}
+		return interfaceState{Mode: mode, Ref: "null"}, nil
+	case "":
+		return interfaceState{}, fmt.Errorf("%s interface_mode is missing", label)
+	default:
+		return interfaceState{}, fmt.Errorf("%s interface_mode %q is not supported", label, mode)
+	}
+}
+
+func normalizeMigrationConstraints(label string, raw json.RawMessage) (string, bool, error) {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return "", false, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return "", false, fmt.Errorf("%s must be a JSON object: %w", label, err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return "", false, fmt.Errorf("%s contains multiple JSON values", label)
+		}
+		return "", false, fmt.Errorf("%s trailing JSON: %w", label, err)
+	}
+	object, ok := value.(map[string]any)
+	if !ok || object == nil {
+		return "", false, fmt.Errorf("%s must be a JSON object", label)
+	}
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return "", false, fmt.Errorf("canonicalize %s: %w", label, err)
+	}
+	return string(encoded), true, nil
+}
+
 func readContract(path string) (schemaContract, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -449,6 +899,48 @@ func readContract(path string) (schemaContract, error) {
 }
 
 func checkCompatibility(baseline, current schemaContract) []string {
+	failures, _ := checkCompatibilityWithMigrations(
+		baseline,
+		current,
+		map[string]normalizedInterfaceMigration{},
+	)
+	return failures
+}
+
+func checkCompatibilityWithMigrations(
+	baseline, current schemaContract,
+	migrations map[string]normalizedInterfaceMigration,
+) ([]string, error) {
+	active, _, err := classifyApprovedInterfaceMigrations(baseline, migrations)
+	if err != nil {
+		return nil, err
+	}
+	return checkCompatibilityWithActiveMigrations(baseline, current, active), nil
+}
+
+func checkCompatibilityWithMigrationManifests(
+	baseline, current schemaContract,
+	baseMigrations, candidateMigrations map[string]normalizedInterfaceMigration,
+) ([]string, error) {
+	active, alreadyApplied, err := classifyApprovedInterfaceMigrations(baseline, baseMigrations)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCandidateInterfaceMigrationLifecycle(
+		current,
+		baseMigrations,
+		candidateMigrations,
+		alreadyApplied,
+	); err != nil {
+		return nil, err
+	}
+	return checkCompatibilityWithActiveMigrations(baseline, current, active), nil
+}
+
+func checkCompatibilityWithActiveMigrations(
+	baseline, current schemaContract,
+	migrations map[string]normalizedInterfaceMigration,
+) []string {
 	var failures []string
 	for productID, oldProduct := range baseline.Products {
 		newProduct, ok := current.Products[productID]
@@ -463,7 +955,12 @@ func checkCompatibility(baseline, current schemaContract) []string {
 				continue
 			}
 			toolPath := productID + "/" + toolID
-			failures = append(failures, checkToolCompatibility(toolPath, oldTool, newTool)...)
+			migration, hasMigration := migrations[toolPath]
+			if hasMigration {
+				failures = append(failures, checkToolCompatibilityWithMigration(toolPath, oldTool, newTool, &migration)...)
+				continue
+			}
+			failures = append(failures, checkToolCompatibilityWithMigration(toolPath, oldTool, newTool, nil)...)
 		}
 	}
 	sort.Strings(failures)
@@ -471,17 +968,25 @@ func checkCompatibility(baseline, current schemaContract) []string {
 }
 
 func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
+	return checkToolCompatibilityWithMigration(toolPath, oldTool, newTool, nil)
+}
+
+func checkToolCompatibilityWithMigration(
+	toolPath string,
+	oldTool, newTool toolSchema,
+	migration *normalizedInterfaceMigration,
+) []string {
 	var failures []string
+	exactContractMigrationApproved := migration != nil &&
+		toolMatchesMigrationOld(oldTool, *migration) &&
+		toolMatchesMigrationNew(newTool, *migration)
 	for _, field := range []struct {
 		name string
 		old  string
 		new  string
 	}{
 		{name: "primary_cli_path", old: oldTool.PrimaryCLIPath, new: newTool.PrimaryCLIPath},
-		{name: "interface_mode", old: oldTool.InterfaceMode, new: newTool.InterfaceMode},
-		{name: "interface_ref", old: oldTool.InterfaceRef, new: newTool.InterfaceRef},
 		{name: "availability", old: oldTool.Availability, new: newTool.Availability},
-		{name: "constraints", old: oldTool.Constraints, new: newTool.Constraints},
 		{name: "effect", old: oldTool.Effect, new: newTool.Effect},
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
@@ -491,7 +996,30 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
-	if !equalPositionals(oldTool.Positionals, newTool.Positionals) {
+	if !exactContractMigrationApproved {
+		if oldTool.InterfaceMode != newTool.InterfaceMode {
+			failures = append(failures, fmt.Sprintf("schema tool %q changed interface_mode", toolPath))
+		}
+		if oldTool.InterfaceRef != newTool.InterfaceRef {
+			failures = append(failures, fmt.Sprintf("schema tool %q changed interface_ref", toolPath))
+		}
+	}
+	constraintsMigrationApproved := exactContractMigrationApproved && migration.HasConstraints
+	if constraintsMigrationApproved {
+		if addedMembers, valid := addedRequireOneOfMembers(oldTool.Constraints, newTool.Constraints); valid {
+			failures = append(failures, checkAddedRequireOneOfMembers(toolPath, oldTool, newTool, addedMembers)...)
+		} else {
+			failures = append(failures, fmt.Sprintf("schema tool %q has invalid approved constraints", toolPath))
+		}
+	} else {
+		addedConstraintMembers, constraintsOK := compatibleConstraintAdditions(oldTool.Constraints, newTool.Constraints)
+		if !constraintsOK {
+			failures = append(failures, fmt.Sprintf("schema tool %q changed constraints", toolPath))
+		} else {
+			failures = append(failures, checkAddedRequireOneOfMembers(toolPath, oldTool, newTool, addedConstraintMembers)...)
+		}
+	}
+	if !compatiblePositionals(oldTool.Positionals, newTool.Positionals) {
 		failures = append(failures, fmt.Sprintf("schema tool %q changed positionals", toolPath))
 	}
 	if oldTool.DryRun != "" && oldTool.DryRun != newTool.DryRun {
@@ -510,12 +1038,426 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	return failures
 }
 
-func equalPositionals(oldPositionals, newPositionals []positionalSchema) bool {
-	if len(oldPositionals) != len(newPositionals) {
+func classifyApprovedInterfaceMigrations(
+	baseline schemaContract,
+	migrations map[string]normalizedInterfaceMigration,
+) (map[string]normalizedInterfaceMigration, map[string]bool, error) {
+	// Only old-matching entries are active authority. Exact new-matching entries
+	// are retained solely so a cleanup PR can remove a previously missed entry.
+	active := make(map[string]normalizedInterfaceMigration, len(migrations))
+	alreadyApplied := map[string]bool{}
+	tools := make([]string, 0, len(migrations))
+	for tool := range migrations {
+		tools = append(tools, tool)
+	}
+	sort.Strings(tools)
+	for _, toolPath := range tools {
+		migration := migrations[toolPath]
+		productID, toolID, _ := strings.Cut(toolPath, "/")
+		product, productExists := baseline.Products[productID]
+		if !productExists {
+			return nil, nil, fmt.Errorf("approved interface migration %q references unknown historical product", toolPath)
+		}
+		tool, toolExists := product.Tools[toolID]
+		if !toolExists {
+			return nil, nil, fmt.Errorf("approved interface migration %q references unknown historical tool", toolPath)
+		}
+		switch {
+		case toolMatchesMigrationOld(tool, migration):
+			active[toolPath] = migration
+		case toolMatchesMigrationNew(tool, migration):
+			alreadyApplied[toolPath] = true
+		default:
+			return nil, nil, fmt.Errorf(
+				"approved interface migration %q is stale: historical contract matches neither old nor new",
+				toolPath,
+			)
+		}
+	}
+	return active, alreadyApplied, nil
+}
+
+func validateCandidateInterfaceMigrationLifecycle(
+	current schemaContract,
+	baseMigrations, candidateMigrations map[string]normalizedInterfaceMigration,
+	alreadyApplied map[string]bool,
+) error {
+	// A candidate cannot mutate base authority in place: pending entries stay
+	// exact, while consumed or already-applied entries disappear.
+	tools := sortedMigrationTools(baseMigrations)
+	for _, toolPath := range tools {
+		baseMigration := baseMigrations[toolPath]
+		candidateMigration, retained := candidateMigrations[toolPath]
+		if alreadyApplied[toolPath] {
+			if retained {
+				return fmt.Errorf(
+					"candidate must remove already-applied interface migration %q to recover the stale manifest",
+					toolPath,
+				)
+			}
+			continue
+		}
+
+		currentTool, exists := contractToolSchema(current, toolPath)
+		if exists && toolMatchesMigrationNew(currentTool, baseMigration) {
+			if retained {
+				return fmt.Errorf("candidate must remove consumed interface migration %q", toolPath)
+			}
+			continue
+		}
+		if !exists || !toolMatchesMigrationOld(currentTool, baseMigration) {
+			return fmt.Errorf(
+				"candidate contract for approved interface migration %q matches neither exact old nor exact new",
+				toolPath,
+			)
+		}
+		if !retained {
+			return fmt.Errorf("candidate must retain pending interface migration %q", toolPath)
+		}
+		if candidateMigration != baseMigration {
+			return fmt.Errorf("candidate must retain pending interface migration %q exactly", toolPath)
+		}
+	}
+
+	for _, toolPath := range sortedMigrationTools(candidateMigrations) {
+		if _, baseOwned := baseMigrations[toolPath]; baseOwned {
+			continue
+		}
+		migration := candidateMigrations[toolPath]
+		currentTool, exists := contractToolSchema(current, toolPath)
+		if !exists {
+			return fmt.Errorf("candidate interface migration %q references an unknown current tool", toolPath)
+		}
+		if !toolMatchesMigrationOld(currentTool, migration) {
+			return fmt.Errorf(
+				"candidate interface migration %q is stale: current contract does not match old",
+				toolPath,
+			)
+		}
+	}
+	return nil
+}
+
+func sortedMigrationTools(migrations map[string]normalizedInterfaceMigration) []string {
+	tools := make([]string, 0, len(migrations))
+	for tool := range migrations {
+		tools = append(tools, tool)
+	}
+	sort.Strings(tools)
+	return tools
+}
+
+func contractToolSchema(contract schemaContract, toolPath string) (toolSchema, bool) {
+	productID, toolID, ok := strings.Cut(toolPath, "/")
+	if !ok {
+		return toolSchema{}, false
+	}
+	product, ok := contract.Products[productID]
+	if !ok {
+		return toolSchema{}, false
+	}
+	tool, ok := product.Tools[toolID]
+	if !ok {
+		return toolSchema{}, false
+	}
+	return tool, true
+}
+
+func toolMatchesMigrationOld(tool toolSchema, migration normalizedInterfaceMigration) bool {
+	return toolMatchesMigrationSnapshot(tool, migration.Old, migration.HasConstraints, migration.OldConstraints)
+}
+
+func toolMatchesMigrationNew(tool toolSchema, migration normalizedInterfaceMigration) bool {
+	return toolMatchesMigrationSnapshot(tool, migration.New, migration.HasConstraints, migration.NewConstraints)
+}
+
+func toolMatchesMigrationSnapshot(
+	tool toolSchema,
+	endpoint interfaceState,
+	hasConstraints bool,
+	constraints string,
+) bool {
+	if normalizedToolInterfaceState(tool) != endpoint {
 		return false
 	}
-	for index := range oldPositionals {
-		if oldPositionals[index] != newPositionals[index] {
+	return !hasConstraints || tool.Constraints == constraints
+}
+
+func normalizedToolInterfaceState(tool toolSchema) interfaceState {
+	ref := tool.InterfaceRef
+	if ref == "" && (tool.InterfaceMode == "local" || tool.InterfaceMode == "composite") {
+		ref = "null"
+	}
+	return interfaceState{Mode: tool.InterfaceMode, Ref: ref}
+}
+
+// constraintsCompatible permits only member additions within the same set of
+// require_one_of groups. Every other normalized constraint field remains exact.
+func constraintsCompatible(oldConstraints, newConstraints string) bool {
+	_, compatible := compatibleConstraintAdditions(oldConstraints, newConstraints)
+	return compatible
+}
+
+func compatibleConstraintAdditions(oldConstraints, newConstraints string) ([]string, bool) {
+	if oldConstraints == newConstraints {
+		return nil, true
+	}
+	oldContract, err := parseConstraintContract(oldConstraints)
+	if err != nil {
+		return nil, false
+	}
+	newContract, err := parseConstraintContract(newConstraints)
+	if err != nil {
+		return nil, false
+	}
+	if oldContract.OtherFields != newContract.OtherFields ||
+		oldContract.HasRequireOneOf != newContract.HasRequireOneOf {
+		return nil, false
+	}
+	return requireOneOfWideningMembersFromContracts(oldContract, newContract)
+}
+
+func addedRequireOneOfMembers(oldConstraints, newConstraints string) ([]string, bool) {
+	oldContract, err := parseConstraintContract(oldConstraints)
+	if err != nil {
+		return nil, false
+	}
+	newContract, err := parseConstraintContract(newConstraints)
+	if err != nil {
+		return nil, false
+	}
+
+	oldMembers := map[string]bool{}
+	if oldContract.HasRequireOneOf {
+		for _, group := range oldContract.RequireOneOf {
+			for _, member := range group {
+				oldMembers[member] = true
+			}
+		}
+	}
+	added := map[string]bool{}
+	if newContract.HasRequireOneOf {
+		for _, group := range newContract.RequireOneOf {
+			for _, member := range group {
+				if !oldMembers[member] {
+					added[member] = true
+				}
+			}
+		}
+	}
+	result := make([]string, 0, len(added))
+	for member := range added {
+		result = append(result, member)
+	}
+	sort.Strings(result)
+	return result, true
+}
+
+func requireOneOfWideningMembersFromContracts(oldContract, newContract constraintContract) ([]string, bool) {
+	if !oldContract.HasRequireOneOf {
+		return nil, false
+	}
+	if !requireOneOfGroupsWidened(oldContract.RequireOneOf, newContract.RequireOneOf) {
+		return nil, false
+	}
+
+	oldMembers := map[string]bool{}
+	for _, group := range oldContract.RequireOneOf {
+		for _, member := range group {
+			oldMembers[member] = true
+		}
+	}
+	added := map[string]bool{}
+	for _, group := range newContract.RequireOneOf {
+		for _, member := range group {
+			if !oldMembers[member] {
+				added[member] = true
+			}
+		}
+	}
+	result := make([]string, 0, len(added))
+	for member := range added {
+		result = append(result, member)
+	}
+	sort.Strings(result)
+	return result, true
+}
+
+func checkAddedRequireOneOfMembers(toolPath string, oldTool, newTool toolSchema, members []string) []string {
+	historicalPositionals := map[string]bool{}
+	for _, positional := range oldTool.Positionals {
+		historicalPositionals[positional.Name] = true
+	}
+
+	var failures []string
+	for _, member := range members {
+		parameter, exists := newTool.Parameters[member]
+		if !exists {
+			if !historicalPositionals[member] {
+				failures = append(failures, fmt.Sprintf(
+					"schema tool %q added require_one_of member %q without a parameter or historical positional",
+					toolPath, member,
+				))
+			}
+			continue
+		}
+		if _, historical := oldTool.Parameters[member]; historical {
+			continue
+		}
+		if parameter.Required {
+			failures = append(failures, fmt.Sprintf(
+				"schema tool %q added required require_one_of parameter %q", toolPath, member,
+			))
+		}
+		if parameter.CLIRequired {
+			failures = append(failures, fmt.Sprintf(
+				"schema tool %q added cli_required require_one_of parameter %q", toolPath, member,
+			))
+		}
+		if parameter.RequiredWhen != "" {
+			failures = append(failures, fmt.Sprintf(
+				"schema tool %q added conditional require_one_of parameter %q", toolPath, member,
+			))
+		}
+	}
+	return failures
+}
+
+func parseConstraintContract(raw string) (constraintContract, error) {
+	if raw == "" {
+		return constraintContract{OtherFields: ""}, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return constraintContract{}, err
+	}
+	if fields == nil {
+		return constraintContract{}, fmt.Errorf("constraints must be an object")
+	}
+	requireOneOfRaw, hasRequireOneOf := fields["require_one_of"]
+	delete(fields, "require_one_of")
+	otherFields, err := json.Marshal(fields)
+	if err != nil {
+		return constraintContract{}, err
+	}
+	contract := constraintContract{
+		OtherFields:     string(otherFields),
+		HasRequireOneOf: hasRequireOneOf,
+	}
+	if !hasRequireOneOf {
+		return contract, nil
+	}
+	if bytes.Equal(bytes.TrimSpace(requireOneOfRaw), []byte("null")) {
+		return constraintContract{}, fmt.Errorf("require_one_of must be an array")
+	}
+	if err := json.Unmarshal(requireOneOfRaw, &contract.RequireOneOf); err != nil {
+		return constraintContract{}, err
+	}
+	if len(contract.RequireOneOf) == 0 {
+		return constraintContract{}, fmt.Errorf("require_one_of must contain at least one group")
+	}
+	seenGroups := map[string]bool{}
+	for groupIndex, group := range contract.RequireOneOf {
+		if len(group) == 0 {
+			return constraintContract{}, fmt.Errorf("require_one_of group %d is empty", groupIndex)
+		}
+		seenMembers := map[string]bool{}
+		for memberIndex, member := range group {
+			if member != strings.TrimSpace(member) {
+				return constraintContract{}, fmt.Errorf("require_one_of group %d member %d contains surrounding whitespace", groupIndex, memberIndex)
+			}
+			if member == "" {
+				return constraintContract{}, fmt.Errorf("require_one_of group %d member %d is empty", groupIndex, memberIndex)
+			}
+			if seenMembers[member] {
+				return constraintContract{}, fmt.Errorf("require_one_of group %d duplicates member %q", groupIndex, member)
+			}
+			seenMembers[member] = true
+			contract.RequireOneOf[groupIndex][memberIndex] = member
+		}
+		sort.Strings(contract.RequireOneOf[groupIndex])
+		groupKey := strings.Join(contract.RequireOneOf[groupIndex], "\x00")
+		if seenGroups[groupKey] {
+			return constraintContract{}, fmt.Errorf("require_one_of duplicates group %d", groupIndex)
+		}
+		seenGroups[groupKey] = true
+	}
+	return contract, nil
+}
+
+func requireOneOfGroupsWidened(oldGroups, newGroups [][]string) bool {
+	if len(oldGroups) != len(newGroups) {
+		return false
+	}
+	matchedOldByNew := make([]int, len(newGroups))
+	for index := range matchedOldByNew {
+		matchedOldByNew[index] = -1
+	}
+	var match func(int, []bool) bool
+	match = func(oldIndex int, visited []bool) bool {
+		for newIndex, newGroup := range newGroups {
+			if visited[newIndex] || !stringSliceSubset(oldGroups[oldIndex], newGroup) {
+				continue
+			}
+			visited[newIndex] = true
+			if matchedOldByNew[newIndex] == -1 || match(matchedOldByNew[newIndex], visited) {
+				matchedOldByNew[newIndex] = oldIndex
+				return true
+			}
+		}
+		return false
+	}
+	for oldIndex := range oldGroups {
+		if !match(oldIndex, make([]bool, len(newGroups))) {
+			return false
+		}
+	}
+	return true
+}
+
+func stringSliceSubset(oldValues, newValues []string) bool {
+	newSet := stringSet(newValues)
+	for _, value := range oldValues {
+		if !newSet[value] {
+			return false
+		}
+	}
+	return true
+}
+
+func compatiblePositionals(oldPositionals, newPositionals []positionalSchema) bool {
+	if len(newPositionals) < len(oldPositionals) {
+		return false
+	}
+	for index, oldPositional := range oldPositionals {
+		newPositional := newPositionals[index]
+		if oldPositional.Name != newPositional.Name ||
+			oldPositional.Index != newPositional.Index ||
+			oldPositional.Type != newPositional.Type {
+			return false
+		}
+		if !oldPositional.Required && newPositional.Required {
+			return false
+		}
+		if oldPositional.Variadic && !newPositional.Variadic {
+			return false
+		}
+		if !oldPositional.Variadic && newPositional.Variadic && index != len(newPositionals)-1 {
+			return false
+		}
+	}
+
+	if len(newPositionals) == len(oldPositionals) {
+		return true
+	}
+	if len(oldPositionals) > 0 && newPositionals[len(oldPositionals)-1].Variadic {
+		return false
+	}
+	for index := len(oldPositionals); index < len(newPositionals); index++ {
+		if newPositionals[index].Required {
+			return false
+		}
+		if index > len(oldPositionals) && newPositionals[index-1].Variadic {
 			return false
 		}
 	}

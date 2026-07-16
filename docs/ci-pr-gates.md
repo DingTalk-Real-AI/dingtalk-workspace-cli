@@ -23,12 +23,15 @@ The repository defines five focused checks in addition to its existing CI:
   variance to avoid failing unchanged code on test-path noise. Set
   `COVERAGE_ENFORCE_OVERALL=true` once repository coverage reaches 80% to make
   the overall target fail closed as well.
-- **CLI Smoke** builds the release binary and renders offline help for the root
-  and every public top-level command.
+- **CLI Smoke** builds the release binary, reads the root command list from the
+  structured Interface contract, and renders offline help for every public
+  top-level command. It rejects Cobra's unknown-command root-help fallback and
+  fails when the checked-in development fixture is stale.
 - **Mock MCP Smoke** runs the existing HTTP and stdio MCP lifecycle tests
   (`Initialize -> ListTools -> CallTool`).
 - **AI Behavior Check** applies to pull requests labeled `ai-generated`. It
-  limits the change to 30 files and blocks release/CI infrastructure changes.
+  limits the change to 30 files and blocks release/CI infrastructure changes,
+  including policy implementations and the checked-in Interface fixture.
   It uses `pull_request_target` without checking out PR code, so the policy
   cannot be bypassed by changing the workflow in the same pull request. The
   evaluator writes an `AI Behavior Check` commit status to the PR head SHA so
@@ -45,10 +48,40 @@ make authoritative-interface-integrity BASE_REF=<merge-base>
 make schema-compatibility BASE_REF=<merge-base>
 make skill-command-integrity
 make cli-smoke
-make coverage-gate BASE_REF=<merge-base>
 # Run on the corresponding native runner with its generated profile:
 make coverage-gate-platform BASE_REF=<merge-base> PROFILE=<coverage-profile>
 ```
+
+`make coverage-gate` is the enforcement step, not a profile generator. It
+expects the candidate, policy, and merge-base profiles (`coverage.txt`,
+`coverage-policy.txt`, and `coverage-base.txt`) produced by the preceding CI
+steps. A clean local checkout can reproduce the Linux/overall CI gate with:
+
+```sh
+base_ref=$(git merge-base HEAD origin/main)
+root=$(pwd)
+base_worktree=$(mktemp -d "${TMPDIR:-/tmp}/dws-coverage-base.XXXXXX")
+rmdir "$base_worktree"
+cleanup() { git worktree remove --force "$base_worktree" >/dev/null 2>&1 || true; }
+trap cleanup EXIT HUP INT TERM
+
+go test -count=1 -coverprofile=coverage.txt -covermode=atomic \
+  ./ ./cmd/... ./internal/... ./skills/...
+go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic \
+  ./pkg/... ./scripts/policy/...
+git worktree add --detach "$base_worktree" "$base_ref"
+(
+  cd "$base_worktree"
+  go test -count=1 -coverprofile="$root/coverage-base.txt" -covermode=atomic \
+    ./ ./cmd/... ./internal/... ./skills/...
+)
+make coverage-gate BASE_REF="$base_ref"
+```
+
+The native-platform target likewise expects `PROFILE` to have already been
+generated on that operating system. CI owns those generation steps; copying
+only either enforcement command into a clean checkout is intentionally an
+incomplete invocation.
 
 CI derives the authoritative Interface snapshots from both the PR merge-base
 and the latest reachable stable release tag. The complete Schema snapshot comes
@@ -57,7 +90,50 @@ from the PR merge-base, which contains the registry-first Schema introduced on
 fixture. Schema additions are allowed; historical products, tools, parameters,
 parameter mappings, positional execution fields, constraints, and safety
 semantics remain protected. Positional descriptions are documentation and may
-change without breaking compatibility.
+change without breaking compatibility. Adding members to an existing
+`require_one_of` group is compatible only when each new member resolves to an
+optional parameter or a historical positional and introduces no `required`,
+`cli_required`, or `required_when` obligation. Such a widening accepts every
+historical input. Removing a member, adding or removing a group, or changing
+any other constraint remains incompatible.
+
+### Two-stage exact contract migrations
+
+An intentional interface-mode or interface-ref migration requires two pull
+requests and explicit human review. The same exact approval may optionally
+carry canonical `old_constraints` and `new_constraints` snapshots when that
+interface transition also requires a reviewed constraint migration:
+
+1. A governance pull request adds one exact old-to-new entry to
+   `scripts/policy/schema-compat/approved-interface-migrations-v1.json` without
+   changing the product Schema. The entry names one exact
+   `product/canonical_path`, both interface modes, both interface refs, and a
+   concrete review reason. Constraint snapshots, when present, must be supplied
+   as an old/new pair of exact JSON objects.
+2. After that governance pull request is merged, the product pull request
+   rebases onto it, applies exactly the approved interface and optional
+   constraint transition, and removes the consumed entry (or the manifest when
+   it becomes empty).
+
+The authoritative check builds the compatibility checker and reads approvals
+from the temporary worktree at the PR merge-base. The candidate manifest is
+read only to enforce lifecycle: a pending base entry must remain the same
+normalized exact entry after strict parsing, while an entry whose complete
+interface-and-constraint contract matches exact `new` must be removed. A
+candidate may add a separately reviewed future entry, but cannot authorize a
+Schema transition in the same pull request. Wildcards, duplicate or
+non-canonical JSON keys, unknown tools, malformed refs or constraint snapshots,
+and entries whose complete historical contract matches neither exact `old` nor
+exact `new` fail closed. If a previously merged product change accidentally
+left an already-applied entry behind, a cleanup pull request may recover only
+by removing that entry while preserving normal Schema compatibility.
+
+An active exact approval suppresses `interface_mode` and `interface_ref` drift,
+and suppresses the constraints failure only when both reviewed constraint
+snapshots are present and match exactly. It does not relax general
+`OtherFields` compatibility. Availability, parameters, positional fields, and
+safety semantics remain protected; newly added `require_one_of` members still
+must resolve to optional parameters or historical positionals.
 
 `make update-interface-baseline` still extends the local checked-in Interface
 fixture used by `make interface-integrity`. Updates are monotonic: they add new

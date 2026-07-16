@@ -234,8 +234,14 @@ jobs:
       - name: Run current and baseline unit tests with coverage
         run: |
           set -eu
-          go test -count=1 -coverprofile=coverage.txt -covermode=atomic ./ ./cmd/... ./internal/... ./skills/...
+          go test -count=1 -p 1 -coverprofile=coverage.txt -covermode=atomic ./ ./cmd/... ./internal/... ./skills/...
           go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic ./pkg/... ./scripts/policy/...
+          go test -count=1 \
+            -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
+            -coverpkg=./internal/app,./internal/helpers,./internal/shortcut/... \
+            -coverprofile=coverage-shortcut.txt \
+            -covermode=atomic \
+            ./internal/app ./internal/helpers ./internal/shortcut/...
 
           base_worktree="$(mktemp -d "${RUNNER_TEMP}/dws-coverage-base.XXXXXX")"
           rmdir "$base_worktree"
@@ -247,6 +253,7 @@ jobs:
           (
             cd "$base_worktree"
             go test -count=1 \
+              -p 1 \
               -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
               -covermode=atomic \
               ./ ./cmd/... ./internal/... ./skills/...
@@ -257,7 +264,7 @@ jobs:
         env:
           COVERAGE_TARGET: "80"
           COVERAGE_ENFORCE_OVERALL: "false"
-        run: make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
+        run: COVERAGE_ADDITIONAL_PROFILE=coverage-shortcut.txt make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
 
       - name: Generate coverage report
         run: go tool cover -html=coverage.txt -o coverage.html
@@ -270,6 +277,7 @@ jobs:
             coverage.txt
             coverage-base.txt
             coverage-policy.txt
+            coverage-shortcut.txt
             coverage.html
 
   policy:

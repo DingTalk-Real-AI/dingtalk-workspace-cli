@@ -38,6 +38,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
@@ -346,7 +347,10 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	schemaCmd := newSchemaCommand(loader)
 	mcpCmd := newMCPCommand(rootCtx, loader, runner, engine)
 	mcpCmd.Hidden = true
-	patCaller := newToolCallerAdapter(runner, flags)
+	// Wrap the caller so every MCP tool call's shape is recorded to the local
+	// usage log (privacy-preserving; see internal/shortcut/usage). Powers
+	// `dws shortcut stats` and future high-frequency shortcut distillation.
+	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
 
 	utilityCommands := []*cobra.Command{
 		newAuthCommand(patCaller),
@@ -364,6 +368,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		newUpgradeCommand(),
 		newVersionCommand(),
 		newPluginCommand(),
+		usage.NewShortcutCommand(),
 		schemaCmd,
 		mcpCmd,
 	}

@@ -93,6 +93,7 @@ func newSheetCommand() *cobra.Command {
   dws sheet chart update                         更新浮动图表
   dws sheet chart delete                         删除浮动图表
   dws sheet export                              导出表格为 xlsx（异步任务一站式：提交→轮询→可选下载）
+  dws sheet import                              导入 xlsx/xls 为在线电子表格
   dws sheet template list                       获取表格模板列表
   dws sheet template search                     搜索表格模板
   dws sheet template apply                      应用表格模板创建新表格文档`,
@@ -110,6 +111,7 @@ func newSheetCommand() *cobra.Command {
 	floatImageCmds := newFloatImageCmds()
 	chartCmd := newChartCmd()
 	exportCmd := newExportCmd()
+	importCmd := newSheetImportCmd()
 	templateCmd := newSheetTemplateCmd()
 	tableCmds := newTableCmds()
 	pivotTableCmd := newPivotTableCmd()
@@ -134,7 +136,7 @@ func newSheetCommand() *cobra.Command {
 	standaloneCmds = append(standaloneCmds, mediaCmds...)
 	standaloneCmds = append(standaloneCmds, floatImageCmds...)
 	standaloneCmds = append(standaloneCmds, tableCmds...)
-	standaloneCmds = append(standaloneCmds, exportCmd, batchUpdateCmd)
+	standaloneCmds = append(standaloneCmds, exportCmd, importCmd, batchUpdateCmd)
 
 	// Register cross-product aliases
 	for _, cmd := range standaloneCmds {

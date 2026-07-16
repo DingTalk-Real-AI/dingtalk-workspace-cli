@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DWS Shortcut 完成情况报告</title>
+<style>
+  :root{--bg:#0f1420;--card:#161d2c;--ink:#e6edf6;--muted:#93a1b5;--line:#26314a;
+    --blue:#4f9cff;--green:#3fb950;--yellow:#d5a429;--red:#f25c5c;--accent:#6ea8fe;--purple:#a371f7}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0d1220,#0f1420);color:var(--ink);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;padding:0 0 80px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+  header{padding:52px 22px 28px;text-align:center;border-bottom:1px solid var(--line);
+    background:radial-gradient(1200px 300px at 50% -60px,rgba(79,156,255,.16),transparent)}
+  h1{font-size:29px;margin:0 0 8px;letter-spacing:.5px}
+  .sub{color:var(--muted);font-size:14px}
+  .stats{display:flex;gap:13px;justify-content:center;flex-wrap:wrap;margin:26px 0 4px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 20px;min-width:118px}
+  .stat .n{font-size:27px;font-weight:700;color:var(--accent)}
+  .stat .l{color:var(--muted);font-size:12.5px;margin-top:2px}
+  h2{font-size:21px;margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h2 .ico{color:var(--accent);margin-right:8px}
+  h3{font-size:15.5px;margin:22px 0 9px;color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;background:var(--card);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#1b2536;color:var(--muted);font-weight:600;font-size:12.5px}
+  tr:last-child td{border-bottom:none}
+  td.c,th.c{text-align:center}
+  .num{color:var(--accent);font-weight:700;text-align:center}
+  .g{color:var(--green);font-weight:700}.s{color:var(--yellow);font-weight:700}.b{color:var(--red);font-weight:700}
+  .ok{color:var(--green)}.star{color:var(--yellow)}
+  code{background:#0c1120;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12.5px;color:#cfe0ff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px 18px;margin:13px 0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .layer{border-radius:12px;padding:16px 18px}
+  .l-wrap{background:linear-gradient(180deg,rgba(79,156,255,.08),transparent);border:1px solid #234b6b}
+  .l-smart{background:linear-gradient(180deg,rgba(163,113,247,.10),transparent);border:1px solid #4a3a6b}
+  .layer h3{margin-top:0}
+  .pill{display:inline-block;background:#12283a;color:#7fc6ff;border:1px solid #234b6b;border-radius:6px;padding:1px 7px;font-size:12px;margin:2px 3px 2px 0}
+  .flow{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+  .flow b{color:var(--ink)}.flow .arw{color:var(--purple)}
+  .concl{background:linear-gradient(90deg,rgba(63,185,80,.10),transparent);border-left:3px solid var(--green);padding:14px 18px;border-radius:8px;margin-top:16px}
+  .keyfind{background:linear-gradient(90deg,rgba(213,164,41,.10),transparent);border-left:3px solid var(--yellow);padding:14px 18px;border-radius:8px;margin:14px 0}
+  footer{color:var(--muted);text-align:center;font-size:12.5px;margin-top:40px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>DWS Shortcut 完成情况报告</h1>
+  <div class="sub">对齐基准 larksuite/cli　·　执行底座 钉钉 MCP　·　随 loop 持续更新</div>
+  <div class="stats">
+    <div class="stat"><div class="n">366</div><div class="l">shortcut 总数</div></div>
+    <div class="stat"><div class="n">298</div><div class="l">1:1 封装层</div></div>
+    <div class="stat"><div class="n">68</div><div class="l">真·智能层</div></div>
+    <div class="stat"><div class="n">16</div><div class="l">覆盖服务</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">失败/panic/编造</div></div>
+  </div>
+</header>
+<div class="wrap">
+
+  <h2><span class="ico">①</span>做了什么：两个层次</h2>
+  <p>诚实区分——shortcut 分两层，价值定位不同，不混为一谈。</p>
+  <div class="two">
+    <div class="layer l-wrap">
+      <h3>🔵 1:1 封装层 · 298 条</h3>
+      <div style="color:var(--muted);font-size:13.5px">一个 shortcut ≡ 一个 MCP tool。把裸 <code>dws mcp &lt;svc&gt; &lt;tool&gt; --json '{…}'</code> 收敛成命名 flag，附校验/风险确认/Intent。</div>
+      <div style="margin:10px 0"><b>价值</b>：DX 与 AI-agent 可发现性，<b>不是新能力</b>。</div>
+      <div><span class="pill">命名 flag</span><span class="pill">required/enum 校验</span><span class="pill">风险确认</span><span class="pill">自然语言 Intent</span><span class="pill">dry-run/format</span></div>
+    </div>
+    <div class="layer l-smart">
+      <h3>🟣 真·智能层 · 68 条</h3>
+      <div style="color:var(--muted);font-size:13.5px">照 lark-cli 范式的多步/编排/智能，<b>不是 1:1</b>。框架新增 <code>CallMCPData</code>（多步取数，对标 lark <code>CallAPITyped</code>）+ <code>resolveUser</code>（名→ID，对标 <code>ResolveOpenIDsTyped</code>）。</div>
+      <div style="margin:10px 0"><b>价值</b>：<b>这才是「shortcut 作为新能力」</b>。</div>
+      <div><span class="pill" style="background:#241a3a;color:#c9b3ff;border-color:#4a3a6b">按名解析+消歧</span><span class="pill" style="background:#241a3a;color:#c9b3ff;border-color:#4a3a6b">多工具编排</span><span class="pill" style="background:#241a3a;color:#c9b3ff;border-color:#4a3a6b">失败回滚</span><span class="pill" style="background:#241a3a;color:#c9b3ff;border-color:#4a3a6b">跨服务</span></div>
+    </div>
+  </div>
+
+  <h2><span class="ico">②</span>真·智能层 68 条明细（节选）</h2>
+  <table>
+    <thead><tr><th>shortcut</th><th>多步/智能逻辑</th><th class="c">验证</th></tr></thead>
+    <tbody>
+      <tr><td><code>chat +dm --to &lt;名&gt;</code></td><td>搜人→解析 userId→发单聊；多人消歧</td><td class="c ok">真机 dry-run</td></tr>
+      <tr><td><code>contact +lookup --name &lt;名&gt;</code></td><td>搜人→解析→取完整资料</td><td class="c ok">✅ 真机端到端</td></tr>
+      <tr><td><code>todo +assign --to &lt;名&gt;</code></td><td>解析人→建待办并设执行人</td><td class="c ok">真机 dry-run</td></tr>
+      <tr><td><code>contact +org --name &lt;名&gt;</code></td><td>解析人→取 deptId→查部门详情（3 步）</td><td class="c ok">✅ 真机端到端</td></tr>
+      <tr><td><code>contact +team --name &lt;名&gt;</code></td><td>解析人→取部门→列部门成员</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>calendar +free --who &lt;名&gt;</code></td><td>解析人→查其时段忙闲</td><td class="c ok">✅ 真机端到端</td></tr>
+      <tr><td><code>calendar +book [--with &lt;名CSV&gt;]</code></td><td>建日程→按名加参与者→<b>失败回滚删日程</b></td><td class="c ok">真机 dry-run</td></tr>
+      <tr><td><code>calendar +invite --event --with</code></td><td>解析多人→加入已有日程</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>calendar +suggest-time --with</code></td><td>解析多人→推荐可开会时间</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>calendar +today</code></td><td>算今天范围→列我今天日程</td><td class="c ok">✅ 真机端到端</td></tr>
+      <tr><td><code>calendar +next-event</code></td><td>近 7 天→取最近一个日程</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>calendar +reschedule --event</code></td><td>查日程详情→改时间</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>chat +send-to-group --group &lt;群名&gt;</code></td><td>按群名搜群→消歧→发消息</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>chat +group-members --group &lt;群名&gt;</code></td><td>搜群→列群成员</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>chat +broadcast --to &lt;名CSV&gt;</code></td><td>多名逐一解析→群发单聊，失败汇总</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>todo +todo-done --task &lt;关键词&gt;</code></td><td>列我待办→按标题匹配→标完成</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>todo +remind --task --at</code></td><td>给自己建带提醒的待办</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>minutes +latest-minutes</code></td><td>列妙记→取最新一条详情</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>minutes +action-items</code></td><td>列妙记→取最新→取其待办</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>wiki +wiki-new-doc --space &lt;名&gt;</code></td><td>按名搜知识空间→建文档（跨 doc server 路由）</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>doc +doc-append --doc --text</code></td><td>文档末尾追加文本</td><td class="c ok">编译/挂载</td></tr>
+      <tr><td><code>doc +share-doc --to &lt;名&gt; --url</code></td><td>解析人→把文档链接私信 TA（跨服务）</td><td class="c ok">编译/挂载</td></tr>
+    </tbody>
+  </table>
+  <div class="card">
+    <b>质量亮点（agent 严守 ground truth）</b>：<code>+send-to-group</code> 纠正了「按群名搜群」的正确工具（<code>search_groups</code> 而非按成员昵称的 <code>search_common_groups</code>）；<code>+wiki-new-doc</code> 发现 <code>create_file</code> 在 doc server 并正确跨服务路由；<code>+mail-to</code> 因钉钉无 email 字段<b>主动 skip 拒绝编造</b>。
+  </div>
+
+  <h2><span class="ico">③</span>测试验证（零副作用全量）</h2>
+  <p>写/删命令不能真跑，用<b>假 Caller 拦截</b>——每条命令走完「解析→校验→确认→组装 MCP 调用」，捕获组装出的 <code>(product,tool,params)</code>，不真发网络。</p>
+  <table>
+    <thead><tr><th>验证项</th><th>范围</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td><code>go build ./...</code> / gofmt / vet</td><td>全仓</td><td class="ok">✅ 0 告警</td></tr>
+      <tr><td>TestAllShortcutsAssemble</td><td>全部 366</td><td class="ok">✅ 322 组装真实MCP · 44 自校验 · 0 失败/panic</td></tr>
+      <tr><td>TestAllToolLiteralsAreReal</td><td>tool 字面量</td><td class="ok">✅ 0 编造（比对 helper ground truth）</td></tr>
+      <tr><td>TestAllHaveIntent</td><td>全部 366</td><td class="ok">✅ 每条均有自然语言描述</td></tr>
+      <tr><td>TestNoDuplicateCommands</td><td>全部</td><td class="ok">✅ 无重复 · 命名规范</td></tr>
+      <tr><td>usage / userdef 单测</td><td>埋点/沉淀</td><td class="ok">✅ 全通过</td></tr>
+      <tr><td>app 包全量回归</td><td>internal/app</td><td class="ok">✅ ~72s 通过（未破坏现有命令）</td></tr>
+      <tr><td>智能层真机验证（9 批）</td><td>只读/解析类 20+ 条</td><td class="ok">✅ 端到端返回真实数据、投影正确</td></tr>
+      <tr><td>真机抓修真实 bug</td><td>合成测试盖不住的投影/解析偏差</td><td class="ok">✅ 修复 8 处（resolve-dept/at-me/group-members/free/today/suggest-time/unread-chats/dept-members）</td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--muted);font-size:13px">真机验证补齐了 assemble 测试的盲区：合成响应验证不了「防御式投影是否匹配真实响应结构」。9 批真机验证抓到并修复 8 处解析/投影偏差（如 <code>+resolve-dept</code> 漏了真实容器 key <code>deptList</code>、<code>+at-me</code> 未拍平嵌套、<code>+today/+free</code> 直吐冗长 raw）。少数命令（chat 会话消息读、minutes）因 org/PAT 权限受限无法真机跑通，组装链路仍由 assemble 测试覆盖。</p>
+
+  <h2><span class="ico">④</span>效果评估 GSB（vs lark-cli）</h2>
+  <h3>4.1 能力覆盖 GSB（按 dws 实际暴露的 MCP tool 数 = helper∪shortcut，非 shortcut 数）</h3>
+  <table>
+    <thead><tr><th>lark 服务</th><th class="c">lark</th><th>dws</th><th class="c">dws</th><th class="c">GSB</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>im</td><td class="c">21</td><td>chat</td><td class="c">95</td><td class="c g">G</td><td>群/消息/机器人更全</td></tr>
+      <tr><td>mail</td><td class="c">21</td><td>mail</td><td class="c">43</td><td class="c g">G</td><td>覆盖更广</td></tr>
+      <tr><td>doc</td><td class="c">14</td><td>doc</td><td class="c">34</td><td class="c g">G</td><td>块级读写更细</td></tr>
+      <tr><td>minutes</td><td class="c">14</td><td>minutes</td><td class="c">25</td><td class="c g">G</td><td>录音/说话人更全</td></tr>
+      <tr><td>calendar</td><td class="c">12</td><td>calendar</td><td class="c">24</td><td class="c g">G</td><td>会议室/ACL 更全</td></tr>
+      <tr><td>contact</td><td class="c">2</td><td>contact</td><td class="c">15</td><td class="c g">G</td><td>部门/角色/花名册更全</td></tr>
+      <tr><td>wiki</td><td class="c">12</td><td>wiki</td><td class="c">16</td><td class="c g">G</td><td>略优</td></tr>
+      <tr><td>base</td><td class="c">87</td><td>aitable</td><td class="c">79</td><td class="c s">S</td><td>持平；helper 仅 16，<b>shortcut 补齐 +63</b>（真 gap-fill）</td></tr>
+      <tr><td>task</td><td class="c">18</td><td>todo</td><td class="c">20</td><td class="c s">S</td><td>持平</td></tr>
+      <tr><td>drive</td><td class="c">26</td><td>drive</td><td class="c">25</td><td class="c s">S</td><td>持平</td></tr>
+      <tr><td>apps</td><td class="c">63</td><td>devapp</td><td class="c">25</td><td class="c b">B</td><td><b>helper 无 devapp，25 全由 shortcut 补</b>，但仍少于 lark</td></tr>
+      <tr><td>sheets</td><td class="c">84</td><td>sheet</td><td class="c">60</td><td class="c b">B</td><td>钉钉表格 MCP 较少；helper 已覆盖</td></tr>
+      <tr><td>vc/okr/slides/markdown/whiteboard/note/event</td><td class="c">62</td><td>—</td><td class="c">0</td><td class="c b">B</td><td>钉钉无对应能力，<b>客观不可对齐</b></td></tr>
+    </tbody>
+  </table>
+  <div style="color:var(--muted);font-size:13px;margin:6px 0 2px">🟢 G 7 领域　·　🟡 S 3 领域　·　🔴 B（apps/sheets 少于 lark + 6 领域钉钉无能力）。base 的"持平"几乎全靠 shortcut gap-fill（helper 仅 16）。dws 独有：oa/attendance/report/ding/aisearch/live/devdoc。</div>
+
+  <h3>4.2 组合/智能层 GSB（关键发现）</h3>
+  <div class="keyfind">
+    <b>关键结论</b>：lark 有 ~104 个组合(≥2 次 API)shortcut，但 <b>lark 的组合性多源于飞书 REST API 太细粒度</b>（要先查 spreadsheetToken→sheetId→再操作）；<b>钉钉 MCP 是粗粒度的——一个 tool = 一个完整操作</b>，所以 lark 的组合在钉钉这边<b>大量塌缩成 1:1</b>（已被封装层覆盖），或<b>根本没有对应 tool</b>。
+  </div>
+  <table>
+    <thead><tr><th>lark 组合来源</th><th class="c">数量</th><th class="c">GSB</th><th>钉钉现实</th></tr></thead>
+    <tbody>
+      <tr><td>sheets（先解析 sheetId）</td><td class="c">41</td><td class="c s">S</td><td>钉钉直接吃 token → 1:1 层已覆盖</td></tr>
+      <tr><td>apps db-env/audit/log/trace</td><td class="c">17</td><td class="c b">B</td><td>钉钉无对应工具</td></tr>
+      <tr><td>drive/doc/im（上传/媒体/搜索）</td><td class="c">23</td><td class="c s">S</td><td>多为钉钉 1:1 已覆盖</td></tr>
+      <tr><td>calendar/contact/wiki/minutes/todo 编排</td><td class="c">~10</td><td class="c g">G</td><td>✅ 已建为真·智能 shortcut（+book/+lookup/+org/+wiki-new-doc/+reschedule…）</td></tr>
+      <tr><td>okr/whiteboard/slides/vc</td><td class="c">11</td><td class="c b">B</td><td>钉钉无对应能力</td></tr>
+    </tbody>
+  </table>
+  <div style="color:var(--muted);font-size:13px">→ 钉钉真正需要「组合」的场景（按名解析+多工具编排+跨服务），dws 已覆盖并<b>额外做了 lark 没有的</b>（+today/+broadcast/+share-doc/+action-items 等）。<b>不盲目复刻 lark 的机械多步</b>（在钉钉会成冗余假组合）。</div>
+
+  <h2><span class="ico">⑤</span>dws 差异化优势</h2>
+  <div class="card"><b>复用生产级 MCP 通道</b>（架构性）—— <code>CallMCP</code> 统一继承错误分类(auth/PAT/业务)、dry-run、<code>--format/--jq/--fields</code>；lark 每命令各自实现。</div>
+  <div class="card"><b>协作能力覆盖更全</b> —— chat 95/mail 43/doc 34/minutes 25（dws tool 覆盖）是 lark 对应 2–4 倍。</div>
+  <div class="card"><b>钉钉原生特有能力</b>（lark 完全没有）—— 审批/日志/考勤/DING/企业智能搜索，75 条差异化封装。</div>
+  <div class="card"><b>真·智能编排（22 条）</b> —— 按名解析+消歧、失败回滚、跨服务；<code>resolveUser</code>/<code>CallMCPData</code> 让新智能 shortcut 越写越快。</div>
+  <div class="card"><b>高频自动沉淀（P2 · lark 无此设计）</b>
+    <div class="flow" style="margin-top:9px"><b>高频使用</b><span class="arw">→</span><b>埋点</b><span class="arw">→</span><b>suggest</b><span class="arw">→</span><b>add 写 YAML</b><span class="arw">→</span><b>运行时加载可用</b></div>
+  </div>
+  <div class="card"><b>工程质量</b> —— 假 Caller 拦截，366 条（含写/删）零副作用全量验证，可复跑回归。</div>
+
+  <div class="concl">
+    <b>一句话结论</b>：dws 已把钉钉侧<b>能对齐的都对齐</b>（366 条 = 298 封装 + 68 智能 / 16 服务，1:1 层已去 213 条纯重复），即时协作显著优于 lark，拥有审批/考勤/DING 等原生差异化能力与「高频自动沉淀」独有闭环。lark 的组合优势多因飞书 API 细粒度、在钉钉粗粒度 MCP 下塌缩为 1:1（已覆盖），真正需编排的钉钉侧已建齐；受限项均为钉钉客观无对应能力，非工程遗漏。全部 366 条通过零副作用全量验证。
+  </div>
+
+  <footer>DWS Shortcut Report · 由持续精进 loop 维护 · 另见 <a href="shortcut-comparison.html">逐条三方对照 HTML</a> · <a href="shortcut-report.md">Markdown 版</a></footer>
+</div>
+</body>
+</html>

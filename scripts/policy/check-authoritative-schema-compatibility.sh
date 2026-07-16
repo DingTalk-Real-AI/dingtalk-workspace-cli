@@ -54,6 +54,9 @@ BASE_RAW="$TMP_ROOT/base-schema.json"
 BASELINE="$TMP_ROOT/base-contract.json"
 CANDIDATE_RAW="$TMP_ROOT/candidate-schema.json"
 CHECKER="$TMP_ROOT/schema-compat"
+APPROVED_MIGRATIONS_REL="scripts/policy/schema-compat/approved-interface-migrations-v1.json"
+BASE_APPROVED_MIGRATIONS="$BASE_WORKTREE/$APPROVED_MIGRATIONS_REL"
+CANDIDATE_APPROVED_MIGRATIONS="$ROOT/$APPROVED_MIGRATIONS_REL"
 
 cleanup() {
 	git -C "$ROOT" worktree remove --force "$BASE_WORKTREE" >/dev/null 2>&1 || true
@@ -68,8 +71,8 @@ git -C "$ROOT" worktree add --detach "$BASE_WORKTREE" "$BASE_REF" >/dev/null
 (
 	cd "$BASE_WORKTREE"
 	go build -o "$BASE_BIN" ./cmd
+	go build -o "$CHECKER" ./scripts/policy/schema-compat
 )
-go build -o "$CHECKER" ./scripts/policy/schema-compat
 
 mkdir -p "$TMP_ROOT/base-home" "$TMP_ROOT/candidate-home"
 HOME="$TMP_ROOT/base-home" DWS_LANG=zh \
@@ -79,4 +82,29 @@ HOME="$TMP_ROOT/candidate-home" DWS_LANG=zh \
 
 "$CHECKER" --normalize "$BASE_RAW" >"$BASELINE"
 printf 'checking complete Schema contract against PR merge-base %s\n' "$BASE_REF"
-"$CHECKER" --check "$BASELINE" --current "$CANDIDATE_RAW"
+if git -C "$BASE_WORKTREE" ls-files --error-unmatch "$APPROVED_MIGRATIONS_REL" >/dev/null 2>&1; then
+	if [ ! -f "$BASE_APPROVED_MIGRATIONS" ] || [ -L "$BASE_APPROVED_MIGRATIONS" ]; then
+		printf 'error: base-approved interface migrations must be a tracked regular file: %s\n' "$APPROVED_MIGRATIONS_REL" >&2
+		exit 2
+	fi
+	printf 'using base-approved interface migrations from %s:%s\n' "$BASE_REF" "$APPROVED_MIGRATIONS_REL"
+	if git -C "$ROOT" ls-files --error-unmatch "$APPROVED_MIGRATIONS_REL" >/dev/null 2>&1; then
+		if [ ! -f "$CANDIDATE_APPROVED_MIGRATIONS" ] || [ -L "$CANDIDATE_APPROVED_MIGRATIONS" ]; then
+			printf 'error: candidate interface migrations must be a tracked regular file: %s\n' "$APPROVED_MIGRATIONS_REL" >&2
+			exit 2
+		fi
+		"$CHECKER" \
+			--check "$BASELINE" \
+			--current "$CANDIDATE_RAW" \
+			--approved-interface-migrations "$BASE_APPROVED_MIGRATIONS" \
+			--candidate-interface-migrations "$CANDIDATE_APPROVED_MIGRATIONS"
+	else
+		"$CHECKER" \
+			--check "$BASELINE" \
+			--current "$CANDIDATE_RAW" \
+			--approved-interface-migrations "$BASE_APPROVED_MIGRATIONS"
+	fi
+else
+	printf 'no base-approved interface migrations at %s:%s\n' "$BASE_REF" "$APPROVED_MIGRATIONS_REL"
+	"$CHECKER" --check "$BASELINE" --current "$CANDIDATE_RAW"
+fi

@@ -369,7 +369,7 @@ var (
 
 func Generate(opts Options) (File, Stats, error) {
 	if strings.TrimSpace(opts.HintsDir) == "" {
-		return File{}, Stats{}, fmt.Errorf("Agent hint directory is required")
+		return File{}, Stats{}, fmt.Errorf("agent hint directory is required")
 	}
 	if len(opts.CanonicalToolPaths) == 0 || len(opts.ToolPaths) == 0 || len(opts.ProductIDs) == 0 {
 		return File{}, Stats{}, fmt.Errorf("complete Effective CommandRegistry projection is required")
