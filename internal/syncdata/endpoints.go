@@ -20,6 +20,7 @@ func StaticServers() []ServerInfo {
 		{ID: "doc", Name: "文档", Endpoint: "https://mcp-gw.dingtalk.com/server/91e17caf44f6ca1ed9c6ce614221a518ac93300ece63ca8d7e9b133f912e0607", Prefixes: []string{"doc"}},
 		{ID: "doc-comment", Name: "文档评论", Endpoint: "https://mcp-gw.dingtalk.com/server/doc-comment", Prefixes: []string{"doc-comment"}},
 		{ID: "drive", Name: "钉盘", Endpoint: "https://mcp-gw.dingtalk.com/server/536f3b329ee774322b14361c666d6e9471e5bbb281b91ded8ca033b3ce7189af", Prefixes: []string{"drive"}},
+		{ID: "hrbrain", Name: "组织大脑", Endpoint: "https://mcp-gw.dingtalk.com/server/3397678130e596e4959e74f87c9b3bd7d6117387f97c27f759851cab7454dafb?key=60f1de2aa27b5cd95c0cad7bf8ee9b74", Prefixes: []string{"hrbrain"}},
 		{ID: "hrmregister", Name: "智能人事", Endpoint: "https://mcp-gw.dingtalk.com/server/2494acfc37317871865c9c715664792200a52a89aeab58fee61cfc7262463c39", Prefixes: []string{"hrmregister"}},
 		{ID: "im", Name: "im", Endpoint: "https://mcp-gw.dingtalk.com/server/450eede6b54d83e030140e66ec77c98a2e89a0869ef4db481f8217a98a42f821", Prefixes: []string{"im"}},
 		{ID: "live", Name: "直播", Endpoint: "https://mcp-gw.dingtalk.com/server/57fb66889659c56df8f0a1838026b9004d8f4257fbef54fd04a028426253a033", Prefixes: []string{"live"}},
