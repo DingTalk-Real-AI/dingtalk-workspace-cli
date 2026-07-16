@@ -71,6 +71,7 @@ dws dev app list --format json
 
 # 查询单个应用详情
 dws dev app get --unified-app-id <unifiedAppId> --format json
+dws dev app get --app-key <appKey> --format json
 
 # 创建应用
 dws dev app create --name <名称> --desc <描述> --format json
@@ -208,4 +209,4 @@ dws dev app version status         --unified-app-id <unifiedAppId> --version-id 
 - **`clientSecret` 只在 `robot result` 返回一次**，务必立即保存；dws 只能 `credentials get` 读取，不支持重置，遗失后到开放平台控制台重置密钥
 - 改配置后机器人不自动生效，需走 `version create → publish` 才上线
 - `hermes`/`openclaw` 渠道走官方建联，`dws dev connect` 不代建机器人，会输出指引后退出
-- 应用名在企业内唯一；`app list/get` 用 `--app-key` 过滤但不能定位单应用，定位单应用须用 `--unified-app-id`
+- 应用名在企业内唯一；`app get` 支持 `--unified-app-id` 或只读 `--app-key` 查详情；写操作定位单应用须用 `--unified-app-id`

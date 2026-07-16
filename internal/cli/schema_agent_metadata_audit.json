@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:e2a790e812006a3883f0ac002fce9320ef0779380384c0a10efb938d02a4d43d",
+  "source_hash": "sha256:8f84f3d5577a92b876cde6e1629cb7289ee9ab374c79f4ad8a8a0675c535b32a",
   "surface_hash": "sha256:631b73b174f48cb0cca7c8449e80920739010d0db223dac2855101f4dbd0eda6",
   "source_files": 150,
   "hint_files": 46,
@@ -2539,7 +2539,7 @@
     {
       "tool_path": "dev connect",
       "source": "skills/mono/references/products/dev.md",
-      "line": 131,
+      "line": 132,
       "candidates": [
         "dev connect status",
         "dev connect stop",
@@ -2553,7 +2553,7 @@
     {
       "tool_path": "dev connect",
       "source": "skills/mono/references/products/dev.md",
-      "line": 135,
+      "line": 136,
       "candidates": [
         "dev connect status",
         "dev connect stop",
@@ -2567,7 +2567,7 @@
     {
       "tool_path": "dev connect",
       "source": "skills/mono/references/products/dev.md",
-      "line": 139,
+      "line": 140,
       "candidates": [
         "dev connect status",
         "dev connect stop",
@@ -2581,7 +2581,7 @@
     {
       "tool_path": "dev connect",
       "source": "skills/mono/references/products/dev.md",
-      "line": 144,
+      "line": 145,
       "candidates": [
         "dev connect status",
         "dev connect stop",
@@ -2595,7 +2595,7 @@
     {
       "tool_path": "dev app version check-approval",
       "source": "skills/mono/references/products/dev.md",
-      "line": 199,
+      "line": 200,
       "candidates": [
         "dev app version create",
         "dev app version get",
