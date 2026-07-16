@@ -23,6 +23,11 @@ The repository defines five focused checks in addition to its existing CI:
   variance to avoid failing unchanged code on test-path noise. Set
   `COVERAGE_ENFORCE_OVERALL=true` once repository coverage reaches 80% to make
   the overall target fail closed as well.
+  CI generates the candidate, supporting, and merge-base profiles on three
+  independent runners, then downloads all profiles into the aggregate
+  `Coverage` job and applies the same fail-closed gate. The split changes only
+  scheduling: the tested packages, profile contents, merge-base comparison,
+  and final coverage thresholds remain unchanged.
 - **CLI Smoke** builds the release binary, reads the root command list from the
   structured Interface contract, and renders offline help for every public
   top-level command. It rejects Cobra's unknown-command root-help fallback and
@@ -53,9 +58,10 @@ make coverage-gate-platform BASE_REF=<merge-base> PROFILE=<coverage-profile>
 ```
 
 `make coverage-gate` is the enforcement step, not a profile generator. It
-expects the candidate, policy, and merge-base profiles (`coverage.txt`,
-`coverage-policy.txt`, and `coverage-base.txt`) produced by the preceding CI
-steps. A clean local checkout can reproduce the Linux/overall CI gate with:
+expects the candidate, policy, shortcut, and merge-base profiles
+(`coverage.txt`, `coverage-policy.txt`, `coverage-shortcut.txt`, and
+`coverage-base.txt`) produced by the parallel CI profile jobs. A clean local
+checkout can reproduce the Linux/overall CI gate sequentially with:
 
 ```sh
 base_ref=$(git merge-base HEAD origin/main)
@@ -65,17 +71,25 @@ rmdir "$base_worktree"
 cleanup() { git worktree remove --force "$base_worktree" >/dev/null 2>&1 || true; }
 trap cleanup EXIT HUP INT TERM
 
-go test -count=1 -coverprofile=coverage.txt -covermode=atomic \
+go test -count=1 -p 1 -coverprofile=coverage.txt -covermode=atomic \
   ./ ./cmd/... ./internal/... ./skills/...
 go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic \
   ./pkg/... ./scripts/policy/...
+go test -count=1 \
+  -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
+  -coverpkg=./internal/app,./internal/helpers,./internal/shortcut/... \
+  -coverprofile=coverage-shortcut.txt \
+  -covermode=atomic \
+  ./internal/app ./internal/helpers ./internal/shortcut/...
 git worktree add --detach "$base_worktree" "$base_ref"
 (
   cd "$base_worktree"
-  go test -count=1 -coverprofile="$root/coverage-base.txt" -covermode=atomic \
+  go test -count=1 -p 1 \
+    -coverprofile="$root/coverage-base.txt" -covermode=atomic \
     ./ ./cmd/... ./internal/... ./skills/...
 )
-make coverage-gate BASE_REF="$base_ref"
+COVERAGE_ADDITIONAL_PROFILE=coverage-shortcut.txt \
+  make coverage-gate BASE_REF="$base_ref"
 ```
 
 The native-platform target likewise expects `PROFILE` to have already been
