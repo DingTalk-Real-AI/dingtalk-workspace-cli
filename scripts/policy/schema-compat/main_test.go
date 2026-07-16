@@ -116,7 +116,7 @@ type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
-func TestRunSchemaModes(t *testing.T) {
+func TestCrossPlatformCoverageRunSchemaModes(t *testing.T) {
 	directory := t.TempDir()
 	raw := filepath.Join(directory, "raw.json")
 	writeTestFile(t, raw, completeSchemaJSON)
@@ -175,7 +175,7 @@ func TestRunSchemaModes(t *testing.T) {
 	}
 }
 
-func TestRunUsesExactApprovedInterfaceMigration(t *testing.T) {
+func TestCrossPlatformCoverageRunUsesExactApprovedInterfaceMigration(t *testing.T) {
 	directory := t.TempDir()
 	oldRaw := filepath.Join(directory, "old.json")
 	currentRaw := filepath.Join(directory, "current.json")
@@ -210,7 +210,7 @@ func TestRunUsesExactApprovedInterfaceMigration(t *testing.T) {
 	}
 }
 
-func TestRunEnforcesApprovedInterfaceMigrationLifecycle(t *testing.T) {
+func TestCrossPlatformCoverageRunEnforcesApprovedInterfaceMigrationLifecycle(t *testing.T) {
 	directory := t.TempDir()
 	oldRaw := filepath.Join(directory, "old.json")
 	newRaw := filepath.Join(directory, "new.json")
@@ -311,7 +311,7 @@ func TestRunEnforcesApprovedInterfaceMigrationLifecycle(t *testing.T) {
 	)
 }
 
-func TestRunWithoutApprovedManifestSupportsBootstrap(t *testing.T) {
+func TestCrossPlatformCoverageRunWithoutApprovedManifestSupportsBootstrap(t *testing.T) {
 	directory := t.TempDir()
 	raw := filepath.Join(directory, "raw.json")
 	baselinePath := filepath.Join(directory, "baseline.json")
@@ -332,7 +332,7 @@ func TestRunWithoutApprovedManifestSupportsBootstrap(t *testing.T) {
 	}
 }
 
-func TestNormalizeRawFileValidation(t *testing.T) {
+func TestCrossPlatformCoverageNormalizeRawFileValidation(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
@@ -361,7 +361,7 @@ func TestNormalizeRawFileValidation(t *testing.T) {
 	}
 }
 
-func TestNormalizeCompleteSchemaPayload(t *testing.T) {
+func TestCrossPlatformCoverageNormalizeCompleteSchemaPayload(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "schema.json")
 	writeTestFile(t, path, completeSchemaJSON)
 
@@ -384,7 +384,7 @@ func TestNormalizeCompleteSchemaPayload(t *testing.T) {
 	}
 }
 
-func TestSchemaCompatibilityIgnoresPositionalDescription(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCompatibilityIgnoresPositionalDescription(t *testing.T) {
 	directory := t.TempDir()
 	baselinePath := filepath.Join(directory, "baseline.json")
 	currentPath := filepath.Join(directory, "current.json")
@@ -404,7 +404,7 @@ func TestSchemaCompatibilityIgnoresPositionalDescription(t *testing.T) {
 	}
 }
 
-func TestSchemaTypeAndHelpers(t *testing.T) {
+func TestCrossPlatformCoverageSchemaTypeAndHelpers(t *testing.T) {
 	if got := schemaType(map[string]any{"type": []any{"string", "null"}}); got != `["string","null"]` {
 		t.Fatalf("schemaType(type)=%q", got)
 	}
@@ -419,7 +419,7 @@ func TestSchemaTypeAndHelpers(t *testing.T) {
 	}
 }
 
-func TestRequireOneOfMemberAdditionsAreCompatible(t *testing.T) {
+func TestCrossPlatformCoverageRequireOneOfMemberAdditionsAreCompatible(t *testing.T) {
 	oldConstraints := `{
   "mutually_exclusive":[["legacy","modern"]],
   "require_one_of":[["scope","product"],["token","profile"]]
@@ -462,7 +462,7 @@ func TestRequireOneOfMemberAdditionsAreCompatible(t *testing.T) {
 	}
 }
 
-func TestRequireOneOfNewMembersMustResolveToOptionalInputs(t *testing.T) {
+func TestCrossPlatformCoverageRequireOneOfNewMembersMustResolveToOptionalInputs(t *testing.T) {
 	optional := cloneContract(baselineContract())
 	mutateTool(&optional, func(tool *toolSchema) {
 		tool.Constraints = `{"require_one_of":[["title","format","all"]]}`
@@ -507,7 +507,7 @@ func TestRequireOneOfNewMembersMustResolveToOptionalInputs(t *testing.T) {
 	}
 }
 
-func TestRequireOneOfConstraintDriftFailsClosed(t *testing.T) {
+func TestCrossPlatformCoverageRequireOneOfConstraintDriftFailsClosed(t *testing.T) {
 	oldConstraints := `{"mutually_exclusive":[["legacy","modern"]],"require_one_of":[["scope","product"],["token","profile"]]}`
 	tests := []struct {
 		name string
@@ -535,7 +535,7 @@ func TestRequireOneOfConstraintDriftFailsClosed(t *testing.T) {
 	}
 }
 
-func TestCommittedApprovedInterfaceMigrationManifestIsValidWhenPresent(t *testing.T) {
+func TestCrossPlatformCoverageCommittedApprovedInterfaceMigrationManifestIsValidWhenPresent(t *testing.T) {
 	path := "approved-interface-migrations-v1.json"
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return
@@ -562,7 +562,7 @@ func TestCommittedApprovedInterfaceMigrationManifestIsValidWhenPresent(t *testin
 	}
 }
 
-func TestApprovedInterfaceMigrationManifestFailsClosed(t *testing.T) {
+func TestCrossPlatformCoverageApprovedInterfaceMigrationManifestFailsClosed(t *testing.T) {
 	duplicate := `{"version":1,"migrations":[` + exactDocInterfaceMigrationEntryJSON + `,` + exactDocInterfaceMigrationEntryJSON + `]}`
 	tests := []struct {
 		name string
@@ -617,7 +617,7 @@ func TestApprovedInterfaceMigrationManifestFailsClosed(t *testing.T) {
 	}
 }
 
-func TestApprovedInterfaceMigrationCompatibilityIsExact(t *testing.T) {
+func TestCrossPlatformCoverageApprovedInterfaceMigrationCompatibilityIsExact(t *testing.T) {
 	baseline := baselineContract()
 	mutateTool(&baseline, func(tool *toolSchema) {
 		tool.InterfaceMode = "mcp"
@@ -681,7 +681,7 @@ func TestApprovedInterfaceMigrationCompatibilityIsExact(t *testing.T) {
 	}
 }
 
-func TestApprovedConstraintMigrationIsExactAndPreservesNewMemberSafety(t *testing.T) {
+func TestCrossPlatformCoverageApprovedConstraintMigrationIsExactAndPreservesNewMemberSafety(t *testing.T) {
 	baseline := baselineContract()
 	mutateTool(&baseline, func(tool *toolSchema) {
 		tool.InterfaceMode = "mcp"
@@ -735,7 +735,7 @@ func TestApprovedConstraintMigrationIsExactAndPreservesNewMemberSafety(t *testin
 	}
 }
 
-func TestApprovedConstraintMigrationLifecycleRejectsPartialState(t *testing.T) {
+func TestCrossPlatformCoverageApprovedConstraintMigrationLifecycleRejectsPartialState(t *testing.T) {
 	current := baselineContract()
 	mutateTool(&current, func(tool *toolSchema) {
 		tool.InterfaceMode = "mcp"
@@ -760,7 +760,7 @@ func TestApprovedConstraintMigrationLifecycleRejectsPartialState(t *testing.T) {
 	}
 }
 
-func TestCandidateManifestMayAddFutureExactMigration(t *testing.T) {
+func TestCrossPlatformCoverageCandidateManifestMayAddFutureExactMigration(t *testing.T) {
 	current := baselineContract()
 	mutateTool(&current, func(tool *toolSchema) {
 		tool.InterfaceMode = "mcp"
@@ -809,7 +809,7 @@ func TestCandidateManifestMayAddFutureExactMigration(t *testing.T) {
 	}
 }
 
-func TestSchemaCompatibilityAllowsAdditionsAndLooserInputs(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCompatibilityAllowsAdditionsAndLooserInputs(t *testing.T) {
 	baseline := baselineContract()
 	mutateTool(&baseline, func(tool *toolSchema) {
 		tool.DryRun = ""
@@ -831,7 +831,7 @@ func TestSchemaCompatibilityAllowsAdditionsAndLooserInputs(t *testing.T) {
 	}
 }
 
-func TestSchemaCompatibilityAllowsLooserAndAppendedOptionalPositionals(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCompatibilityAllowsLooserAndAppendedOptionalPositionals(t *testing.T) {
 	baseline := baselineContract()
 	mutateTool(&baseline, func(tool *toolSchema) {
 		tool.Positionals[0].Required = true
@@ -851,7 +851,7 @@ func TestSchemaCompatibilityAllowsLooserAndAppendedOptionalPositionals(t *testin
 	}
 }
 
-func TestCompatiblePositionals(t *testing.T) {
+func TestCrossPlatformCoverageCompatiblePositionals(t *testing.T) {
 	baseline := []positionalSchema{
 		{Name: "content", Index: 0, Type: "string", Required: true},
 		{Name: "format", Index: 1, Type: "string"},
@@ -916,7 +916,7 @@ func TestCompatiblePositionals(t *testing.T) {
 	}
 }
 
-func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	tests := []struct {
 		name   string
 		want   string
@@ -1000,7 +1000,7 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	}
 }
 
-func TestMergeContracts(t *testing.T) {
+func TestCrossPlatformCoverageMergeContracts(t *testing.T) {
 	historical := baselineContract()
 	current := cloneContract(historical)
 	mutateTool(&current, func(tool *toolSchema) {
