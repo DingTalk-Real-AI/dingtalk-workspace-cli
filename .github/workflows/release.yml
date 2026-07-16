@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       recover_release_version:
-        description: "Recover an existing undelivered tag, e.g. v1.0.52"
+        description: "Recover the existing undelivered v1.0.53-beta.2 tag"
         required: false
         type: string
       recover_release_previous_tag:
@@ -45,14 +45,8 @@ jobs:
           PREVIOUS_TAG: ${{ inputs.recover_release_previous_tag }}
         run: |
           set -euo pipefail
-          case "$RELEASE_VERSION" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "Recovery requires a stable vX.Y.Z tag" >&2; exit 1 ;;
-          esac
-          case "$RELEASE_VERSION" in
-            *-*) echo "Stable recovery cannot use a prerelease tag" >&2; exit 1 ;;
-          esac
-          test -n "$PREVIOUS_TAG"
+          test "$RELEASE_VERSION" = "v1.0.53-beta.2"
+          test "$PREVIOUS_TAG" = "v1.0.52"
           test "$(git cat-file -t "refs/tags/$RELEASE_VERSION")" = tag
           target_commit="$(git rev-parse "$RELEASE_VERSION^{commit}")"
           test "$target_commit" = "$(git rev-parse HEAD)"
