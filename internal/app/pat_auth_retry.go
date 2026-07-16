@@ -48,6 +48,7 @@ const (
 	PatAuthPollInterval = 5 * time.Second
 
 	patScopeAuthRequiredCode = "PAT_SCOPE_AUTH_REQUIRED"
+	patOrgPolicyDeniedCode   = "PAT_ORG_POLICY_DENIED"
 )
 
 var openBrowserFunc = tryOpenBrowser
@@ -234,7 +235,11 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 		delete(data, "authUrl")
 		delete(data, "authorizationUrl")
 	}
-	data["openBrowser"] = openBrowser
+	if code, _ := payload["code"].(string); code == "PAT_ORG_POLICY_DENIED" {
+		data["openBrowser"] = false
+	} else {
+		data["openBrowser"] = openBrowser
+	}
 
 	encoded, err := marshalSingleLineJSONNoHTMLEscape(payload)
 	if err != nil {
@@ -499,6 +504,15 @@ func handlePatAuthCheck(
 	}
 	if patData.Data.URI == "" {
 		patData.Data.URI = patData.Data.AuthorizationURL
+	}
+	// Organization-policy denial is terminal until an administrator changes
+	// the policy. Return it before reading browser policy, mutating process-wide
+	// credentials, opening a browser, polling, or retrying the invocation even
+	// when a lenient backend also supplies active-flow fields.
+	if patData.Code == patOrgPolicyDeniedCode {
+		return executor.Result{}, &apperrors.PATError{
+			RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, false),
+		}
 	}
 
 	slog.Debug("PAT auth check",
