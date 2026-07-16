@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -40,30 +41,41 @@ var (
 	tokenRemove                  = os.Remove
 	tokenGlob                    = filepath.Glob
 	tokenSaveKeychainForCorpID   = SaveTokenDataKeychainForCorpID
+	tokenSaveKeychainForIdentity = SaveTokenDataKeychainForIdentity
 	tokenSaveKeychain            = SaveTokenDataKeychain
 	tokenLoadKeychainForCorpID   = LoadTokenDataKeychainForCorpID
+	tokenLoadKeychainIdentity    = LoadTokenDataKeychainForIdentity
 	tokenLoadKeychain            = LoadTokenDataKeychain
 	tokenKeychainExists          = TokenDataExistsKeychain
 	tokenDeleteKeychainForCorpID = DeleteTokenDataKeychainForCorpID
+	tokenDeleteKeychainIdentity  = DeleteTokenDataKeychainForIdentity
 	tokenDeleteKeychain          = DeleteTokenDataKeychain
+	tokenRemoveAuthTokenEntries  = keychain.RemoveAuthTokenEntries
 	tokenLoadSecure              = LoadSecureTokenData
 	tokenDeleteSecure            = DeleteSecureData
-	tokenResolveProfile          = resolveProfileForLoad
-	tokenUpsertProfile           = upsertProfileFromTokenWithCurrentLocked
-	tokenRemoveProfile           = removeProfileLocked
-	tokenSyncLegacyMirror        = syncLegacyTokenMirrorLocked
-	tokenLoadProfiles            = LoadProfiles
-	tokenWriteMarker             = WriteTokenMarker
-	tokenDeleteMarker            = DeleteTokenMarker
-	tokenParseURL                = url.Parse
-	tokenNewRequest              = http.NewRequestWithContext
-	tokenDefaultConfigDir        = getDefaultConfigDir
-	tokenLoadData                = LoadTokenData
-	tokenRevokeURL               = GetRevokeTokenURL
-	tokenLogoutURL               = LogoutURL
-	tokenLogoutContinueURL       = LogoutContinueURL
-	tokenLogoutHTTPClient        = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	tokenRevokeHTTPClient        = &http.Client{Timeout: 10 * time.Second}
+	tokenResolveProfile          = func(configDir, selector string) (*Profile, error) {
+		profile, _, err := resolveProfileForLoadLocked(configDir, selector)
+		return profile, err
+	}
+	tokenResolveDeletion        = resolveProfileDeletionSelection
+	tokenResolveSelection       = resolveProfileSelection
+	tokenUpsertProfile          = upsertProfileFromTokenWithCurrentLocked
+	tokenRemoveProfile          = removeProfileLocked
+	tokenSyncLegacyMirror       = syncLegacyTokenMirrorLocked
+	tokenSyncOrganizationMirror = syncOrganizationTokenMirrorForProfile
+	tokenLoadProfiles           = LoadProfiles
+	tokenWriteMarker            = WriteTokenMarker
+	tokenDeleteMarker           = DeleteTokenMarker
+	tokenParseURL               = url.Parse
+	tokenNewRequest             = http.NewRequestWithContext
+	tokenDefaultConfigDir       = getDefaultConfigDir
+	tokenLoadData               = LoadTokenData
+	tokenRevokeURL              = GetRevokeTokenURL
+	tokenMCPBaseURL             = GetMCPBaseURL
+	tokenLogoutURL              = LogoutURL
+	tokenLogoutContinueURL      = LogoutContinueURL
+	tokenLogoutHTTPClient       = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	tokenRevokeHTTPClient       = &http.Client{Timeout: 10 * time.Second}
 )
 
 // TokenData holds the OAuth token set persisted to disk.
@@ -158,12 +170,39 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		return saveTokenViaHook(h, configDir, data)
 	}
 	if data != nil && strings.TrimSpace(data.CorpID) != "" {
-		if err := tokenSaveKeychainForCorpID(data.CorpID, data); err != nil {
-			return err
+		corpID := strings.TrimSpace(data.CorpID)
+		userID := strings.TrimSpace(data.UserID)
+		if userID != "" {
+			if err := tokenSaveKeychainForIdentity(corpID, userID, data); err != nil {
+				return err
+			}
+		} else {
+			cfg, err := tokenLoadProfiles(configDir)
+			if err != nil {
+				return err
+			}
+			for _, profile := range cfg.Profiles {
+				if strings.TrimSpace(profile.CorpID) == corpID && strings.TrimSpace(profile.UserID) != "" {
+					return fmt.Errorf("cannot store profile for corpId %q without userId because account identities already exist", corpID)
+				}
+			}
 		}
-		makeCurrent := strings.TrimSpace(RuntimeProfile()) == ""
+		runtimeSelector := strings.TrimSpace(RuntimeProfile())
+		makeCurrent := runtimeSelector == ""
 		if err := tokenUpsertProfile(configDir, data, makeCurrent); err != nil {
 			return err
+		}
+		cfg, err := tokenLoadProfiles(configDir)
+		if err != nil {
+			return err
+		}
+		exactSelector := profileSelector(corpID, userID)
+		mirrorOrg := makeCurrent ||
+			exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]) == exactSelector
+		if mirrorOrg {
+			if err := tokenSaveKeychainForCorpID(corpID, data); err != nil {
+				return err
+			}
 		}
 		if makeCurrent {
 			if err := tokenSaveKeychain(data); err != nil {
@@ -213,13 +252,23 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		return &td, nil
 	}
 
+	var result *TokenData
+	err := withProfilesLock(configDir, func() error {
+		var loadErr error
+		result, loadErr = loadTokenDataForProfileLocked(configDir, profile)
+		return loadErr
+	})
+	return result, err
+}
+
+func loadTokenDataForProfileLocked(configDir, profile string) (*TokenData, error) {
 	// Default: keychain with legacy .data migration
 	selected, err := tokenResolveProfile(configDir, profile)
 	if err != nil {
 		return nil, err
 	}
 	if selected != nil {
-		data, err := tokenLoadKeychainForCorpID(selected.CorpID)
+		data, err := tokenLoadProfileIdentity(*selected)
 		if err == nil {
 			return data, nil
 		}
@@ -231,12 +280,20 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		// the SAME org; otherwise surface the error instead of silently acting
 		// as a different organization (the legacy mirror may have drifted).
 		if legacy, lerr := tokenLoadKeychain(); lerr == nil && legacy != nil &&
-			strings.TrimSpace(legacy.CorpID) == strings.TrimSpace(selected.CorpID) {
+			strings.TrimSpace(legacy.CorpID) == strings.TrimSpace(selected.CorpID) &&
+			(strings.TrimSpace(selected.UserID) == "" || strings.TrimSpace(legacy.UserID) == strings.TrimSpace(selected.UserID)) {
 			return legacy, nil
 		} else if lerr != nil && !errors.Is(lerr, ErrTokenDataNotFound) {
 			return nil, lerr
 		}
 		return nil, err
+	}
+	cfg, err := tokenLoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	if cfg != nil && cfg.Version >= profilesVersion {
+		return nil, ErrTokenDataNotFound
 	}
 	if tokenKeychainExists() {
 		return tokenLoadKeychain()
@@ -251,6 +308,36 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		_ = tokenDeleteSecure(configDir)
 	}
 	return data, nil
+}
+
+func tokenLoadProfileIdentity(profile Profile) (*TokenData, error) {
+	if strings.TrimSpace(profile.UserID) == "" {
+		return tokenLoadKeychainForCorpID(profile.CorpID)
+	}
+	data, err := tokenLoadKeychainIdentity(profile.CorpID, profile.UserID)
+	if err == nil {
+		return data, nil
+	}
+	if !errors.Is(err, ErrTokenDataNotFound) {
+		return nil, err
+	}
+	orgData, orgErr := tokenLoadKeychainForCorpID(profile.CorpID)
+	if orgErr != nil {
+		if errors.Is(orgErr, ErrTokenDataNotFound) {
+			return nil, err
+		}
+		return nil, orgErr
+	}
+	if strings.TrimSpace(orgData.UserID) == "" {
+		return nil, fmt.Errorf("organization token mirror for corpId %q has no userId; cannot use it for profile %q", profile.CorpID, ProfileSelector(profile))
+	}
+	if strings.TrimSpace(orgData.UserID) != strings.TrimSpace(profile.UserID) {
+		return nil, err
+	}
+	if saveErr := tokenSaveKeychainForIdentity(profile.CorpID, profile.UserID, orgData); saveErr != nil {
+		return nil, saveErr
+	}
+	return orgData, nil
 }
 
 // DeleteTokenData removes token data. When an edition hook (DeleteToken) is
@@ -275,25 +362,79 @@ func DeleteTokenDataForProfile(configDir, profile string) error {
 }
 
 func deleteTokenDataForProfileLocked(configDir, profile string) error {
-	selected, err := tokenResolveProfile(configDir, profile)
+	if err := profilesEnsureMigration(configDir); err != nil {
+		return err
+	}
+	cfg, err := tokenLoadProfiles(configDir)
 	if err != nil {
 		return err
 	}
+	effectiveSelector := strings.TrimSpace(profile)
+	if effectiveSelector == "" {
+		effectiveSelector = strings.TrimSpace(cfg.CurrentProfile)
+	}
+	var selected *Profile
+	exact := false
+	if effectiveSelector != "" {
+		selected, exact, err = tokenResolveDeletion(cfg, effectiveSelector)
+		if err != nil {
+			return err
+		}
+	}
 	if selected != nil {
-		keychainErr := tokenDeleteKeychainForCorpID(selected.CorpID)
-		_, removeErr := tokenRemoveProfile(configDir, selected.CorpID)
-		legacyErr := tokenSyncLegacyMirror(configDir)
-		secureErr := tokenDeleteSecure(configDir)
-		if keychainErr != nil {
-			return keychainErr
+		removed := *selected
+		if exact {
+			orgCurrent := exactProfileSelectorForCorp(
+				cfg,
+				removed.CorpID,
+				cfg.OrgCurrentProfiles[removed.CorpID],
+			) == ProfileSelector(removed)
+			if strings.TrimSpace(removed.UserID) != "" {
+				if err := tokenDeleteKeychainIdentity(removed.CorpID, removed.UserID); err != nil {
+					return err
+				}
+			}
+			if _, err := tokenRemoveProfile(configDir, ProfileSelector(removed)); err != nil {
+				return err
+			}
+			if orgCurrent {
+				if err := tokenDeleteKeychainForCorpID(removed.CorpID); err != nil {
+					return err
+				}
+				updated, loadErr := tokenLoadProfiles(configDir)
+				if loadErr != nil {
+					return loadErr
+				}
+				if replacementSelector := updated.OrgCurrentProfiles[removed.CorpID]; replacementSelector != "" {
+					replacement, _, resolveErr := tokenResolveSelection(configDir, updated, replacementSelector)
+					if resolveErr != nil {
+						return resolveErr
+					}
+					if err := tokenSyncOrganizationMirror(*replacement); err != nil {
+						return err
+					}
+				}
+			}
+		} else {
+			for _, candidate := range cfg.Profiles {
+				if strings.TrimSpace(candidate.CorpID) != strings.TrimSpace(removed.CorpID) || strings.TrimSpace(candidate.UserID) == "" {
+					continue
+				}
+				if err := tokenDeleteKeychainIdentity(candidate.CorpID, candidate.UserID); err != nil {
+					return err
+				}
+			}
+			if err := tokenDeleteKeychainForCorpID(removed.CorpID); err != nil {
+				return err
+			}
+			if _, err := tokenRemoveProfile(configDir, removed.CorpID); err != nil {
+				return err
+			}
 		}
-		if removeErr != nil {
-			return removeErr
+		if err := tokenSyncLegacyMirror(configDir); err != nil {
+			return err
 		}
-		if legacyErr != nil {
-			return legacyErr
-		}
-		return secureErr
+		return tokenDeleteSecure(configDir)
 	}
 
 	keychainErr := tokenDeleteKeychain()
@@ -315,14 +456,10 @@ func DeleteAllTokenData(configDir string) error {
 	}
 	return withProfilesLock(configDir, func() error {
 		var firstErr error
-		// Best-effort: even if profiles.json is unreadable, still clear every
-		// other slot so the user can always self-heal via auth reset / logout.
-		if cfg, err := tokenLoadProfiles(configDir); err == nil {
-			for _, profile := range cfg.Profiles {
-				if e := tokenDeleteKeychainForCorpID(profile.CorpID); e != nil && firstErr == nil {
-					firstErr = e
-				}
-			}
+		// Sweep the complete auth-token namespace so orphan identity slots that
+		// are not present in profiles.json cannot survive reset/logout --all.
+		if e := tokenRemoveAuthTokenEntries(keychain.Service); e != nil {
+			firstErr = e
 		}
 		if e := tokenRemove(ProfilesPath(configDir)); e != nil && !os.IsNotExist(e) && firstErr == nil {
 			firstErr = e
@@ -335,14 +472,18 @@ func DeleteAllTokenData(configDir string) error {
 				}
 			}
 		}
-		if e := tokenDeleteKeychain(); e != nil && firstErr == nil {
-			firstErr = e
-		}
 		if e := tokenDeleteSecure(configDir); e != nil && firstErr == nil {
 			firstErr = e
 		}
 		if e := tokenDeleteMarker(configDir); e != nil && firstErr == nil {
 			firstErr = e
+		}
+		if firstErr != nil {
+			// Preserve an explicit v2 empty registry so any stale mirror that
+			// could not be removed is never imported on a later read.
+			if e := profilesSave(configDir, &ProfilesConfig{Version: profilesVersion}); e != nil {
+				return fmt.Errorf("%v; save logged-out profile tombstone: %w", firstErr, e)
+			}
 		}
 		return firstErr
 	})
@@ -353,18 +494,42 @@ func DeleteAllTokenData(configDir string) error {
 // This should be called before deleting local token data.
 // The function is best-effort: errors are returned but callers may choose to ignore them.
 func RevokeTokenRemote(ctx context.Context) error {
-	// Use MCP revoke endpoint when clientID is from MCP
-	if IsClientIDFromMCP() {
-		return revokeTokenViaMCP(ctx)
+	tokenData, err := tokenLoadData(tokenDefaultConfigDir())
+	if err != nil || tokenData == nil {
+		return nil
 	}
-	// Direct mode: use DingTalk logout endpoint
+	// Historical token records may not have Source. Preserve the legacy
+	// process-wide MCP decision only for those records.
+	if strings.TrimSpace(tokenData.Source) == "" && IsClientIDFromMCP() {
+		copy := *tokenData
+		copy.Source = "mcp"
+		tokenData = &copy
+	}
+	return RevokeTokenRemoteForData(ctx, tokenData)
+}
+
+// RevokeTokenRemoteForData revokes the supplied account token using the
+// credential source and client ID persisted with that exact identity.
+func RevokeTokenRemoteForData(ctx context.Context, tokenData *TokenData) error {
+	if tokenData == nil {
+		return nil
+	}
+	clientID := strings.TrimSpace(tokenData.ClientID)
+	if clientID == "" {
+		clientID = ClientID()
+	}
+	if strings.EqualFold(strings.TrimSpace(tokenData.Source), "mcp") {
+		return revokeTokenViaMCP(ctx, tokenData, clientID)
+	}
+
+	// Direct mode: use DingTalk logout endpoint.
 	logoutURL, err := tokenParseURL(tokenLogoutURL)
 	if err != nil {
 		return fmt.Errorf("parsing logout URL: %w", err)
 	}
 
 	q := logoutURL.Query()
-	q.Set("client_id", ClientID())
+	q.Set("client_id", clientID)
 	q.Set("continue", tokenLogoutContinueURL)
 	logoutURL.RawQuery = q.Encode()
 
@@ -388,20 +553,10 @@ func RevokeTokenRemote(ctx context.Context) error {
 }
 
 // revokeTokenViaMCP revokes token via MCP endpoint.
-func revokeTokenViaMCP(ctx context.Context) error {
-	revokeURL := tokenRevokeURL()
-	if revokeURL == "" {
-		return nil // No revoke endpoint available
-	}
-
-	// Load current token to get accessToken
-	tokenData, err := tokenLoadData(tokenDefaultConfigDir())
-	if err != nil || tokenData == nil {
-		return nil // No token to revoke
-	}
-
+func revokeTokenViaMCP(ctx context.Context, tokenData *TokenData, clientID string) error {
+	revokeURL := tokenMCPBaseURL() + MCPRevokeTokenPath
 	body := map[string]string{
-		"clientId":    ClientID(),
+		"clientId":    clientID,
 		"accessToken": tokenData.AccessToken,
 	}
 	bodyBytes, err := tokenJSONMarshal(body)

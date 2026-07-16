@@ -92,7 +92,7 @@ func TestLoadTokenDataFallsBackToLegacyOnlyWhenCurrentSlotIsMissing(t *testing.T
 	}
 }
 
-func TestLoadTokenDataDoesNotHideUnreadableCurrentSlotWithLegacyFallback(t *testing.T) {
+func TestLoadTokenDataUsesIdentitySlotWhenOrganizationMirrorIsUnreadable(t *testing.T) {
 	cleanupKeychain(t)
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	configDir := t.TempDir()
@@ -106,11 +106,11 @@ func TestLoadTokenDataDoesNotHideUnreadableCurrentSlotWithLegacyFallback(t *test
 	}
 
 	loaded, err := LoadTokenData(configDir)
-	if err == nil {
-		t.Fatalf("LoadTokenData() = %#v, nil; want unreadable profile error", loaded)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
 	}
-	if loaded != nil {
-		t.Fatalf("LoadTokenData() data = %#v, want nil", loaded)
+	if loaded == nil || loaded.AccessToken != data.AccessToken || loaded.UserID != data.UserID {
+		t.Fatalf("LoadTokenData() = %#v, want identity token %#v", loaded, data)
 	}
 }
 
@@ -147,6 +147,26 @@ func TestPreflightTokenPersistenceRejectsUnreadableProfileSlot(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "dws auth logout --profile \""+data.CorpID+"\"") {
 		t.Fatalf("preflightTokenPersistence() error = %v, want per-profile recovery hint", err)
+	}
+}
+
+func TestExactProfileRefreshIgnoresUnreadableOrgMirror(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	data := testToken("at_exact_refresh", "corp_exact", "Exact Org")
+	data.UserID = "user_exact"
+	if err := SaveTokenData(configDir, data); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+	if err := os.WriteFile(profileCiphertextPathForTest(data.CorpID), []byte("corrupt ciphertext"), 0o600); err != nil {
+		t.Fatalf("WriteFile(profile ciphertext) error = %v", err)
+	}
+
+	SetRuntimeProfile("corp_exact:user_exact")
+	defer SetRuntimeProfile("")
+	if err := preflightTokenRefreshPersistence(data); err != nil {
+		t.Fatalf("preflightTokenRefreshPersistence(exact) error = %v", err)
 	}
 }
 
@@ -372,5 +392,39 @@ func TestExchangeAuthCodeAllowsFirstLogin(t *testing.T) {
 	}
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("HTTP calls = %d, want 1", got)
+	}
+}
+
+func TestExchangeAuthCodeExplicitUIDSkipsIdentityOverride(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	setPreflightTestCredentials(t)
+	configDir := t.TempDir()
+
+	var identityCalls atomic.Int32
+	provider := NewOAuthProvider(configDir, nil)
+	provider.IdentityEnricher = func(context.Context, *TokenData) error {
+		identityCalls.Add(1)
+		return errors.New("identity lookup should not run for explicit uid")
+	}
+	provider.httpClient = &http.Client{Transport: preflightRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(
+				`{"accessToken":"new-access","refreshToken":"new-refresh","expiresIn":7200,"corpId":"corp_new"}`,
+			)),
+		}, nil
+	})}
+
+	data, err := provider.ExchangeAuthCode(context.Background(), "new-code", "explicit-user")
+	if err != nil {
+		t.Fatalf("ExchangeAuthCode() error = %v", err)
+	}
+	if data.UserID != "explicit-user" {
+		t.Fatalf("ExchangeAuthCode() userId = %q, want explicit-user", data.UserID)
+	}
+	if got := identityCalls.Load(); got != 0 {
+		t.Fatalf("IdentityEnricher calls = %d, want 0", got)
 	}
 }

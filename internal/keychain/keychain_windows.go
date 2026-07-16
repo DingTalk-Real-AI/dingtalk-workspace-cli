@@ -204,3 +204,31 @@ func registryRemove(service, account string) error {
 	_ = k.DeleteValue(valueNameForAccount(account))
 	return nil
 }
+
+func registryRemoveAuthTokenEntries(service string) error {
+	keyPath := registryPathForService(service)
+	k, err := registry.OpenKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		return nil
+	}
+	defer k.Close()
+
+	names, err := k.ReadValueNames(-1)
+	if err != nil {
+		return fmt.Errorf("registry list values failed: %w", err)
+	}
+	for _, name := range names {
+		accountBytes, decodeErr := base64.RawURLEncoding.DecodeString(name)
+		if decodeErr != nil {
+			continue
+		}
+		account := string(accountBytes)
+		if account != AccountToken && !strings.HasPrefix(account, AccountToken+":") {
+			continue
+		}
+		if err := k.DeleteValue(name); err != nil {
+			return fmt.Errorf("registry delete auth token value failed: %w", err)
+		}
+	}
+	return nil
+}

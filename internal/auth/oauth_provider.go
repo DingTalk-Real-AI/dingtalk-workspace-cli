@@ -44,6 +44,7 @@ var (
 	oauthPollInterval    = 5 * time.Second
 	oauthSuccessPause    = 2 * time.Second
 	oauthLoadToken       = LoadTokenData
+	oauthLoadTokenLocked = loadTokenDataForProfileLocked
 	oauthAcquireLock     = AcquireDualLock
 	oauthMarkProfile     = MarkProfileStatus
 	oauthFetchClientID   = FetchClientIDFromMCP
@@ -73,6 +74,9 @@ type OAuthProvider struct {
 	httpClient   *http.Client
 	NoBrowser    bool
 	TargetCorpID string
+	// IdentityEnricher resolves userId/userName/corpName while the freshly
+	// exchanged access token is still only in memory.
+	IdentityEnricher func(context.Context, *TokenData) error
 }
 
 // NewOAuthProvider creates a new OAuth provider.
@@ -555,7 +559,7 @@ continueLogin:
 
 	// Save token data with associated client ID for refresh
 	tokenData.ClientID = p.clientID
-	if err := oauthSaveToken(p.configDir, tokenData); err != nil {
+	if err := p.persistLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 
@@ -595,12 +599,13 @@ func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
 		if rErr == nil {
 			return refreshed.AccessToken, nil
 		}
-		_ = oauthMarkProfile(p.configDir, data.CorpID, ProfileStatusExpired)
+		_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
+		return "", fmt.Errorf("%s: %w", i18n.T("refresh_token 刷新失败"), rErr)
 	} else {
-		_ = oauthMarkProfile(p.configDir, data.CorpID, ProfileStatusExpired)
+		_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
 	}
 
 	return "", errors.New(i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"))
@@ -635,7 +640,7 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 
 	// Double-check: re-load from disk — another goroutine/process may have refreshed
 	// while we were waiting for the lock.
-	data, err := oauthLoadToken(p.configDir)
+	data, err := oauthLoadTokenLocked(p.configDir, RuntimeProfile())
 	if err != nil {
 		return nil, err
 	}
@@ -672,12 +677,48 @@ func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid stri
 		return nil, fmt.Errorf("%s: %w", i18n.T("换取 token 失败"), err)
 	}
 	if uid != "" {
-		tokenData.UserID = uid
+		tokenData.UserID = strings.TrimSpace(uid)
+		if err := p.persistKnownLoginToken(tokenData); err != nil {
+			return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
+		}
+		return tokenData, nil
 	}
-	if err := oauthSaveToken(p.configDir, tokenData); err != nil {
+	if err := p.persistLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 	return tokenData, nil
+}
+
+func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenData) error {
+	if err := p.prepareLoginToken(ctx, tokenData); err != nil {
+		return err
+	}
+	return oauthSaveToken(p.configDir, tokenData)
+}
+
+func (p *OAuthProvider) prepareLoginToken(ctx context.Context, tokenData *TokenData) error {
+	if tokenData == nil {
+		return fmt.Errorf("token data is empty")
+	}
+	if p != nil && p.IdentityEnricher != nil {
+		if err := p.IdentityEnricher(ctx, tokenData); err != nil {
+			return fmt.Errorf("resolve login identity: %w", err)
+		}
+	}
+	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
+		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
+	}
+	return nil
+}
+
+func (p *OAuthProvider) persistKnownLoginToken(tokenData *TokenData) error {
+	if tokenData == nil {
+		return fmt.Errorf("token data is empty")
+	}
+	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
+		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
+	}
+	return oauthSaveToken(p.configDir, tokenData)
 }
 
 // Logout clears all stored credentials.
