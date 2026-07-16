@@ -680,9 +680,14 @@ contact user profile fields 获取可用字段列表。
 			if err := validateRequiredFlags(cmd, "org-name", "creator-username"); err != nil {
 				return err
 			}
+			orgName := strings.TrimSpace(mustGetFlag(cmd, "org-name"))
+			creatorUsername := strings.TrimSpace(mustGetFlag(cmd, "creator-username"))
+			if orgName == "" || creatorUsername == "" {
+				return fmt.Errorf("--org-name 和 --creator-username 不能为空")
+			}
 			return callMCPTool("org_create", map[string]any{
-				"orgName":         mustGetFlag(cmd, "org-name"),
-				"creatorUsername": mustGetFlag(cmd, "creator-username"),
+				"orgName":         orgName,
+				"creatorUsername": creatorUsername,
 			})
 		},
 	}
@@ -717,13 +722,18 @@ contact user profile fields 获取可用字段列表。
 			if err := validateRequiredFlags(cmd, "org-user-name", "login-id"); err != nil {
 				return err
 			}
+			orgUserName := strings.TrimSpace(mustGetFlag(cmd, "org-user-name"))
+			loginID := strings.TrimSpace(mustGetFlag(cmd, "login-id"))
+			if orgUserName == "" || loginID == "" {
+				return fmt.Errorf("--org-user-name 和 --login-id 不能为空")
+			}
 			toolArgs := map[string]any{
-				"orgUserName": strings.TrimSpace(mustGetFlag(cmd, "org-user-name")),
-				"loginId":     strings.TrimSpace(mustGetFlag(cmd, "login-id")),
-				"sendPwdViaSms": cmd.Flags().Changed("send-pwd-via-sms") && func() bool {
-					v, _ := cmd.Flags().GetBool("send-pwd-via-sms")
-					return v
-				}(),
+				"orgUserName": orgUserName,
+				"loginId":     loginID,
+			}
+			if cmd.Flags().Changed("send-pwd-via-sms") {
+				sendPwdViaSMS, _ := cmd.Flags().GetBool("send-pwd-via-sms")
+				toolArgs["sendPwdViaSms"] = sendPwdViaSMS
 			}
 			if mobile := strings.TrimSpace(mustGetFlag(cmd, "org-user-mobile")); mobile != "" {
 				toolArgs["orgUserMobile"] = mobile
@@ -732,10 +742,11 @@ contact user profile fields 获取可用字段列表。
 				toolArgs["email"] = email
 			}
 			if cmd.Flags().Changed("dept-ids") {
-				ids := parseCSVInts(mustGetFlag(cmd, "dept-ids"))
-				if len(ids) > 0 {
-					toolArgs["deptIds"] = ids
+				ids, err := parseCSVIntsStrict(mustGetFlag(cmd, "dept-ids"))
+				if err != nil {
+					return fmt.Errorf("--dept-ids 解析失败: %w", err)
 				}
+				toolArgs["deptIds"] = ids
 			}
 			return callMCPTool("exclusive_account_create", toolArgs)
 		},
@@ -982,4 +993,21 @@ func parseCSVInts(s string) []int64 {
 		}
 	}
 	return result
+}
+
+func parseCSVIntsStrict(s string) ([]int64, error) {
+	parts := strings.Split(s, ",")
+	result := make([]int64, 0, len(parts))
+	for i, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			return nil, fmt.Errorf("第 %d 项为空", i+1)
+		}
+		n, err := strconv.ParseInt(trimmed, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("第 %d 项 %q 不是整数: %w", i+1, trimmed, err)
+		}
+		result = append(result, n)
+	}
+	return result, nil
 }

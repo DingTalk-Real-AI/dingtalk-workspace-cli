@@ -123,6 +123,25 @@ func TestCrossPlatformCoverageContactEnterpriseCommandsMapMCPArguments(t *testin
 				"sendPwdViaSms": true,
 			},
 		},
+		{
+			name:     "create enterprise account without optional send flag",
+			args:     []string{"account", "create", "--org-user-name", "王五", "--login-id", "wangwu001"},
+			toolName: "exclusive_account_create",
+			wantArgs: map[string]any{
+				"orgUserName": "王五",
+				"loginId":     "wangwu001",
+			},
+		},
+		{
+			name:     "create enterprise account with explicit false send flag",
+			args:     []string{"account", "create", "--org-user-name", "王五", "--login-id", "wangwu001", "--send-pwd-via-sms=false"},
+			toolName: "exclusive_account_create",
+			wantArgs: map[string]any{
+				"orgUserName":   "王五",
+				"loginId":       "wangwu001",
+				"sendPwdViaSms": false,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -157,6 +176,48 @@ func TestCrossPlatformCoverageContactUserInviteRejectsInvalidDepartmentsJSON(t *
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("invalid input made %d remote call(s)", len(caller.calls))
+	}
+}
+
+func TestCrossPlatformCoverageContactAccountCreateRejectsInvalidDepartmentIDs(t *testing.T) {
+	for _, deptIDs := range []string{"1,not-an-id,3", "1,,3", "   "} {
+		t.Run(deptIDs, func(t *testing.T) {
+			caller, err := runContactEnterpriseCommand(t,
+				"account", "create",
+				"--org-user-name", "张三",
+				"--login-id", "zhangsan001",
+				"--dept-ids", deptIDs,
+			)
+			if err == nil || !strings.Contains(err.Error(), "--dept-ids 解析失败") {
+				t.Fatalf("error = %v, want department ID validation", err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid input made %d remote call(s)", len(caller.calls))
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageContactOrgAndAccountCreateRejectWhitespaceIdentityFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"organization name", []string{"org", "create", "--org-name", "   ", "--creator-username", "张三"}},
+		{"organization creator", []string{"org", "create", "--org-name", "测试企业", "--creator-username", "   "}},
+		{"account user name", []string{"account", "create", "--org-user-name", "   ", "--login-id", "zhangsan001"}},
+		{"account login ID", []string{"account", "create", "--org-user-name", "张三", "--login-id", "   "}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller, err := runContactEnterpriseCommand(t, tt.args...)
+			if err == nil || !strings.Contains(err.Error(), "不能为空") {
+				t.Fatalf("error = %v, want non-blank identity validation", err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("blank input made %d remote call(s)", len(caller.calls))
+			}
+		})
 	}
 }
 
