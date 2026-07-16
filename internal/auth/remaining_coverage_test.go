@@ -91,6 +91,7 @@ func TestCrossPlatformCoverageTokenPersistencePreflightRemainingEdges(t *testing
 }
 
 func TestCrossPlatformCoveragePortableExportRemainingEdges(t *testing.T) {
+	origGOOS := portableRuntimeGOOS
 	origStat := portableStat
 	origConfigFiles := portableConfigFilesForExport
 	origManifest := portableWriteManifest
@@ -99,6 +100,7 @@ func TestCrossPlatformCoveragePortableExportRemainingEdges(t *testing.T) {
 	origKeychainGet := authKeychainGet
 	origKeychainExists := authKeychainExists
 	t.Cleanup(func() {
+		portableRuntimeGOOS = origGOOS
 		portableStat = origStat
 		portableConfigFilesForExport = origConfigFiles
 		portableWriteManifest = origManifest
@@ -107,6 +109,7 @@ func TestCrossPlatformCoveragePortableExportRemainingEdges(t *testing.T) {
 		authKeychainGet = origKeychainGet
 		authKeychainExists = origKeychainExists
 	})
+	portableRuntimeGOOS = func() string { return "linux" }
 
 	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 	t.Setenv(keychain.DisableKeychainEnv, "1")

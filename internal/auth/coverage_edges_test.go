@@ -1234,6 +1234,12 @@ func TestCrossPlatformCoveragePortableAuthBundleCoverageEdges(t *testing.T) {
 	})
 
 	t.Run("import validation", func(t *testing.T) {
+		oldGOOS := portableRuntimeGOOS
+		t.Cleanup(func() {
+			portableRuntimeGOOS = oldGOOS
+		})
+		portableRuntimeGOOS = func() string { return "linux" }
+
 		t.Setenv(keychain.StorageDirEnv, t.TempDir())
 		if _, err := ImportPortableAuthBundle(t.TempDir(), nil); err == nil {
 			t.Fatal("nil portable reader succeeded")
