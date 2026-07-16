@@ -105,8 +105,13 @@ func newContactCommand() *cobra.Command {
 
 通讯录功能：
   - contact user get-self/search/search-mobile/get: 通讯录用户查询
+  - contact user invite: 邀请员工加入企业
   - contact dept search/get-info/list-children/list-members: 部门查询
   - contact relation list-my-followings: 特别关注人查询
+
+企业管理功能：
+  - contact org create: 创建企业
+  - contact account create: 创建企业专属账号
 
 基础人事功能（HR 花名册）：
   - contact user profile fields/get: 员工花名册档案查询（学历、家庭、银行卡等）
@@ -116,11 +121,12 @@ func newContactCommand() *cobra.Command {
 
 	userCmd := &cobra.Command{
 		Use:   "user",
-		Short: "人员查询",
-		Long: `人员查询：通讯录用户查询、用户档案（花名册）查询、离职员工查询。
+		Short: "人员管理",
+		Long: `人员管理：通讯录用户查询、邀请员工加入企业、用户档案（花名册）查询、离职员工查询。
 
 【何时用哪个命令】
   - 查询用户的部门、主管、管理员权限       → contact user get
+  - 邀请员工加入企业                     → contact user invite
   - 查询用户的学历、家庭、银行卡、合同等档案 → contact user profile get
   - 查询离职员工列表                       → contact user dismission search`,
 		RunE: groupRunE,
@@ -557,6 +563,86 @@ contact user profile fields 获取可用字段列表。
 
 	contactUserDismissionCmd.AddCommand(contactUserDismissionSearchCmd)
 
+	contactUserInviteCmd := &cobra.Command{
+		Use:     "invite",
+		Short:   "邀请员工加入企业",
+		Long:    "通过手机号邀请单个员工加入当前企业。认证信息由系统自动注入。",
+		Example: `  dws contact user invite --org-user-name "张三" --org-user-mobile "13800138000" --depts '[{"deptId":1}]'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "org-user-name", "org-user-mobile"); err != nil {
+				return err
+			}
+			var depts []map[string]any
+			if raw := mustGetFlag(cmd, "depts"); raw != "" {
+				if err := json.Unmarshal([]byte(raw), &depts); err != nil {
+					return fmt.Errorf("--depts JSON 解析失败: %w\n  hint: 正确格式: [{\"deptId\":1}]", err)
+				}
+			}
+			name := strings.TrimSpace(mustGetFlag(cmd, "org-user-name"))
+			mobile := strings.TrimSpace(mustGetFlag(cmd, "org-user-mobile"))
+			if name == "" || mobile == "" {
+				return fmt.Errorf("--org-user-name 和 --org-user-mobile 不能为空")
+			}
+			return callMCPTool("add_employee", map[string]any{
+				"orgUserName": name, "orgUserMobile": mobile, "depts": depts,
+			})
+		},
+	}
+	contactUserInviteCmd.Flags().String("org-user-name", "", "员工在企业内的名称 (必填)")
+	contactUserInviteCmd.Flags().String("org-user-mobile", "", "员工手机号 (必填)")
+	contactUserInviteCmd.Flags().String("depts", "", "员工所属部门 JSON 数组（可选），格式: [{\"deptId\":1}]")
+
+	contactOrgCmd := &cobra.Command{Use: "org", Short: "企业管理", RunE: groupRunE}
+	contactOrgCreateCmd := &cobra.Command{
+		Use: "create", Short: "创建企业",
+		Example: `  dws contact org create --org-name "我的企业" --creator-username "张三"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "org-name", "creator-username"); err != nil {
+				return err
+			}
+			return callMCPTool("org_create", map[string]any{
+				"orgName": mustGetFlag(cmd, "org-name"), "creatorUsername": mustGetFlag(cmd, "creator-username"),
+			})
+		},
+	}
+	contactOrgCreateCmd.Flags().String("org-name", "", "企业名称 (必填)")
+	contactOrgCreateCmd.Flags().String("creator-username", "", "创建者在企业内的名称 (必填)")
+	contactOrgCmd.AddCommand(contactOrgCreateCmd)
+
+	contactAccountCmd := &cobra.Command{Use: "account", Short: "企业账号管理", RunE: groupRunE}
+	contactAccountCreateCmd := &cobra.Command{
+		Use: "create", Short: "创建企业专属账号",
+		Example: `  dws contact account create --org-user-name "张三" --login-id "zhangsan001" --org-user-mobile "13800138000" --email "zhangsan@example.com" --dept-ids "1,2" --send-pwd-via-sms`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "org-user-name", "login-id"); err != nil {
+				return err
+			}
+			send, _ := cmd.Flags().GetBool("send-pwd-via-sms")
+			toolArgs := map[string]any{
+				"orgUserName":   strings.TrimSpace(mustGetFlag(cmd, "org-user-name")),
+				"loginId":       strings.TrimSpace(mustGetFlag(cmd, "login-id")),
+				"sendPwdViaSms": send,
+			}
+			if mobile := strings.TrimSpace(mustGetFlag(cmd, "org-user-mobile")); mobile != "" {
+				toolArgs["orgUserMobile"] = mobile
+			}
+			if email := strings.TrimSpace(mustGetFlag(cmd, "email")); email != "" {
+				toolArgs["email"] = email
+			}
+			if ids := parseCSVInts(mustGetFlag(cmd, "dept-ids")); len(ids) > 0 {
+				toolArgs["deptIds"] = ids
+			}
+			return callMCPTool("exclusive_account_create", toolArgs)
+		},
+	}
+	contactAccountCreateCmd.Flags().String("org-user-name", "", "员工在企业内的名称 (必填)")
+	contactAccountCreateCmd.Flags().String("login-id", "", "登录号 (必填)，请勿包含手机号")
+	contactAccountCreateCmd.Flags().String("org-user-mobile", "", "员工手机号（可选）")
+	contactAccountCreateCmd.Flags().String("email", "", "邮箱（可选）")
+	contactAccountCreateCmd.Flags().String("dept-ids", "", "部门 ID 列表，逗号分隔（可选）")
+	contactAccountCreateCmd.Flags().Bool("send-pwd-via-sms", false, "是否通过手机短信/邮件发送登录邀请（可选）")
+	contactAccountCmd.AddCommand(contactAccountCreateCmd)
+
 	// ── flags 注册 ───────────────────────────────────────────────
 	contactUserSearchCmd.Flags().String("query", "", "搜索关键词 (必填)")
 	contactUserSearchCmd.Flags().String("keyword", "", "--query 的别名")
@@ -573,6 +659,7 @@ contact user profile fields 获取可用字段列表。
 	_ = contactUserGetCmd.Flags().MarkHidden("userid")
 	userCmd.AddCommand(
 		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetCmd,
+		contactUserInviteCmd,
 		contactUserProfileCmd,    // 花名册档案
 		contactUserDismissionCmd, // 离职员工
 	)
@@ -610,7 +697,7 @@ contact user profile fields 获取可用字段列表。
 	contactDeptCmd.AddCommand(contactDeptSearchCmd, contactDeptGetInfoCmd, contactDeptListChildrenCmd, contactDeptListMembersCmd)
 
 	relationCmd.AddCommand(contactRelationListMyFollowingsCmd)
-	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, relationCmd)
+	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, relationCmd, contactOrgCmd, contactAccountCmd)
 
 	addQueryFlags := func(cmd *cobra.Command) {
 		cmd.Flags().String("query", "", "搜索关键词 (必填)")

@@ -8,6 +8,48 @@
     "reviewed": true
   },
   "tools": {
+    "contact.add_employee": {
+      "agent_summary": "邀请员工加入当前企业组织",
+      "use_when": [
+        "已取得员工姓名、手机号和部门信息，并明确需要发送入职邀请时"
+      ],
+      "avoid_when": [
+        "仅查询员工或部门信息时使用 contact 的只读命令",
+        "未确认目标企业、手机号或部门信息时不要邀请"
+      ],
+      "examples": [
+        "dws contact user invite --org-user-name \"张三\" --org-user-mobile 13800138000 --depts '[{\"deptId\":1}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.add_employee",
+        "cobra-help:dws contact user invite",
+        "Skill:skills/mono/references/products/contact.md",
+        "wukong-develop:352a828e#wukong/products/contact.go"
+      ]
+    },
+    "contact.exclusive_account_create": {
+      "agent_summary": "为企业员工创建专属登录账号",
+      "use_when": [
+        "已确认员工姓名、登录 ID 和部门，需要创建企业专属账号时"
+      ],
+      "avoid_when": [
+        "普通员工邀请应使用 contact user invite",
+        "未确认登录 ID 唯一性和目标部门时不要创建"
+      ],
+      "examples": [
+        "dws contact account create --org-user-name \"张三\" --login-id zhangsan001 --dept-ids 1,2"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.exclusive_account_create",
+        "cobra-help:dws contact account create",
+        "Skill:skills/mono/references/products/contact.md",
+        "wukong-develop:352a828e#wukong/products/contact.go"
+      ]
+    },
     "contact.get_authorized_emp_rosterInfo": {
       "agent_summary": "按字段 code 查询指定员工花名册字段值",
       "use_when": [
@@ -183,6 +225,27 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.list_my_followings"
       ]
     },
+    "contact.org_create": {
+      "agent_summary": "创建新的企业组织",
+      "use_when": [
+        "已明确组织名称和创建人姓名，需要创建企业组织时"
+      ],
+      "avoid_when": [
+        "仅查询现有组织或部门时不要创建",
+        "未确认组织名称和创建人身份时不要执行"
+      ],
+      "examples": [
+        "dws contact org create --org-name \"示例企业\" --creator-username \"张三\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.org_create",
+        "cobra-help:dws contact org create",
+        "Skill:skills/mono/references/products/contact.md",
+        "wukong-develop:352a828e#wukong/products/contact.go"
+      ]
+    },
     "contact.query_dismission_employee_list": {
       "agent_summary": "查询离职员工列表",
       "use_when": [
@@ -275,9 +338,10 @@
   },
   "products": {
     "contact": {
-      "agent_summary": "查询通讯录用户、部门、关注关系与授权花名册",
+      "agent_summary": "查询通讯录，并创建企业、邀请员工或创建企业账号",
       "use_when": [
-        "按姓名/手机号/userId/部门条件做通讯录精确查询"
+        "按姓名/手机号/userId/部门条件做通讯录精确查询",
+        "明确需要执行企业创建、员工邀请或企业账号创建"
       ],
       "avoid_when": [
         "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息"

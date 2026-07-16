@@ -1,6 +1,6 @@
 # 通讯录 (contact) 命令参考
 
-> **CRITICAL — 命令合法性**：contact 只有 `user` / `dept` / `label` / `relation` 四个二级子命令。
+> **CRITICAL — 命令合法性**：contact 二级子命令包括 `user` / `dept` / `label` / `relation` / `org` / `account`。
 > 不存在 `contact search`、`contact find`、`contact list`、`contact get`、`contact user find/list`。
 > 构造命令前必须确认路径在下方「命令总览」中存在；不确定时，**根据意图对照下方「意图判断」选择正确命令**。
 >
@@ -67,6 +67,18 @@ Flags:
       --ids string   用户 ID 列表，逗号分隔 (必填)
 Notes:
   - **禁止**将 `self/me/current/whoami` 作为 userId 传入；查自己请用 `dws contact user get-self`
+```
+
+#### 邀请员工加入企业
+```bash
+dws contact user invite --org-user-name "张三" --org-user-mobile "13800138000" --depts '[{"deptId":1}]' --format json
+```
+
+### 企业与专属账号
+```bash
+dws contact org create --org-name "我的企业" --creator-username "张三" --format json
+dws contact account create --org-user-name "张三" --login-id "zhangsan001" \
+  --org-user-mobile "13800138000" --email "zhangsan@example.com" --dept-ids "1,2" --send-pwd-via-sms --format json
 ```
 
 ### profile (用户档案 / 花名册)
@@ -251,6 +263,9 @@ Notes:
 用户说"我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami" → `user get-self`（无需参数；禁止用 `user get --ids me/self` 代替）
 用户需要 userId 给其他产品使用（发消息/建待办/约日程）→ `user search`（按名字）或 `user search-mobile`（按手机号）
 用户说"查用户详情/部门/主管/管理员" → `user get`（需 userId，返回组织管理信息）
+用户说"邀请员工/添加员工/拉人进企业" → `user invite`
+用户说"创建企业/新建组织" → `org create`
+用户说"创建企业专属账号/开通企业账号" → `account create`
 用户说"花名册字段/有哪些字段/字段列表" → `user profile fields`
 用户说"花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同" → `user profile get`（需 staffId，返回个人档案信息）
 用户说"离职员工/离职名单/离职人员/已离职" → `user dismission search`

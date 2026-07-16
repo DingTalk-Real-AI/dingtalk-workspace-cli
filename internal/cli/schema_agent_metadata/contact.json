@@ -1,6 +1,293 @@
 {
   "product_id": "contact",
   "tools": {
+    "contact account create": {
+      "agent_summary": "为企业员工创建专属登录账号",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "普通员工邀请应使用 contact user invite",
+        "未确认登录 ID 唯一性和目标部门时不要创建"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact account create --org-user-name \"张三\" --login-id zhangsan001 --dept-ids 1,2"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "为企业员工创建专属登录账号",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": "为企业员工创建专属登录账号",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "普通员工邀请应使用 contact user invite",
+            "未确认登录 ID 唯一性和目标部门时不要创建"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "普通员工邀请应使用 contact user invite",
+                "未确认登录 ID 唯一性和目标部门时不要创建"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact account create --org-user-name \"张三\" --login-id zhangsan001 --dept-ids 1,2"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact account create --org-user-name \"张三\" --login-id zhangsan001 --dept-ids 1,2"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已确认员工姓名、登录 ID 和部门，需要创建企业专属账号时"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "已确认员工姓名、登录 ID 和部门，需要创建企业专属账号时"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业账号，属于非幂等写操作。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.exclusive_account_create",
+        "Skill:skills/mono/references/products/contact.md",
+        "cobra-help:dws contact account create",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "skills/mono/references/products/contact.md",
+        "wukong-develop:352a828e#wukong/products/contact.go"
+      ],
+      "use_when": [
+        "已确认员工姓名、登录 ID 和部门，需要创建企业专属账号时"
+      ]
+    },
     "contact dept get-info": {
       "agent_summary": "获取指定部门详情",
       "agent_summary_source": "dws-agent-selection/contact",
@@ -1019,6 +1306,293 @@
       ],
       "use_when": [
         "只知道部门名称或关键词，需要定位 deptId 时"
+      ]
+    },
+    "contact org create": {
+      "agent_summary": "创建新的企业组织",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "仅查询现有组织或部门时不要创建",
+        "未确认组织名称和创建人身份时不要执行"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact org create --org-name \"示例企业\" --creator-username \"张三\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "创建新的企业组织",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": "创建新的企业组织",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "仅查询现有组织或部门时不要创建",
+            "未确认组织名称和创建人身份时不要执行"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "仅查询现有组织或部门时不要创建",
+                "未确认组织名称和创建人身份时不要执行"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact org create --org-name \"示例企业\" --creator-username \"张三\""
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact org create --org-name \"示例企业\" --creator-username \"张三\""
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已明确组织名称和创建人姓名，需要创建企业组织时"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "已明确组织名称和创建人姓名，需要创建企业组织时"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会创建企业组织，属于非幂等写操作。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.org_create",
+        "Skill:skills/mono/references/products/contact.md",
+        "cobra-help:dws contact org create",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "skills/mono/references/products/contact.md",
+        "wukong-develop:352a828e#wukong/products/contact.go"
+      ],
+      "use_when": [
+        "已明确组织名称和创建人姓名，需要创建企业组织时"
       ]
     },
     "contact relation list-my-followings": {
@@ -2047,6 +2621,269 @@
       ],
       "use_when": [
         "用户问我是谁/我的 userId/当前账号信息"
+      ]
+    },
+    "contact user invite": {
+      "agent_summary": "邀请员工加入当前企业组织",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "仅查询员工或部门信息时使用 contact 的只读命令",
+        "未确认目标企业、手机号或部门信息时不要邀请"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact user invite --org-user-name \"张三\" --org-user-mobile 13800138000 --depts '[{\"deptId\":1}]'"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "邀请员工加入当前企业组织",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": "邀请员工加入当前企业组织",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "仅查询员工或部门信息时使用 contact 的只读命令",
+            "未确认目标企业、手机号或部门信息时不要邀请"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "仅查询员工或部门信息时使用 contact 的只读命令",
+                "未确认目标企业、手机号或部门信息时不要邀请"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact user invite --org-user-name \"张三\" --org-user-mobile 13800138000 --depts '[{\"deptId\":1}]'"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact user invite --org-user-name \"张三\" --org-user-mobile 13800138000 --depts '[{\"deptId\":1}]'"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/contact marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/contact marks this tool as reviewed"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已取得员工姓名、手机号和部门信息，并明确需要发送入职邀请时"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。",
+          "candidates": [
+            {
+              "value": [
+                "已取得员工姓名、手机号和部门信息，并明确需要发送入职邀请时"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 Wukong develop@352a828e 的真实 Cobra leaf 与 Open 同步实现审阅；该命令会邀请员工，属于非幂等写操作。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.add_employee",
+        "Skill:skills/mono/references/products/contact.md",
+        "cobra-help:dws contact user invite",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "skills/mono/references/products/contact.md",
+        "wukong-develop:352a828e#wukong/products/contact.go"
+      ],
+      "use_when": [
+        "已取得员工姓名、手机号和部门信息，并明确需要发送入职邀请时"
       ]
     },
     "contact user profile fields": {

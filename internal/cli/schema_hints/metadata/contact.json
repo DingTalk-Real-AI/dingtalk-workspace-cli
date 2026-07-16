@@ -8,6 +8,28 @@
     "reviewed": true
   },
   "tools": {
+    "contact.add_employee": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "contact.exclusive_account_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
     "contact.get_authorized_emp_rosterInfo": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -59,6 +81,17 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "contact.org_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed Wukong-synced remote adapter: this executable CLI wrapper calls a contact MCP tool that is absent from the pinned Open MCP metadata snapshot.",
+      "reviewed": true,
+      "runtime_gate": "none"
     },
     "contact.query_dismission_employee_list": {
       "interface_mode": "mcp",
