@@ -189,7 +189,7 @@ func TestProjectionFailureWarnsAndEmitsFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev := transport.Event{EventID: "outer", Data: "not-json"}
+	ev := transport.Event{EventID: "outer", EventType: "user_im_message_receive_o2o", Data: "not-json"}
 	for i := 0; i < 2; i++ {
 		out, err := f.Render(ev)
 		if err != nil {
@@ -202,6 +202,11 @@ func TestProjectionFailureWarnsAndEmitsFallback(t *testing.T) {
 	}
 	if count := strings.Count(warnings.String(), "WARN: personal event output projection failed"); count != 1 {
 		t.Fatalf("warning count = %d, output = %q", count, warnings.String())
+	}
+	for _, want := range []string{`event_id="outer"`, `event_type="user_im_message_receive_o2o"`, "bad payload"} {
+		if !strings.Contains(warnings.String(), want) {
+			t.Fatalf("warning missing %q: %q", want, warnings.String())
+		}
 	}
 }
 

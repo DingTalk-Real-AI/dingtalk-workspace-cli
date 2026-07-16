@@ -41,26 +41,33 @@ const (
 )
 
 type Definition struct {
-	EventKey       string         `json:"event_key"`
-	DisplayName    string         `json:"display_name"`
-	Description    string         `json:"description"`
-	Category       string         `json:"category"`
-	RuleType       string         `json:"rule_type"`
-	Status         string         `json:"status"`
-	RequiredParams []string       `json:"required_params"`
-	Auth           map[string]any `json:"auth,omitempty"`
-	Public         bool           `json:"-"`
+	EventKey       string                `json:"event_key"`
+	DisplayName    string                `json:"display_name"`
+	Description    string                `json:"description"`
+	Category       string                `json:"category"`
+	RuleType       string                `json:"rule_type"`
+	Status         string                `json:"status"`
+	RequiredParams []string              `json:"required_params"`
+	Constraints    *ParameterConstraints `json:"constraints,omitempty"`
+	Auth           map[string]any        `json:"auth,omitempty"`
+	Public         bool                  `json:"-"`
+}
+
+type ParameterConstraints struct {
+	RequireOneOf      [][]string `json:"require_one_of,omitempty"`
+	MutuallyExclusive [][]string `json:"mutually_exclusive,omitempty"`
 }
 
 type SchemaDocument struct {
-	EventKey       string         `json:"event_key"`
-	DisplayName    string         `json:"display_name"`
-	Description    string         `json:"description"`
-	Category       string         `json:"category"`
-	RuleType       string         `json:"rule_type"`
-	RequiredParams []string       `json:"required_params"`
-	JQRootPath     string         `json:"jq_root_path"`
-	Schema         map[string]any `json:"schema"`
+	EventKey       string                `json:"event_key"`
+	DisplayName    string                `json:"display_name"`
+	Description    string                `json:"description"`
+	Category       string                `json:"category"`
+	RuleType       string                `json:"rule_type"`
+	RequiredParams []string              `json:"required_params"`
+	Constraints    *ParameterConstraints `json:"constraints,omitempty"`
+	JQRootPath     string                `json:"jq_root_path"`
+	Schema         map[string]any        `json:"schema"`
 }
 
 type RuleOptions struct {
@@ -97,7 +104,8 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user or open-dingtalk-id"},
+		RequiredParams: nil,
+		Constraints:    targetUIDConstraints(),
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -119,7 +127,8 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "sender",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user or open-dingtalk-id"},
+		RequiredParams: nil,
+		Constraints:    targetUIDConstraints(),
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -130,7 +139,8 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user or open-dingtalk-id"},
+		RequiredParams: nil,
+		Constraints:    targetUIDConstraints(),
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -152,7 +162,8 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user or open-dingtalk-id"},
+		RequiredParams: nil,
+		Constraints:    targetUIDConstraints(),
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -174,7 +185,8 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user or open-dingtalk-id"},
+		RequiredParams: nil,
+		Constraints:    targetUIDConstraints(),
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -191,15 +203,25 @@ var definitions = []Definition{
 	},
 }
 
+func targetUIDConstraints() *ParameterConstraints {
+	return &ParameterConstraints{
+		RequireOneOf:      [][]string{{"user", "open-dingtalk-id"}},
+		MutuallyExclusive: [][]string{{"user", "open-dingtalk-id"}},
+	}
+}
+
 func Definitions() []Definition {
-	out := append([]Definition(nil), definitions...)
+	out := make([]Definition, 0, len(definitions))
+	for _, def := range definitions {
+		out = append(out, cloneDefinition(def))
+	}
 	return out
 }
 
 func Lookup(eventKey string) (Definition, bool) {
 	for _, def := range definitions {
 		if def.EventKey == eventKey {
-			return def, true
+			return cloneDefinition(def), true
 		}
 	}
 	return Definition{}, false
@@ -230,7 +252,7 @@ func Catalog(category string, enabledOnly, includePending bool) []Definition {
 		if !includePending && def.Status == StatusPending {
 			continue
 		}
-		out = append(out, def)
+		out = append(out, cloneDefinition(def))
 	}
 	return out
 }
@@ -245,9 +267,44 @@ func BuildSchemaDocument(def Definition) SchemaDocument {
 		Category:       def.Category,
 		RuleType:       def.RuleType,
 		RequiredParams: requiredParams,
+		Constraints:    cloneParameterConstraints(def.Constraints),
 		JQRootPath:     ".",
 		Schema:         outputSchema(def.EventKey),
 	}
+}
+
+func cloneDefinition(def Definition) Definition {
+	def.RequiredParams = append([]string(nil), def.RequiredParams...)
+	def.Constraints = cloneParameterConstraints(def.Constraints)
+	if def.Auth != nil {
+		def.Auth = cloneMap(def.Auth)
+	}
+	return def
+}
+
+func cloneParameterConstraints(in *ParameterConstraints) *ParameterConstraints {
+	if in == nil {
+		return nil
+	}
+	cloneGroups := func(groups [][]string) [][]string {
+		out := make([][]string, len(groups))
+		for i, group := range groups {
+			out[i] = append([]string(nil), group...)
+		}
+		return out
+	}
+	return &ParameterConstraints{
+		RequireOneOf:      cloneGroups(in.RequireOneOf),
+		MutuallyExclusive: cloneGroups(in.MutuallyExclusive),
+	}
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, ruleParam map[string]any, err error) {

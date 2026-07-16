@@ -160,6 +160,8 @@ type personalReactionBody struct {
 }
 
 func (b *personalReactionBody) UnmarshalJSON(data []byte) error {
+	// encoding/json otherwise falls back to case-insensitive field matching.
+	// Read this protocol field from a map so only operOpenDingtalkId is accepted.
 	type bodyAlias personalReactionBody
 	var decoded bodyAlias
 	if err := json.Unmarshal(data, &decoded); err != nil {

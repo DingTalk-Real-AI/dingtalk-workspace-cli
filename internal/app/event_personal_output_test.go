@@ -469,6 +469,49 @@ func TestEventConsumeCobraSchemaIncludesOpenDingTalkID(t *testing.T) {
 	if _, ok := params["odid"]; ok {
 		t.Fatalf("schema parameters unexpectedly include odid alias: %#v", params)
 	}
+	for name, want := range map[string]string{
+		"user":             "--subscribe-id is absent, event_key uses singleChat or sender, and --open-dingtalk-id is absent",
+		"open-dingtalk-id": "--subscribe-id is absent, event_key uses singleChat or sender, and --user is absent",
+		"group":            "--subscribe-id is absent and event_key uses group",
+	} {
+		param, ok := params[name].(map[string]any)
+		if !ok {
+			t.Fatalf("schema parameter %s = %#v", name, params[name])
+		}
+		if got := param["required_when"]; got != want {
+			t.Fatalf("schema parameter %s required_when = %#v, want %q", name, got, want)
+		}
+	}
+	constraints, ok := doc["constraints"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema constraints = %#v", doc["constraints"])
+	}
+	assertJSONConstraintGroup := func(field string, want []string) {
+		t.Helper()
+		groups, ok := constraints[field].([]any)
+		if !ok {
+			t.Fatalf("schema constraint %s = %#v", field, constraints[field])
+		}
+		for _, rawGroup := range groups {
+			group, ok := rawGroup.([]any)
+			if !ok || len(group) != len(want) {
+				continue
+			}
+			matched := true
+			for i := range want {
+				if group[i] != want[i] {
+					matched = false
+					break
+				}
+			}
+			if matched {
+				return
+			}
+		}
+		t.Fatalf("schema constraint %s = %#v, missing %#v", field, groups, want)
+	}
+	assertJSONConstraintGroup("require_one_of", []string{"event_key", "subscribe-id"})
+	assertJSONConstraintGroup("mutually_exclusive", []string{"user", "open-dingtalk-id", "group"})
 }
 
 func TestPersonalEventSchemaRejectsTableFormat(t *testing.T) {

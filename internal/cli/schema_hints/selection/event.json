@@ -11,14 +11,17 @@
     "event.consume": {
       "agent_summary": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
       "use_when": [
-        "需要实时监听 @我、指定单聊或指定群的后续消息事件"
+        "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
+        "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
+        "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
       ],
       "avoid_when": [
         "只查历史聊天记录时用 chat 查询命令",
         "只看事件目录/字段时用 event list / event schema"
       ],
       "examples": [
-        "dws event consume user_im_message_receive_at --max-events 1 --format ndjson"
+        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
+        "dws event consume user_im_message_reaction_group --group cid-example --max-events 1 --format ndjson"
       ],
       "reviewed": true,
       "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
@@ -56,7 +59,7 @@
     "event.schema": {
       "agent_summary": "查询指定个人事件码的 payload 字段结构",
       "use_when": [
-        "已知 event_key，消费前需要理解 payload 字段"
+        "已知任一公开个人消息 event_key，消费前需要理解扁平输出字段"
       ],
       "avoid_when": [
         "查询 CLI 命令参数契约时用顶层 dws schema",
@@ -122,9 +125,9 @@
   },
   "products": {
     "event": {
-      "agent_summary": "订阅/消费个人消息事件，并查询目录、Schema、状态或停止订阅",
+      "agent_summary": "订阅/消费个人消息接收、已读、撤回和表情回应事件，并管理订阅生命周期",
       "use_when": [
-        "需要实时监听个人消息事件，或管理个人事件订阅生命周期"
+        "需要实时监听个人消息接收、已读、撤回或表情回应事件，或管理个人事件订阅生命周期"
       ],
       "avoid_when": [
         "查历史聊天或主动发消息分别用 chat 查询/发送命令"

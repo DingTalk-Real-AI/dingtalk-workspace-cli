@@ -110,6 +110,13 @@ func cloneRuntimeSchemaStringMap(source map[string]string) map[string]string {
 }
 
 func init() {
+	RegisterRuntimeSchemaParameterMetadata("event.consume", RuntimeSchemaParameterMetadata{
+		RequiredWhen: map[string]string{
+			"user":             "--subscribe-id is absent, event_key uses singleChat or sender, and --open-dingtalk-id is absent",
+			"open-dingtalk-id": "--subscribe-id is absent, event_key uses singleChat or sender, and --user is absent",
+			"group":            "--subscribe-id is absent and event_key uses group",
+		},
+	})
 	RegisterRuntimeSchemaParameterMetadata("aisearch.enterprise_person_search", RuntimeSchemaParameterMetadata{
 		Required: []string{"keyword"},
 	})

@@ -160,7 +160,9 @@ func (f *structuredFormatter) Render(ev transport.Event) ([]byte, error) {
 		}
 		if err != nil {
 			f.config.warnOnce.Do(func() {
-				fmt.Fprintf(f.config.warnings, "WARN: personal event output projection failed; using raw envelope: %v\n", err)
+				fmt.Fprintf(f.config.warnings,
+					"WARN: personal event output projection failed; using raw envelope event_id=%q event_type=%q: %v\n",
+					ev.EventID, ev.EventType, err)
 			})
 		}
 	} else if f.compact {

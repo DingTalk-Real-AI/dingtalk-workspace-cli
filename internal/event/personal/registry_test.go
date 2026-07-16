@@ -185,6 +185,10 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 }
 
 func TestTargetUIDEventSchemasRequireUserOrOpenDingTalkID(t *testing.T) {
+	wantConstraints := &ParameterConstraints{
+		RequireOneOf:      [][]string{{"user", "open-dingtalk-id"}},
+		MutuallyExclusive: [][]string{{"user", "open-dingtalk-id"}},
+	}
 	for _, eventKey := range []string{
 		EventSingleChat,
 		EventFromUser,
@@ -197,8 +201,15 @@ func TestTargetUIDEventSchemasRequireUserOrOpenDingTalkID(t *testing.T) {
 			if !ok {
 				t.Fatalf("Lookup(%q) failed", eventKey)
 			}
-			if want := []string{"user or open-dingtalk-id"}; !reflect.DeepEqual(def.RequiredParams, want) {
-				t.Fatalf("required_params = %#v, want %#v", def.RequiredParams, want)
+			if len(def.RequiredParams) != 0 {
+				t.Fatalf("required_params = %#v, want no unconditional parameters", def.RequiredParams)
+			}
+			if !reflect.DeepEqual(def.Constraints, wantConstraints) {
+				t.Fatalf("constraints = %#v, want %#v", def.Constraints, wantConstraints)
+			}
+			doc := BuildSchemaDocument(def)
+			if !reflect.DeepEqual(doc.Constraints, wantConstraints) {
+				t.Fatalf("schema constraints = %#v, want %#v", doc.Constraints, wantConstraints)
 			}
 		})
 	}
@@ -207,9 +218,28 @@ func TestTargetUIDEventSchemasRequireUserOrOpenDingTalkID(t *testing.T) {
 	if len(mention.RequiredParams) != 0 {
 		t.Fatalf("mention required_params = %#v, want none", mention.RequiredParams)
 	}
+	if mention.Constraints != nil {
+		t.Fatalf("mention constraints = %#v, want none", mention.Constraints)
+	}
 	group, _ := Lookup(EventInChat)
 	if want := []string{"group"}; !reflect.DeepEqual(group.RequiredParams, want) {
 		t.Fatalf("group required_params = %#v, want %#v", group.RequiredParams, want)
+	}
+	if group.Constraints != nil {
+		t.Fatalf("group constraints = %#v, want none", group.Constraints)
+	}
+}
+
+func TestDefinitionCopiesDoNotMutateRegistryConstraints(t *testing.T) {
+	def, ok := Lookup(EventSingleChat)
+	if !ok {
+		t.Fatalf("Lookup(%q) failed", EventSingleChat)
+	}
+	def.Constraints.RequireOneOf[0][0] = "mutated"
+
+	again, _ := Lookup(EventSingleChat)
+	if got := again.Constraints.RequireOneOf[0][0]; got != "user" {
+		t.Fatalf("registry constraint mutated through lookup copy: %q", got)
 	}
 }
 
