@@ -23,6 +23,34 @@ metadata:
 
 > 命令参考：[attendance.md](references/attendance.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service attendance --format json` 读取参数、约束、风险和示例，并以 `dws attendance <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws attendance +check-record` | read | 查询用户打卡流水（打卡时间/地点/定位方式） |
+| `dws attendance +check-result` | read | 查询用户打卡结果（迟到/早退/缺卡等） |
+| `dws attendance +get-adjustment-rule` | read | 根据补卡规则主键 ID 查询补卡规则详情 |
+| `dws attendance +get-approve-template` | read | 查询补卡/请假/加班/外出/出差审批提交链接 |
+| `dws attendance +get-checkin-record` | read | 查询指定员工一段时间内的签到记录 |
+| `dws attendance +get-leave-records` | read | 查询指定员工的假期余额变更记录 |
+| `dws attendance +get-overtime-rule` | read | 根据加班规则主键 ID 查询加班规则详情 |
+| `dws attendance +get-schedule` | read | 获取指定用户一段时间内的排班记录 |
+| `dws attendance +get-self-setting` | read | 查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等） |
+| `dws attendance +get-summary` | read | 查询某个人的考勤统计摘要（周/月） |
+| `dws attendance +list-approve` | read | 查询用户考勤审批单（补卡/加班/请假/出差外出） |
+| `dws attendance +list-leave-types` | read | 查询当前用户可用的假期规则列表 |
+| `dws attendance +my-attendance` | read | 查我今天的考勤打卡记录（打卡流水，自动解析当前用户） |
+| `dws attendance +query-report-data` | read | 根据字段查询考勤报表数据（仅管理员） |
+| `dws attendance +search-adjustment-rule` | read | 查询当前用户可管理的补卡规则列表 |
+| `dws attendance +search-class` | read | 查询当前用户可管理的班次详情列表 |
+| `dws attendance +search-group` | read | 查询当前用户可管理的考勤组列表 |
+| `dws attendance +search-overtime-rule` | read | 查询当前用户可管理的加班规则列表 |
+| `dws attendance +this-month` | read | 查我本月的考勤打卡记录（打卡流水，自动解析当前用户） |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 意图表
 
 | 用户说 | 命令 |

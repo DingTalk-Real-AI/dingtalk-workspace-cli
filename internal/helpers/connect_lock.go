@@ -14,13 +14,13 @@
 package helpers
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
+
+	eventprocess "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/process"
 )
 
 // connectLockDir is a var so tests can isolate lock files.
@@ -67,16 +67,8 @@ func sanitizeLockID(s string) string {
 	}, s)
 }
 
-// processAlive reports whether pid refers to a live process (unix signal-0
-// probe; a permission error still means "alive").
+// processAlive reports whether pid refers to a live process using the shared
+// Unix signal-0 / Windows OpenProcess implementation.
 func processAlive(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	if err == nil {
-		return true
-	}
-	return errors.Is(err, syscall.EPERM)
+	return eventprocess.Alive(pid)
 }

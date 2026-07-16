@@ -23,12 +23,15 @@ The repository defines five focused checks in addition to its existing CI:
   variance to avoid failing unchanged code on test-path noise. Set
   `COVERAGE_ENFORCE_OVERALL=true` once repository coverage reaches 80% to make
   the overall target fail closed as well.
-- **CLI Smoke** builds the release binary and renders offline help for the root
-  and every public top-level command.
+- **CLI Smoke** builds the release binary, reads the root command list from the
+  structured Interface contract, and renders offline help for every public
+  top-level command. It rejects Cobra's unknown-command root-help fallback and
+  fails when the checked-in development fixture is stale.
 - **Mock MCP Smoke** runs the existing HTTP and stdio MCP lifecycle tests
   (`Initialize -> ListTools -> CallTool`).
 - **AI Behavior Check** applies to pull requests labeled `ai-generated`. It
-  limits the change to 30 files and blocks release/CI infrastructure changes.
+  limits the change to 30 files and blocks release/CI infrastructure changes,
+  including policy implementations and the checked-in Interface fixture.
   It uses `pull_request_target` without checking out PR code, so the policy
   cannot be bypassed by changing the workflow in the same pull request. The
   evaluator writes an `AI Behavior Check` commit status to the PR head SHA so
@@ -45,10 +48,40 @@ make authoritative-interface-integrity BASE_REF=<merge-base>
 make schema-compatibility BASE_REF=<merge-base>
 make skill-command-integrity
 make cli-smoke
-make coverage-gate BASE_REF=<merge-base>
 # Run on the corresponding native runner with its generated profile:
 make coverage-gate-platform BASE_REF=<merge-base> PROFILE=<coverage-profile>
 ```
+
+`make coverage-gate` is the enforcement step, not a profile generator. It
+expects the candidate, policy, and merge-base profiles (`coverage.txt`,
+`coverage-policy.txt`, and `coverage-base.txt`) produced by the preceding CI
+steps. A clean local checkout can reproduce the Linux/overall CI gate with:
+
+```sh
+base_ref=$(git merge-base HEAD origin/main)
+root=$(pwd)
+base_worktree=$(mktemp -d "${TMPDIR:-/tmp}/dws-coverage-base.XXXXXX")
+rmdir "$base_worktree"
+cleanup() { git worktree remove --force "$base_worktree" >/dev/null 2>&1 || true; }
+trap cleanup EXIT HUP INT TERM
+
+go test -count=1 -coverprofile=coverage.txt -covermode=atomic \
+  ./ ./cmd/... ./internal/... ./skills/...
+go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic \
+  ./pkg/... ./scripts/policy/...
+git worktree add --detach "$base_worktree" "$base_ref"
+(
+  cd "$base_worktree"
+  go test -count=1 -coverprofile="$root/coverage-base.txt" -covermode=atomic \
+    ./ ./cmd/... ./internal/... ./skills/...
+)
+make coverage-gate BASE_REF="$base_ref"
+```
+
+The native-platform target likewise expects `PROFILE` to have already been
+generated on that operating system. CI owns those generation steps; copying
+only either enforcement command into a clean checkout is intentionally an
+incomplete invocation.
 
 CI derives the authoritative Interface snapshots from both the PR merge-base
 and the latest reachable stable release tag. The complete Schema snapshot comes

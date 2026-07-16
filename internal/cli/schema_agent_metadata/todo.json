@@ -3439,6 +3439,265 @@
         "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
       ]
     },
+    "todo task list-attachment": {
+      "agent_summary": "查询待办附件列表",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "要上传附件时改用 dws todo task add-attachment",
+        "要删除附件时先用本命令确认 attachmentId，再改用 dws todo task remove-attachment"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task list-attachment --task-id \u003ctaskId\u003e",
+        "dws todo task list-attachment --task-id \u003ctaskId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询待办附件列表",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。",
+          "candidates": [
+            {
+              "value": "查询待办附件列表",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要上传附件时改用 dws todo task add-attachment",
+            "要删除附件时先用本命令确认 attachmentId，再改用 dws todo task remove-attachment"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。",
+          "candidates": [
+            {
+              "value": [
+                "要上传附件时改用 dws todo task add-attachment",
+                "要删除附件时先用本命令确认 attachmentId，再改用 dws todo task remove-attachment"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo task list-attachment --task-id \u003ctaskId\u003e",
+            "dws todo task list-attachment --task-id \u003ctaskId\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo task list-attachment --task-id \u003ctaskId\u003e",
+                "dws todo task list-attachment --task-id \u003ctaskId\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 taskId，需要查看该待办当前附件及其 attachmentId、文件名和大小时"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。",
+          "candidates": [
+            {
+              "value": [
+                "已知 taskId，需要查看该待办当前附件及其 attachmentId、文件名和大小时"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.list_todo_attachment",
+        "Skill:skills/mono/references/products/todo.md",
+        "cobra-help:dws todo task list-attachment",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "live-dws-schema:todo.list_todo_attachment#FAILED",
+        "runtime-call:internal/helpers/todo.go#list_todo_attachment",
+        "skills/mono/references/products/todo.md"
+      ],
+      "use_when": [
+        "已知 taskId，需要查看该待办当前附件及其 attachmentId、文件名和大小时"
+      ]
+    },
     "todo task remove-executor": {
       "agent_summary": "移除待办执行人",
       "agent_summary_source": "dws-agent-selection/todo",

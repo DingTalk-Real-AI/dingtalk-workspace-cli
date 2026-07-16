@@ -23,6 +23,22 @@ metadata:
 
 > 命令参考：[drive.md](references/drive.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service drive --format json` 读取参数、约束、风险和示例，并以 `dws drive <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws drive +copy` | write | 复制文件/文档到指定位置 |
+| `dws drive +find-file` | read | 按名称关键词搜索钉盘文件并投影关键字段（只读） |
+| `dws drive +info` | read | 获取钉盘文件/文件夹元数据 |
+| `dws drive +move` | write | 移动文件/文档到指定位置 |
+| `dws drive +recent` | read | 获取最近访问/编辑的文档列表 |
+| `dws drive +search` | read | 搜索钉盘文件 |
+| `dws drive +search-docs` | read | 搜索文档空间文档 |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 意图表
 
 | 用户说 | 命令 |

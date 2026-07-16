@@ -286,6 +286,29 @@
         "live-dws-schema:todo.list_todo_comment"
       ]
     },
+    "todo.list_todo_attachment": {
+      "agent_summary": "查询待办附件列表",
+      "use_when": [
+        "已知 taskId，需要查看该待办当前附件及其 attachmentId、文件名和大小时"
+      ],
+      "avoid_when": [
+        "要上传附件时改用 dws todo task add-attachment",
+        "要删除附件时先用本命令确认 attachmentId，再改用 dws todo task remove-attachment"
+      ],
+      "examples": [
+        "dws todo task list-attachment --task-id <taskId>",
+        "dws todo task list-attachment --task-id <taskId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "依据当前 Cobra Help、Todo Skill 与 helper 中的 list_todo_attachment 调用手工审阅；当前 live leaf Schema 缺失，记录失败证据并以源码契约收口。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.list_todo_attachment",
+        "cobra-help:dws todo task list-attachment",
+        "Skill:skills/mono/references/products/todo.md",
+        "runtime-call:internal/helpers/todo.go#list_todo_attachment",
+        "live-dws-schema:todo.list_todo_attachment#FAILED"
+      ]
+    },
     "todo.remove_task_executors": {
       "agent_summary": "移除待办执行人",
       "use_when": [

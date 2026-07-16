@@ -146,6 +146,13 @@ func callMCPToolCellInfos(toolArgs map[string]any) error {
 		deps.Out.PrintRaw(text)
 		return nil
 	}
+	if parsed == nil {
+		return &CLIError{
+			Code:       CodeMCPToolError,
+			Message:    "get_cell_infos returned a null response",
+			Suggestion: "请确认 --node 指向当前用户可访问的钉钉在线表格",
+		}
+	}
 	// 清理空 dataValidation / hyperlink
 	if cells, ok := parsed["cells"].([]any); ok {
 		for _, row := range cells {
