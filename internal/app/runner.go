@@ -217,7 +217,7 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 	// Prefetch the Keychain token in the background. Keychain access costs
 	// ~70ms on macOS; starting it here lets the load overlap with endpoint
 	// resolution and catalog loading below.
-	if prefetchToken {
+	if shouldPrefetchRuntimeToken(prefetchToken, r.globalFlags) {
 		go getCachedRuntimeToken(ctx)
 	}
 
@@ -270,6 +270,15 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 		endpoint = toolEndpoint
 	}
 	return r.executeInvocation(ctx, endpoint, invocation)
+}
+
+func shouldPrefetchRuntimeToken(enabled bool, flags *GlobalFlags) bool {
+	if !enabled {
+		return false
+	}
+	// An explicit token wins in resolveAuthToken, so a background Keychain/OAuth
+	// read would be both wasted work and an unauthorized credential side effect.
+	return flags == nil || strings.TrimSpace(flags.Token) == ""
 }
 
 func (r *runtimeRunner) stampGlobalDryRun(invocation *executor.Invocation) {

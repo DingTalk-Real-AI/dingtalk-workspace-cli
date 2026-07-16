@@ -986,6 +986,28 @@ func TestCrossPlatformCoverageRuntimeRunnerDryRunBoundaryHelpers(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageShouldPrefetchRuntimeToken(t *testing.T) {
+	tests := []struct {
+		name    string
+		enabled bool
+		flags   *GlobalFlags
+		want    bool
+	}{
+		{name: "disabled", flags: &GlobalFlags{}, want: false},
+		{name: "nil flags", enabled: true, want: true},
+		{name: "implicit token", enabled: true, flags: &GlobalFlags{}, want: true},
+		{name: "whitespace token", enabled: true, flags: &GlobalFlags{Token: "  "}, want: true},
+		{name: "explicit token", enabled: true, flags: &GlobalFlags{Token: "explicit"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldPrefetchRuntimeToken(tt.enabled, tt.flags); got != tt.want {
+				t.Fatalf("shouldPrefetchRuntimeToken() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageRuntimeRunnerExecuteInvocationDryRunUsesPluginCredentialPath(t *testing.T) {
 	const product = "coverage-plugin"
 	pluginAuthMu.Lock()
