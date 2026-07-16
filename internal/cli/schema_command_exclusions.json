@@ -369,7 +369,6 @@
         "oa approval revert-activities",
         "oa approval revert-task",
         "oa approval search-forms",
-        "todo task list-attachment",
         "todo task list-sub",
         "todo task remove-attachment"
       ]

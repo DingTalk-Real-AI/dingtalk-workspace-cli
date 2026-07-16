@@ -97,20 +97,35 @@ func TestTodoSimpleCommandValidationAndSuccessEdges(t *testing.T) {
 		}
 	}
 
-	validCases := [][]string{
-		{"task", "list-sub", "--task-id", "1"},
-		{"task", "done", "--task-id", "1", "--status", "true"},
-		{"task", "add-executor", "--task-id", "1", "--executors", "u1,u2"},
-		{"task", "remove-executor", "--task-id", "1", "--executors", "u1,u2"},
-		{"task", "add-participant", "--task-id", "1", "--participants", "u1,u2"},
-		{"task", "remove-participant", "--task-id", "1", "--participants", "u1,u2"},
-		{"task", "list-attachment", "--task-id", "1"},
-		{"comment", "add", "--task-id", "1", "--content", "hello"},
-		{"comment", "list", "--task-id", "1"},
+	validCases := []struct {
+		args  []string
+		steps []scriptedToolStep
+	}{
+		{args: []string{"task", "list-sub", "--task-id", "1"}},
+		{
+			args: []string{"task", "done", "--task-id", "1", "--status", "true"},
+			steps: []scriptedToolStep{
+				{text: `{"result":{"todoDetailModel":{"taskId":"1"}}}`},
+				{text: `{}`},
+			},
+		},
+		{args: []string{"task", "add-executor", "--task-id", "1", "--executors", "u1,u2"}},
+		{args: []string{"task", "remove-executor", "--task-id", "1", "--executors", "u1,u2"}},
+		{args: []string{"task", "add-participant", "--task-id", "1", "--participants", "u1,u2"}},
+		{args: []string{"task", "remove-participant", "--task-id", "1", "--participants", "u1,u2"}},
+		{
+			args: []string{"task", "list-attachment", "--task-id", "1"},
+			steps: []scriptedToolStep{
+				{text: `{"result":{"todoDetailModel":{"taskId":"1"}}}`},
+				{text: `{}`},
+			},
+		},
+		{args: []string{"comment", "add", "--task-id", "1", "--content", "hello"}},
+		{args: []string{"comment", "list", "--task-id", "1"}},
 	}
-	for _, args := range validCases {
-		if err := executeTodoEdge(t, &scriptedToolCaller{}, args...); err != nil {
-			t.Fatalf("execute %v: %v", args, err)
+	for _, tc := range validCases {
+		if err := executeTodoEdge(t, &scriptedToolCaller{steps: tc.steps}, tc.args...); err != nil {
+			t.Fatalf("execute %v: %v", tc.args, err)
 		}
 	}
 }

@@ -2294,6 +2294,10 @@
           "cli_path": "todo task add-attachment"
         },
         {
+          "canonical_path": "todo.list_todo_attachment",
+          "cli_path": "todo task list-attachment"
+        },
+        {
           "canonical_path": "todo.add_task_executors",
           "cli_path": "todo task add-executor"
         },
