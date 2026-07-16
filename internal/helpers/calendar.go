@@ -1173,7 +1173,7 @@ func newCalendarCommand() *cobra.Command {
 	eventCreateCmd.Flags().String("members", "", "")
 	_ = eventCreateCmd.Flags().MarkHidden("members")
 	eventCreateCmd.Flags().String("open-dingtalk-ids", "", "openDingTalkId 列表，逗号分隔 (与 --attendees 至少传一个)")
-	eventCreateCmd.Flags().String("rooms", "", "会议室 roomId 列表，逗号分隔 (创建时直接预定，roomId 必须来自 `room search` 返回，若是循环会议，必须设置recurrence-end-date，避免长期预订)")
+	eventCreateCmd.Flags().String("rooms", "", "会议室 roomId 列表，逗号分隔 (创建时直接预定，roomId 必须来自“room search”返回，若是循环会议，必须设置recurrence-end-date，避免长期预订)")
 	eventCreateCmd.Flags().String("room-ids", "", "")
 	_ = eventCreateCmd.Flags().MarkHidden("room-ids")
 	eventCreateCmd.Flags().String("roomIds", "", "")

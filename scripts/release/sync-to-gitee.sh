@@ -68,6 +68,10 @@ missing=""
 [ -z "${GITEE_USER:-}" ]  && missing="$missing GITEE_USER"
 [ -z "${GITEE_REPO:-}" ]  && missing="$missing GITEE_REPO"
 if [ -n "$missing" ]; then
+  if [ "${DWS_REQUIRE_GITEE:-0}" = "1" ]; then
+    echo "error: Gitee mirror sync is enabled but credentials are missing:${missing}" >&2
+    exit 1
+  fi
   echo "ℹ️  Gitee mirror sync skipped — missing:${missing}"
   echo "   Set these as repo secrets to auto-mirror releases to Gitee for China users."
   exit 0
@@ -121,10 +125,21 @@ api_get() {
     --max-time "$max_time" "$@"
 }
 
+release_id_from_json() {
+  python3 -c 'import json, sys
+data = json.load(sys.stdin)
+value = data.get("id") if isinstance(data, dict) else None
+if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+    print(value)
+elif isinstance(value, str) and value.isdigit() and int(value) > 0:
+    print(value)' 2>/dev/null
+}
+
 # ── Resolve or create the Gitee release for this tag ──────────────────────────
 rel_json="$(api_get "$GITEE_RELEASE_LOOKUP_MAX_TIME" \
-  "${base}/releases/tags/${VERSION}?access_token=${GITEE_TOKEN}" 2>/dev/null || true)"
-release_id="$(printf '%s' "$rel_json" | grep -o '"id":[ ]*[0-9]*' | head -1 | grep -o '[0-9]*' || true)"
+  -H "Authorization: token ${GITEE_TOKEN}" \
+  "${base}/releases/tags/${VERSION}" 2>/dev/null || true)"
+release_id="$(printf '%s' "$rel_json" | release_id_from_json || true)"
 
 if [ -z "$release_id" ]; then
   deadline_remaining >/dev/null || err "overall Gitee sync deadline exhausted during release lookup"
@@ -133,12 +148,12 @@ if [ -z "$release_id" ]; then
     || err "overall Gitee sync deadline exhausted before release creation"
   rel_json="$(curl -fsSL --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
     --max-time "$create_max_time" -X POST "${base}/releases" \
-    -F "access_token=${GITEE_TOKEN}" \
+    -H "Authorization: token ${GITEE_TOKEN}" \
     -F "tag_name=${VERSION}" \
     -F "name=${VERSION}" \
     -F "body=Mirror of GitHub release ${VERSION} for China users." \
     -F "target_commitish=${target_commit}" 2>/dev/null || true)"
-  release_id="$(printf '%s' "$rel_json" | grep -o '"id":[ ]*[0-9]*' | head -1 | grep -o '[0-9]*' || true)"
+  release_id="$(printf '%s' "$rel_json" | release_id_from_json || true)"
 fi
 [ -n "$release_id" ] || { echo "❌ Could not get/create Gitee release for ${VERSION}. Response: ${rel_json}" >&2; exit 1; }
 echo "   Gitee release id = ${release_id}"

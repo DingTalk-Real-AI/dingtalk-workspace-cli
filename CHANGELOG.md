@@ -12,6 +12,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 - **Sheet imports and Aitable workflow writes** (#624) — adds `dws sheet import` / `sheet import create` for converting local xlsx/xls files into new online sheets, `sheet import get` for polling import tasks, and `dws aitable workflow create/update` for applying validated `workflow-dsl/v1` definitions, with matching reviewed Agent Schema and bundled Skill guidance.
 - **Official multi-platform Homebrew channel** — stable `Formula/dingtalk-workspace-cli.rb` and keg-only `Formula/dingtalk-workspace-cli-beta.rb` live in this repository and select signed macOS Intel/Apple Silicon or Linux amd64/arm64 artifacts at install time. Stable and beta releases open isolated Formula update PRs after final artifact signing, so beta never replaces the stable Formula. Agent Skills stay under `pkgshare` without mutating the user's home directory, and both tracks are covered by the six-channel post-release verifier.
 
+### Changed
+
+- **Guarded prerelease and stable automation** — adds the guided `dws-release` entry for one-command CHANGELOG preparation, validation-only and annotated-tag publication flows; promotes only an explicitly validated beta; verifies command-tree compatibility and all six packaged binaries; and serializes immutable GitHub Release, npm channel, OSS, Homebrew, and optional Gitee delivery with fail-closed recovery checks.
+
 ### Fixed
 
 - **PAT organization-policy denials stop immediately** — `PAT_ORG_POLICY_DENIED` now remains terminal even if a backend also returns `flowId`, authorization URLs, or client credentials; the CLI does not mutate process credentials, open a browser, poll, or retry until an organization administrator changes the policy.

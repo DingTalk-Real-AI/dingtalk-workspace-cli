@@ -38,6 +38,22 @@ jobs:
       #     version: v1.64.8
       #     args: ./...
 
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -412,6 +428,7 @@ jobs:
     name: CI Gate
     needs:
       - lint
+      - actionlint
       - test
       - test-darwin
       - test-windows
@@ -431,6 +448,7 @@ jobs:
       - name: Verify required checks
         env:
           LINT_RESULT: ${{ needs.lint.result }}
+          ACTIONLINT_RESULT: ${{ needs.actionlint.result }}
           TEST_RESULT: ${{ needs.test.result }}
           TEST_DARWIN_RESULT: ${{ needs.test-darwin.result }}
           TEST_WINDOWS_RESULT: ${{ needs.test-windows.result }}
@@ -446,6 +464,7 @@ jobs:
           failed=0
           for check in \
             "Lint:$LINT_RESULT" \
+            "Actionlint:$ACTIONLINT_RESULT" \
             "Test:$TEST_RESULT" \
             "Test (macOS auth/keychain):$TEST_DARWIN_RESULT" \
             "Test (Windows):$TEST_WINDOWS_RESULT" \

@@ -5,6 +5,10 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"
 FORMULA_PATH="$DIST_DIR/homebrew/dingtalk-workspace-cli-local.rb"
 NPM_STAGE_DIR="$DIST_DIR/npm/dingtalk-workspace-cli"
+RUN_NPM=1
+RUN_BREW=1
+EXPECTED_VERSION=""
+VERIFY_SKILL_TARGETS=1
 
 say() {
   printf '%s\n' "$*"
@@ -22,6 +26,34 @@ need_cmd() {
 need_file() {
   [ -f "$1" ] || err "required file not found: $1"
 }
+
+usage() {
+  printf '%s\n' "usage: $0 [--npm-only|--brew-only] [--expected-version <vX.Y.Z>] [--skip-skill-targets]" >&2
+}
+
+mode_seen=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --npm-only)
+      [ "$mode_seen" -eq 0 ] || { usage; exit 2; }
+      RUN_NPM=1; RUN_BREW=0; mode_seen=1; shift
+      ;;
+    --brew-only)
+      [ "$mode_seen" -eq 0 ] || { usage; exit 2; }
+      RUN_NPM=0; RUN_BREW=1; mode_seen=1; shift
+      ;;
+    --expected-version)
+      [ "$#" -ge 2 ] || { usage; exit 2; }
+      EXPECTED_VERSION="${2#v}"
+      shift 2
+      ;;
+    --skip-skill-targets) VERIFY_SKILL_TARGETS=0; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage; exit 2 ;;
+  esac
+done
+
+[ -z "$EXPECTED_VERSION" ] || need_cmd strings
 
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dws-package-verify-XXXXXX")"
 HOME_AGENT_PARENTS="
@@ -60,13 +92,11 @@ HOME_SKILL_TARGETS="
 .hermes/skills/dws
 "
 cleanup() {
-  if command -v brew >/dev/null 2>&1; then
+  if [ "$RUN_BREW" -eq 1 ] && command -v brew >/dev/null 2>&1 && [ -n "${BREW_TAP_NAME:-}" ]; then
     HOME="$TMP_ROOT/brew-home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
       brew uninstall --force dingtalk-workspace-cli-local >/dev/null 2>&1 || true
-    if [ -n "${BREW_TAP_NAME:-}" ]; then
-      HOME="$TMP_ROOT/brew-home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-        brew untap --force "$BREW_TAP_NAME" >/dev/null 2>&1 || true
-    fi
+    HOME="$TMP_ROOT/brew-home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+      brew untap --force "$BREW_TAP_NAME" >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP_ROOT"
 }
@@ -111,8 +141,18 @@ verify_npm() {
     npm install -g "$tarball_path" >/dev/null
 
   [ -x "$npm_prefix/bin/dws" ] || err "npm install did not expose dws in $npm_prefix/bin"
-  "$npm_prefix/bin/dws" --help >/dev/null
-  verify_skill_targets "$npm_home"
+  HOME="$npm_home" "$npm_prefix/bin/dws" --help >/dev/null
+  if [ -n "$EXPECTED_VERSION" ]; then
+    vendor_bin="$npm_prefix/lib/node_modules/dingtalk-workspace-cli/vendor/dws"
+    need_file "$vendor_bin"
+    strings "$vendor_bin" | grep -Fqx "v$EXPECTED_VERSION" || \
+      err "npm-installed binary does not embed expected version v$EXPECTED_VERSION"
+    EXPECTED_VERSION="$EXPECTED_VERSION" node -e '
+      const pkg = require(process.argv[1]);
+      if (pkg.version !== process.env.EXPECTED_VERSION) process.exit(1);
+    ' "$NPM_STAGE_DIR/package.json" || err "npm package.json version mismatch"
+  fi
+  [ "$VERIFY_SKILL_TARGETS" -eq 0 ] || verify_skill_targets "$npm_home"
 
   HOME="$npm_home" npm_config_cache="$npm_cache" npm_config_prefix="$npm_prefix" \
     npm uninstall -g dingtalk-workspace-cli >/dev/null
@@ -126,7 +166,6 @@ verify_brew() {
 
   brew_home="$TMP_ROOT/brew-home"
   mkdir -p "$brew_home"
-  seed_agent_homes "$brew_home"
   BREW_TAP_NAME="local/dws-package-verify-$$"
 
   say "==> verifying Homebrew formula install"
@@ -134,7 +173,6 @@ verify_brew() {
     brew uninstall --force dingtalk-workspace-cli-local >/dev/null 2>&1 || true
   HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
     brew untap --force "$BREW_TAP_NAME" >/dev/null 2>&1 || true
-
   HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
     brew tap-new --no-git "$BREW_TAP_NAME" >/dev/null
 
@@ -154,12 +192,16 @@ verify_brew() {
   )"
   [ -x "$prefix/bin/dws" ] || err "brew install did not create $prefix/bin/dws"
   "$prefix/bin/dws" --help >/dev/null
+  if [ -n "$EXPECTED_VERSION" ]; then
+    strings "$prefix/bin/dws" | grep -Fqx "v$EXPECTED_VERSION" || \
+      err "Homebrew-installed binary does not embed expected version v$EXPECTED_VERSION"
+  fi
   need_file "$prefix/share/dingtalk-workspace-cli-local/skills/dws/SKILL.md"
 }
 
 need_file "$DIST_DIR/dws-skills.zip"
 
-verify_npm
-verify_brew
+[ "$RUN_NPM" -eq 0 ] || verify_npm
+[ "$RUN_BREW" -eq 0 ] || verify_brew
 
 say "Package-manager verification complete."
