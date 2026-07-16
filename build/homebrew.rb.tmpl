@@ -2,7 +2,6 @@ class __CLASS_NAME__ < Formula
   desc "Install locally built DingTalk workspace CLI artifacts for verification"
   homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
   url "__ARCHIVE_URL__"
-  version "__VERSION__"
   sha256 "__ARCHIVE_SHA256__"
   license "Apache-2.0"
 __KEG_ONLY_LINE__
@@ -31,42 +30,11 @@ __KEG_ONLY_LINE__
     end
   end
 
-  def post_install
-    require "fileutils"
-
-    skill_root = pkgshare/"skills/dws"
-    entries = Dir["#{skill_root}/*"]
-    return if entries.empty?
-
-    skill_home_override = "__SKILL_HOME_OVERRIDE__"
-    skill_home = skill_home_override.empty? ? Dir.home : skill_home_override
-    targets = [
-      Pathname.new(File.join(skill_home, ".agents/skills/dws")),
-      Pathname.new(File.join(skill_home, ".claude/skills/dws")),
-      Pathname.new(File.join(skill_home, ".cursor/skills/dws")),
-      Pathname.new(File.join(skill_home, ".qoder/skills/dws")),
-      Pathname.new(File.join(skill_home, ".qoderwork/skills/dws")),
-      Pathname.new(File.join(skill_home, ".gemini/skills/dws")),
-      Pathname.new(File.join(skill_home, ".codex/skills/dws")),
-      Pathname.new(File.join(skill_home, ".github/skills/dws")),
-      Pathname.new(File.join(skill_home, ".windsurf/skills/dws")),
-      Pathname.new(File.join(skill_home, ".augment/skills/dws")),
-      Pathname.new(File.join(skill_home, ".cline/skills/dws")),
-      Pathname.new(File.join(skill_home, ".amp/skills/dws")),
-      Pathname.new(File.join(skill_home, ".kiro/skills/dws")),
-      Pathname.new(File.join(skill_home, ".trae/skills/dws")),
-      Pathname.new(File.join(skill_home, ".openclaw/skills/dws")),
-      Pathname.new(File.join(skill_home, ".hermes/skills/dws")),
-    ]
-
-    targets.each_with_index do |dest, index|
-      parent_gate = dest.parent.parent
-      next if index > 0 && !parent_gate.directory?
-
-      FileUtils.rm_rf(dest)
-      FileUtils.mkdir_p(dest)
-      FileUtils.cp_r(entries, dest)
-    end
+  def caveats
+    <<~EOS
+      Agent Skills are bundled in #{pkgshare}/skills/dws.
+      Run `dws skill setup` to install them into your Agent directories.
+    EOS
   end
 
   test do

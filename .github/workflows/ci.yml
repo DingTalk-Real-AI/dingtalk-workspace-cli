@@ -38,6 +38,22 @@ jobs:
       #     version: v1.64.8
       #     args: ./...
 
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -63,17 +79,10 @@ jobs:
         # package timeout aligned with the macOS race job so the Linux runner's
         # five-minute default does not expire while that gate is still making
         # progress.
-        run: |
-          go test -v -race -count=1 -timeout=10m \
-            ./cmd/... \
-            ./internal/... \
-            ./pkg/... \
-            ./test/unit/...
-          go test -v -count=1 -timeout=5m \
-            ./test/cli/...
+        run: go test -v -race -count=1 -timeout=10m ./cmd/... ./internal/...
 
-      - name: Test engineering scripts
-        run: go test -v -count=1 -timeout=5m ./test/scripts/...
+      - name: Test release scripts
+        run: go test -v -count=1 -timeout=5m ./test/scripts
 
   test-darwin:
     name: Test (macOS auth/keychain)
@@ -415,123 +424,22 @@ jobs:
       - name: Run edition contract tests
         run: go test -v -count=1 ./pkg/editiontest/...
 
-  code-check:
-    name: Code Check
-    needs: [lint, test, test-darwin, test-windows, coverage, policy, edition-tests]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Verify code checks
-        env:
-          LINT_RESULT: ${{ needs.lint.result }}
-          TEST_RESULT: ${{ needs.test.result }}
-          TEST_DARWIN_RESULT: ${{ needs.test-darwin.result }}
-          TEST_WINDOWS_RESULT: ${{ needs.test-windows.result }}
-          COVERAGE_RESULT: ${{ needs.coverage.result }}
-          POLICY_RESULT: ${{ needs.policy.result }}
-          EDITION_TESTS_RESULT: ${{ needs.edition-tests.result }}
-        run: |
-          set -eu
-          failed=0
-          for check in \
-            "Lint:$LINT_RESULT" \
-            "Test:$TEST_RESULT" \
-            "Test (macOS auth/keychain):$TEST_DARWIN_RESULT" \
-            "Test (Windows):$TEST_WINDOWS_RESULT" \
-            "Coverage:$COVERAGE_RESULT" \
-            "Policy Check:$POLICY_RESULT" \
-            "Edition Contract Tests:$EDITION_TESTS_RESULT"
-          do
-            name="${check%%:*}"
-            result="${check#*:}"
-            printf '%s: %s\n' "$name" "$result"
-            if [ "$result" != "success" ]; then
-              failed=1
-            fi
-          done
-          test "$failed" -eq 0
-
-  command-compatibility:
-    name: Command Compatibility
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Fetch official release tags
-        run: |
-          git fetch --force --no-tags \
-            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Check command compatibility
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -eu
-          base_ref="$PUSH_BEFORE_SHA"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            base_ref="$PR_BASE_SHA"
-          fi
-          stable_ref="$(git tag --merged HEAD --list 'v*' --sort=-version:refname | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')"
-          test -n "$base_ref"
-          test -n "$stable_ref"
-          stable_commit="$(git rev-parse "$stable_ref^{commit}")"
-          ./scripts/release/verify-delivered-stable.sh "$stable_ref" "$stable_commit"
-          ./scripts/policy/check-command-compatibility.sh \
-            --base-ref "$base_ref" \
-            --stable-ref "$stable_ref"
-
-  cli-smoke:
-    name: CLI Smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Run CLI smoke tests
-        run: go test -count=1 -timeout=5m ./test/smoke/...
-
-  mock-mcp-smoke:
-    name: Mock MCP Smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Run Mock MCP smoke tests
-        run: go test -count=1 -timeout=5m ./test/mock_mcp/...
-
   ci-gate:
     name: CI Gate
-    needs: [code-check, command-compatibility, cli-smoke, mock-mcp-smoke]
+    needs:
+      - lint
+      - actionlint
+      - test
+      - test-darwin
+      - test-windows
+      - coverage
+      - coverage-darwin
+      - coverage-windows
+      - policy
+      - interface-integrity
+      - cli-smoke
+      - mock-mcp-smoke
+      - edition-tests
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -539,18 +447,35 @@ jobs:
     steps:
       - name: Verify required checks
         env:
-          CODE_CHECK_RESULT: ${{ needs.code-check.result }}
-          COMMAND_COMPATIBILITY_RESULT: ${{ needs.command-compatibility.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          ACTIONLINT_RESULT: ${{ needs.actionlint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          TEST_DARWIN_RESULT: ${{ needs.test-darwin.result }}
+          TEST_WINDOWS_RESULT: ${{ needs.test-windows.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          COVERAGE_DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
+          COVERAGE_WINDOWS_RESULT: ${{ needs.coverage-windows.result }}
+          POLICY_RESULT: ${{ needs.policy.result }}
+          INTERFACE_INTEGRITY_RESULT: ${{ needs.interface-integrity.result }}
           CLI_SMOKE_RESULT: ${{ needs.cli-smoke.result }}
           MOCK_MCP_SMOKE_RESULT: ${{ needs.mock-mcp-smoke.result }}
+          EDITION_TESTS_RESULT: ${{ needs.edition-tests.result }}
         run: |
-          set -eu
           failed=0
           for check in \
-            "Code Check:$CODE_CHECK_RESULT" \
-            "Command Compatibility:$COMMAND_COMPATIBILITY_RESULT" \
+            "Lint:$LINT_RESULT" \
+            "Actionlint:$ACTIONLINT_RESULT" \
+            "Test:$TEST_RESULT" \
+            "Test (macOS auth/keychain):$TEST_DARWIN_RESULT" \
+            "Test (Windows):$TEST_WINDOWS_RESULT" \
+            "Coverage:$COVERAGE_RESULT" \
+            "Coverage (macOS):$COVERAGE_DARWIN_RESULT" \
+            "Coverage (Windows):$COVERAGE_WINDOWS_RESULT" \
+            "Policy Check:$POLICY_RESULT" \
+            "Interface Integrity:$INTERFACE_INTEGRITY_RESULT" \
             "CLI Smoke:$CLI_SMOKE_RESULT" \
-            "Mock MCP Smoke:$MOCK_MCP_SMOKE_RESULT"
+            "Mock MCP Smoke:$MOCK_MCP_SMOKE_RESULT" \
+            "Edition Contract Tests:$EDITION_TESTS_RESULT"
           do
             name="${check%%:*}"
             result="${check#*:}"

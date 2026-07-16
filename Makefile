@@ -2,8 +2,11 @@ GO ?= go
 REMOTE ?=
 PUBLISH ?= 0
 YES ?= 0
+DWS_POLICY_TMPDIR ?= $(CURDIR)/.worktrees/policy-tmp
+POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
+POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 
-.PHONY: all help build rebuild test lint fmt policy edition-test test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 

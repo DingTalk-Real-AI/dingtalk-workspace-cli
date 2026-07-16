@@ -93,9 +93,9 @@ HOME_SKILL_TARGETS="
 "
 cleanup() {
   if [ "$RUN_BREW" -eq 1 ] && command -v brew >/dev/null 2>&1 && [ -n "${BREW_TAP_NAME:-}" ]; then
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-      brew uninstall --force "$BREW_TAP_NAME/dingtalk-workspace-cli-local" >/dev/null 2>&1 || true
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+    HOME="$TMP_ROOT/brew-home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+      brew uninstall --force dingtalk-workspace-cli-local >/dev/null 2>&1 || true
+    HOME="$TMP_ROOT/brew-home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
       brew untap --force "$BREW_TAP_NAME" >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP_ROOT"
@@ -163,45 +163,40 @@ verify_npm() {
 verify_brew() {
   need_cmd brew
   need_file "$FORMULA_PATH"
-  if [ -n "$EXPECTED_VERSION" ]; then
-    grep -Fq "  version \"$EXPECTED_VERSION\"" "$FORMULA_PATH" || \
-      err "Homebrew formula does not declare version $EXPECTED_VERSION"
-  fi
 
   brew_home="$TMP_ROOT/brew-home"
   mkdir -p "$brew_home"
-  seed_agent_homes "$brew_home"
   BREW_TAP_NAME="local/dws-package-verify-$$"
 
   say "==> verifying Homebrew formula install"
-  HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+  HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+    brew uninstall --force dingtalk-workspace-cli-local >/dev/null 2>&1 || true
+  HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+    brew untap --force "$BREW_TAP_NAME" >/dev/null 2>&1 || true
+  HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
     brew tap-new --no-git "$BREW_TAP_NAME" >/dev/null
 
   tap_repo="$(
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+    HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
       brew --repository "$BREW_TAP_NAME"
   )"
   mkdir -p "$tap_repo/Formula"
-  sed "s|skill_home_override = \"\"|skill_home_override = \"$brew_home\"|" \
-    "$FORMULA_PATH" > "$tap_repo/Formula/dingtalk-workspace-cli-local.rb"
+  cp "$FORMULA_PATH" "$tap_repo/Formula/dingtalk-workspace-cli-local.rb"
 
-  HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-    brew install "$BREW_TAP_NAME/dingtalk-workspace-cli-local" >/dev/null
+  HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+    brew install -y "$BREW_TAP_NAME/dingtalk-workspace-cli-local" >/dev/null
 
   prefix="$(
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-      brew --prefix "$BREW_TAP_NAME/dingtalk-workspace-cli-local"
+    HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+      brew --prefix dingtalk-workspace-cli-local
   )"
   [ -x "$prefix/bin/dws" ] || err "brew install did not create $prefix/bin/dws"
-  HOME="$brew_home" "$prefix/bin/dws" --help >/dev/null
+  "$prefix/bin/dws" --help >/dev/null
   if [ -n "$EXPECTED_VERSION" ]; then
     strings "$prefix/bin/dws" | grep -Fqx "v$EXPECTED_VERSION" || \
       err "Homebrew-installed binary does not embed expected version v$EXPECTED_VERSION"
-    installed_version="$(HOMEBREW_NO_AUTO_UPDATE=1 brew list --versions "$BREW_TAP_NAME/dingtalk-workspace-cli-local" | awk '{ print $2 }')"
-    [ "$installed_version" = "$EXPECTED_VERSION" ] || \
-      err "Homebrew installed version $installed_version, expected $EXPECTED_VERSION"
   fi
-  [ "$VERIFY_SKILL_TARGETS" -eq 0 ] || verify_skill_targets "$brew_home"
+  need_file "$prefix/share/dingtalk-workspace-cli-local/skills/dws/SKILL.md"
 }
 
 need_file "$DIST_DIR/dws-skills.zip"

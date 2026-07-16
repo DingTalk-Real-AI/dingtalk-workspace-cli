@@ -374,15 +374,15 @@ func TestReconcileGiteeAssetsHonorsTheOverallDeadline(t *testing.T) {
 	}
 }
 
-func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
+func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 	mirrorPath := mustAbs(t, filepath.Join("..", "..", ".github", "workflows", "mirror-to-gitee.yml"))
 	mirrorData, err := os.ReadFile(mirrorPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s) error = %v", mirrorPath, err)
 	}
 	mirror := string(mirrorData)
-	if !strings.Contains(mirror, `VERSION="$GITHUB_REF_NAME" ./scripts/release/sync-gitee-tag.sh`) {
-		t.Fatal("tag workflow must delegate immutable tag reconciliation to sync-gitee-tag.sh")
+	if strings.Contains(mirror, "tags:") || strings.Contains(mirror, "sync-gitee-tag.sh") {
+		t.Fatal("code mirror must not publish release tags outside the guarded release workflow")
 	}
 	for _, forbidden := range []string{
 		`git push --force "$REMOTE" "refs/tags/`,
@@ -394,9 +394,8 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 	}
 
 	manualPath := mustAbs(t, filepath.Join("..", "..", ".github", "workflows", "sync-release-to-gitee.yml"))
-	manualData, err := os.ReadFile(manualPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s) error = %v", manualPath, err)
+	if _, err := os.Stat(manualPath); !os.IsNotExist(err) {
+		t.Fatalf("manual Gitee release workflow must be removed, stat error = %v", err)
 	}
 
 	syncPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-to-gitee.sh"))
@@ -443,27 +442,6 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 	}
 
 	const workflowReserveMinutes = 5
-	assertWorkflowBudget(
-		t,
-		string(manualData),
-		"sync-gitee:",
-		[]string{
-			"name: Check out repository",
-			"name: Download GitHub release assets",
-			"name: Mirror release to Gitee (China)",
-		},
-		workflowReserveMinutes,
-	)
-	manualSyncStepSeconds := workflowTimeoutMinutesAfter(
-		t, string(manualData), "name: Mirror release to Gitee (China)",
-	) * 60
-	if syncSeconds+workflowReserveMinutes*60 > manualSyncStepSeconds {
-		t.Fatalf(
-			"sync deadline %ds plus reserve exceeds manual sync step %ds",
-			syncSeconds, manualSyncStepSeconds,
-		)
-	}
-
 	releasePath := mustAbs(t, filepath.Join("..", "..", ".github", "workflows", "release.yml"))
 	releaseData, err := os.ReadFile(releasePath)
 	if err != nil {
@@ -474,7 +452,7 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 		string(releaseData),
 		"mirror-gitee-release:",
 		[]string{
-			"name: Check out repository",
+			"name: Check out sealed release source",
 			"name: Restore finalized distribution files",
 			"name: Mirror release to Gitee (China)",
 		},
@@ -495,8 +473,16 @@ func TestGiteeWorkflowsUseImmutableTagsAndBoundedRetryBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(%s) error = %v", localBuildPath, err)
 	}
-	if !strings.Contains(string(localBuildData), "publish-gitee-local.sh reconcile-gitee-assets.sh") {
-		t.Fatal("detached-tag Gitee builds must copy the shared asset reconciler with the publisher")
+	if !strings.Contains(string(localBuildData), "Direct Gitee release builds are disabled") {
+		t.Fatal("local Gitee builds must stay disabled so only immutable GitHub assets are mirrored")
+	}
+	localPublishPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "publish-gitee-local.sh"))
+	localPublishData, err := os.ReadFile(localPublishPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", localPublishPath, err)
+	}
+	if !strings.Contains(string(localPublishData), "Direct Gitee artifact publication is disabled") {
+		t.Fatal("direct local Gitee publication must stay disabled")
 	}
 }
 

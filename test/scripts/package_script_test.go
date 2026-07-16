@@ -186,10 +186,9 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	formulaText := string(formulaData)
 	for _, want := range []string{
 		"class DingtalkWorkspaceCliLocal < Formula",
-		"version \"1.2.3\"",
-		"skill_home_override = \"\"",
 		"resource \"skills\" do",
 		"Install locally built DingTalk workspace CLI artifacts for verification",
+		"Agent Skills are bundled in #{pkgshare}/skills/dws",
 	} {
 		if !strings.Contains(formulaText, want) {
 			t.Fatalf("formula missing %q:\n%s", want, formulaText)
@@ -204,8 +203,14 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	releaseFormulaText := string(releaseFormulaData)
 	for _, want := range []string{
 		"class DingtalkWorkspaceCli < Formula",
-		"version \"1.2.3\"",
-		"https://downloads.example.com/dws/releases/v1.2.3/" + archiveName,
+		`desc "Automate DingTalk workspace tasks from the terminal"`,
+		`version "1.2.3"`,
+		"on_macos do",
+		"on_linux do",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-darwin-amd64.tar.gz",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-darwin-arm64.tar.gz",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-linux-amd64.tar.gz",
+		"https://downloads.example.com/dws/releases/v1.2.3/dws-linux-arm64.tar.gz",
 		"https://downloads.example.com/dws/releases/v1.2.3/dws-skills.zip",
 	} {
 		if !strings.Contains(releaseFormulaText, want) {
@@ -375,7 +380,7 @@ func TestPostGoreleaserBuildsVersionedBetaFormula(t *testing.T) {
 		"dws-linux-amd64.tar.gz",
 		"dws-linux-arm64.tar.gz",
 	})
-	env := postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v1.2.3-beta.4")
+	env := postGoreleaserEnv(t, distDir, "v1.2.3-beta.4", "https://downloads.example.com/dws/releases/v1.2.3-beta.4")
 	for i, value := range env {
 		if strings.HasPrefix(value, "DWS_PACKAGE_VERSION=") {
 			env[i] = "DWS_PACKAGE_VERSION=v1.2.3-beta.4"
@@ -792,6 +797,10 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 		"Publish or reuse immutable GitHub Release",
 		"gh release upload",
 		"Publish missing version to npm channel",
+		"Open stable Homebrew formula PR",
+		"Open beta Homebrew formula PR",
+		"DingTalk-Real-AI/dingtalk-workspace-cli.git",
+		"secrets.HOMEBREW_PR_TOKEN",
 	} {
 		if !strings.Contains(publishSection, required) {
 			t.Errorf("post-verification publication stage is missing %q", required)
@@ -828,14 +837,14 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 	if start == -1 {
 		t.Fatal("release workflow is missing the stable Homebrew PR step")
 	}
-	end := strings.Index(workflow[start:], "- name: Mirror release to Gitee")
+	end := strings.Index(workflow[start:], "- name: Open beta Homebrew formula PR")
 	if end == -1 {
-		t.Fatal("release workflow is missing the post-Homebrew Gitee step")
+		t.Fatal("release workflow is missing the beta Homebrew PR step after the stable step")
 	}
 	section := workflow[start : start+end]
 	for _, required := range []string{
 		"github.repository_owner == 'DingTalk-Real-AI'",
-		"!contains(github.ref_name, '-')",
+		"needs.release-contract.outputs.channel == 'stable'",
 		"./scripts/release/publish-homebrew-formula.sh",
 		"secrets.HOMEBREW_PR_TOKEN",
 		"DWS_TAP_PR_REPOSITORY",
@@ -848,7 +857,7 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
 		t.Error("Homebrew Formula PRs must use the dedicated token so their CI is triggered")
 	}
-	stableNPM := strings.Index(workflow, "- name: Publish stable to npm")
+	stableNPM := strings.Index(workflow, "- name: Publish missing version to npm channel")
 	if stableNPM == -1 || start > stableNPM {
 		t.Fatal("Homebrew PR creation must run before npm so a failure is safely rerunnable")
 	}
@@ -871,14 +880,14 @@ func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
 	if start == -1 {
 		t.Fatal("release workflow is missing the beta Homebrew PR step")
 	}
-	end := strings.Index(workflow[start:], "- name: Sync release to China OSS mirror")
+	end := strings.Index(workflow[start:], "- name: Reverify exact immutable npm package")
 	if end == -1 {
-		t.Fatal("release workflow is missing the post-Homebrew OSS step")
+		t.Fatal("release workflow is missing the post-Homebrew npm verification step")
 	}
 	section := workflow[start : start+end]
 	for _, required := range []string{
 		"github.repository_owner == 'DingTalk-Real-AI'",
-		"contains(github.ref_name, '-')",
+		"needs.release-contract.outputs.channel == 'prerelease'",
 		"dist/homebrew/dingtalk-workspace-cli-beta.rb",
 		"Formula/dingtalk-workspace-cli-beta.rb",
 		"secrets.HOMEBREW_PR_TOKEN",

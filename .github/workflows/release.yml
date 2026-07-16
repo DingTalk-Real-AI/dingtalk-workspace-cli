@@ -49,6 +49,16 @@ jobs:
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
             '+refs/tags/v*:refs/tags/v*'
 
+      - name: Check Homebrew PR automation token
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        env:
+          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+        run: |
+          if [ -z "${HOMEBREW_PR_TOKEN:-}" ]; then
+            echo "HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases" >&2
+            exit 1
+          fi
+
       - name: Validate release contract
         id: contract
         run: |
@@ -526,6 +536,30 @@ jobs:
           ./scripts/release/verify-github-release-assets.sh "$GITHUB_REF_NAME"
           ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
+      - name: Open stable Homebrew formula PR
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'stable' }}
+        run: ./scripts/release/publish-homebrew-formula.sh
+        env:
+          DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
+          DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+          DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
+          DWS_TAP_PR_BRANCH: "automation/homebrew-${{ github.ref_name }}"
+          DWS_TAP_PR_TITLE: "chore: update Homebrew formula for ${{ github.ref_name }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ github.ref_name }}"
+
+      - name: Open beta Homebrew formula PR
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'prerelease' }}
+        run: ./scripts/release/publish-homebrew-formula.sh
+        env:
+          DWS_FORMULA_SOURCE: dist/homebrew/dingtalk-workspace-cli-beta.rb
+          DWS_TAP_FORMULA_PATH: Formula/dingtalk-workspace-cli-beta.rb
+          DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
+          DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+          DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
+          DWS_TAP_PR_BRANCH: "automation/homebrew-beta-${{ github.ref_name }}"
+          DWS_TAP_PR_TITLE: "chore: update Homebrew beta formula for ${{ github.ref_name }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ github.ref_name }}"
+
       - name: Reverify exact immutable npm package
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
 
@@ -740,16 +774,15 @@ jobs:
           DWS_REQUIRE_OSS: ${{ github.repository_owner == 'DingTalk-Real-AI' && '1' || '0' }}
 
   mirror-gitee-release:
-    # Keep the optional cross-border fallback out of publish-release so all
-    # pre-sync work has an independently provable budget.
+    name: Mirror immutable release to Gitee
     if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
-    needs:
-      - release
-      - publish-release
+    needs: [release, publish-channels]
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
     steps:
-      - name: Check out repository
+      - name: Check out sealed release source
         uses: actions/checkout@v4
         timeout-minutes: 5
 
@@ -761,8 +794,7 @@ jobs:
           path: dist
 
       - name: Mirror release to Gitee (China)
-        if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
-        timeout-minutes: 20
+        timeout-minutes: 100
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ github.ref_name }}

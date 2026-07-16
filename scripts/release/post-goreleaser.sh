@@ -99,18 +99,15 @@ stage_npm_package() {
 
 render_homebrew_formula() {
   class_name="$1"
-  formula_version="$2"
-  archive_url="$3"
-  skills_url="$4"
-  archive_sha="$5"
-  skills_sha="$6"
-  keg_only_line="$7"
-  output_path="$8"
+  archive_url="$2"
+  skills_url="$3"
+  archive_sha="$4"
+  skills_sha="$5"
+  keg_only_line="$6"
+  output_path="$7"
 
   sed \
     -e "s|__CLASS_NAME__|$class_name|g" \
-    -e "s|__VERSION__|$formula_version|g" \
-    -e "s|__SKILL_HOME_OVERRIDE__||g" \
     -e "s|__ARCHIVE_URL__|$archive_url|g" \
     -e "s|__ARCHIVE_SHA256__|$archive_sha|g" \
     -e "s|__SKILLS_URL__|$skills_url|g" \
@@ -184,7 +181,6 @@ stage_homebrew_formula() {
 
   render_homebrew_formula \
     "DingtalkWorkspaceCliLocal" \
-    "$version" \
     "file://$archive_path" \
     "file://$DIST_DIR/dws-skills.zip" \
     "$archive_sha" \
@@ -192,12 +188,27 @@ stage_homebrew_formula() {
     '  keg_only "Local verification formula to avoid linking conflicts"' \
     "$formula_dir/dingtalk-workspace-cli-local.rb"
 
-  render_homebrew_formula \
-    "DingtalkWorkspaceCli" \
+  formula_class="DingtalkWorkspaceCli"
+  formula_path="$formula_dir/dingtalk-workspace-cli.rb"
+  keg_only_line=""
+  channel_caveat=""
+  case "$version" in
+    *-*)
+      formula_class="DingtalkWorkspaceCliBeta"
+      formula_path="$formula_dir/dingtalk-workspace-cli-beta.rb"
+      keg_only_line='  keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"'
+      channel_caveat='      This beta is keg-only. Add #{opt_bin} to PATH to use its `dws` binary.'
+      ;;
+  esac
+
+  render_homebrew_release_formula \
+    "$formula_class" \
     "$version" \
-    "$release_url_base/$archive_name" \
-    "$release_url_base/$skills_name" \
-    "$archive_sha" \
+    "$release_url_base" \
+    "$(sha256_file "$darwin_amd64")" \
+    "$(sha256_file "$darwin_arm64")" \
+    "$(sha256_file "$linux_amd64")" \
+    "$(sha256_file "$linux_arm64")" \
     "$skills_sha" \
     "$keg_only_line" \
     "$channel_caveat" \
