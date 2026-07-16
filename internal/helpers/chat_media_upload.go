@@ -20,6 +20,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,12 @@ func newChatMediaUploadCommand() *cobra.Command {
 }
 
 func mediaResolveAppToken(ctx context.Context) (string, error) {
+	return mediaResolveAppTokenWithRequest(ctx, http.NewRequestWithContext)
+}
+
+type mediaRequestFactory func(context.Context, string, string, io.Reader) (*http.Request, error)
+
+func mediaResolveAppTokenWithRequest(ctx context.Context, newRequest mediaRequestFactory) (string, error) {
 	appKey := os.Getenv("DWS_CLIENT_ID")
 	appSecret := os.Getenv("DWS_CLIENT_SECRET")
 	if appKey == "" || appSecret == "" {
@@ -109,8 +116,15 @@ func mediaResolveAppToken(ctx context.Context) (string, error) {
 			"缺少应用凭证。chat media upload 需要 DWS_CLIENT_ID / DWS_CLIENT_SECRET 环境变量。\n" +
 				"请使用 dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET> 登录。")
 	}
-	url := "https://oapi.dingtalk.com/gettoken?appkey=" + appKey + "&appsecret=" + appSecret
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	endpoint := url.URL{Scheme: "https", Host: "oapi.dingtalk.com", Path: "/gettoken"}
+	endpoint.RawQuery = url.Values{
+		"appkey":    []string{appKey},
+		"appsecret": []string{appSecret},
+	}.Encode()
+	req, err := newRequest(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return "", apperrors.NewAuth("构造访问令牌请求失败: " + err.Error())
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return "", apperrors.NewAuth("获取访问令牌失败: " + err.Error())
@@ -135,8 +149,24 @@ func mediaResolveAppToken(ctx context.Context) (string, error) {
 }
 
 func mediaUploadFile(ctx context.Context, token, filePath, mediaType string) (string, error) {
+	return mediaUploadFileWithRequest(ctx, token, filePath, mediaType, http.NewRequestWithContext)
+}
+
+func mediaUploadFileWithRequest(ctx context.Context, token, filePath, mediaType string, newRequest mediaRequestFactory) (string, error) {
 	pr, pw := io.Pipe()
 	writer := multipart.NewWriter(pw)
+	endpoint := url.URL{Scheme: "https", Host: "oapi.dingtalk.com", Path: "/media/upload"}
+	endpoint.RawQuery = url.Values{
+		"access_token": []string{token},
+		"type":         []string{mediaType},
+	}.Encode()
+	req, err := newRequest(ctx, http.MethodPost, endpoint.String(), pr)
+	if err != nil {
+		_ = pr.CloseWithError(err)
+		_ = pw.CloseWithError(err)
+		return "", apperrors.NewAPI("construct media upload request: " + err.Error())
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	go func() {
 		defer pw.Close()
@@ -156,10 +186,6 @@ func mediaUploadFile(ctx context.Context, token, filePath, mediaType string) (st
 			pw.CloseWithError(err)
 		}
 	}()
-
-	url := "https://oapi.dingtalk.com/media/upload?access_token=" + token + "&type=" + mediaType
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := (&http.Client{Timeout: 2 * time.Minute}).Do(req)
 	if err != nil {

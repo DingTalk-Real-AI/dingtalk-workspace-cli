@@ -198,14 +198,12 @@ func TestDarwinDEKKeyringEdges(t *testing.T) {
 	origGet := keyringGet
 	origSet := keyringSet
 	origRand := keychainRandRead
-	origTimeout := keychainTimeout
 	t.Cleanup(func() {
 		readDefaultKeychain = origReadDefault
 		keychainStat = origStat
 		keyringGet = origGet
 		keyringSet = origSet
 		keychainRandRead = origRand
-		keychainTimeout = origTimeout
 	})
 	t.Setenv(DisableKeychainEnv, "")
 	readDefaultKeychain = func() ([]byte, error) { return []byte(`"/keychain"`), nil }
@@ -258,21 +256,42 @@ func TestDarwinDEKKeyringEdges(t *testing.T) {
 		t.Fatalf("set error = %v", err)
 	}
 
-	keychainTimeout = time.Millisecond
-	keyringGet = func(string, string) (string, error) { select {} }
-	if _, err := getSystemDEKReadOnly("timeout"); !IsUnavailable(err) {
+	timeoutRuntime := snapshotDarwinKeychainRuntime()
+	timeoutRuntime.timeout = time.Millisecond
+	release := make(chan struct{})
+	timeoutRuntime.get = func(string, string) (string, error) {
+		<-release
+		return "", keyring.ErrNotFound
+	}
+	timeoutRuntime.randRead = func(data []byte) (int, error) {
+		copy(data, bytesOf(4, len(data)))
+		return len(data), nil
+	}
+	timeoutRuntime.set = func(string, string, string) error { return nil }
+	_, err, readDone := getSystemDEKReadOnlyWithRuntime("timeout", timeoutRuntime)
+	if !IsUnavailable(err) {
 		t.Fatalf("read timeout = %v", err)
 	}
-	if _, err := getOrCreateDEK("timeout"); !IsUnavailable(err) {
+	_, err, createDone := getOrCreateDEKWithRuntime("timeout", timeoutRuntime)
+	if !IsUnavailable(err) {
 		t.Fatalf("create timeout = %v", err)
 	}
-	keyringGet = func(string, string) (string, error) { panic("keyring panic") }
-	if _, err := getSystemDEKReadOnly("panic"); !IsUnavailable(err) {
+	close(release)
+	waitDarwinKeychainWorkerDone(t, readDone)
+	waitDarwinKeychainWorkerDone(t, createDone)
+
+	panicRuntime := snapshotDarwinKeychainRuntime()
+	panicRuntime.get = func(string, string) (string, error) { panic("keyring panic") }
+	_, err, readDone = getSystemDEKReadOnlyWithRuntime("panic", panicRuntime)
+	if !IsUnavailable(err) {
 		t.Fatalf("read panic = %v", err)
 	}
-	if _, err := getOrCreateDEK("panic"); !IsUnavailable(err) {
+	waitDarwinKeychainWorkerDone(t, readDone)
+	_, err, createDone = getOrCreateDEKWithRuntime("panic", panicRuntime)
+	if !IsUnavailable(err) {
 		t.Fatalf("create panic = %v", err)
 	}
+	waitDarwinKeychainWorkerDone(t, createDone)
 
 	keychainStat = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	if _, err := getSystemDEKReadOnly("missing-keychain"); !IsUnavailable(err) {
@@ -280,6 +299,15 @@ func TestDarwinDEKKeyringEdges(t *testing.T) {
 	}
 	if _, err := getOrCreateDEK("missing-keychain"); !IsUnavailable(err) {
 		t.Fatalf("preflight create = %v", err)
+	}
+}
+
+func waitDarwinKeychainWorkerDone(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for keychain worker shutdown")
 	}
 }
 

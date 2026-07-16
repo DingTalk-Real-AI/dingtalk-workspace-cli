@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +120,7 @@ func TestMailHTTPTransfersCoverage(t *testing.T) {
 func TestChatMediaHTTPAndDocVersionsCoverage(t *testing.T) {
 	previousTransport := http.DefaultTransport
 	mode := "success"
+	var requestQuery url.Values
 	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if mode == "transport-error" {
 			return nil, errors.New("transport")
@@ -128,6 +130,7 @@ func TestChatMediaHTTPAndDocVersionsCoverage(t *testing.T) {
 				return nil, err
 			}
 		}
+		requestQuery = req.URL.Query()
 		status := http.StatusOK
 		body := `{"access_token":"token","errcode":0}`
 		if strings.Contains(req.URL.Path, "media/upload") {
@@ -157,6 +160,15 @@ func TestChatMediaHTTPAndDocVersionsCoverage(t *testing.T) {
 		mode = current
 		_, _ = mediaResolveAppToken(context.Background())
 	}
+	t.Setenv("DWS_CLIENT_ID", "client&scope=chat")
+	t.Setenv("DWS_CLIENT_SECRET", "secret=with?reserved")
+	mode = "success"
+	if _, err := mediaResolveAppToken(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if requestQuery.Get("appkey") != "client&scope=chat" || requestQuery.Get("appsecret") != "secret=with?reserved" {
+		t.Fatalf("token query was not encoded: %v", requestQuery)
+	}
 	file := filepath.Join(t.TempDir(), "image.png")
 	if err := os.WriteFile(file, []byte("image"), 0o600); err != nil {
 		t.Fatal(err)
@@ -166,7 +178,24 @@ func TestChatMediaHTTPAndDocVersionsCoverage(t *testing.T) {
 		_, _ = mediaUploadFile(context.Background(), "token", file, "image")
 	}
 	mode = "success"
+	if _, err := mediaUploadFile(context.Background(), "token&scope=chat", file, "image&type=file"); err != nil {
+		t.Fatal(err)
+	}
+	if requestQuery.Get("access_token") != "token&scope=chat" || requestQuery.Get("type") != "image&type=file" {
+		t.Fatalf("upload query was not encoded: %v", requestQuery)
+	}
+	mode = "success"
 	_, _ = mediaUploadFile(context.Background(), "token", filepath.Join(t.TempDir(), "missing"), "image")
+
+	requestFailure := func(context.Context, string, string, io.Reader) (*http.Request, error) {
+		return nil, errors.New("request")
+	}
+	if _, err := mediaResolveAppTokenWithRequest(context.Background(), requestFailure); err == nil {
+		t.Fatal("token request construction failure returned nil")
+	}
+	if _, err := mediaUploadFileWithRequest(context.Background(), "token", file, "image", requestFailure); err == nil {
+		t.Fatal("upload request construction failure returned nil")
+	}
 
 	for _, value := range []any{float64(3), float64(3.5), "3", "bad", jsonNumber("3"), jsonNumber("bad"), true} {
 		_ = docVersionNumberMatches(value, 3)

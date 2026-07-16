@@ -74,6 +74,71 @@ var (
 	keychainEntryReadFile            = os.ReadFile
 )
 
+type darwinKeychainRuntime struct {
+	checkAvailable func() error
+	get            func(service, account string) (string, error)
+	set            func(service, account, value string) error
+	randRead       func([]byte) (int, error)
+	timeout        time.Duration
+}
+
+func snapshotDarwinKeychainRuntime() darwinKeychainRuntime {
+	return darwinKeychainRuntime{
+		checkAvailable: checkDefaultKeychainAvailable,
+		get:            keyringGet,
+		set:            keyringSet,
+		randRead:       keychainRandRead,
+		timeout:        keychainTimeout,
+	}
+}
+
+type darwinKeychainResult struct {
+	key []byte
+	err error
+}
+
+type darwinKeychainWorker struct {
+	result <-chan darwinKeychainResult
+	done   <-chan struct{}
+}
+
+func startDarwinKeychainWorker(operation string, work func() ([]byte, error)) darwinKeychainWorker {
+	result := make(chan darwinKeychainResult, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				result <- darwinKeychainResult{
+					err: NewUnavailableError(operation, fmt.Errorf("panic: %v", recovered)),
+				}
+			}
+		}()
+		key, err := work()
+		result <- darwinKeychainResult{key: key, err: err}
+	}()
+	return darwinKeychainWorker{result: result, done: done}
+}
+
+func waitDarwinKeychainWorker(timeout time.Duration, operation string, worker darwinKeychainWorker) ([]byte, error, <-chan struct{}) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	select {
+	case result := <-worker.result:
+		<-worker.done
+		return result.key, result.err, worker.done
+	case <-ctx.Done():
+		return nil, NewUnavailableError(operation, ctx.Err()), worker.done
+	}
+}
+
+func finishedDarwinKeychainWorker() <-chan struct{} {
+	done := make(chan struct{})
+	close(done)
+	return done
+}
+
 func defaultKeychainPathFromSecurityOutput(output []byte) string {
 	value := strings.TrimSpace(string(output))
 	if value == "" {
@@ -168,104 +233,75 @@ func platformDiagnose() Diagnostic {
 }
 
 func getSystemDEKReadOnly(service string) ([]byte, error) {
-	if err := checkDefaultKeychainAvailable(); err != nil {
-		return nil, err
+	key, err, _ := getSystemDEKReadOnlyWithRuntime(service, snapshotDarwinKeychainRuntime())
+	return key, err
+}
+
+func getSystemDEKReadOnlyWithRuntime(service string, runtime darwinKeychainRuntime) ([]byte, error, <-chan struct{}) {
+	if err := runtime.checkAvailable(); err != nil {
+		return nil, err, finishedDarwinKeychainWorker()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
-	defer cancel()
-
-	type result struct {
-		key []byte
-		err error
-	}
-	resCh := make(chan result, 1)
-	getKeyring := keyringGet
-
-	go func() {
-		defer func() { recover() }()
-
-		encodedKey, err := getKeyring(service, "dek")
+	const operation = "read DEK from macOS Keychain"
+	worker := startDarwinKeychainWorker(operation, func() ([]byte, error) {
+		encodedKey, err := runtime.get(service, "dek")
 		if err == nil {
 			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
 			if decodeErr == nil && len(key) == dekBytes {
-				resCh <- result{key: key, err: nil}
-				return
+				return key, nil
 			}
-			resCh <- result{key: nil, err: fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)}
-			return
+			return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
 		}
 		if errors.Is(err, keyring.ErrNotFound) {
-			resCh <- result{key: nil, err: fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)}
-			return
+			return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
 		}
-		resCh <- result{key: nil, err: NewUnavailableError("read DEK from macOS Keychain", err)}
-	}()
+		return nil, NewUnavailableError("read DEK from macOS Keychain", err)
+	})
 
-	select {
-	case res := <-resCh:
-		return res.key, res.err
-	case <-ctx.Done():
-		return nil, NewUnavailableError("read DEK from macOS Keychain", ctx.Err())
-	}
+	return waitDarwinKeychainWorker(runtime.timeout, operation, worker)
 }
 
 func getOrCreateDEK(service string) ([]byte, error) {
 	if os.Getenv(DisableKeychainEnv) != "" {
 		return fileDEK(service)
 	}
-	if err := checkDefaultKeychainAvailable(); err != nil {
-		return nil, err
+	key, err, _ := getOrCreateDEKWithRuntime(service, snapshotDarwinKeychainRuntime())
+	return key, err
+}
+
+func getOrCreateDEKWithRuntime(service string, runtime darwinKeychainRuntime) ([]byte, error, <-chan struct{}) {
+	if err := runtime.checkAvailable(); err != nil {
+		return nil, err, finishedDarwinKeychainWorker()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
-	defer cancel()
-
-	type result struct {
-		key []byte
-		err error
-	}
-	resCh := make(chan result, 1)
-	getKeyring := keyringGet
-
-	go func() {
-		defer func() { recover() }()
-
+	const operation = "read or create DEK in macOS Keychain"
+	worker := startDarwinKeychainWorker(operation, func() ([]byte, error) {
 		// Try to get existing DEK from system Keychain
-		encodedKey, err := getKeyring(service, "dek")
+		encodedKey, err := runtime.get(service, "dek")
 		if err == nil {
 			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
 			if decodeErr == nil && len(key) == dekBytes {
-				resCh <- result{key: key, err: nil}
-				return
+				return key, nil
 			}
 		} else if !errors.Is(err, keyring.ErrNotFound) {
-			resCh <- result{key: nil, err: NewUnavailableError("read DEK from macOS Keychain", err)}
-			return
+			return nil, NewUnavailableError("read DEK from macOS Keychain", err)
 		}
 
 		// Generate new DEK if not found or invalid
 		key := make([]byte, dekBytes)
-		if _, randErr := keychainRandRead(key); randErr != nil {
-			resCh <- result{key: nil, err: randErr}
-			return
+		if _, randErr := runtime.randRead(key); randErr != nil {
+			return nil, randErr
 		}
 
 		// Store in system Keychain
 		encodedKey = base64.StdEncoding.EncodeToString(key)
-		if setErr := keyringSet(service, "dek", encodedKey); setErr != nil {
-			resCh <- result{key: nil, err: NewUnavailableError("store DEK in macOS Keychain", setErr)}
-			return
+		if setErr := runtime.set(service, "dek", encodedKey); setErr != nil {
+			return nil, NewUnavailableError("store DEK in macOS Keychain", setErr)
 		}
-		resCh <- result{key: key, err: nil}
-	}()
+		return key, nil
+	})
 
-	select {
-	case res := <-resCh:
-		return res.key, res.err
-	case <-ctx.Done():
-		return nil, NewUnavailableError("read DEK from macOS Keychain", ctx.Err())
-	}
+	return waitDarwinKeychainWorker(runtime.timeout, operation, worker)
 }
 
 func encryptData(plaintext string, key []byte) ([]byte, error) {
