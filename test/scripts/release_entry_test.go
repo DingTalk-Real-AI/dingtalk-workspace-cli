@@ -30,8 +30,22 @@ func newReleaseEntryFixture(t *testing.T) *releaseEntryFixture {
 	}
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), fakeDelegate("prepare"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "release.sh"), fakeDelegate("release"), 0o755)
+	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "recover-release.sh"), fakeDelegate("recover"), 0o755)
 	r.commitAndPush(t, "install unified release entry fixture")
 	return &releaseEntryFixture{repo: r, entry: entry, log: filepath.Join(t.TempDir(), "calls.log")}
+}
+
+func TestDWSReleaseEntryRoutesProtectedRecovery(t *testing.T) {
+	f := newReleaseEntryFixture(t)
+	f.configureRemote(t, "origin")
+	output, err := f.run(t, nil, "recover", "v1.0.1-beta.1", "--failed-run", "12345")
+	if err != nil {
+		t.Fatalf("dws-release recovery route error = %v\noutput:\n%s", err, output)
+	}
+	want := "recover\tv1.0.1-beta.1\t--remote\torigin\t--failed-run\t12345\n"
+	if got := f.callLog(t); got != want {
+		t.Fatalf("recovery delegate calls = %q, want %q", got, want)
+	}
 }
 
 func (f *releaseEntryFixture) run(t *testing.T, extraEnv []string, args ...string) (string, error) {

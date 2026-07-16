@@ -3,15 +3,21 @@ set -eu
 
 TAG="${1:-}"
 EXPECTED_COMMIT="${2:-}"
+EXPECTED_TAG_OBJECT="${3:-}"
 REPOSITORY="${GITHUB_REPOSITORY:-}"
 
 [ -n "$TAG" ] && [ -n "$EXPECTED_COMMIT" ] && [ -n "$REPOSITORY" ] || {
-  printf 'usage: GITHUB_REPOSITORY=owner/repo verify-github-tag-authority.sh <tag> <commit>\n' >&2
+  printf 'usage: GITHUB_REPOSITORY=owner/repo verify-github-tag-authority.sh <tag> <commit> [tag-object]\n' >&2
   exit 2
 }
 command -v gh >/dev/null 2>&1 || { printf 'gh is required\n' >&2; exit 1; }
 
 local_object="$(git rev-parse "refs/tags/$TAG")"
+if [ -n "$EXPECTED_TAG_OBJECT" ] && [ "$local_object" != "$EXPECTED_TAG_OBJECT" ]; then
+  printf 'local tag object for %s changed (expected=%s actual=%s)\n' \
+    "$TAG" "$EXPECTED_TAG_OBJECT" "$local_object" >&2
+  exit 1
+fi
 remote_ref="$(
   gh api -H 'Accept: application/vnd.github+json' \
     "repos/$REPOSITORY/git/ref/tags/$TAG" \

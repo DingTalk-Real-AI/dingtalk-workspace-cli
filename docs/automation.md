@@ -80,6 +80,25 @@ built-in `GITHUB_TOKEN` is insufficient because organization policy prevents
 Actions from creating pull requests, and its generated PR events may require
 separate workflow approval.
 
+## Release Governance and Recovery
+
+Store `RELEASE_GOVERNANCE_TOKEN` as a dedicated Actions secret with only
+repository `Administration: read`. The immutable-releases REST endpoint is an
+administration setting and cannot be read by the workflow's built-in
+`GITHUB_TOKEN`. Both the default-branch governance preflight and the tag
+contract use this same credential so a missing or expired identity is detected
+before an irreversible tag is created.
+
+Create a protected `release-recovery` environment limited to protected
+branches, with a required reviewer, self-review disabled, and administrator
+bypass disabled. The workflow reads the environment through the GitHub API and
+fails closed unless the required-reviewer, prevent-self-review, and protected-
+branch rules are present.
+Recovery is restricted to an existing annotated tag whose exact tag object,
+commit, and failed tag-push run all match; it then reuses the normal release
+jobs. Do not put publication secrets in temporary branches or create ad-hoc
+recovery workflows.
+
 ## Handoff Checklist
 
 Before handoff, include:

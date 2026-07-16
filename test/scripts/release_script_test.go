@@ -392,6 +392,72 @@ esac
 	}
 }
 
+func TestReleaseWorkflowDeliveryAcceptsOnlySharedProtectedRecovery(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	fakeCurl := filepath.Join(binDir, "curl")
+	mustWriteFile(t, fakeCurl, []byte(`#!/bin/sh
+set -eu
+for argument in "$@"; do endpoint="$argument"; done
+case "$endpoint" in
+  *event=push*)
+    printf '{"workflow_runs":[]}\n'
+    ;;
+  *event=workflow_dispatch*)
+    printf '{"workflow_runs":[{"id":42,"display_title":"Release recovery %s at %s %s-1700000000-42","event":"workflow_dispatch","status":"completed","conclusion":"success","head_branch":"main","head_sha":"%s","path":".github/workflows/release.yml","repository":{"full_name":"owner/repo"}}]}\n' "$TAG" "$RELEASE_COMMIT" "$RELEASE_COMMIT" "$WORKFLOW_SHA"
+    ;;
+  */compare/*...main)
+    printf '{"status":"ahead"}\n'
+    ;;
+  */actions/runs/42/jobs*)
+    printf '{"jobs":['
+    printf '{"name":"Build signed release artifacts","status":"completed","conclusion":"success","head_sha":"%s"},' "$WORKFLOW_SHA"
+    printf '{"name":"Verify Apple Developer ID signatures","status":"completed","conclusion":"success","head_sha":"%s"},' "$WORKFLOW_SHA"
+    printf '{"name":"Publish immutable GitHub Release","status":"completed","conclusion":"success","head_sha":"%s"}' "$WORKFLOW_SHA"
+    if [ "${MISSING_CHANNELS:-0}" != 1 ]; then
+      printf ',{"name":"Publish npm and mirrors","status":"completed","conclusion":"success","head_sha":"%s"}' "$WORKFLOW_SHA"
+    fi
+    printf ']}\n'
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-release-workflow-delivery.sh")
+	tag := "v1.2.3-beta.1"
+	commit := strings.Repeat("a", 40)
+	workflowSHA := strings.Repeat("b", 40)
+	run := func(missingChannels bool) (string, error) {
+		cmd := exec.Command("sh", script, tag, commit)
+		missing := "0"
+		if missingChannels {
+			missing = "1"
+		}
+		cmd.Env = []string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"DWS_RELEASE_OFFICIAL_REPOSITORY=owner/repo",
+			"TAG=" + tag,
+			"RELEASE_COMMIT=" + commit,
+			"WORKFLOW_SHA=" + workflowSHA,
+			"MISSING_CHANNELS=" + missing,
+		}
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	output, err := run(false)
+	if err != nil || !strings.Contains(output, "protected recovery run 42") {
+		t.Fatalf("protected shared recovery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	output, err = run(true)
+	if err == nil || !strings.Contains(output, "did not complete the shared release job graph") {
+		t.Fatalf("incomplete recovery job graph passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
 func releaseChangelog(sections ...string) string {
 	text := "# Changelog\n\n## [Unreleased]\n\n"
 	for _, section := range sections {
@@ -1002,6 +1068,178 @@ func TestReleaseCommandValidatesThenPushesAnnotatedTag(t *testing.T) {
 	}
 }
 
+func TestReleaseCommandReusesExactPreflightProof(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	installReleaseCommandFixture(t, r)
+	mustWriteFile(t, filepath.Join(r.root, ".gitignore"), []byte("/dws\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(betaSection())), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte(`test:
+	@rm -f dws
+	@printf 'test\n' >> "$$(git rev-parse --git-path release-phases)"
+build:
+	@printf '#!/bin/sh\nexit 0\n' > dws
+	@chmod +x dws
+	@printf 'build\n' >> "$$(git rev-parse --git-path release-phases)"
+policy:
+	@test -x dws
+	@printf 'policy\n' >> "$$(git rev-parse --git-path release-phases)"
+package:
+	@printf 'package\n' >> "$$(git rev-parse --git-path release-phases)"
+`), 0o644)
+	r.commitAndPush(t, "install proof-aware release automation")
+
+	command := filepath.Join(r.root, "scripts", "release", "release.sh")
+	output, err := runReleaseScript(t, r.root, command,
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin",
+	)
+	if err != nil {
+		t.Fatalf("release validation error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "Publish within six hours") {
+		t.Fatalf("validation output missing reusable-proof guidance:\n%s", output)
+	}
+	phasePath := filepath.Join(r.root, ".git", "release-phases")
+	phaseData, err := os.ReadFile(phasePath)
+	if err != nil {
+		t.Fatalf("ReadFile(release phases) error = %v", err)
+	}
+	wantPhases := "test\nbuild\npolicy\npackage\n"
+	if string(phaseData) != wantPhases {
+		t.Fatalf("release phase order = %q, want %q", phaseData, wantPhases)
+	}
+	proofPath := strings.TrimSpace(mustOutput(t, r.root, "git", "rev-parse", "--git-path", "dws-release-preflight/v1.0.1-beta.1.proof"))
+	if !filepath.IsAbs(proofPath) {
+		proofPath = filepath.Join(r.root, proofPath)
+	}
+	proofBefore, err := os.ReadFile(proofPath)
+	if err != nil {
+		t.Fatalf("ReadFile(preflight proof) error = %v", err)
+	}
+	hook := filepath.Join(r.remote, "hooks", "pre-receive")
+	mustWriteFile(t, hook, []byte("#!/bin/sh\nset -eu\nwhile read -r old new ref; do\n  case \"$ref\" in refs/tags/*) exit 1 ;; esac\ndone\nexit 0\n"), 0o755)
+	failedOutput, failedErr := runReleaseScript(t, r.root, command,
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin", "--publish", "--yes",
+	)
+	if failedErr == nil || !strings.Contains(failedOutput, "new local tag was removed") {
+		t.Fatalf("rejected proof-based publish did not fail safely: err=%v\noutput:\n%s", failedErr, failedOutput)
+	}
+	proofAfterFailure, err := os.ReadFile(proofPath)
+	if err != nil {
+		t.Fatalf("ReadFile(preflight proof after failure) error = %v", err)
+	}
+	if string(proofAfterFailure) != string(proofBefore) {
+		t.Fatalf("failed publish refreshed reusable proof:\nbefore:\n%s\nafter:\n%s", proofBefore, proofAfterFailure)
+	}
+	if err := os.Remove(hook); err != nil {
+		t.Fatalf("Remove(rejecting hook) error = %v", err)
+	}
+
+	output, err = runReleaseScript(t, r.root, command,
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin", "--publish", "--yes",
+	)
+	if err != nil {
+		t.Fatalf("release publish error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "Reusing exact preflight proof") {
+		t.Fatalf("publish did not reuse the exact preflight proof:\n%s", output)
+	}
+	phaseData, err = os.ReadFile(phasePath)
+	if err != nil {
+		t.Fatalf("ReadFile(release phases after publish) error = %v", err)
+	}
+	if string(phaseData) != wantPhases {
+		t.Fatalf("publish reran expensive phases: %q", phaseData)
+	}
+}
+
+func TestReleaseGovernanceCIDispatchBindsExactRunIdentity(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	stateDir := t.TempDir()
+	fakeGH := filepath.Join(binDir, "gh")
+	mustWriteFile(t, fakeGH, []byte(`#!/bin/sh
+set -eu
+command="$1"
+shift
+case "$command" in
+  workflow)
+    test "$1" = run
+    shift
+    printf '%s\n' "$@" > "$GH_STATE/workflow-args"
+    for argument in "$@"; do
+      case "$argument" in
+        governance_preflight_nonce=*)
+          printf 'Release governance preflight %s\n' "${argument#governance_preflight_nonce=}" > "$GH_STATE/title"
+          ;;
+        governance_preflight_commit=*)
+          printf '%s\n' "${argument#governance_preflight_commit=}" > "$GH_STATE/commit"
+          ;;
+      esac
+    done
+    ;;
+  api)
+    for argument in "$@"; do
+      case "$argument" in repos/*/actions/*) endpoint="$argument" ;; esac
+    done
+    case "$endpoint" in
+      */actions/workflows/release.yml/runs*) printf '42\n' ;;
+      */actions/runs/42)
+        title="$(cat "$GH_STATE/title")"
+        commit="$(cat "$GH_STATE/commit")"
+        repository=owner/repo
+        if [ "${GH_BAD_STATE:-0}" = 1 ]; then repository=attacker/repo; fi
+        printf '%s\tworkflow_dispatch\tcompleted\tsuccess\tmain\t%s\t.github/workflows/release.yml\t%s\n' "$title" "$commit" "$repository"
+        ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  run)
+    test "$1" = watch
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-release-governance-ci.sh")
+	commit := strings.Repeat("a", 40)
+	run := func(badState bool) (string, error) {
+		cmd := exec.Command("sh", script, "owner/repo", commit)
+		cmd.Env = []string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"GH_STATE=" + stateDir,
+			fmt.Sprintf("GH_BAD_STATE=%d", map[bool]int{false: 0, true: 1}[badState]),
+		}
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	output, err := run(false)
+	if err != nil || !strings.Contains(output, "Release governance preflight passed") {
+		t.Fatalf("governance CI preflight error = %v\noutput:\n%s", err, output)
+	}
+	args, err := os.ReadFile(filepath.Join(stateDir, "workflow-args"))
+	if err != nil {
+		t.Fatalf("ReadFile(workflow args) error = %v", err)
+	}
+	for _, required := range []string{
+		"--ref\nmain\n",
+		"governance_preflight_commit=" + commit,
+		"governance_preflight_nonce=" + commit + "-",
+	} {
+		if !strings.Contains(string(args), required) {
+			t.Errorf("workflow dispatch args are missing %q:\n%s", required, args)
+		}
+	}
+
+	output, err = run(true)
+	if err == nil || !strings.Contains(output, "run identity mismatch") {
+		t.Fatalf("mismatched governance run identity passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
 func TestReleaseCommandCleansLocalTagWhenPushFails(t *testing.T) {
 	r := newReleaseTestRepo(t)
 	installReleaseCommandFixture(t, r)
@@ -1048,7 +1286,7 @@ func TestReleaseCommandRechecksAdvancedStableAuthority(t *testing.T) {
 	section := "## [1.0.2-beta.1] - 2026-07-11\n\n### Changed\n\n- Validate a candidate after stable authority advances.\n\n"
 	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nprintf 'compatibility %s\\n' \"$*\"\n"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\npolicy:\n\t@:\npackage:\n\t@git tag -a v1.0.1 -m 'Release v1.0.1'\n\t@git push origin refs/tags/v1.0.1\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\nbuild:\n\t@:\npolicy:\n\t@:\npackage:\n\t@git tag -a v1.0.1 -m 'Release v1.0.1'\n\t@git push origin refs/tags/v1.0.1\n"), 0o644)
 	r.commitAndPush(t, "install advancing release fixture")
 
 	output, err := runReleaseScript(t, r.root, filepath.Join(r.root, "scripts", "release", "release.sh"),
@@ -1071,7 +1309,7 @@ func installReleaseCommandFixture(t *testing.T, r *releaseTestRepo) {
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-package-managers.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-release-artifacts.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\npolicy:\n\t@:\npackage:\n\t@:\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\nbuild:\n\t@:\npolicy:\n\t@:\npackage:\n\t@:\n"), 0o644)
 }
 
 func releaseCopyFile(t *testing.T, source, target string, mode os.FileMode) {
