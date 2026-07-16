@@ -185,9 +185,12 @@ func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackend(t *testing.T)
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows DPAPI contract requires a native Windows runner")
 	}
-	t.Cleanup(CloseFileLogger)
 
 	root := t.TempDir()
+	// NewRootCommand initializes the normal CLI file logger below configDir.
+	// Register its cleanup after TempDir so the Windows handle is closed before
+	// testing removes the temporary directory.
+	t.Cleanup(CloseFileLogger)
 	configDir := filepath.Join(root, ".dws")
 	keychainDir := filepath.Join(root, "keychain")
 	inputPath := filepath.Join(root, "bundle.tar.gz")
@@ -215,7 +218,14 @@ func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackend(t *testing.T)
 			t.Fatalf("error = %v, want substring %q", err, want)
 		}
 	}
-	for _, path := range []string{configDir, keychainDir} {
+	// The root command may create configDir/logs as part of normal CLI startup.
+	// The capability guard must still run before any auth state is imported.
+	for _, path := range []string{
+		keychainDir,
+		authpkg.ProfilesPath(configDir),
+		filepath.Join(configDir, "app.json"),
+		filepath.Join(configDir, "token.json"),
+	} {
 		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 			t.Fatalf("unsupported Windows import touched %s: stat error = %v", path, statErr)
 		}
