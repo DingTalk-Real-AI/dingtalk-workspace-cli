@@ -143,7 +143,6 @@ func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) exe
 		scanner:            newRuntimeContentScanner(),
 		enforceContentScan: runtimeFlagEnabled(os.Getenv(runtimeContentScanEnforceEnv), false),
 		includeScanReport:  runtimeFlagEnabled(os.Getenv(runtimeContentScanReportOutputEnv), false),
-		auditSink:          setupAuditSink(),
 	}
 }
 
@@ -456,6 +455,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		return r.executeStdioInvocation(ctx, invocation)
 	}
 
+	// Constructing the Cobra tree is also used for help, schema, and command
+	// discovery. Open the process-wide audit writer only when a real invocation
+	// reaches the execution boundary so read-only command inspection does not
+	// leave an audit lock handle behind (which prevents TempDir cleanup on
+	// Windows). Keep an injected sink when tests or editions provide one.
+	auditSink := r.auditSink
+	if auditSink == nil {
+		auditSink = setupAuditSink()
+	}
+
 	invokeStart := time.Now()
 	execID := generateExecutionID()
 	r.transport.ExecutionId = execID
@@ -483,7 +492,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
-		emitAudit(r.auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
+		emitAudit(auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
 	}()
 
 	// Check if this product has plugin-level auth credentials registered.

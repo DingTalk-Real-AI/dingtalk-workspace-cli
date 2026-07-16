@@ -14,11 +14,14 @@
 package app
 
 import (
+	"log/slog"
 	"sort"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
@@ -28,6 +31,17 @@ func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller) 
 	injectStaticServers()
 	helpers.InitDeps(caller)
 	commands := helpers.NewPublicCommands(runner)
+	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
+	// command tree, so distilled high-frequency operations mount alongside the
+	// built-ins. Conflicts with built-ins are skipped inside Load.
+	if _, err := userdef.Load(); err != nil {
+		slog.Warn("shortcut: failed to load user-defined shortcuts", "error", err)
+	}
+	// Built-in + user shortcuts (`dws <service> +<command>`) share the same
+	// command tree; mergeTopLevelCommands folds each shortcut's service parent
+	// into the matching helper command so the `+leaf` sits alongside existing
+	// subcommands.
+	commands = append(commands, builtin.Commands()...)
 	return mergeTopLevelCommands(commands)
 }
 

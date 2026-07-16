@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func (*chatMessageSearchCaller) DryRun() bool   { return false }
 func (*chatMessageSearchCaller) Fields() string { return "" }
 func (*chatMessageSearchCaller) JQ() string     { return "" }
 
-func TestChatMessageSearchUsesMCPContracts(t *testing.T) {
+func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 	previousDeps := deps
 	previousArgs := os.Args
 	t.Cleanup(func() {
@@ -125,5 +126,103 @@ func TestChatMessageSearchUsesMCPContracts(t *testing.T) {
 				t.Fatalf("tool args = %#v, want %#v", call.args, tt.wantToolArg)
 			}
 		})
+	}
+}
+
+type chatChangedContractCaller struct {
+	calls        []chatMessageSearchCall
+	resolveUsers bool
+}
+
+func (c *chatChangedContractCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	c.calls = append(c.calls, chatMessageSearchCall{productID: productID, toolName: toolName, args: args})
+	text := `{}`
+	if c.resolveUsers && toolName == "get_user_info_by_user_ids" {
+		text = `{"result":[{"userId":"123","openDingTalkId":"open-123"}]}`
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
+}
+
+func (*chatChangedContractCaller) Format() string { return "json" }
+func (*chatChangedContractCaller) DryRun() bool   { return false }
+func (*chatChangedContractCaller) Fields() string { return "" }
+func (*chatChangedContractCaller) JQ() string     { return "" }
+
+func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller, args ...string) error {
+	t.Helper()
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	cmd := newChatCommand()
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetArgs(args)
+	return cmd.Execute()
+}
+
+func TestCrossPlatformCoverageChatMessageListUsesObservedGroupKeys(t *testing.T) {
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller,
+		"message", "list", "--group", "cid-1", "--time", "2026-07-15 09:00:00", "--limit", "50")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != "list_conversation_message_v2" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	want := map[string]any{"openCid": "cid-1", "cid": "cid-1", "time": "2026-07-15 09:00:00", "forward": true, "limit": 50}
+	if !reflect.DeepEqual(caller.calls[0].args, want) {
+		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatAuditUsesUserIDs(t *testing.T) {
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller,
+		"group", "audit-join-validation",
+		"--group", "cid-1", "--record-id", "123", "--applicant", "user-a", "--inviter", "user-b", "--status", "AuditApprove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].productID != "im" || caller.calls[0].toolName != "audit_join_group" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	want := map[string]any{
+		"openConversationId": "cid-1", "applyRecordId": int64(123),
+		"applicantUid": "user-a", "inviterUid": "user-b", "status": "AuditApprove",
+	}
+	if !reflect.DeepEqual(caller.calls[0].args, want) {
+		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatSendResolvesUserBeforeDispatch(t *testing.T) {
+	caller := &chatChangedContractCaller{resolveUsers: true}
+	err := executeChatChangedContract(t, caller, "message", "send", "--user", "123", "--text", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 2 || caller.calls[1].toolName != "send_personal_message" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	if got := caller.calls[1].args["receiverOpenDingTalkId"]; got != "open-123" {
+		t.Fatalf("receiverOpenDingTalkId = %#v, args = %#v", got, caller.calls[1].args)
+	}
+	if _, leaked := caller.calls[1].args["receiverUid"]; leaked {
+		t.Fatalf("resolved send must not include receiverUid: %#v", caller.calls[1].args)
+	}
+}
+
+func TestCrossPlatformCoverageChatSendFailsClosedWhenUserCannotResolve(t *testing.T) {
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller, "message", "send", "--user", "123", "--text", "hello")
+	if err == nil || !strings.Contains(err.Error(), "pass --open-dingtalk-id instead") {
+		t.Fatalf("error = %v, want explicit resolution failure", err)
+	}
+	for _, call := range caller.calls {
+		if call.toolName == "send_personal_message" {
+			t.Fatalf("unresolved user must not be dispatched: %#v", caller.calls)
+		}
 	}
 }

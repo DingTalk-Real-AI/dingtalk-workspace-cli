@@ -127,17 +127,6 @@ func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
 		if ev.EventType != "user_im_message_receive_at" || ev.EventID != "evt-1" {
 			t.Fatalf("event = %#v", ev)
 		}
-		out := logs.String()
-		for _, want := range []string{"personal source received dataframe", "user_im_message_receive_at", "evt-1", "sub-1", "sourceId", "message", "<redacted>"} {
-			if !strings.Contains(out, want) {
-				t.Fatalf("debug log missing %q: %s", want, out)
-			}
-		}
-		for _, leaked := range []string{"header-secret-token", "data-secret-token", "data-secret", "data-ticket", "Bearer data-auth"} {
-			if strings.Contains(out, leaked) {
-				t.Fatalf("debug log leaked %q: %s", leaked, out)
-			}
-		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for event")
 	}
@@ -157,6 +146,21 @@ func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("source did not stop after cancel")
+	}
+
+	// Start can log a reconnect after emitting the event and before observing
+	// cancellation. Read the shared log buffer only after the goroutine exits so
+	// the assertion remains race-free under `go test -race`.
+	out := logs.String()
+	for _, want := range []string{"personal source received dataframe", "user_im_message_receive_at", "evt-1", "sub-1", "sourceId", "message", "<redacted>"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("debug log missing %q: %s", want, out)
+		}
+	}
+	for _, leaked := range []string{"header-secret-token", "data-secret-token", "data-secret", "data-ticket", "Bearer data-auth"} {
+		if strings.Contains(out, leaked) {
+			t.Fatalf("debug log leaked %q: %s", leaked, out)
+		}
 	}
 }
 

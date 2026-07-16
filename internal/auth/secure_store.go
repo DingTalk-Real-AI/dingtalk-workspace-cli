@@ -99,13 +99,15 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 	}
 
 	finalPath := filepath.Join(configDir, secureDataFile)
-	tmpPath := finalPath + ".tmp"
 
-	// Atomic write with fsync to ensure data durability
-	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, config.FilePerm)
+	// Give every writer its own temporary file. Reusing one fixed .tmp path lets
+	// concurrent saves truncate or rename another writer's ciphertext before it
+	// is complete, which can publish a corrupt final file.
+	tmpFile, err := os.CreateTemp(configDir, secureDataFile+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("creating tmp file: %w", err)
 	}
+	tmpPath := tmpFile.Name()
 
 	writeSuccess := false
 	defer func() {
@@ -172,7 +174,13 @@ func DeleteSecureData(configDir string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("deleting secure data file: %w", err)
 	}
+	// Remove the legacy fixed temporary path and any per-writer temporary files
+	// left behind by an interrupted save.
 	_ = os.Remove(path + ".tmp")
+	tmpPaths, _ := filepath.Glob(path + ".tmp-*")
+	for _, tmpPath := range tmpPaths {
+		_ = os.Remove(tmpPath)
+	}
 	return nil
 }
 
