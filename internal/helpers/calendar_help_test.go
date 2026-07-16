@@ -19,7 +19,7 @@ import (
 	"testing"
 )
 
-func TestCalendarEventCreateHelpKeepsRoomsStringMetavar(t *testing.T) {
+func TestCrossPlatformCoverageCalendarEventCreateHelpKeepsRoomsStringMetavar(t *testing.T) {
 	cmd := newCalendarCommand()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
