@@ -7,30 +7,50 @@ on:
   workflow_dispatch:
     inputs:
       repair_npm_version:
-        description: "Only publish an existing release to npm, e.g. v1.0.48"
+        description: "Recover npm for a public immutable release without moving latest/beta"
         required: false
         type: string
 
 permissions:
-  contents: write
+  contents: read
+
+# Queue tag releases and npm repairs behind one publication lock. The local
+# entrypoint also refuses to tag while a Release run is active.
+concurrency:
+  group: dws-release-publication
+  queue: max
 
 jobs:
-  release:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.repair_npm_version == '' }}
+  release-contract:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    outputs:
+      channel: ${{ steps.contract.outputs.channel }}
+      previous_stable: ${{ steps.contract.outputs.previous_stable }}
+      previous_stable_commit: ${{ steps.contract.outputs.previous_stable_commit }}
+      from_beta: ${{ steps.contract.outputs.from_beta }}
+      from_beta_commit: ${{ steps.contract.outputs.from_beta_commit }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Fetch release branch and official tags
+        run: |
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+
       - name: Check Homebrew PR automation token
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
-        # Organization policy intentionally prevents the broad, built-in
-        # GITHUB_TOKEN from creating PRs. Keep Formula automation on a
-        # repository-scoped token instead of weakening that policy.
         env:
           HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
         run: |
@@ -39,10 +59,196 @@ jobs:
             exit 1
           fi
 
+      - name: Validate release contract
+        id: contract
+        run: |
+          set -eu
+          . ./scripts/release/release-lib.sh
+          channel="$(release_channel_for_version "$GITHUB_REF_NAME")"
+          ./scripts/release/release-contract.sh \
+            --channel "$channel" \
+            --version "$GITHUB_REF_NAME" \
+            --context ci \
+            --remote origin \
+            --branch main \
+            --notes-output "$RUNNER_TEMP/release-notes.md" \
+            --metadata-output "$GITHUB_OUTPUT"
+
+      - name: Verify remote annotated tag authority
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
+      - name: Require successful CI Gate on the sealed commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data } = await github.rest.checks.listForRef({
+              owner,
+              repo,
+              ref: context.sha,
+              check_name: "CI Gate",
+              filter: "latest",
+              per_page: 100,
+            });
+            const passed = data.check_runs.some(
+              (run) => run.name === "CI Gate" && run.conclusion === "success",
+            );
+            if (!passed) {
+              core.setFailed(`CI Gate has not succeeded for ${context.sha}`);
+            }
+
+      - name: Require delivered previous stable baseline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
+          PREVIOUS_STABLE_COMMIT: ${{ steps.contract.outputs.previous_stable_commit }}
+        run: ./scripts/release/verify-delivered-stable.sh "$PREVIOUS_STABLE" "$PREVIOUS_STABLE_COMMIT"
+
+      - name: Require immutable releases governance
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.request(
+              "GET /repos/{owner}/{repo}/immutable-releases",
+              {
+                owner,
+                repo,
+                headers: { "X-GitHub-Api-Version": "2026-03-10" },
+              },
+            );
+            if (response.data.enabled !== true) {
+              core.setFailed("Immutable releases must be enabled before publishing");
+            }
+
+      - name: Require successful beta delivery before stable promotion
+        if: ${{ steps.contract.outputs.channel == 'stable' }}
+        uses: actions/github-script@v7
+        env:
+          FROM_BETA: ${{ steps.contract.outputs.from_beta }}
+          FROM_BETA_COMMIT: ${{ steps.contract.outputs.from_beta_commit }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const expectedAssets = new Set([
+              "dws-darwin-amd64.tar.gz",
+              "dws-darwin-arm64.tar.gz",
+              "dws-linux-amd64.tar.gz",
+              "dws-linux-arm64.tar.gz",
+              "dws-windows-amd64.zip",
+              "dws-windows-arm64.zip",
+              "dws-skills.zip",
+              "checksums.txt",
+            ]);
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner,
+              repo,
+              tag: process.env.FROM_BETA,
+            });
+            if (release.draft || !release.prerelease || !release.immutable) {
+              core.setFailed(`${process.env.FROM_BETA} is not a published immutable prerelease`);
+              return;
+            }
+            const assetNames = release.assets.map((asset) => asset.name);
+            const names = new Set(assetNames);
+            const missing = [...expectedAssets].filter((name) => !names.has(name));
+            const extra = assetNames.filter((name) => !expectedAssets.has(name));
+            if (
+              missing.length > 0 ||
+              extra.length > 0 ||
+              assetNames.length !== expectedAssets.size
+            ) {
+              core.setFailed(
+                `beta release asset set differs: missing=${missing.join(",")} extra=${extra.join(",")}`,
+              );
+              return;
+            }
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id: "release.yml",
+              branch: process.env.FROM_BETA,
+              event: "push",
+              status: "completed",
+              per_page: 100,
+            });
+            const passed = runs.some(
+              (run) =>
+                run.head_sha === process.env.FROM_BETA_COMMIT &&
+                run.head_branch === process.env.FROM_BETA &&
+                run.conclusion === "success",
+            );
+            if (!passed) {
+              core.setFailed(`Release workflow did not succeed for ${process.env.FROM_BETA}`);
+            }
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Test release automation
+        run: go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'
+
+      - name: Verify module files are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Verify released command tree
+        env:
+          PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
+        run: |
+          set -eu
+          test -n "$PREVIOUS_STABLE"
+          ./scripts/policy/check-command-compatibility.sh \
+            --base-ref HEAD \
+            --stable-ref "$PREVIOUS_STABLE"
+
+  release:
+    name: Build signed release artifacts
+    if: ${{ github.event_name == 'push' }}
+    needs: [release-contract]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release branch and official tags
+        run: |
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+
+      - name: Revalidate contract and render release notes
+        run: |
+          ./scripts/release/release-contract.sh \
+            --channel "${{ needs.release-contract.outputs.channel }}" \
+            --version "$GITHUB_REF_NAME" \
+            --context ci \
+            --remote origin \
+            --branch main \
+            --notes-output "$RUNNER_TEMP/release-notes.md"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install archive tooling
         run: sudo apt-get update && sudo apt-get install -y zip unzip
@@ -94,18 +300,20 @@ jobs:
           echo "DWS_APPLE_CERTIFICATE_P12=$certificate_path" >> "$GITHUB_ENV"
           echo "DWS_APPLE_CERTIFICATE_PASSWORD_FILE=$password_path" >> "$GITHUB_ENV"
 
-      - name: Run GoReleaser
+      - name: Build release artifacts without publishing
         uses: goreleaser/goreleaser-action@v6
         with:
-          version: "~> v2"
-          args: release --clean
+          version: "v2.16.0"
+          args: release --clean --skip=publish --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
 
       - name: Post-release packaging
         run: ./scripts/release/post-goreleaser.sh
         env:
           DWS_PACKAGE_VERSION: ${{ github.ref_name }}
+          DWS_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
           DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
 
       - name: Remove Apple Developer ID certificate
@@ -114,14 +322,16 @@ jobs:
           rm -f "$RUNNER_TEMP/dws-developer-id.p12"
           rm -f "$RUNNER_TEMP/dws-developer-id-password"
 
-      # GoReleaser uploads the original archives to a Draft before
-      # post-goreleaser.sh replaces the Darwin binaries. Re-upload every changed
-      # file, verify the Draft digests, and keep it private for Apple validation.
-      - name: Upload finalized signed assets to release
+      - name: Verify final release artifacts
+        run: ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+
+      - name: Verify npm package before sealing GitHub Release
+        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
+
+      - name: Reverify remote tag before sealing GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DWS_PUBLISH_RELEASE: "false"
-        run: ./scripts/release/finalize-github-release.sh
+        run: ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
       - name: Preserve finalized distribution files
         uses: actions/upload-artifact@v4
@@ -132,24 +342,19 @@ jobs:
           retention-days: 1
 
   verify-darwin-signatures:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.repair_npm_version == '' }}
+    name: Verify Apple Developer ID signatures
+    if: ${{ github.event_name == 'push' }}
     needs: release
     runs-on: macos-latest
     timeout-minutes: 10
-
+    permissions:
+      contents: read
     steps:
-      - name: Download finalized Darwin assets from Draft release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          gh release download "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --dir dist \
-            --pattern 'dws-darwin-amd64.tar.gz' \
-            --pattern 'dws-darwin-arm64.tar.gz' \
-            --clobber
+      - name: Restore finalized distribution files
+        uses: actions/download-artifact@v4
+        with:
+          name: finalized-release-dist
+          path: dist
 
       - name: Verify finalized Darwin signatures with Apple codesign
         run: |
@@ -165,18 +370,45 @@ jobs:
           done
 
   publish-release:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.repair_npm_version == '' }}
-    needs:
-      - release
-      - verify-darwin-signatures
+    name: Publish immutable GitHub Release
+    if: ${{ github.event_name == 'push' }}
+    needs: [release-contract, release, verify-darwin-signatures]
     runs-on: ubuntu-latest
-    # The optional Gitee fallback has its own bounded retry budget and may be
-    # enabled during a cross-border incident. Normal releases skip that step.
-    timeout-minutes: 120
-
+    timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
-      - name: Check out repository
+      - name: Check out sealed release source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release branch and official tags
+        run: |
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+
+      - name: Revalidate contract and render release notes
+        run: |
+          ./scripts/release/release-contract.sh \
+            --channel "${{ needs.release-contract.outputs.channel }}" \
+            --version "$GITHUB_REF_NAME" \
+            --context ci \
+            --remote origin \
+            --branch main \
+            --notes-output "$RUNNER_TEMP/release-notes.md"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Restore finalized distribution files
         uses: actions/download-artifact@v4
@@ -184,15 +416,128 @@ jobs:
           name: finalized-release-dist
           path: dist
 
-      - name: Publish verified Draft release
+      - name: Verify finalized release artifacts before publication
+        run: ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+
+      - name: Verify npm package before sealing GitHub Release
+        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
+
+      - name: Reverify remote tag before sealing GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+        run: ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
+      - name: Publish or reuse immutable GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
+        run: |
+          set -eu
+          expected_prerelease=false
+          prerelease_flag=""
+          if [ "$RELEASE_CHANNEL" = "prerelease" ]; then
+            expected_prerelease=true
+            prerelease_flag="--prerelease"
+          fi
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)"
+            is_prerelease="$(gh release view "$GITHUB_REF_NAME" --json isPrerelease --jq .isPrerelease)"
+            if [ "$is_prerelease" != "$expected_prerelease" ]; then
+              echo "Existing release channel does not match $RELEASE_CHANNEL." >&2
+              exit 1
+            fi
+            if [ "$is_draft" = "false" ]; then
+              is_immutable="$(
+                gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+                  "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+                  --jq .immutable
+              )"
+              if [ "$is_immutable" != "true" ]; then
+                echo "Published release is mutable; refusing to reuse its assets." >&2
+                exit 1
+              fi
+              remote_body="$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)"
+              local_body="$(cat "$RUNNER_TEMP/release-notes.md")"
+              if [ "$remote_body" != "$local_body" ]; then
+                echo "Published release notes differ from the sealed CHANGELOG." >&2
+                exit 1
+              fi
+              published_dir="$RUNNER_TEMP/published-release"
+              mkdir -p "$published_dir"
+              gh release download "$GITHUB_REF_NAME" \
+                --dir "$published_dir" \
+                --pattern 'dws-*' \
+                --pattern 'checksums.txt' \
+                --clobber
+              DWS_PACKAGE_DIST_DIR="$published_dir" \
+                ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+              for asset in "$published_dir"/dws-* "$published_dir"/checksums.txt; do
+                cp "$asset" dist/
+              done
+              DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+                DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
+                ./scripts/release/stage-npm-package.sh "$GITHUB_REF_NAME"
+              echo "Published GitHub Release is immutable and verified; reusing its exact assets."
+              exit 0
+            fi
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            # shellcheck disable=SC2086
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --draft \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" \
+              $prerelease_flag
+          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/dws-*.tar.gz \
+            dist/dws-windows-*.zip \
+            dist/dws-skills.zip \
+            dist/checksums.txt \
+            --clobber
+          ./scripts/release/verify-github-release-assets.sh "$GITHUB_REF_NAME"
+          sealed_upload="$RUNNER_TEMP/sealed-upload"
+          rm -rf "$sealed_upload"
+          mkdir -p "$sealed_upload"
+          gh release download "$GITHUB_REF_NAME" \
+            --dir "$sealed_upload" \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          DWS_PACKAGE_DIST_DIR="$sealed_upload" \
+            ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+          for remote_asset in "$sealed_upload"/dws-* "$sealed_upload"/checksums.txt; do
+            local_asset="dist/$(basename "$remote_asset")"
+            cmp -s "$local_asset" "$remote_asset" || {
+              echo "Uploaded GitHub asset differs from local sealed bytes: $(basename "$remote_asset")" >&2
+              exit 1
+            }
+          done
+          gh release edit "$GITHUB_REF_NAME" --draft=false
+
+      - name: Require immutable published GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          immutable="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              --jq .immutable
+          )"
+          test "$immutable" = true || {
+            echo "GitHub Release is not immutable; refusing downstream publication." >&2
+            exit 1
+          }
+          ./scripts/release/verify-github-release-assets.sh "$GITHUB_REF_NAME"
+          ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
       - name: Open stable Homebrew formula PR
-        # Beta builds must never replace the stable Homebrew formula. Formula
-        # updates use the normal PR path instead of writing main from a tag job.
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(github.ref_name, '-') }}
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'stable' }}
         run: ./scripts/release/publish-homebrew-formula.sh
         env:
           DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
@@ -203,9 +548,7 @@ jobs:
           DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ github.ref_name }}"
 
       - name: Open beta Homebrew formula PR
-        # Keep beta in a separately named, keg-only Formula so it cannot replace the
-        # stable dws link for ordinary Homebrew users.
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(github.ref_name, '-') }}
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'prerelease' }}
         run: ./scripts/release/publish-homebrew-formula.sh
         env:
           DWS_FORMULA_SOURCE: dist/homebrew/dingtalk-workspace-cli-beta.rb
@@ -217,17 +560,39 @@ jobs:
           DWS_TAP_PR_TITLE: "chore: update Homebrew beta formula for ${{ github.ref_name }}"
           DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ github.ref_name }}"
 
-      - name: Sync release to China OSS mirror
-        # 自动同步到国内镜像，供 install.sh 的 DWS_RELEASE_BASE 开关消费。
-        # 脚本自带门控：未配置 OSS_* secret 时优雅跳过，不影响海外发布。
-        run: ./scripts/release/sync-to-oss.sh
-        env:
-          VERSION: ${{ github.ref_name }}
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
-          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
-          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+      - name: Reverify exact immutable npm package
+        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
+
+  publish-channels:
+    name: Publish npm and mirrors
+    if: ${{ github.event_name == 'push' }}
+    needs: [release-contract, publish-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out sealed release source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release branch and official tags
+        run: |
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+
+      - name: Revalidate sealed contract
+        run: |
+          ./scripts/release/release-contract.sh \
+            --channel "${{ needs.release-contract.outputs.channel }}" \
+            --version "$GITHUB_REF_NAME" \
+            --context ci \
+            --remote origin \
+            --branch main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -235,34 +600,189 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Publish stable to npm
-        # 只有官方仓库发 npm；fork（dev 预览）没有 NPM_TOKEN，跳过以免红叉。
-        # 必须在 Gitee mirror 前发布：Gitee 附件上传偶发长时间挂住，不能阻塞 npm/latest。
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(github.ref_name, '-') }}
-        working-directory: dist/npm/dingtalk-workspace-cli
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
 
-      - name: Publish prerelease to npm beta
-        # 预发布版本不能更新 npm latest，避免普通 npm 安装链路拿到 beta。
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(github.ref_name, '-') }}
-        working-directory: dist/npm/dingtalk-workspace-cli
-        run: npm publish --access public --tag beta
+      - name: Download and verify immutable GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          release_state="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              --jq '[.draft, .immutable] | @tsv'
+          )"
+          test "$release_state" = "$(printf 'false\ttrue')" || {
+            echo "GitHub Release must be public and immutable before channel publication." >&2
+            exit 1
+          }
+          ./scripts/release/verify-github-release-assets.sh "$GITHUB_REF_NAME"
+          ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          mkdir -p dist
+          gh release download "$GITHUB_REF_NAME" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+          DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
+            DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            ./scripts/release/stage-npm-package.sh "$GITHUB_REF_NAME"
+
+      - name: Verify immutable npm package without publication credentials
+        run: |
+          ./scripts/release/verify-package-managers.sh \
+            --npm-only \
+            --expected-version "$GITHUB_REF_NAME"
+
+      - name: Inspect npm channel state
+        id: npm-state
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        env:
+          RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
+        run: |
+          set -eu
+          . ./scripts/release/release-lib.sh
+          semver="${GITHUB_REF_NAME#v}"
+          npm_tag=latest
+          if [ "$RELEASE_CHANNEL" = "prerelease" ]; then npm_tag=beta; fi
+          current="$(npm view dingtalk-workspace-cli "dist-tags.$npm_tag")"
+          local_integrity="$(
+            ./scripts/release/pack-npm-package.sh \
+              "$GITHUB_WORKSPACE/dist/npm/dingtalk-workspace-cli" \
+              "$RUNNER_TEMP/dingtalk-workspace-cli.tgz"
+          )"
+          version_error="$RUNNER_TEMP/npm-version-error.log"
+          if existing="$(npm view "dingtalk-workspace-cli@$semver" version 2>"$version_error")"; then
+            if [ "$existing" != "$semver" ]; then
+              echo "npm returned unexpected version $existing for $semver" >&2
+              exit 1
+            fi
+          elif grep -Eq 'E404|404 Not Found' "$version_error"; then
+            existing=""
+          else
+            cat "$version_error" >&2
+            exit 1
+          fi
+          if [ -n "$existing" ]; then
+            remote_integrity="$(npm view "dingtalk-workspace-cli@$semver" dist.integrity)"
+            if [ -z "$remote_integrity" ] || [ "$remote_integrity" != "$local_integrity" ]; then
+              echo "npm $semver integrity differs from the sealed package." >&2
+              echo "local:  $local_integrity" >&2
+              echo "remote: $remote_integrity" >&2
+              exit 1
+            fi
+            advance_channel=false
+            if [ "$current" = "$semver" ]; then
+              :
+            elif [ -n "$current" ] && release_version_is_greater "v$current" "$GITHUB_REF_NAME"; then
+              echo "npm $npm_tag already points to newer v$current; leaving it unchanged."
+            elif [ -z "$current" ] || release_version_is_greater "$GITHUB_REF_NAME" "v$current"; then
+              advance_channel=true
+            else
+              echo "Cannot reconcile npm $npm_tag=$current with $GITHUB_REF_NAME" >&2
+              exit 1
+            fi
+            {
+              echo "published=true"
+              echo "advance_channel=$advance_channel"
+              echo "npm_tag=$npm_tag"
+              echo "semver=$semver"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$current" ] && ! release_version_is_greater "$GITHUB_REF_NAME" "v$current"; then
+            echo "$GITHUB_REF_NAME would move npm $npm_tag backwards from v$current" >&2
+            exit 1
+          fi
+          {
+            echo "published=false"
+            echo "advance_channel=false"
+            echo "npm_tag=$npm_tag"
+            echo "semver=$semver"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish missing version to npm channel
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && steps.npm-state.outputs.published != 'true' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ steps.npm-state.outputs.npm_tag }}
+          SEMVER: ${{ steps.npm-state.outputs.semver }}
+        run: |
+          set -eu
+          . ./scripts/release/release-lib.sh
+          current="$(npm view dingtalk-workspace-cli "dist-tags.$NPM_TAG")"
+          if [ -n "$current" ] && [ "$current" != "$SEMVER" ] && ! release_version_is_greater "v$SEMVER" "v$current"; then
+            echo "Refusing to move npm $NPM_TAG backwards from v$current to v$SEMVER" >&2
+            exit 1
+          fi
+          npm publish "$RUNNER_TEMP/dingtalk-workspace-cli.tgz" \
+            --access public \
+            --tag "$NPM_TAG" \
+            --ignore-scripts \
+            --registry=https://registry.npmjs.org
+
+      - name: Advance npm channel for an existing exact version
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && steps.npm-state.outputs.advance_channel == 'true' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ steps.npm-state.outputs.npm_tag }}
+          SEMVER: ${{ steps.npm-state.outputs.semver }}
+        run: |
+          set -eu
+          . ./scripts/release/release-lib.sh
+          current="$(npm view dingtalk-workspace-cli "dist-tags.$NPM_TAG")"
+          if [ "$current" = "$SEMVER" ]; then exit 0; fi
+          if [ -n "$current" ] && release_version_is_greater "v$current" "v$SEMVER"; then
+            echo "npm $NPM_TAG advanced to newer v$current; leaving it unchanged."
+            exit 0
+          fi
+          if [ -n "$current" ] && ! release_version_is_greater "v$SEMVER" "v$current"; then
+            echo "Refusing unsafe npm $NPM_TAG transition from v$current to v$SEMVER" >&2
+            exit 1
+          fi
+          npm dist-tag add "dingtalk-workspace-cli@$SEMVER" "$NPM_TAG" \
+            --registry=https://registry.npmjs.org
+
+      - name: Verify npm channel delivery
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        env:
+          NPM_TAG: ${{ steps.npm-state.outputs.npm_tag }}
+          SEMVER: ${{ steps.npm-state.outputs.semver }}
+        run: |
+          set -eu
+          . ./scripts/release/release-lib.sh
+          delivered="$(npm view dingtalk-workspace-cli "dist-tags.$NPM_TAG")"
+          if [ "$delivered" = "$SEMVER" ]; then exit 0; fi
+          release_version_is_greater "v$delivered" "v$SEMVER" || {
+            echo "npm $NPM_TAG=$delivered does not deliver or supersede v$SEMVER" >&2
+            exit 1
+          }
+          echo "npm $NPM_TAG already supersedes this historical rerun at v$delivered."
+
+      - name: Sync release artifacts to China OSS mirror
+        run: ./scripts/release/sync-to-oss.sh
+        env:
+          VERSION: ${{ github.ref_name }}
+          DWS_RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+          DWS_REQUIRE_OSS: ${{ github.repository_owner == 'DingTalk-Real-AI' && '1' || '0' }}
 
   mirror-gitee-release:
-    # Keep the optional cross-border fallback out of publish-release so all
-    # pre-sync work has an independently provable budget.
+    name: Mirror immutable release to Gitee
     if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
-    needs:
-      - release
-      - publish-release
+    needs: [release, publish-channels]
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
     steps:
-      - name: Check out repository
+      - name: Check out sealed release source
         uses: actions/checkout@v4
         timeout-minutes: 5
 
@@ -281,45 +801,152 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_USER: ${{ secrets.GITEE_USER }}
           GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          DWS_REQUIRE_GITEE: "1"
 
   repair-npm:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && github.ref_name == github.event.repository.default_branch && github.repository_owner == 'DingTalk-Real-AI' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - name: Check out repository
+      - name: Check out trusted release tooling
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: tooling
 
-      - name: Download GitHub release assets
+      - name: Validate repair version
+        id: version
+        working-directory: tooling
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.repair_npm_version }}
         run: |
           set -eu
-          mkdir -p dist
-          gh release download "${{ inputs.repair_npm_version }}" \
-            --repo "${{ github.repository }}" \
-            --dir dist \
-            --pattern 'dws-*' \
-            --pattern 'checksums.txt' \
-            --clobber
-          ls -la dist
+          . ./scripts/release/release-lib.sh
+          if ! release_is_stable_version "$VERSION" && ! release_is_prerelease_version "$VERSION"; then
+            echo "Invalid release version: $VERSION" >&2
+            exit 2
+          fi
+          echo "semver=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Stage npm package
-        run: |
-          set -eu
-          version="${{ inputs.repair_npm_version }}"
-          semver="${version#v}"
-          pkg_root="dist/npm/dingtalk-workspace-cli"
-          rm -rf "$pkg_root"
-          mkdir -p "$pkg_root/assets" "$pkg_root/bin"
-          cp build/npm/install.js "$pkg_root/install.js"
-          cp build/npm/bin/dws.js "$pkg_root/bin/dws.js"
-          cp build/npm/README.md "$pkg_root/README.md"
-          sed "s|__VERSION__|${semver}|g" build/npm/package.json.tmpl > "$pkg_root/package.json"
-          cp dist/dws-* "$pkg_root/assets/"
-          cp dist/checksums.txt "$pkg_root/assets/"
-          test -f "$pkg_root/assets/dws-skills.zip"
-          cat "$pkg_root/package.json"
+      - name: Verify immutable release authority
+        id: authority
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ inputs.repair_npm_version }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const version = process.env.VERSION;
+            const ref = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: `tags/${version}`,
+            });
+            if (ref.data.object.type !== "tag") {
+              core.setFailed(`${version} is not an annotated tag`);
+              return;
+            }
+            const tag = await github.rest.git.getTag({
+              owner,
+              repo,
+              tag_sha: ref.data.object.sha,
+            });
+            if (tag.data.tag !== version || tag.data.object.type !== "commit") {
+              core.setFailed(`${version} does not resolve to one annotated commit tag`);
+              return;
+            }
+            const commitSha = tag.data.object.sha;
+            const defaultBranch = context.payload.repository.default_branch;
+            const branch = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: defaultBranch,
+            });
+            const comparison = await github.rest.repos.compareCommitsWithBasehead({
+              owner,
+              repo,
+              basehead: `${commitSha}...${branch.data.commit.sha}`,
+            });
+            if (!["ahead", "identical"].includes(comparison.data.status)) {
+              core.setFailed(`${version} is not contained in ${defaultBranch}`);
+              return;
+            }
+            const release = await github.rest.repos.getReleaseByTag({
+              owner,
+              repo,
+              tag: version,
+            });
+            if (
+              release.data.tag_name !== version ||
+              release.data.draft ||
+              !release.data.immutable
+            ) {
+              core.setFailed(`${version} is not a public immutable GitHub Release`);
+              return;
+            }
+            const expectedAssets = new Set([
+              "dws-darwin-amd64.tar.gz",
+              "dws-darwin-arm64.tar.gz",
+              "dws-linux-amd64.tar.gz",
+              "dws-linux-arm64.tar.gz",
+              "dws-windows-amd64.zip",
+              "dws-windows-arm64.zip",
+              "dws-skills.zip",
+              "checksums.txt",
+            ]);
+            const assetNames = release.data.assets.map((asset) => asset.name);
+            if (
+              assetNames.length !== expectedAssets.size ||
+              assetNames.some((name) => !expectedAssets.has(name)) ||
+              new Set(assetNames).size !== expectedAssets.size
+            ) {
+              core.setFailed(`${version} does not contain the exact release asset set`);
+              return;
+            }
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id: "release.yml",
+              branch: version,
+              event: "push",
+              status: "completed",
+              per_page: 100,
+            });
+            let passed = false;
+            for (const run of runs) {
+              if (run.head_sha !== commitSha || run.head_branch !== version) continue;
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                owner,
+                repo,
+                run_id: run.id,
+                filter: "all",
+                per_page: 100,
+              });
+              if (
+                jobs.some(
+                  (job) =>
+                    job.name === "Publish immutable GitHub Release" &&
+                    job.conclusion === "success",
+                )
+              ) {
+                passed = true;
+                break;
+              }
+            }
+            if (!passed) {
+              core.setFailed(`Immutable GitHub Release job did not succeed for ${version} at ${commitSha}`);
+              return;
+            }
+            core.setOutput("commit_sha", commitSha);
+
+      - name: Check out target release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.authority.outputs.commit_sha }}
+          path: release-source
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -327,16 +954,74 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Publish stable to npm
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(inputs.repair_npm_version, '-') }}
-        working-directory: dist/npm/dingtalk-workspace-cli
-        run: npm publish --access public
+      - name: Download and verify GitHub release assets
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.repair_npm_version }}
+        run: |
+          set -eu
+          mkdir -p dist
+          gh release download "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-release-artifacts.sh" "$VERSION"
 
-      - name: Publish prerelease to npm beta
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(inputs.repair_npm_version, '-') }}
-        working-directory: dist/npm/dingtalk-workspace-cli
-        run: npm publish --access public --tag beta
+      - name: Stage and verify target npm package
+        env:
+          VERSION: ${{ inputs.repair_npm_version }}
+        run: |
+          set -eu
+          DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE/release-source" \
+            DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            "$GITHUB_WORKSPACE/tooling/scripts/release/stage-npm-package.sh" "$VERSION"
+          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-package-managers.sh" \
+              --npm-only \
+              --expected-version "$VERSION" \
+              --skip-skill-targets
+
+      - name: Inspect npm version
+        id: npm
+        env:
+          SEMVER: ${{ steps.version.outputs.semver }}
+        run: |
+          set -eu
+          local_integrity="$(
+            "$GITHUB_WORKSPACE/tooling/scripts/release/pack-npm-package.sh" \
+              "$GITHUB_WORKSPACE/dist/npm/dingtalk-workspace-cli" \
+              "$RUNNER_TEMP/dingtalk-workspace-cli-repair.tgz"
+          )"
+          version_error="$RUNNER_TEMP/npm-version-error.log"
+          if existing="$(npm view "dingtalk-workspace-cli@$SEMVER" version 2>"$version_error")"; then
+            if [ "$existing" != "$SEMVER" ]; then
+              echo "npm returned unexpected version $existing for $SEMVER" >&2
+              exit 1
+            fi
+          elif grep -Eq 'E404|404 Not Found' "$version_error"; then
+            existing=""
+          else
+            cat "$version_error" >&2
+            exit 1
+          fi
+          if [ "$existing" = "$SEMVER" ]; then
+            remote_integrity="$(npm view "dingtalk-workspace-cli@$SEMVER" dist.integrity)"
+            if [ -z "$remote_integrity" ] || [ "$remote_integrity" != "$local_integrity" ]; then
+              echo "npm $SEMVER integrity differs from the immutable release package." >&2
+              echo "local:  $local_integrity" >&2
+              echo "remote: $remote_integrity" >&2
+              exit 1
+            fi
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Backfill exact version to npm
+        if: ${{ steps.npm.outputs.published != 'true' }}
+        run: npm publish "$RUNNER_TEMP/dingtalk-workspace-cli-repair.tgz" --access public --tag backfill --ignore-scripts --registry=https://registry.npmjs.org
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

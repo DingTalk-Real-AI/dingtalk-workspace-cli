@@ -90,21 +90,9 @@ resolve_release_base_url() {
 
 stage_npm_package() {
   version="$1"
-  pkg_root="$DIST_DIR/npm/dingtalk-workspace-cli"
-
-  rm -rf "$pkg_root"
-  mkdir -p "$pkg_root/assets" "$pkg_root/bin"
-
-  cp "$ROOT/build/npm/install.js" "$pkg_root/install.js"
-  cp "$ROOT/build/npm/bin/dws.js" "$pkg_root/bin/dws.js"
-  cp "$ROOT/build/npm/README.md" "$pkg_root/README.md"
-  sed "s|__VERSION__|$version|g" "$ROOT/build/npm/package.json.tmpl" > "$pkg_root/package.json"
-
-  for artifact in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/dws-skills.zip; do
-    if [ -f "$artifact" ]; then
-      cp "$artifact" "$pkg_root/assets/"
-    fi
-  done
+  DWS_PACKAGE_SOURCE_ROOT="$ROOT" \
+    DWS_PACKAGE_DIST_DIR="$DIST_DIR" \
+    "$ROOT/scripts/release/stage-npm-package.sh" "$version"
 }
 
 # ---------- Homebrew formula staging ----------

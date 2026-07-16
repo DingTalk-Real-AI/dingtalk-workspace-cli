@@ -1,0 +1,6 @@
+paths:
+  .github/workflows/release.yml:
+    ignore:
+      # GitHub Actions added concurrency.queue in 2026. actionlint v1.7.12's
+      # bundled workflow schema has not caught up with the platform syntax.
+      - 'unexpected key "queue" for "concurrency" section'
