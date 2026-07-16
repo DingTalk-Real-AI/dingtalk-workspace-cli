@@ -72,7 +72,7 @@ func executeQualityEvaluationCommand(t *testing.T, product string, caller *quali
 	return cmd.Execute()
 }
 
-func TestSheetRangeReadRejectsNullToolResponse(t *testing.T) {
+func TestCrossPlatformCoverageSheetRangeReadRejectsNullToolResponse(t *testing.T) {
 	for _, command := range []string{"read", "get"} {
 		t.Run(command, func(t *testing.T) {
 			caller := &qualityEvaluationCaller{}
@@ -88,7 +88,7 @@ func TestSheetRangeReadRejectsNullToolResponse(t *testing.T) {
 	}
 }
 
-func TestTodoCommandsRejectMissingTaskBeforeTargetCall(t *testing.T) {
+func TestCrossPlatformCoverageTodoCommandsRejectMissingTaskBeforeTargetCall(t *testing.T) {
 	tests := []struct {
 		name       string
 		args       []string
@@ -112,7 +112,7 @@ func TestTodoCommandsRejectMissingTaskBeforeTargetCall(t *testing.T) {
 	}
 }
 
-func TestTodoCommandsPreflightExistingTask(t *testing.T) {
+func TestCrossPlatformCoverageTodoCommandsPreflightExistingTask(t *testing.T) {
 	tests := []struct {
 		name       string
 		args       []string
@@ -135,7 +135,7 @@ func TestTodoCommandsPreflightExistingTask(t *testing.T) {
 	}
 }
 
-func TestTodoTaskPreflightIsSkippedForDryRun(t *testing.T) {
+func TestCrossPlatformCoverageTodoTaskPreflightIsSkippedForDryRun(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
