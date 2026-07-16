@@ -650,6 +650,95 @@ func TestEnrichPATErrorWithOpenBrowserKeepsAuthorizationURLAmpersandReadable(t *
 	}
 }
 
+func TestCrossPlatformCoverageHandlePatAuthCheckOrgPolicyDenied(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	originalClientID := authpkg.ClientID()
+	originalClientSecret := authpkg.ClientSecret()
+	t.Cleanup(func() {
+		authpkg.SetClientID(originalClientID)
+		authpkg.SetClientSecret(originalClientSecret)
+	})
+
+	originalOpenBrowser := openBrowserFunc
+	t.Cleanup(func() { openBrowserFunc = originalOpenBrowser })
+
+	for _, test := range []struct {
+		name   string
+		format string
+	}{
+		{name: "structured", format: "json"},
+		{name: "human"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			configDir := t.TempDir()
+			t.Setenv("DWS_CONFIG_DIR", configDir)
+			if _, err := pat.SetBrowserPolicy(configDir, "", true); err != nil {
+				t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+			}
+
+			authpkg.SetClientID("existing-client-id")
+			authpkg.SetClientSecret("existing-client-secret")
+			opened := false
+			openBrowserFunc = func(string) error {
+				opened = true
+				return nil
+			}
+			retried := false
+			runner := &runtimeRunner{
+				globalFlags: &GlobalFlags{Format: test.format},
+				fallback: &mockRunner{runFunc: func(context.Context, executor.Invocation) (executor.Result, error) {
+					retried = true
+					return executor.Result{}, nil
+				}},
+			}
+			raw := `{"success":false,"code":"PAT_ORG_POLICY_DENIED","data":{"hint":"组织策略已禁止当前工具所需的开源数据权限","scope":"contact.user.read","flowId":"terminal-flow","uri":"https://example.com/pat","clientId":"denied-client-id","clientSecret":"denied-client-secret","openBrowser":true}}`
+
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			var out bytes.Buffer
+			_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+				CanonicalProduct: "contact",
+				Tool:             "get_current_user_profile",
+				CanonicalPath:    "contact.get_current_user_profile",
+			}, &apperrors.PATError{RawJSON: raw}, configDir, &out)
+			if err == nil {
+				t.Fatal("expected PATError")
+			}
+			if got := strings.TrimSpace(out.String()); got != "" {
+				t.Fatalf("terminal denial produced human authorization or polling output %q", got)
+			}
+			if opened {
+				t.Fatal("terminal denial opened a browser")
+			}
+			if retried {
+				t.Fatal("terminal denial retried the invocation")
+			}
+			if got := authpkg.ClientID(); got != "existing-client-id" {
+				t.Fatalf("client ID = %q, want existing process credential preserved", got)
+			}
+			if got := authpkg.ClientSecret(); got != "existing-client-secret" {
+				t.Fatalf("client secret = %q, want existing process credential preserved", got)
+			}
+
+			patOut, ok := err.(*apperrors.PATError)
+			if !ok {
+				t.Fatalf("expected *PATError, got %T: %v", err, err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+				t.Fatalf("json.Unmarshal(PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+			}
+			data, _ := payload["data"].(map[string]any)
+			if got, ok := data["openBrowser"].(bool); !ok || got {
+				t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+			}
+			if got, _ := data["hint"].(string); !strings.Contains(got, "组织策略") {
+				t.Fatalf("data.hint = %q, want org policy guidance", got)
+			}
+		})
+	}
+}
+
 func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
