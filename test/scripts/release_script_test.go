@@ -704,8 +704,9 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 			dist := filepath.Join(root, "dist")
 			seedVersionedReleaseArtifacts(t, dist, test.version)
 			logPath := filepath.Join(root, "ossutil.log")
+			argsLogPath := filepath.Join(root, "ossutil-args.log")
 			fakeOSSUtil := filepath.Join(root, "ossutil")
-			mustWriteFile(t, fakeOSSUtil, []byte("#!/bin/sh\nset -eu\nprevious=\npenultimate=\nfor arg in \"$@\"; do penultimate=\"$previous\"; previous=\"$arg\"; done\nlast=\"$previous\"\ncase \"$penultimate\" in oss://*) echo 'ErrorCode=NoSuchKey' >&2; exit 1 ;; esac\nprintf '%s\\n' \"$last\" >> \"$OSSUTIL_LOG\"\n"), 0o755)
+			mustWriteFile(t, fakeOSSUtil, []byte("#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" >> \"$OSSUTIL_ARGS_LOG\"\nprevious=\npenultimate=\nfor arg in \"$@\"; do penultimate=\"$previous\"; previous=\"$arg\"; done\nlast=\"$previous\"\ncase \"$penultimate\" in oss://*) echo 'ErrorCode=NoSuchKey' >&2; exit 1 ;; esac\nprintf '%s\\n' \"$last\" >> \"$OSSUTIL_LOG\"\n"), 0o755)
 
 			cmd := exec.Command("bash", script)
 			cmd.Dir = sourceRoot
@@ -720,6 +721,7 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 				"OSS_PREFIX=dws",
 				"OSSUTIL="+fakeOSSUtil,
 				"OSSUTIL_LOG="+logPath,
+				"OSSUTIL_ARGS_LOG="+argsLogPath,
 			)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
@@ -738,6 +740,15 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 			hasInstaller := strings.Contains(string(logData), "/dws/install.sh")
 			if hasInstaller != test.installer {
 				t.Fatalf("installer upload = %v, want %v:\n%s", hasInstaller, test.installer, logData)
+			}
+			argsData, err := os.ReadFile(argsLogPath)
+			if err != nil {
+				t.Fatalf("ReadFile(ossutil args log) error = %v", err)
+			}
+			for _, forbidden := range []string{"test-key", "test-secret", "--access-key-id", "--access-key-secret"} {
+				if strings.Contains(string(argsData), forbidden) {
+					t.Fatalf("ossutil argv exposed %q:\n%s", forbidden, argsData)
+				}
 			}
 		})
 	}

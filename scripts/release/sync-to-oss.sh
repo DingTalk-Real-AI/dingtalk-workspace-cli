@@ -107,9 +107,9 @@ fi
 
 oss_cp() {
   # oss_cp <local-file> <oss-key>
+  # ossutil reads OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET from the
+  # environment. Never copy either secret into the process argv.
   "$OSSUTIL" cp -f \
-    --access-key-id "$OSS_ACCESS_KEY_ID" \
-    --access-key-secret "$OSS_ACCESS_KEY_SECRET" \
     --endpoint "$OSS_ENDPOINT" \
     "$1" "oss://${OSS_BUCKET}/$2"
 }
@@ -117,8 +117,6 @@ oss_cp() {
 oss_get() {
   # oss_get <oss-key> <local-file>
   "$OSSUTIL" cp -f \
-    --access-key-id "$OSS_ACCESS_KEY_ID" \
-    --access-key-secret "$OSS_ACCESS_KEY_SECRET" \
     --endpoint "$OSS_ENDPOINT" \
     "oss://${OSS_BUCKET}/$1" "$2"
 }

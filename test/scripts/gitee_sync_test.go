@@ -149,6 +149,79 @@ exec %q "$@"
 	}
 }
 
+func TestSyncGiteeTagUsesAskpassWithoutEmbeddingCredentials(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	expectedCommit := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", "v1.2.3^{commit}"))
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("LookPath(git) error = %v", err)
+	}
+	wrapperDir := t.TempDir()
+	logPath := filepath.Join(root, "git.log")
+	pushMarker := filepath.Join(root, "pushed")
+	wrapper := fmt.Sprintf(`#!/bin/sh
+set -eu
+case "$1" in
+  ls-remote)
+    printf '%%s\n' "$*" >>"$GIT_TEST_LOG"
+    case " $* " in *"$DWS_GITEE_TOKEN"*) exit 91 ;; esac
+    [ "${GIT_TERMINAL_PROMPT:-}" = "0" ]
+    [ -x "${GIT_ASKPASS:-}" ]
+    [ "$("$GIT_ASKPASS" "Username for https://gitee.com")" = "$DWS_GITEE_USER" ]
+    [ "$("$GIT_ASKPASS" "Password for https://gitee.com")" = "$DWS_GITEE_TOKEN" ]
+    if [ -f "$GIT_PUSH_MARKER" ]; then
+      printf '%%s\trefs/tags/v1.2.3^{}\n' "$EXPECTED_COMMIT"
+    fi
+    ;;
+  push)
+    printf '%%s\n' "$*" >>"$GIT_TEST_LOG"
+    case " $* " in *"$DWS_GITEE_TOKEN"*) exit 92 ;; esac
+    [ "$2" = "https://gitee.com/owner/repo.git" ]
+    : >"$GIT_PUSH_MARKER"
+    ;;
+  *) exec %q "$@" ;;
+esac
+`, realGit)
+	mustWriteFile(t, filepath.Join(wrapperDir, "git"), []byte(wrapper), 0o755)
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		"PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"VERSION=v1.2.3",
+		"GITEE_USER=test-user",
+		"GITEE_TOKEN=sensitive-token",
+		"GITEE_REPO=owner/repo",
+		"GITEE_SOURCE_REMOTE=",
+		"GITEE_GIT_REMOTE=",
+		"GITEE_PUBLIC_GIT_REMOTE=",
+		"GITEE_TAG_VERIFY_ATTEMPTS=1",
+		"GITEE_TAG_VERIFY_DELAY=0",
+		"GITEE_GIT_TIMEOUT_SECONDS=10",
+		"GIT_TEST_LOG="+logPath,
+		"GIT_PUSH_MARKER="+pushMarker,
+		"EXPECTED_COMMIT="+expectedCommit,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("sync-gitee-tag.sh error = %v\noutput:\n%s", err, output)
+	}
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile(git log) error = %v", err)
+	}
+	if strings.Contains(string(logData), "sensitive-token") {
+		t.Fatalf("Gitee token leaked into git argv:\n%s", logData)
+	}
+	if !strings.Contains(string(logData), "push https://gitee.com/owner/repo.git") {
+		t.Fatalf("tag push did not use the credential-free remote:\n%s", logData)
+	}
+}
+
 func TestSyncGiteeTagAndReleasePathShareOneOverallDeadline(t *testing.T) {
 	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-to-gitee.sh"))
 	root := t.TempDir()
@@ -213,6 +286,16 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 	releaseLookups := 0
 	releaseCreates := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/repos/") {
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				t.Errorf("Authorization header = %q, want token authentication", got)
+			}
+			if got := r.URL.Query().Get("access_token"); got != "" {
+				t.Errorf("Gitee token leaked in query string: %q", got)
+			}
+		} else if got := r.Header.Get("Authorization"); got != "" {
+			t.Errorf("token forwarded to asset download URL: %q", got)
+		}
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/releases/tags/v1.2.3":
 			releaseMu.Lock()
@@ -220,11 +303,17 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 			releaseMu.Unlock()
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/releases":
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Errorf("ParseMultipartForm(release create) error = %v", err)
+			}
+			if got := r.FormValue("access_token"); got != "" {
+				t.Errorf("Gitee token leaked in release form: %q", got)
+			}
 			releaseMu.Lock()
 			releaseCreates++
 			releaseMu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
+			_, _ = io.WriteString(w, `{"metadata":{"id":999},"id":1}`)
 		default:
 			fake.ServeHTTP(w, r)
 		}
@@ -416,6 +505,14 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 		t.Fatalf("ReadFile(%s) error = %v", reconcilerPath, err)
 	}
 	reconciler := string(reconcilerData)
+	for _, forbidden := range []string{"?access_token=", `-F "access_token=`} {
+		if strings.Contains(syncScript, forbidden) || strings.Contains(reconciler, forbidden) {
+			t.Fatalf("Gitee API scripts still expose tokens via %q", forbidden)
+		}
+	}
+	if !strings.Contains(syncScript, "Authorization: token") || !strings.Contains(reconciler, "Authorization: token") {
+		t.Fatal("Gitee API scripts must authenticate with an Authorization header")
+	}
 	perAssetSeconds := shellDefaultInt(t, reconciler, "GITEE_ASSET_TIMEOUT_SECONDS")
 	overallSeconds := shellDefaultInt(t, reconciler, "GITEE_OVERALL_TIMEOUT_SECONDS")
 	finalListSeconds := shellDefaultInt(t, reconciler, "GITEE_LIST_MAX_TIME")
@@ -483,6 +580,21 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 	}
 	if !strings.Contains(string(localPublishData), "Direct Gitee artifact publication is disabled") {
 		t.Fatal("direct local Gitee publication must stay disabled")
+	}
+
+	tagSyncPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	tagSyncData, err := os.ReadFile(tagSyncPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", tagSyncPath, err)
+	}
+	tagSync := string(tagSyncData)
+	if strings.Contains(tagSync, `https://${GITEE_USER}:${GITEE_TOKEN}@`) {
+		t.Fatal("Gitee git remote must not embed credentials")
+	}
+	for _, required := range []string{"GIT_ASKPASS", "GIT_TERMINAL_PROMPT", "DWS_GITEE_TOKEN"} {
+		if !strings.Contains(tagSync, required) {
+			t.Fatalf("Gitee tag sync missing askpass safeguard %q", required)
+		}
 	}
 }
 
@@ -657,6 +769,19 @@ func newFakeGiteeRelease(dropFirstResponse, failUploads bool) *fakeGiteeRelease 
 
 func (f *fakeGiteeRelease) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	const attachPath = "/repos/owner/repo/releases/1/attach_files"
+	if strings.HasPrefix(r.URL.Path, "/repos/") {
+		if got := r.Header.Get("Authorization"); got != "token test-token" {
+			http.Error(w, "missing token authorization header", http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Query().Get("access_token") != "" {
+			http.Error(w, "token leaked in query string", http.StatusBadRequest)
+			return
+		}
+	} else if r.Header.Get("Authorization") != "" {
+		http.Error(w, "token forwarded to asset download URL", http.StatusBadRequest)
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == attachPath:
 		f.list(w, r)
@@ -690,6 +815,10 @@ func (f *fakeGiteeRelease) list(w http.ResponseWriter, r *http.Request) {
 func (f *fakeGiteeRelease) upload(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if r.FormValue("access_token") != "" {
+		http.Error(w, "token leaked in upload form", http.StatusBadRequest)
 		return
 	}
 	file, header, err := r.FormFile("file")
