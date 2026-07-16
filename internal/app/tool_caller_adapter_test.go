@@ -89,6 +89,7 @@ func TestCrossPlatformCoverageToolCallerAdapter_GlobalDryRunAllowsOnlyExactPATRe
 		transport:   transport.NewClient(server.Client()),
 		globalFlags: flags,
 		fallback:    executor.EchoRunner{},
+		auditSink:   audit.NopSink{},
 	}
 	caller := newToolCallerAdapter(runner, flags)
 
@@ -282,6 +283,7 @@ func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunPATChallengeHasNoA
 		transport:   transport.NewClient(server.Client()),
 		globalFlags: flags,
 		fallback:    executor.EchoRunner{},
+		auditSink:   audit.NopSink{},
 	}
 	caller := newToolCallerAdapter(runner, flags)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
@@ -928,6 +930,7 @@ func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunMakesOneTransportA
 		transport:   transport.NewClient(server.Client()),
 		globalFlags: flags,
 		fallback:    executor.EchoRunner{},
+		auditSink:   audit.NopSink{},
 	}
 	caller := newToolCallerAdapter(runner, flags)
 	if _, err := caller.CallTool(context.Background(), "pat", "pat.batch_plan", map[string]any{"dryRun": true}); err == nil {
