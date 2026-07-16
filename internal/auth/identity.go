@@ -39,6 +39,15 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
+var (
+	identityReadFile      = os.ReadFile
+	identityUnmarshal     = json.Unmarshal
+	identityMkdirAll      = os.MkdirAll
+	identityMarshalIndent = json.MarshalIndent
+	identityWriteFile     = os.WriteFile
+	identityRandRead      = rand.Read
+)
+
 const identityFile = "identity.json"
 
 // identityVersion is the current on-disk schema version. v1 files (no
@@ -71,12 +80,12 @@ type Identity struct {
 // v1 files are migrated in-memory (machineId backfilled from agentId).
 func Load(configDir string) *Identity {
 	path := filepath.Join(configDir, identityFile)
-	data, err := os.ReadFile(path)
+	data, err := identityReadFile(path)
 	if err != nil {
 		return nil
 	}
 	var id Identity
-	if err := json.Unmarshal(data, &id); err != nil {
+	if err := identityUnmarshal(data, &id); err != nil {
 		return nil
 	}
 	if id.AgentID == "" && id.MachineID == "" {
@@ -182,15 +191,15 @@ func (id *Identity) Headers() map[string]string {
 }
 
 func save(configDir string, id *Identity) error {
-	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
+	if err := identityMkdirAll(configDir, config.DirPerm); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(id, "", "  ")
+	data, err := identityMarshalIndent(id, "", "  ")
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(filepath.Join(configDir, identityFile), data, config.FilePerm)
+	return identityWriteFile(filepath.Join(configDir, identityFile), data, config.FilePerm)
 }
 
 // deriveAgentID computes a stable, client-side agentId for a (machine,
@@ -198,7 +207,10 @@ func save(configDir string, id *Identity) error {
 // Deterministic and idempotent; no gateway allocation needed for statistics.
 func deriveAgentID(seed, agentCode string) string {
 	sum := sha256.Sum256([]byte(seed + "|" + agentCode))
-	enc := base62Encode(sum[:])
+	return formatDerivedAgentID(base62Encode(sum[:]))
+}
+
+func formatDerivedAgentID(enc string) string {
 	for len(enc) < 12 {
 		enc = "0" + enc
 	}
@@ -228,7 +240,7 @@ func base62Encode(b []byte) string {
 // generateUUID produces a UUID v4 string.
 func generateUUID() string {
 	var u [16]byte
-	if _, err := rand.Read(u[:]); err != nil {
+	if _, err := identityRandRead(u[:]); err != nil {
 		// Extremely unlikely; fallback to zero UUID rather than panic.
 		return "00000000-0000-4000-8000-000000000000"
 	}

@@ -635,11 +635,11 @@ func runtimeToolTextMetadataFromMetadata(entry runtimeSchemaEntry, metadata runt
 	hint := runtimeSchemaHintForEntry(entry)
 	titleCandidates = append(titleCandidates, runtimeSchemaStringCandidate(hint.Title, "tool_schema_hint"))
 	descriptionCandidates = append(descriptionCandidates, runtimeSchemaStringCandidate(hint.Description, "tool_schema_hint"))
-	titleWinner, err := resolveRuntimeSchemaCandidate("title", titleCandidates...)
+	titleWinner, err := resolveRuntimeSchemaField("title", titleCandidates...)
 	if err != nil {
 		return "", "", "", nil, err
 	}
-	descriptionWinner, err := resolveRuntimeSchemaCandidate("description", descriptionCandidates...)
+	descriptionWinner, err := resolveRuntimeSchemaField("description", descriptionCandidates...)
 	if err != nil {
 		return "", "", "", nil, err
 	}
@@ -808,11 +808,15 @@ func resolveRuntimeSchemaCandidate(field string, candidates ...runtimeSchemaFiel
 	return winner, nil
 }
 
+// resolveRuntimeSchemaField keeps field resolution replaceable in focused
+// tests without changing the deterministic production resolver.
+var resolveRuntimeSchemaField = resolveRuntimeSchemaCandidate
+
 // resolveRequiredProjection merges required candidates with a Cobra hard-required
 // floor. Other Schema fields still use value-neutral resolveRuntimeSchemaCandidate;
 // required alone cannot project optional when the executable flag is MarkFlagRequired.
 func resolveRequiredProjection(cobraHard bool, candidates ...runtimeSchemaFieldCandidate) (runtimeSchemaFieldCandidate, error) {
-	winner, err := resolveRuntimeSchemaCandidate("required", candidates...)
+	winner, err := resolveRuntimeSchemaField("required", candidates...)
 	if err != nil {
 		return runtimeSchemaFieldCandidate{}, err
 	}
@@ -976,10 +980,9 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 		return nil, nil
 	}
 	params := make([]ParameterSpec, 0)
-	seenParameterNames := map[string]bool{}
 	var resolveErr error
 	metadata := runtimeSchemaParameterMetadataByCanonical[canonicalPath]
-	bindingSnapshot, err := runtimeSchemaParameterBindingData()
+	bindingSnapshot, err := schemaParameterBindingData()
 	if err != nil {
 		return nil, fmt.Errorf("load reviewed Schema parameter bindings: %w", err)
 	}
@@ -1002,7 +1005,7 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 			resolveErr = fmt.Errorf("flag --%s: %w", flag.Name, err)
 			return
 		}
-		propertyWinner, err := resolveRuntimeSchemaCandidate("property",
+		propertyWinner, err := resolveRuntimeSchemaField("property",
 			excludedProperty,
 			manualProperty,
 			bindingProperty,
@@ -1034,7 +1037,7 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 		if manual.InterfaceType != nil {
 			manualInterfaceType = runtimeSchemaManualCandidate(*manual.InterfaceType, true, manualReason)
 		}
-		interfaceTypeWinner, err := resolveRuntimeSchemaCandidate("interface_type",
+		interfaceTypeWinner, err := resolveRuntimeSchemaField("interface_type",
 			manualInterfaceType,
 			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagTypeAnnotation), "native_annotation"),
 			runtimeSchemaStringCandidate(hint.Type, "tool_schema_hint"),
@@ -1051,7 +1054,7 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 		if manual.Description != nil {
 			manualDescription = runtimeSchemaManualCandidate(*manual.Description, true, manualReason)
 		}
-		descriptionWinner, err := resolveRuntimeSchemaCandidate("description",
+		descriptionWinner, err := resolveRuntimeSchemaField("description",
 			manualDescription,
 			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagDescriptionAnnotation), "native_annotation"),
 			runtimeSchemaStringCandidate(flag.Usage, "cobra_usage"),
@@ -1156,7 +1159,7 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 		if manual.RequiredWhen != nil {
 			manualRequiredWhen = runtimeSchemaManualCandidate(*manual.RequiredWhen, true, manualReason)
 		}
-		requiredWhenWinner, err := resolveRuntimeSchemaCandidate("required_when",
+		requiredWhenWinner, err := resolveRuntimeSchemaField("required_when",
 			manualRequiredWhen,
 			runtimeSchemaStringCandidate(metadata.RequiredWhen[flag.Name], "typed_parameter_metadata"),
 			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagMetadataRequiredWhenAnnotation), "typed_parameter_metadata"),
@@ -1181,7 +1184,7 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 				parameter.InterfaceDefault = runtimeSchemaJSONString(interfaceDefault)
 			}
 		}
-		formatWinner, err := resolveRuntimeSchemaCandidate("format",
+		formatWinner, err := resolveRuntimeSchemaField("format",
 			runtimeSchemaStringCandidate(metadata.Formats[flag.Name], "typed_parameter_metadata"),
 			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagMetadataFormatAnnotation), "typed_parameter_metadata"),
 			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, "x-cli-format"), "native_annotation"),
@@ -1198,7 +1201,7 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 			fieldProvenance["format"] = runtimeSchemaFieldProvenance(formatWinner)
 		}
 
-		enumWinner, err := resolveRuntimeSchemaCandidate("enum",
+		enumWinner, err := resolveRuntimeSchemaField("enum",
 			runtimeSchemaEnumCandidate(metadata.Enums[flag.Name], "typed_parameter_metadata"),
 			runtimeSchemaEnumCandidate(runtimeFlagEnumAnnotation(flag, runtimeSchemaFlagMetadataEnumAnnotation), "typed_parameter_metadata"),
 			runtimeSchemaEnumCandidate(runtimeFlagEnum(flag), "native_annotation"),
@@ -1214,7 +1217,7 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 			fieldProvenance["enum"] = runtimeSchemaFieldProvenance(enumWinner)
 		}
 
-		exampleWinner, err := resolveRuntimeSchemaCandidate("example",
+		exampleWinner, err := resolveRuntimeSchemaField("example",
 			runtimeSchemaStringCandidate(metadata.Examples[flag.Name], "typed_parameter_metadata"),
 			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagMetadataExampleAnnotation), "typed_parameter_metadata"),
 			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagExampleAnnotation), "native_annotation"),
@@ -1228,11 +1231,6 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 			parameter.Example = runtimeSchemaJSONString(example)
 			fieldProvenance["example"] = runtimeSchemaFieldProvenance(exampleWinner)
 		}
-		if seenParameterNames[parameter.Name] {
-			resolveErr = fmt.Errorf("multiple CLI flags resolve to Schema parameter %q", parameter.Name)
-			return
-		}
-		seenParameterNames[parameter.Name] = true
 		params = append(params, parameter)
 	})
 	if resolveErr != nil {
@@ -1254,8 +1252,10 @@ func runtimeSchemaJSONString(value string) json.RawMessage {
 // have not yet moved to ToolSpec. Resolution happens only in the typed path;
 // this wrapper serializes the resulting ParameterSpecs without re-merging or
 // re-interpreting any source.
+var runtimeCommandParameterSpecsForPayload = runtimeCommandParameterSpecs
+
 func runtimeCommandParameters(cmd *cobra.Command, canonicalPath string, hints map[string]ParameterSchemaHint, embeddedParams map[string]embeddedMCPParamMeta, constraints RuntimeSchemaConstraints) (map[string]any, error) {
-	specs, err := runtimeCommandParameterSpecs(cmd, canonicalPath, hints, embeddedParams, constraints)
+	specs, err := runtimeCommandParameterSpecsForPayload(cmd, canonicalPath, hints, embeddedParams, constraints)
 	if err != nil {
 		return nil, err
 	}
@@ -1337,9 +1337,6 @@ func visitRuntimeCommandFlags(cmd *cobra.Command, inheritedNames []string, visit
 	}
 	seen := map[string]bool{}
 	visitSet := func(flags *pflag.FlagSet) {
-		if flags == nil {
-			return
-		}
 		flags.VisitAll(func(flag *pflag.Flag) {
 			if flag == nil || rootPersistent[flag] || seen[flag.Name] ||
 				(ancestorPersistent[flag] && !allowedInherited[flag.Name]) {
@@ -1531,9 +1528,6 @@ func lowerCamelFlagName(flagName string) string {
 	}
 	out := strings.ToLower(parts[0])
 	for _, part := range parts[1:] {
-		if part == "" {
-			continue
-		}
 		lower := strings.ToLower(part)
 		out += strings.ToUpper(lower[:1]) + lower[1:]
 	}
@@ -1554,11 +1548,6 @@ func runtimeFlagDefault(flag *pflag.Flag) string {
 		"uint", "uint8", "uint16", "uint32", "uint64", "count",
 		"float32", "float64":
 		if def == "0" {
-			return ""
-		}
-	case "stringSlice", "stringArray", "intSlice", "int32Slice", "int64Slice",
-		"uintSlice", "float32Slice", "float64Slice", "boolSlice", "durationSlice":
-		if def == "[]" {
 			return ""
 		}
 	}

@@ -31,6 +31,13 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+var (
+	oauthSaveClientSecret = SaveClientSecret
+	oauthSaveTokenLocked  = saveTokenDataLocked
+	oauthRetryAfter       = time.After
+	oauthNewRequest       = http.NewRequestWithContext
+)
+
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {
 	if err := preflightTokenPersistence(p.configDir); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
@@ -61,7 +68,7 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	data.ClientID = clientID
 	data.Source = resolveCredentialSource()
 	// Save clientSecret for future refresh (even if env changes)
-	if err := SaveClientSecret(clientID, clientSecret); err != nil {
+	if err := oauthSaveClientSecret(clientID, clientSecret); err != nil {
 		// Log warning but don't fail login
 		fmt.Fprintf(p.Output, "Warning: failed to save client secret: %v\n", err)
 	}
@@ -125,7 +132,7 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 		clientSecret = ClientSecret()
 	}
 
-	if clientID == "" || clientSecret == "" {
+	if clientID == "" || clientSecret == "" || strings.HasPrefix(clientSecret, "<") {
 		return nil, fmt.Errorf("无法刷新 token: 缺少 clientId 或 clientSecret，请重新登录")
 	}
 
@@ -156,7 +163,7 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 
 	// Refresh runs under lockedRefresh's dual-layer lock; use the lock-free
 	// saver to avoid re-acquiring the non-reentrant lock (deadlock).
-	if err := saveTokenDataLocked(p.configDir, updated); err != nil {
+	if err := oauthSaveTokenLocked(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
 	}
 	return updated, nil
@@ -202,7 +209,7 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 
 	// Refresh runs under lockedRefresh's dual-layer lock; use the lock-free
 	// saver to avoid re-acquiring the non-reentrant lock (deadlock).
-	if err := saveTokenDataLocked(p.configDir, updated); err != nil {
+	if err := oauthSaveTokenLocked(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
 	}
 	return updated, nil
@@ -213,7 +220,7 @@ func (p *OAuthProvider) postJSON(ctx context.Context, endpoint string, body any)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling request: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
+	req, err := oauthNewRequest(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -1362,7 +1369,7 @@ func (p *OAuthProvider) CheckCLIAuthEnabled(ctx context.Context, accessToken str
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
 		status, err := p.doCheckCLIAuthEnabled(ctx, accessToken)
@@ -1376,7 +1383,7 @@ func (p *OAuthProvider) CheckCLIAuthEnabled(ctx context.Context, accessToken str
 
 func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken string) (*CLIAuthStatus, error) {
 	url := GetMCPBaseURL() + CLIAuthEnabledPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -1417,7 +1424,7 @@ func GetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespons
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
 		result, err := doGetSuperAdmins(ctx, accessToken)
@@ -1431,7 +1438,7 @@ func GetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespons
 
 func doGetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminResponse, error) {
 	url := GetMCPBaseURL() + SuperAdminPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -1465,7 +1472,7 @@ func SendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*S
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
 		result, err := doSendCliAuthApply(ctx, accessToken, adminStaffID)
@@ -1479,7 +1486,7 @@ func SendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*S
 
 func doSendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*SendApplyResponse, error) {
 	url := GetMCPBaseURL() + SendCliAuthApplyPath + "?adminStaffId=" + adminStaffID
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -1522,7 +1529,7 @@ func FetchClientIDFromMCP(ctx context.Context) (string, error) {
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()
-			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
 		id, err := doFetchClientIDFromMCP(ctx)
@@ -1536,7 +1543,7 @@ func FetchClientIDFromMCP(ctx context.Context) (string, error) {
 
 func doFetchClientIDFromMCP(ctx context.Context) (string, error) {
 	url := GetMCPBaseURL() + ClientIDPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}

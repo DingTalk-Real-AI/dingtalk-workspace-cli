@@ -99,6 +99,10 @@ func TestResolveSkillSetupSourceErrorWhenMissing(t *testing.T) {
 }
 
 func TestResolveSkillSetupTargetsSingleAgent(t *testing.T) {
+	home := t.TempDir()
+	originalHome := skillSetupUserHomeDir
+	skillSetupUserHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { skillSetupUserHomeDir = originalHome })
 	got, err := resolveSkillSetupTargets("claude", skillSetupModeMono)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -106,7 +110,7 @@ func TestResolveSkillSetupTargetsSingleAgent(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 dest, got %d", len(got))
 	}
-	if !strings.Contains(got[0], ".claude/skills/dws") {
+	if !strings.Contains(got[0], filepath.Join(".claude", "skills", "dws")) {
 		t.Fatalf("expected .claude/skills/dws path, got %s", got[0])
 	}
 }
@@ -118,6 +122,10 @@ func TestResolveSkillSetupTargetsUnknown(t *testing.T) {
 }
 
 func TestResolveSkillSetupTargetsMultiOmitsDwsTail(t *testing.T) {
+	home := t.TempDir()
+	originalHome := skillSetupUserHomeDir
+	skillSetupUserHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { skillSetupUserHomeDir = originalHome })
 	got, err := resolveSkillSetupTargets("claude", skillSetupModeMulti)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -125,10 +133,10 @@ func TestResolveSkillSetupTargetsMultiOmitsDwsTail(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 dest, got %d", len(got))
 	}
-	if strings.HasSuffix(got[0], "/dws") {
+	if filepath.Base(got[0]) == "dws" {
 		t.Fatalf("multi target must not end with /dws, got %s", got[0])
 	}
-	if !strings.HasSuffix(got[0], ".claude/skills") {
+	if !strings.HasSuffix(got[0], filepath.Join(".claude", "skills")) {
 		t.Fatalf("expected suffix .claude/skills, got %s", got[0])
 	}
 }

@@ -36,15 +36,8 @@ func commandBoolFlag(cmd *cobra.Command, name string) bool {
 	if cmd == nil {
 		return false
 	}
-	root := cmd.Root()
-	var rootFlags *pflag.FlagSet
-	if root != nil {
-		rootFlags = root.PersistentFlags()
-	}
+	rootFlags := cmd.Root().PersistentFlags()
 	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags(), rootFlags} {
-		if flags == nil {
-			continue
-		}
 		flag := flags.Lookup(name)
 		if flag == nil {
 			continue

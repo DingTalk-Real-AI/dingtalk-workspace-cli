@@ -33,8 +33,11 @@ func init() {
 
 // Build-time variables injected via ldflags when available.
 var (
-	buildTime = "unknown"
-	gitCommit = "unknown"
+	buildTime       = "unknown"
+	gitCommit       = "unknown"
+	userHomeDir     = os.UserHomeDir
+	executablePath  = os.Executable
+	evaluateSymlink = filepath.EvalSymlinks
 )
 
 func defaultConfigDir() string {
@@ -44,7 +47,7 @@ func defaultConfigDir() string {
 	if fn := edition.Get().ConfigDir; fn != nil {
 		return fn()
 	}
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := userHomeDir()
 	if err != nil {
 		return exeRelativeConfigDir()
 	}
@@ -52,11 +55,11 @@ func defaultConfigDir() string {
 }
 
 func exeRelativeConfigDir() string {
-	exePath, err := os.Executable()
+	exePath, err := executablePath()
 	if err != nil {
 		return ".dws"
 	}
-	realPath, err := filepath.EvalSymlinks(exePath)
+	realPath, err := evaluateSymlink(exePath)
 	if err != nil {
 		realPath = exePath
 	}

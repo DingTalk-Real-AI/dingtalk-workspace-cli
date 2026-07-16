@@ -98,7 +98,7 @@ func validateSegment(label, value string, minLen, maxLen int) error {
 	if !namePattern.MatchString(value) {
 		return fmt.Errorf("%s %q must be kebab-case (a-z0-9-), starting with a letter", label, value)
 	}
-	if strings.HasPrefix(value, "-") || strings.HasSuffix(value, "-") {
+	if strings.HasSuffix(value, "-") {
 		return fmt.Errorf("%s %q must not start or end with a hyphen", label, value)
 	}
 	return nil

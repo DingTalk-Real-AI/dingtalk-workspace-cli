@@ -13,6 +13,17 @@ import (
 	"strings"
 )
 
+var (
+	upgradeRename        = os.Rename
+	upgradeChmod         = os.Chmod
+	upgradeCopyFile      = copyFile
+	upgradeSyncParentDir = syncParentDir
+	upgradeOpenZipEntry  = func(f *zip.File) (io.ReadCloser, error) { return f.Open() }
+	upgradeOpenFile      = os.OpenFile
+	upgradeIOCopy        = io.Copy
+	upgradeFileSync      = func(f *os.File) error { return f.Sync() }
+)
+
 // ReplaceSelf atomically replaces the currently running binary with newBinaryPath.
 //
 // On Unix (macOS / Linux):
@@ -23,16 +34,16 @@ import (
 // Strategy: rename running exe → .old, then rename/copy new binary in, then
 // clean up .old (best-effort, may be cleaned on next run).
 func ReplaceSelf(newBinaryPath string) error {
-	currentExe, err := os.Executable()
+	currentExe, err := upgradeExecutable()
 	if err != nil {
 		return fmt.Errorf("无法获取当前二进制路径: %w", err)
 	}
-	currentExe, err = filepath.EvalSymlinks(currentExe)
+	currentExe, err = upgradeEvalSymlinks(currentExe)
 	if err != nil {
 		return fmt.Errorf("无法解析符号链接: %w", err)
 	}
 
-	if err := os.Chmod(newBinaryPath, filePermBinary); err != nil {
+	if err := upgradeChmod(newBinaryPath, filePermBinary); err != nil {
 		return fmt.Errorf("设置权限失败: %w", err)
 	}
 
@@ -40,23 +51,27 @@ func ReplaceSelf(newBinaryPath string) error {
 		return err
 	}
 
-	syncParentDir(currentExe)
+	upgradeSyncParentDir(currentExe)
 	return nil
 }
 
 // replaceExeFile replaces dst with src, handling Windows file-lock semantics.
 func replaceExeFile(src, dst string) error {
+	return replaceExeFileFor(src, dst, runtime.GOOS)
+}
+
+func replaceExeFileFor(src, dst, goos string) error {
 	// Fast path: atomic rename (works on Unix same-filesystem, or Windows when dst is unlocked)
-	if err := os.Rename(src, dst); err == nil {
+	if err := upgradeRename(src, dst); err == nil {
 		return nil
 	}
 
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		return windowsReplace(src, dst)
 	}
 
 	// Unix cross-device fallback
-	return copyFile(src, dst, filePermBinary)
+	return upgradeCopyFile(src, dst, filePermBinary)
 }
 
 // windowsReplace handles the Windows-specific case where the running exe is locked.
@@ -68,16 +83,16 @@ func windowsReplace(src, dst string) error {
 	os.Remove(oldPath)
 
 	// Move the running (locked) binary out of the way
-	if err := os.Rename(dst, oldPath); err != nil {
+	if err := upgradeRename(dst, oldPath); err != nil {
 		return fmt.Errorf("无法移动正在运行的二进制文件: %w", err)
 	}
 
 	// Place the new binary at the target path
-	if err := os.Rename(src, dst); err != nil {
+	if err := upgradeRename(src, dst); err != nil {
 		// Cross-device fallback
-		if cpErr := copyFile(src, dst, filePermBinary); cpErr != nil {
+		if cpErr := upgradeCopyFile(src, dst, filePermBinary); cpErr != nil {
 			// Attempt to restore the original
-			os.Rename(oldPath, dst)
+			upgradeRename(oldPath, dst)
 			return fmt.Errorf("替换失败: %w", cpErr)
 		}
 	}
@@ -157,19 +172,19 @@ func FindBinaryInDir(dir string) string {
 func extractZipEntry(f *zip.File, destPath string) error {
 	os.MkdirAll(filepath.Dir(destPath), dirPermShared)
 
-	rc, err := f.Open()
+	rc, err := upgradeOpenZipEntry(f)
 	if err != nil {
 		return fmt.Errorf("读取 zip 条目失败: %w", err)
 	}
 	defer rc.Close()
 
-	out, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, filePermConfig)
+	out, err := upgradeOpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, filePermConfig)
 	if err != nil {
 		return fmt.Errorf("创建文件失败: %w", err)
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, rc)
+	_, err = upgradeIOCopy(out, rc)
 	return err
 }
 
@@ -180,16 +195,16 @@ func copyFile(src, dst string, perm os.FileMode) error {
 	}
 	defer in.Close()
 
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	out, err := upgradeOpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	if _, err = io.Copy(out, in); err != nil {
+	if _, err = upgradeIOCopy(out, in); err != nil {
 		return err
 	}
-	return out.Sync()
+	return upgradeFileSync(out)
 }
 
 func syncParentDir(path string) {

@@ -36,29 +36,33 @@ import (
 )
 
 func TestAuthExportImportBase64RoundTrip(t *testing.T) {
-	t.Setenv(keychain.DisableKeychainEnv, "1")
-	sourceKeychain := filepath.Join(t.TempDir(), "source-keychain")
-	sourceConfig := filepath.Join(t.TempDir(), ".dws")
-	t.Setenv(keychain.StorageDirEnv, sourceKeychain)
-	t.Setenv("DWS_CONFIG_DIR", sourceConfig)
+	originalSupported := authPortableExportSupported
+	originalReady := authPortableSourceReady
+	originalExport := authExportPortableBundle
+	originalTarget := authPortableTargetPopulated
+	originalImport := authImportPortableBundle
+	t.Cleanup(func() {
+		authPortableExportSupported = originalSupported
+		authPortableSourceReady = originalReady
+		authExportPortableBundle = originalExport
+		authPortableTargetPopulated = originalTarget
+		authImportPortableBundle = originalImport
+	})
 
-	original := &authpkg.TokenData{
-		AccessToken:  "access-cli",
-		RefreshToken: "refresh-cli",
-		ExpiresAt:    time.Now().Add(-time.Hour),
-		RefreshExpAt: time.Now().Add(24 * time.Hour),
-		ClientID:     "client-cli",
-		Source:       "mcp",
-	}
-	if err := authpkg.SaveTokenData(sourceConfig, original); err != nil {
-		t.Fatalf("SaveTokenData() error = %v", err)
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	bundle := []byte("portable-auth-bundle")
+	authPortableExportSupported = func() bool { return true }
+	authPortableSourceReady = func() bool { return true }
+	authExportPortableBundle = func(_ string, w io.Writer) error {
+		_, err := w.Write(bundle)
+		return err
 	}
 
-	exportCmd := NewRootCommand()
+	exportCmd := newAuthExportCommand()
 	var exported bytes.Buffer
 	exportCmd.SetOut(&exported)
 	exportCmd.SetErr(&bytes.Buffer{})
-	exportCmd.SetArgs([]string{"auth", "export", "--base64"})
+	exportCmd.SetArgs([]string{"--base64"})
 	if err := exportCmd.Execute(); err != nil {
 		t.Fatalf("auth export --base64 error = %v", err)
 	}
@@ -72,56 +76,45 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 		t.Fatalf("write input bundle error = %v", err)
 	}
 
-	targetKeychain := filepath.Join(targetRoot, "target-keychain")
-	targetConfig := filepath.Join(targetRoot, ".dws")
-	t.Setenv(keychain.StorageDirEnv, targetKeychain)
-	t.Setenv("DWS_CONFIG_DIR", targetConfig)
+	authPortableTargetPopulated = func(string) bool { return false }
+	var imported []byte
+	authImportPortableBundle = func(_ string, r io.Reader) (authpkg.PortableImportReport, error) {
+		var err error
+		imported, err = io.ReadAll(r)
+		return authpkg.PortableImportReport{}, err
+	}
 
-	importCmd := NewRootCommand()
+	importCmd := newAuthImportCommand()
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&bytes.Buffer{})
-	importCmd.SetArgs([]string{"auth", "import", "--input", inputPath, "--base64"})
+	importCmd.SetArgs([]string{"--input", inputPath, "--base64"})
 	if err := importCmd.Execute(); err != nil {
 		t.Fatalf("auth import --base64 error = %v", err)
 	}
-
-	loaded, err := authpkg.LoadTokenData(targetConfig)
-	if err != nil {
-		t.Fatalf("LoadTokenData() after CLI import error = %v", err)
-	}
-	if loaded.RefreshToken != original.RefreshToken {
-		t.Fatalf("refresh token = %q, want %q", loaded.RefreshToken, original.RefreshToken)
-	}
-	if !loaded.IsRefreshTokenValid() {
-		t.Fatal("refresh token should remain valid after CLI import")
+	if !bytes.Equal(imported, bundle) {
+		t.Fatalf("imported bundle = %q, want %q", imported, bundle)
 	}
 }
 
 func TestAuthImportRequiresForceWhenPopulated(t *testing.T) {
-	t.Setenv(keychain.DisableKeychainEnv, "1")
+	originalTarget := authPortableTargetPopulated
+	authPortableTargetPopulated = func(string) bool { return true }
+	t.Cleanup(func() { authPortableTargetPopulated = originalTarget })
+
 	root := t.TempDir()
 	configDir := filepath.Join(root, ".dws")
-	t.Setenv(keychain.StorageDirEnv, filepath.Join(root, "keychain"))
 	t.Setenv("DWS_CONFIG_DIR", configDir)
-
-	if err := authpkg.SaveTokenData(configDir, &authpkg.TokenData{
-		AccessToken:  "existing",
-		RefreshToken: "existing-refresh",
-		RefreshExpAt: time.Now().Add(24 * time.Hour),
-	}); err != nil {
-		t.Fatalf("SaveTokenData() error = %v", err)
-	}
 
 	bundlePath := filepath.Join(root, "bundle.tar.gz")
 	if err := os.WriteFile(bundlePath, []byte("not-a-real-bundle"), 0o600); err != nil {
 		t.Fatalf("write bundle stub error = %v", err)
 	}
 
-	importCmd := NewRootCommand()
+	importCmd := newAuthImportCommand()
 	var stderr bytes.Buffer
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&stderr)
-	importCmd.SetArgs([]string{"auth", "import", "--input", bundlePath})
+	importCmd.SetArgs([]string{"--input", bundlePath})
 	err := importCmd.Execute()
 	if err == nil {
 		t.Fatal("auth import without --force should fail when auth exists")
@@ -1073,9 +1066,11 @@ func setupAuthLogoutProfiles(t *testing.T, tokens ...*authpkg.TokenData) string 
 	ResetRuntimeTokenCache()
 	clearCompatCache()
 	t.Cleanup(func() {
+		_ = authpkg.DeleteAllTokenData(configDir)
 		authpkg.SetRuntimeProfile("")
 		ResetRuntimeTokenCache()
 		clearCompatCache()
+		CloseFileLogger()
 	})
 
 	for _, token := range tokens {

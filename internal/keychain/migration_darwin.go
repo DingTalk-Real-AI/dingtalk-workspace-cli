@@ -23,6 +23,16 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	migrationAuthTokenCiphertextPaths = authTokenCiphertextPaths
+	migrationReadFile                 = os.ReadFile
+	migrationFileDEK                  = fileDEK
+	migrationEncryptData              = encryptData
+	migrationDecryptData              = decryptData
+	migrationWriteFile                = os.WriteFile
+	migrationRename                   = os.Rename
+)
+
 type fileDEKMigrationEntry struct {
 	path      string
 	plaintext string
@@ -34,14 +44,14 @@ func platformMigrateToFileDEK(service string, dryRun bool) (int, error) {
 		return 0, fmt.Errorf("file-DEK migration requires system Keychain mode; unset %s and retry", DisableKeychainEnv)
 	}
 
-	paths, err := authTokenCiphertextPaths(service)
+	paths, err := migrationAuthTokenCiphertextPaths(service)
 	if err != nil {
 		return 0, err
 	}
 
 	entries := make([]fileDEKMigrationEntry, 0, len(paths))
 	for _, path := range paths {
-		ciphertext, err := os.ReadFile(path)
+		ciphertext, err := migrationReadFile(path)
 		if err != nil {
 			return 0, fmt.Errorf("read keychain entry %q: %w", filepath.Base(path), err)
 		}
@@ -55,16 +65,16 @@ func platformMigrateToFileDEK(service string, dryRun bool) (int, error) {
 		return len(entries), nil
 	}
 
-	fileKey, err := fileDEK(service)
+	fileKey, err := migrationFileDEK(service)
 	if err != nil {
 		return 0, fmt.Errorf("prepare file DEK: %w", err)
 	}
 	for i := range entries {
-		entries[i].encrypted, err = encryptData(entries[i].plaintext, fileKey)
+		entries[i].encrypted, err = migrationEncryptData(entries[i].plaintext, fileKey)
 		if err != nil {
 			return 0, fmt.Errorf("encrypt keychain entry %q: %w", filepath.Base(entries[i].path), err)
 		}
-		if _, err := decryptData(entries[i].encrypted, fileKey); err != nil {
+		if _, err := migrationDecryptData(entries[i].encrypted, fileKey); err != nil {
 			return 0, fmt.Errorf("verify migrated keychain entry %q: %w", filepath.Base(entries[i].path), err)
 		}
 	}
@@ -77,13 +87,13 @@ func platformMigrateToFileDEK(service string, dryRun bool) (int, error) {
 	}()
 	for _, entry := range entries {
 		tmpPath := entry.path + "." + uuid.New().String() + ".migrate.tmp"
-		if err := os.WriteFile(tmpPath, entry.encrypted, 0600); err != nil {
+		if err := migrationWriteFile(tmpPath, entry.encrypted, 0600); err != nil {
 			return 0, fmt.Errorf("stage keychain entry %q: %w", filepath.Base(entry.path), err)
 		}
 		tempPaths = append(tempPaths, tmpPath)
 	}
 	for i, entry := range entries {
-		if err := os.Rename(tempPaths[i], entry.path); err != nil {
+		if err := migrationRename(tempPaths[i], entry.path); err != nil {
 			return 0, fmt.Errorf("commit keychain entry %q: %w; rerun the migration to finish", filepath.Base(entry.path), err)
 		}
 		tempPaths[i] = ""

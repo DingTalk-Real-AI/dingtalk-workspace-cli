@@ -16,6 +16,14 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
+var (
+	newSmokeRoot                = app.NewRootCommand
+	buildEffectiveSmokeRegistry = cli.BuildEffectiveCommandRegistry
+	bindEffectiveSmokeRegistry  = cli.BindEffectiveCommandRegistry
+	buildSmokeRegistryData      = buildSmokeRegistry
+	exitSmokeProcess            = os.Exit
+)
+
 type smokeVector struct {
 	CanonicalPath  string   `json:"canonical_path"`
 	PrimaryCLIPath string   `json:"primary_cli_path"`
@@ -29,22 +37,19 @@ type smokeRegistry struct {
 }
 
 func main() {
-	root := app.NewRootCommand()
-	effective, err := cli.BuildEffectiveCommandRegistry(root)
+	root := newSmokeRoot()
+	effective, err := buildEffectiveSmokeRegistry(root)
 	if err != nil {
 		fail(fmt.Errorf("build effective CommandRegistry: %w", err))
 	}
-	if _, err := cli.BindEffectiveCommandRegistry(root, effective); err != nil {
+	if _, err := bindEffectiveSmokeRegistry(root, effective); err != nil {
 		fail(fmt.Errorf("bind effective CommandRegistry: %w", err))
 	}
-	registry, err := buildSmokeRegistry(effective)
+	registry, err := buildSmokeRegistryData(effective)
 	if err != nil {
 		fail(err)
 	}
-	encoded, err := json.Marshal(registry)
-	if err != nil {
-		fail(fmt.Errorf("encode smoke vector: %w", err))
-	}
+	encoded, _ := json.Marshal(registry)
 	_, _ = os.Stdout.Write(append(encoded, '\n'))
 }
 
@@ -77,5 +82,5 @@ func buildSmokeRegistry(effective cli.EffectiveCommandRegistry) (smokeRegistry, 
 
 func fail(err error) {
 	_, _ = fmt.Fprintln(os.Stderr, "error:", err)
-	os.Exit(1)
+	exitSmokeProcess(1)
 }

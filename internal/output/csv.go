@@ -18,6 +18,8 @@ import (
 	"io"
 )
 
+var writeCSVRecord = (*csv.Writer).Write
+
 // writeCSV renders a payload as RFC-4180 CSV.
 //
 // It mirrors the shape decisions `-f table` already makes (same helpers:
@@ -68,7 +70,7 @@ func writeCSV(w io.Writer, payload any) error {
 		}
 		return writeKeyValueCSV(cw, typed)
 	case []any:
-		headers, rows, _ := rowsFromSlice(typed)
+		headers, rows := rowsFromSlice(typed)
 		return writeTableCSV(cw, headers, rows)
 	case nil:
 		// Nothing to write — emit an empty document rather than erroring.
@@ -76,7 +78,7 @@ func writeCSV(w io.Writer, payload any) error {
 		return cw.Error()
 	default:
 		// Scalar: a single-cell, single-row CSV.
-		if err := cw.Write([]string{formatValue(normalized)}); err != nil {
+		if err := writeCSVRecord(cw, []string{formatValue(normalized)}); err != nil {
 			return err
 		}
 		cw.Flush()
@@ -85,7 +87,7 @@ func writeCSV(w io.Writer, payload any) error {
 }
 
 func writeTableCSV(cw *csv.Writer, headers []string, rows [][]string) error {
-	if err := cw.Write(headers); err != nil {
+	if err := writeCSVRecord(cw, headers); err != nil {
 		return err
 	}
 	for _, row := range rows {
@@ -96,7 +98,7 @@ func writeTableCSV(cw *csv.Writer, headers []string, rows [][]string) error {
 			copy(padded, row)
 			row = padded
 		}
-		if err := cw.Write(row); err != nil {
+		if err := writeCSVRecord(cw, row); err != nil {
 			return err
 		}
 	}
@@ -145,11 +147,11 @@ func broadcastMeta(headers []string, rows [][]string, meta map[string]any) ([]st
 }
 
 func writeKeyValueCSV(cw *csv.Writer, m map[string]any) error {
-	if err := cw.Write([]string{"key", "value"}); err != nil {
+	if err := writeCSVRecord(cw, []string{"key", "value"}); err != nil {
 		return err
 	}
 	for _, key := range sortedMapKeys(m) {
-		if err := cw.Write([]string{key, formatValue(m[key])}); err != nil {
+		if err := writeCSVRecord(cw, []string{key, formatValue(m[key])}); err != nil {
 			return err
 		}
 	}

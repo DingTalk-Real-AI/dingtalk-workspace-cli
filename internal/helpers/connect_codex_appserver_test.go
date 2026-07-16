@@ -15,10 +15,12 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +28,17 @@ import (
 
 func writeShellExecutable(t *testing.T, dir, name, body string) string {
 	t.Helper()
-	requirePOSIXShell(t)
+	if runtime.GOOS == "windows" {
+		path := testExecutablePath(dir, name)
+		if err := copyCurrentHelpersTestBinary(path); err != nil {
+			t.Fatalf("write Windows stub %s: %v", name, err)
+		}
+		if err := os.WriteFile(path+helpersShellStubBodySuffix, []byte(body), 0o600); err != nil {
+			t.Fatalf("write Windows stub body %s: %v", name, err)
+		}
+		t.Setenv(helpersShellStubEnv, "1")
+		return path
+	}
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatalf("write stub %s: %v", name, err)
@@ -158,7 +170,11 @@ while IFS= read -r line; do
 	if strings.Count(log, `"method":"thread/resume"`) != 1 {
 		t.Fatalf("expected one thread/resume, log:\n%s", log)
 	}
-	if !strings.Contains(log, `"type":"localImage"`) || !strings.Contains(log, imagePath) {
+	encodedImagePath, err := json.Marshal(imagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(log, `"type":"localImage"`) || !strings.Contains(log, string(encodedImagePath)) {
 		t.Fatalf("turn/start missing native localImage input, log:\n%s", log)
 	}
 }

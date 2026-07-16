@@ -282,8 +282,9 @@ func TestWriteReportIfEnabled_Auto(t *testing.T) {
 	tmpHome := t.TempDir()
 	expected := filepath.Join(tmpHome, ".dws", "perf", "latest.json")
 
-	// Temporarily override HOME for defaultPerfReportPath
-	t.Setenv("HOME", tmpHome)
+	originalHome := timingUserHomeDir
+	timingUserHomeDir = func() (string, error) { return tmpHome, nil }
+	t.Cleanup(func() { timingUserHomeDir = originalHome })
 	t.Setenv(PerfReportEnv, "auto")
 
 	tc := NewTimingCollector()
@@ -312,7 +313,9 @@ func TestWriteReportIfEnabled_NilCollector(t *testing.T) {
 
 func TestLoadLatestReport(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
+	originalHome := timingUserHomeDir
+	timingUserHomeDir = func() (string, error) { return tmpHome, nil }
+	t.Cleanup(func() { timingUserHomeDir = originalHome })
 
 	perfDir := filepath.Join(tmpHome, ".dws", "perf")
 	if err := os.MkdirAll(perfDir, 0o700); err != nil {
@@ -348,7 +351,9 @@ func TestLoadLatestReport(t *testing.T) {
 
 func TestLoadLatestReport_NotFound(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
+	originalHome := timingUserHomeDir
+	timingUserHomeDir = func() (string, error) { return tmpHome, nil }
+	t.Cleanup(func() { timingUserHomeDir = originalHome })
 
 	_, err := LoadLatestReport()
 	if err == nil {

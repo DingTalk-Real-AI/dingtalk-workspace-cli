@@ -118,6 +118,8 @@ type Config struct {
 	Quiet bool
 }
 
+var discoverBus = busctl.Discover
+
 // Run dials the bus (forking one if necessary), sends Hello, and writes
 // each received Event frame as one NDJSON line to stdout. Blocks until
 // ctx is cancelled, MaxEvents is reached, the bus sends Bye, or the
@@ -179,7 +181,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	defer pipeline.Close()
 
-	conn, err := busctl.Discover(busctl.DiscoverConfig{
+	conn, err := discoverBus(busctl.DiscoverConfig{
 		WorkDir:        cfg.WorkDir,
 		IPCEndpoint:    cfg.IPCEndpoint,
 		ClientID:       cfg.ClientID,

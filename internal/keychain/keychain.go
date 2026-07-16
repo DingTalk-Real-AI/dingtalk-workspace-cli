@@ -17,7 +17,10 @@
 // - Windows: DPAPI + Registry storage
 package keychain
 
-import "errors"
+import (
+	"errors"
+	"os"
+)
 
 const (
 	// Service is the unified keychain service name for all secrets.
@@ -40,6 +43,15 @@ const (
 	// at-rest protection — DEK and ciphertext live in the same
 	// directory — and is therefore opt-in.
 	DisableKeychainEnv = "DWS_DISABLE_KEYCHAIN"
+)
+
+// These filesystem hooks are shared by the platform implementations and the
+// platform-neutral legacy migration path.
+var (
+	keychainReadFile = os.ReadFile
+	keychainRename   = os.Rename
+	keychainRemove   = os.Remove
+	keychainStat     = os.Stat
 )
 
 var (

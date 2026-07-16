@@ -21,6 +21,12 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
+var (
+	marshalEvent       = json.Marshal
+	marshalEventIndent = json.MarshalIndent
+	marshalCompact     = json.Marshal
+)
+
 // Format identifies the wire shape `dws event consume` writes per event.
 // Values mirror dws's global -f/--format flag vocabulary (defined in
 // internal/output) with the subset that makes sense for streaming.
@@ -108,7 +114,7 @@ func NewFormatter(format Format) (Formatter, error) {
 type ndjsonFormatter struct{}
 
 func (ndjsonFormatter) Render(ev transport.Event) ([]byte, error) {
-	b, err := json.Marshal(ev)
+	b, err := marshalEvent(ev)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +127,7 @@ func (ndjsonFormatter) Render(ev transport.Event) ([]byte, error) {
 type prettyFormatter struct{}
 
 func (prettyFormatter) Render(ev transport.Event) ([]byte, error) {
-	b, err := json.MarshalIndent(ev, "", "  ")
+	b, err := marshalEventIndent(ev, "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +155,7 @@ type compactFormatter struct{}
 func (compactFormatter) Render(ev transport.Event) ([]byte, error) {
 	p := registry.LookupProcessor(ev.EventType)
 	v := p(ev)
-	b, err := json.Marshal(v)
+	b, err := marshalCompact(v)
 	if err != nil {
 		return nil, err
 	}

@@ -177,10 +177,11 @@ func TestRetention(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "audit-"+oldDate+".jsonl"), []byte("old"), 0o600)
 	os.WriteFile(filepath.Join(dir, "audit-"+recentDate+".jsonl"), []byte("recent"), 0o600)
 
-	_, err := NewDateRotatingWriter(dir, 90)
+	writer, err := NewDateRotatingWriter(dir, 90)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer writer.Close()
 
 	// Give async pruning a moment
 	time.Sleep(50 * time.Millisecond)

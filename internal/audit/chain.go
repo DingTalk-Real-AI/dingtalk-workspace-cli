@@ -23,6 +23,12 @@ import (
 //     other dws process, so concurrent writers cannot fork the chain.
 type Chain struct{}
 
+var (
+	chainReadAt  = func(file *os.File, data []byte, offset int64) (int, error) { return file.ReadAt(data, offset) }
+	chainSeek    = func(file *os.File, offset int64, whence int) (int64, error) { return file.Seek(offset, whence) }
+	chainMarshal = json.Marshal
+)
+
 // NewChain keeps the historical constructor signature. The directory argument
 // is no longer needed because prev_hash is derived from the target file.
 func NewChain(string) *Chain { return &Chain{} }
@@ -57,7 +63,7 @@ func lastRecordHash(f *os.File) (string, error) {
 		start = 0
 	}
 	buf := make([]byte, size-start)
-	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
+	if _, err := chainReadAt(f, buf, start); err != nil && err != io.EOF {
 		return "", err
 	}
 
@@ -90,7 +96,7 @@ func lastRecordHash(f *os.File) (string, error) {
 }
 
 func lastRecordHashFullScan(f *os.File) (string, error) {
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	if _, err := chainSeek(f, 0, io.SeekStart); err != nil {
 		return "", err
 	}
 	scanner := bufio.NewScanner(f)
@@ -169,7 +175,7 @@ func stripHashFields(line []byte) []byte {
 	}
 	evt.PrevHash = ""
 	evt.Hash = ""
-	out, err := json.Marshal(evt)
+	out, err := chainMarshal(evt)
 	if err != nil {
 		return line
 	}

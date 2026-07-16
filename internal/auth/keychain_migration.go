@@ -15,13 +15,15 @@ package auth
 
 import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 
+var authMigrateToFileDEK = keychain.MigrateToFileDEK
+
 // MigrateKeychainToFileDEK serializes migration with profile/token updates so
 // refresh and login cannot rewrite an entry while its DEK backend is changing.
 func MigrateKeychainToFileDEK(configDir string, dryRun bool) (int, error) {
 	var migrated int
 	err := withProfilesLock(configDir, func() error {
 		var err error
-		migrated, err = keychain.MigrateToFileDEK(keychain.Service, dryRun)
+		migrated, err = authMigrateToFileDEK(keychain.Service, dryRun)
 		return err
 	})
 	return migrated, err

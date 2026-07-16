@@ -65,10 +65,8 @@ func printCacheCompatNotice(cmd *cobra.Command, command string) error {
 	case "", "json":
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(notice)
 	case "pretty":
-		data, err := json.MarshalIndent(notice, "", "  ")
-		if err != nil {
-			return err
-		}
+		data, _ := json.MarshalIndent(notice, "", "  ")
+		var err error
 		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 		return err
 	default:

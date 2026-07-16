@@ -71,10 +71,7 @@ func (r *Reader) Read() ([]byte, error) {
 	if errors.Is(err, io.EOF) && len(line) == 0 {
 		return nil, io.EOF
 	}
-	if err != nil {
-		return nil, err
-	}
-	return nil, nil // unreachable
+	return nil, err
 }
 
 // ReadJSON decodes the next frame into dst. dst must be a non-nil pointer.

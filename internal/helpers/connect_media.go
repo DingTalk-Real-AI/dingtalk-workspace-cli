@@ -65,6 +65,16 @@ func connectAttachmentMIME(path string) string {
 	return http.DetectContentType(buf[:n])
 }
 
+var (
+	mediaMkdirAll       = os.MkdirAll
+	mediaCreate         = os.Create
+	mediaCopy           = io.Copy
+	mediaRemove         = os.Remove
+	connectMediaCallRaw = func(c *aiCardClient, ctx context.Context, method, path string, body map[string]any) (string, error) {
+		return c.callRaw(ctx, method, path, body)
+	}
+)
+
 // pictureDownloadCode digs the downloadCode out of a picture callback's
 // loosely-typed content payload (the stream SDK models Content as
 // interface{}).
@@ -390,9 +400,6 @@ func callbackInboundMedia(msgtype string, content interface{}) (pictureCodes []s
 			return
 		}
 		key := fileInboundKey(info)
-		if key == "" {
-			return
-		}
 		if _, picture := seenPictures[info.DownloadCode]; picture {
 			return
 		}
@@ -635,7 +642,7 @@ func (c *aiCardClient) downloadMessageFileNamed(ctx context.Context, robotCode, 
 		return "", fmt.Errorf("媒体文件过大：%d 字节，最大允许 %d 字节", resp.ContentLength, mediaMaxDownloadBytes)
 	}
 	dir := filepath.Join(os.TempDir(), "dws-connect-media")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := mediaMkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	ext := filepath.Ext(strings.TrimSpace(fileName))
@@ -671,7 +678,7 @@ func (c *aiCardClient) getUserUnionID(ctx context.Context, userID string) (strin
 // path, returning the path.
 func (c *aiCardClient) downloadDentryFile(ctx context.Context, spaceID, dentryID int64, unionID, fileName string) (string, error) {
 	path := fmt.Sprintf("/v2.0/storage/spaces/%d/dentries/%d/getDownloadInfo", spaceID, dentryID)
-	raw, err := c.callRaw(ctx, http.MethodPost, path, map[string]any{
+	raw, err := connectMediaCallRaw(c, ctx, http.MethodPost, path, map[string]any{
 		"unionId": unionID,
 	})
 	if err != nil {
@@ -705,7 +712,7 @@ func (c *aiCardClient) downloadDentryFile(ctx context.Context, spaceID, dentryID
 	}
 
 	dir := filepath.Join(os.TempDir(), "dws-connect-media")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := mediaMkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	ext := filepath.Ext(fileName)
@@ -724,22 +731,22 @@ func (c *aiCardClient) downloadDentryFile(ctx context.Context, spaceID, dentryID
 // from a larger file; the latter is removed instead of leaving a corrupt local
 // artifact that an agent could mistake for the original.
 func writeCompleteMediaFile(dest string, src io.Reader) error {
-	f, err := os.Create(dest)
+	f, err := mediaCreate(dest)
 	if err != nil {
 		return err
 	}
-	n, copyErr := io.Copy(f, io.LimitReader(src, mediaMaxDownloadBytes+1))
+	n, copyErr := mediaCopy(f, io.LimitReader(src, mediaMaxDownloadBytes+1))
 	closeErr := f.Close()
 	if copyErr != nil {
-		_ = os.Remove(dest)
+		_ = mediaRemove(dest)
 		return copyErr
 	}
 	if closeErr != nil {
-		_ = os.Remove(dest)
+		_ = mediaRemove(dest)
 		return closeErr
 	}
 	if n > mediaMaxDownloadBytes {
-		_ = os.Remove(dest)
+		_ = mediaRemove(dest)
 		return fmt.Errorf("媒体文件超过最大允许大小 %d 字节，未保存截断文件", mediaMaxDownloadBytes)
 	}
 	return nil

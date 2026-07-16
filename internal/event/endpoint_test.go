@@ -22,6 +22,24 @@ import (
 	"testing"
 )
 
+func TestEndpointPlatformVariants(t *testing.T) {
+	if maxUnixSocketPath("linux") != 107 || maxUnixSocketPath("darwin") != 103 {
+		t.Fatal("Unix socket limits changed")
+	}
+	pipe := ipcEndpointForOS("windows", "ignored", "open", "", "hash")
+	if pipe != `\\.\pipe\dws-event-open-app_stream-hash` {
+		t.Fatalf("Windows pipe = %q", pipe)
+	}
+	short := ipcEndpointForOS("darwin", "/tmp/events", "open", SourceKindPersonalStream, "hash")
+	if short != filepath.Join("/tmp/events", "bus.sock") {
+		t.Fatalf("short Unix endpoint = %q", short)
+	}
+	long := ipcEndpointForOS("darwin", "/"+strings.Repeat("deep/", 40), "open", SourceKindAppStream, "hash")
+	if !strings.Contains(long, "dws-evt-") {
+		t.Fatalf("long Unix endpoint = %q", long)
+	}
+}
+
 func TestIPCEndpointShortWorkDirUsesCanonicalPath(t *testing.T) {
 	workDir := "/tmp/dws/events/open/app_stream/aabbccdd00112233"
 	got := IPCEndpoint(workDir, "open", SourceKindAppStream, "aabbccdd00112233")

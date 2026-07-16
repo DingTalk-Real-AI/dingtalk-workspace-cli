@@ -30,7 +30,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var doctorKeychainDiagnose = keychain.Diagnose
+var (
+	doctorKeychainDiagnose   = keychain.Diagnose
+	doctorAuthStatus         = (*authpkg.OAuthProvider).Status
+	doctorAuthAccessToken    = (*authpkg.OAuthProvider).GetAccessToken
+	doctorHTTPDo             = (*http.Client).Do
+	doctorFetchLatestRelease = func() (*upgrade.ReleaseInfo, error) { return upgrade.NewClient().FetchLatestRelease() }
+	doctorNeedsUpgrade       = upgrade.NeedsUpgrade
+)
 
 // checkStatus represents the outcome of a single doctor check.
 type checkStatus string
@@ -136,7 +143,7 @@ func doctorCheckAuth(ctx context.Context, w io.Writer, jsonOut bool) checkResult
 	provider := authpkg.NewOAuthProvider(configDir, nil)
 	configureOAuthProviderCompatibility(provider, configDir)
 
-	data, err := provider.Status()
+	data, err := doctorAuthStatus(provider)
 	if err != nil || data == nil {
 		if diagnostic := authStatusDiagnosticFromError(err); diagnostic != nil {
 			r := checkResult{
@@ -164,7 +171,7 @@ func doctorCheckAuth(ctx context.Context, w io.Writer, jsonOut bool) checkResult
 	if data.IsAccessTokenValid() || data.IsRefreshTokenValid() {
 		if !data.IsAccessTokenValid() {
 			refreshCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			_, refreshErr := provider.GetAccessToken(refreshCtx)
+			_, refreshErr := doctorAuthAccessToken(provider, refreshCtx)
 			cancel()
 			if refreshErr != nil {
 				r := checkResult{
@@ -263,7 +270,7 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 		return r
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := doctorHTTPDo(httpClient, req)
 	latency := time.Since(start)
 	if err != nil {
 		r := checkResult{
@@ -317,8 +324,7 @@ func doctorCheckVersion(w io.Writer, jsonOut bool, timeout time.Duration) checkR
 
 	currentVer := version
 
-	client := upgrade.NewClient()
-	latest, err := client.FetchLatestRelease()
+	latest, err := doctorFetchLatestRelease()
 	if err != nil {
 		r := checkResult{
 			Name:    "version",
@@ -332,7 +338,7 @@ func doctorCheckVersion(w io.Writer, jsonOut bool, timeout time.Duration) checkR
 		return r
 	}
 
-	if upgrade.NeedsUpgrade(currentVer, latest.Version) {
+	if doctorNeedsUpgrade(currentVer, latest.Version) {
 		r := checkResult{
 			Name:    "version",
 			Status:  statusWarn,

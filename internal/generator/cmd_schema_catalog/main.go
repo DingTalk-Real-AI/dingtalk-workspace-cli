@@ -27,6 +27,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	validateCatalogParameterBindings = cli.ValidateEmbeddedSchemaParameterBindings
+	buildCatalogSnapshot             = cli.BuildSchemaCatalogSnapshot
+	makeCatalogDirectory             = os.MkdirAll
+	writeCatalogFile                 = os.WriteFile
+	exitCatalogProcess               = os.Exit
+)
+
 func main() {
 	var rootPath string
 	var surfacePath string
@@ -103,7 +111,7 @@ func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputP
 	if err := validateDeprecatedSurface(surfacePath); err != nil {
 		return err
 	}
-	if err := cli.ValidateEmbeddedSchemaParameterBindings(); err != nil {
+	if err := validateCatalogParameterBindings(); err != nil {
 		return fmt.Errorf("validate reviewed parameter binding input: %w", err)
 	}
 
@@ -111,20 +119,17 @@ func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputP
 	if err != nil {
 		return fmt.Errorf("resolve final Schema build: %w", err)
 	}
-	snapshot, err := cli.BuildSchemaCatalogSnapshot(resolved, cli.SchemaCatalogBuildOptions{
+	snapshot, err := buildCatalogSnapshot(resolved, cli.SchemaCatalogBuildOptions{
 		RegistryHash: resolved.RegistryHash(),
 	})
 	if err != nil {
 		return err
 	}
-	encoded, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode catalog: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+	encoded, _ := json.MarshalIndent(snapshot, "", "  ")
+	if err := makeCatalogDirectory(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
-	if err := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); err != nil {
+	if err := writeCatalogFile(outputPath, append(encoded, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write catalog: %w", err)
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "generated schema catalog: output=%s registry_commands=%d tools=%d registry_hash=%s source_hash=%s\n",
@@ -148,5 +153,5 @@ func validateDeprecatedSurface(path string) error {
 
 func fail(err error) {
 	_, _ = fmt.Fprintln(os.Stderr, "error:", err)
-	os.Exit(1)
+	exitCatalogProcess(1)
 }

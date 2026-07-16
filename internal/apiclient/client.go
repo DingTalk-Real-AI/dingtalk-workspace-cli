@@ -49,6 +49,8 @@ var AllowedMethods = map[string]bool{
 	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true,
 }
 
+var newHTTPRequest = http.NewRequestWithContext
+
 // RawAPIRequest describes a raw API request to DingTalk OpenAPI.
 type RawAPIRequest struct {
 	Method string         // GET, POST, PUT, PATCH, DELETE
@@ -112,7 +114,7 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 		bodyReader = bytes.NewReader(data)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
+	httpReq, err := newHTTPRequest(ctx, method, fullURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("creating HTTP request: %w", err)
 	}

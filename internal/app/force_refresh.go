@@ -23,6 +23,20 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 )
 
+type accessTokenGetter interface {
+	GetAccessToken(context.Context) (string, error)
+}
+
+var (
+	markAccessTokenStale = authpkg.MarkAccessTokenStale
+	newRefreshProvider   = func(configDir string) accessTokenGetter {
+		disc := slog.New(slog.NewTextHandler(io.Discard, nil))
+		provider := authpkg.NewOAuthProvider(configDir, disc)
+		configureOAuthProviderCompatibility(provider, configDir)
+		return provider
+	}
+)
+
 // ForceRefreshAccessToken forces a single refresh_token exchange and returns
 // the new access_token. It is intended for callers that have observed a
 // server-side rejection (HTTP 401 or business code such as
@@ -43,12 +57,10 @@ func ForceRefreshAccessToken(ctx context.Context, configDir string) (string, err
 	if strings.TrimSpace(configDir) == "" {
 		return "", fmt.Errorf("config directory is empty")
 	}
-	if err := authpkg.MarkAccessTokenStale(configDir); err != nil {
+	if err := markAccessTokenStale(configDir); err != nil {
 		return "", fmt.Errorf("mark access token stale: %w", err)
 	}
-	disc := slog.New(slog.NewTextHandler(io.Discard, nil))
-	provider := authpkg.NewOAuthProvider(configDir, disc)
-	configureOAuthProviderCompatibility(provider, configDir)
+	provider := newRefreshProvider(configDir)
 	tok, err := provider.GetAccessToken(ctx)
 	if err != nil {
 		return "", err

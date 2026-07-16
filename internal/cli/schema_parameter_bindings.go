@@ -86,6 +86,8 @@ var runtimeSchemaParameterBindingsLazy struct {
 
 var runtimeSchemaParameterBindingsLazyLoadCount atomic.Uint64
 
+var schemaParameterBindingData = runtimeSchemaParameterBindingData
+
 func decodeSchemaParameterBindings(data []byte) (schemaParameterBindingSnapshot, error) {
 	var snapshot schemaParameterBindingSnapshot
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -122,7 +124,7 @@ func runtimeSchemaParameterBindingData() (schemaParameterBindingSnapshot, error)
 // before any candidate resolution so malformed input can never degrade to an
 // empty binding set and flag-name inference.
 func ValidateEmbeddedSchemaParameterBindings() error {
-	_, err := runtimeSchemaParameterBindingData()
+	_, err := schemaParameterBindingData()
 	return err
 }
 
@@ -220,7 +222,7 @@ func validateSchemaParameterBindingSnapshot(snapshot schemaParameterBindingSnaps
 // this production invariant joins the v3 manifest to the bound Cobra command
 // and its delivered ParameterSpec before any Catalog is serialized.
 func ValidateSchemaParameterBindingDelivery(bound BoundCommandRegistry, registry SchemaRegistry) error {
-	snapshot, err := runtimeSchemaParameterBindingData()
+	snapshot, err := schemaParameterBindingData()
 	if err != nil {
 		return err
 	}
@@ -418,18 +420,11 @@ func schemaParameterBindingManifestHash(bindings map[string]map[string]string) (
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].CanonicalPath != rows[j].CanonicalPath {
-			return rows[i].CanonicalPath < rows[j].CanonicalPath
-		}
-		if rows[i].FlagName != rows[j].FlagName {
-			return rows[i].FlagName < rows[j].FlagName
-		}
-		return rows[i].Property < rows[j].Property
+		left := rows[i].CanonicalPath + "\x00" + rows[i].FlagName
+		right := rows[j].CanonicalPath + "\x00" + rows[j].FlagName
+		return left < right
 	})
-	encoded, err := json.Marshal(rows)
-	if err != nil {
-		return "", fmt.Errorf("encode Schema parameter binding manifest: %w", err)
-	}
+	encoded, _ := json.Marshal(rows)
 	sum := sha256.Sum256(encoded)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
@@ -456,7 +451,7 @@ func applyRuntimeSchemaParameterBindingsFrom(cmd *cobra.Command, canonical strin
 // EmbeddedSchemaParameterBindings returns a defensive copy of the reviewed,
 // active public flag-to-interface bindings used by Catalog generation.
 func EmbeddedSchemaParameterBindings() (map[string]map[string]string, error) {
-	snapshot, err := runtimeSchemaParameterBindingData()
+	snapshot, err := schemaParameterBindingData()
 	if err != nil {
 		return nil, err
 	}

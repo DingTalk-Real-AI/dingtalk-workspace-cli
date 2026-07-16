@@ -7,7 +7,9 @@ import (
 
 func TestDefaultConfigDirUsesHomeDirectoryInOSSMode(t *testing.T) {
 	homeDir := filepath.Join(t.TempDir(), "home")
-	t.Setenv("HOME", homeDir)
+	originalUserHomeDir := userHomeDir
+	userHomeDir = func() (string, error) { return homeDir, nil }
+	t.Cleanup(func() { userHomeDir = originalUserHomeDir })
 	t.Setenv("DWS_CONFIG_DIR", "")
 
 	got := defaultConfigDir()

@@ -48,6 +48,8 @@ type StdioClient struct {
 	initResult  InitializeResult
 }
 
+var stdioCommandContext = exec.CommandContext
+
 // NewStdioClient creates a StdioClient for the given command.
 // The subprocess is not started until Start() is called.
 func NewStdioClient(command string, args []string, env map[string]string) *StdioClient {
@@ -67,7 +69,7 @@ func (s *StdioClient) Start(ctx context.Context) error {
 		return nil
 	}
 
-	cmd := exec.CommandContext(ctx, s.command, s.args...)
+	cmd := stdioCommandContext(ctx, s.command, s.args...)
 
 	// Build environment: inherit current env + merge plugin-specific vars.
 	cmd.Env = os.Environ()

@@ -14,11 +14,22 @@
 package event
 
 import (
+	"math"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+func TestItoaCoversSignedBoundaries(t *testing.T) {
+	for value, want := range map[int64]string{
+		0: "0", 1: "1", -1: "-1", math.MaxInt64: "9223372036854775807", math.MinInt64: "-9223372036854775808",
+	} {
+		if got := itoa(value); got != want {
+			t.Errorf("itoa(%d) = %q, want %q", value, got, want)
+		}
+	}
+}
 
 func TestRawEvent_DedupKey_UsesEventID(t *testing.T) {
 	e := &RawEvent{EventID: "ev_abc"}
@@ -84,9 +95,11 @@ func TestClientIDHash_StableAndPathSafe(t *testing.T) {
 			t.Fatalf("ClientIDHash(%q) = %q contains path-unsafe chars", in, got)
 		}
 		// And actually joining doesn't escape parent.
-		joined := filepath.Join("/tmp/events", got)
-		if !strings.HasPrefix(joined, "/tmp/events/") {
-			t.Fatalf("path escape: %q", joined)
+		parent := t.TempDir()
+		joined := filepath.Join(parent, got)
+		rel, err := filepath.Rel(parent, joined)
+		if err != nil || rel != got {
+			t.Fatalf("path escape: joined=%q rel=%q err=%v", joined, rel, err)
 		}
 	}
 }

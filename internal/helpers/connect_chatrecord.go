@@ -38,6 +38,8 @@ type chatRecordLookup struct {
 
 type chatRecordToolCall func(context.Context, string, string, map[string]any) (string, error)
 
+var chatRecordDownloadToolCall chatRecordToolCall = callMCPToolReturnTextOnServer
+
 type chatRecordMessage struct {
 	OpenMessageID      string              `json:"openMessageId"`
 	OpenConversationID string              `json:"openConversationId"`
@@ -63,6 +65,7 @@ var (
 	chatRecordFileIDPattern       = regexp.MustCompile(`(?i)\bfileId:\s*([^\s]+)`)
 	chatRecordFileNamePattern     = regexp.MustCompile(`(?m)^\[文件\]\s*(.*?)(?:\s+fileId:|$)`)
 	chatRecordDownloadHintPattern = regexp.MustCompile(`\s*注意：如需下载使用dws\s+(?:chat message download-media|drive download)命令下载\s*`)
+	chatRecordMkdirAll            = os.MkdirAll
 )
 
 func chatRecordEntries(content interface{}) []interface{} {
@@ -339,7 +342,7 @@ func mediaTypeFromFileName(fileName string) string {
 }
 
 func (c *aiCardClient) downloadRecoveredChatRecordFile(ctx context.Context, info fileInboundInfo) (string, error) {
-	return c.downloadRecoveredChatRecordFileWithCall(ctx, info, callMCPToolReturnTextOnServer)
+	return c.downloadRecoveredChatRecordFileWithCall(ctx, info, chatRecordDownloadToolCall)
 }
 
 func (c *aiCardClient) downloadRecoveredChatRecordFileWithCall(ctx context.Context, info fileInboundInfo, call chatRecordToolCall) (string, error) {
@@ -390,10 +393,13 @@ func downloadConnectURLToTemp(ctx context.Context, client *http.Client, resource
 		return "", fmt.Errorf("转发附件过大：%d 字节，最大允许 %d 字节", resp.ContentLength, mediaMaxDownloadBytes)
 	}
 	dir := filepath.Join(os.TempDir(), "dws-connect-media")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := chatRecordMkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	ext := filepath.Ext(filepath.Base(strings.TrimSpace(fileName)))
+	ext := ""
+	if name := strings.TrimSpace(fileName); name != "" {
+		ext = filepath.Ext(filepath.Base(name))
+	}
 	if ext == "" {
 		ext = mediaExt(resourceURL, resp.Header.Get("Content-Type"))
 	}

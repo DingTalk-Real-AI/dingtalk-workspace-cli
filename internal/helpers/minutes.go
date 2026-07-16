@@ -3,7 +3,6 @@ package helpers
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -755,11 +754,6 @@ func newMinutesCommand() *cobra.Command {
 			}
 
 			memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids"))
-			for _, uid := range memberUids {
-				if strings.TrimSpace(uid) == "" {
-					return fmt.Errorf("flag --member-uids contains empty UID")
-				}
-			}
 
 			toolArgs := map[string]any{
 				"uuids":      parseCSVValues(v),
@@ -812,11 +806,6 @@ func newMinutesCommand() *cobra.Command {
 			}
 
 			memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids"))
-			for _, uid := range memberUids {
-				if strings.TrimSpace(uid) == "" {
-					return fmt.Errorf("flag --member-uids contains empty UID")
-				}
-			}
 
 			return callMCPTool("remove_member_permission", map[string]any{
 				"uuids":      parseCSVValues(v),

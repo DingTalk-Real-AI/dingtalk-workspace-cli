@@ -20,6 +20,8 @@ import (
 	"syscall"
 )
 
+var killProcess = syscall.Kill
+
 // Alive reports whether a process with the given PID is currently running.
 // Returns false for non-positive PIDs without performing any syscall.
 //
@@ -36,7 +38,7 @@ func Alive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	err := syscall.Kill(pid, 0)
+	err := killProcess(pid, 0)
 	if err == nil {
 		return true
 	}

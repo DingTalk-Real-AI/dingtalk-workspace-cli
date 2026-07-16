@@ -32,6 +32,8 @@ type File struct {
 	f *os.File
 }
 
+var acquireFileLock = lockFile
+
 // TryAcquire opens path (creating it if absent, mode 0600) and attempts to
 // take an exclusive non-blocking lock. Returns ErrBusy when the lock is held
 // by another process; any other error wraps the underlying I/O failure.
@@ -43,7 +45,7 @@ func TryAcquire(path string) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lock: open %s: %w", path, err)
 	}
-	if err := lockFile(f); err != nil {
+	if err := acquireFileLock(f); err != nil {
 		_ = f.Close()
 		if isBusy(err) {
 			return nil, ErrBusy

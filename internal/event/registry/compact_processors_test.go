@@ -103,6 +103,14 @@ func TestLookupProcessor_FallsBackToGeneric(t *testing.T) {
 	}
 }
 
+func TestLookupProcessorReturnsRegisteredProcessor(t *testing.T) {
+	p := LookupProcessor("im.message.read_v1")
+	view := p(transport.Event{EventType: "im.message.read_v1", Data: `{"reader":{"open_id":"ou"}}`})
+	if view.Extra["open_id"] != "ou" {
+		t.Fatalf("registered processor output = %#v", view)
+	}
+}
+
 func TestCompactIMMessage_LiftsNestedFields(t *testing.T) {
 	// Simulate the nested SDK shape: {"message": {...}, "sender": {...}}.
 	ev := transport.Event{
@@ -223,6 +231,25 @@ func TestCompactContactUser(t *testing.T) {
 	out := mustJSON(t, compactContactUser(ev))
 	if out["open_id"] != "ou_x" || out["userid"] != "u_x" || out["name"] != "Alice" {
 		t.Errorf("contact user fields missing: %+v", out)
+	}
+}
+
+func TestRemainingSpecializedProcessors(t *testing.T) {
+	read := mustJSON(t, compactIMMessageRead(transport.Event{Data: `{"reader":{"open_id":"ou","read_time":1},"context":{"open_message_ids":["m1"]}}`}))
+	if read["open_id"] != "ou" || read["open_message_ids"] == nil {
+		t.Errorf("message read fields missing: %#v", read)
+	}
+	task := mustJSON(t, compactApprovalTask(transport.Event{Data: `{"task":{"task_id":"t1","status":"pending"},"assignee":{"userid":"u1"}}`}))
+	if task["task_id"] != "t1" || task["assignee_userid"] != "u1" {
+		t.Errorf("approval task fields missing: %#v", task)
+	}
+	contact := mustJSON(t, compactContactUser(transport.Event{Data: `{"open_ids":["ou-old"]}`}))
+	if contact["open_id"] != "ou-old" {
+		t.Errorf("legacy contact fields missing: %#v", contact)
+	}
+	attendance := mustJSON(t, compactAttendanceCheck(transport.Event{Data: `{"punch":{"userid":"u1","check_time":1,"check_type":"on"}}`}))
+	if attendance["userid"] != "u1" || attendance["check_type"] != "on" {
+		t.Errorf("attendance fields missing: %#v", attendance)
 	}
 }
 

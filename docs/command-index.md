@@ -164,16 +164,19 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 
 ## `dws contact` — Contact Directory
 
-_Users, departments, and directory lookups._
+_Users, departments, directory lookups, and enterprise onboarding._
 
-**6 commands**
+**9 commands**
 
 | Command | Description | When to use |
 |---|---|---|
+| `dws contact account create` | Create a dedicated login account in the current enterprise. | When the user explicitly asks for an enterprise account or login account, rather than a new enterprise organization. |
 | `dws contact dept list-members` | List members of a specific department by department ID. | When the agent needs the roster of a department to target communication or build a team overview. |
 | `dws contact dept search` | Search departments in the organization's contact directory by keyword. | When the agent needs to resolve a department name to a department ID. |
+| `dws contact org create` | Create a new DingTalk enterprise organization. | When the user explicitly asks to create or initialize an enterprise and provides its name and creator display name. |
 | `dws contact user get` | Batch-fetch detailed profile information for one or more users by user ID. | When the agent needs names, titles, emails, or departments for a known set of user IDs. |
 | `dws contact user get-self` | Retrieve the profile of the currently authenticated user. | When the agent needs to identify who it is acting on behalf of (user ID, name, org). |
+| `dws contact user invite` | Invite one employee by mobile number into the current enterprise. | When the user explicitly asks to add an employee and has supplied the employee name and mobile number. |
 | `dws contact user search` | Search users in the contact directory by keyword (name, title, etc.). | When the agent needs to resolve a person's display name to a user ID. |
 | `dws contact user search-mobile` | Look up a user by mobile phone number. | When the agent has only a phone number and needs to find the corresponding DingTalk user. |
 

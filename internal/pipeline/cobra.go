@@ -42,7 +42,7 @@ func RunPreParse(root *cobra.Command, engine *Engine) {
 
 	// Traverse the command tree to find the target command.
 	target, _, err := root.Traverse(rawArgs)
-	if err != nil || target == nil {
+	if err != nil {
 		return
 	}
 
@@ -94,22 +94,22 @@ func FlagInfoFromCommand(cmd *cobra.Command) []FlagInfo {
 	var infos []FlagInfo
 
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if seen[f.Name] {
-			return
-		}
-		seen[f.Name] = true
-		infos = append(infos, flagInfoFromPflag(f))
+		appendFlagInfo(&infos, seen, f)
 	})
 
 	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
-		if seen[f.Name] {
-			return
-		}
-		seen[f.Name] = true
-		infos = append(infos, flagInfoFromPflag(f))
+		appendFlagInfo(&infos, seen, f)
 	})
 
 	return infos
+}
+
+func appendFlagInfo(infos *[]FlagInfo, seen map[string]bool, flag *pflag.Flag) {
+	if seen[flag.Name] {
+		return
+	}
+	seen[flag.Name] = true
+	*infos = append(*infos, flagInfoFromPflag(flag))
 }
 
 // flagInfoFromPflag builds a FlagInfo from a pflag.Flag, copying

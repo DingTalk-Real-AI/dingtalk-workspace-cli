@@ -28,6 +28,21 @@ var runtimeState struct {
 	lastCapture *LastError
 }
 
+var (
+	recoveryReadFile  = os.ReadFile
+	recoveryWriteFile = os.WriteFile
+	recoveryOpen      = os.Open
+	recoveryOpenFile  = os.OpenFile
+	recoveryMkdirAll  = os.MkdirAll
+	recoveryReadDir   = os.ReadDir
+	recoveryStat      = os.Stat
+	recoveryRemove    = os.Remove
+	recoveryRemoveAll = os.RemoveAll
+	recoveryFileWrite = func(file *os.File, data []byte) (int, error) {
+		return file.Write(data)
+	}
+)
+
 func NewStore(configDir string) *Store {
 	return &Store{baseDir: configDir}
 }
@@ -77,7 +92,7 @@ func (s *Store) LoadLastError() (*LastError, error) {
 	if err := s.pruneExpiredArtifacts(time.Now().UTC()); err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(s.lastErrorPath())
+	data, err := recoveryReadFile(s.lastErrorPath())
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +114,7 @@ func (s *Store) LoadErrorByEvent(eventID string) (*LastError, error) {
 		return nil, err
 	}
 
-	file, err := os.Open(s.eventsPath())
+	file, err := recoveryOpen(s.eventsPath())
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -187,27 +202,24 @@ func (s *Store) writeJSON(path string, payload any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	return recoveryWriteFile(path, append(data, '\n'), 0o600)
 }
 
 func (s *Store) appendEvent(event RecoveryEvent) error {
 	if err := s.ensureDir(); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(s.eventsPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	file, err := recoveryOpenFile(s.eventsPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	writer := bufio.NewWriter(file)
-	defer writer.Flush()
-
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
-	if _, err := writer.Write(append(data, '\n')); err != nil {
+	if _, err := recoveryFileWrite(file, append(data, '\n')); err != nil {
 		return err
 	}
 	return nil
@@ -217,7 +229,7 @@ func (s *Store) ensureDir() error {
 	if !s.Enabled() {
 		return fmt.Errorf("recovery store disabled")
 	}
-	if err := os.MkdirAll(s.dir(), 0o700); err != nil {
+	if err := recoveryMkdirAll(s.dir(), 0o700); err != nil {
 		return err
 	}
 	return s.pruneExpiredArtifacts(time.Now().UTC())
@@ -354,7 +366,7 @@ func (s *Store) pruneExpiredArtifacts(now time.Time) error {
 
 func (s *Store) pruneLastError(cutoff time.Time) error {
 	path := s.lastErrorPath()
-	data, err := os.ReadFile(path)
+	data, err := recoveryReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -365,12 +377,12 @@ func (s *Store) pruneLastError(cutoff time.Time) error {
 	var last LastError
 	if err := json.Unmarshal(data, &last); err == nil {
 		if recordedAt, ok := parseRecordedAt(last.RecordedAt); ok && recordedAt.Before(cutoff) {
-			return os.Remove(path)
+			return recoveryRemove(path)
 		}
 		return nil
 	}
 
-	info, statErr := os.Stat(path)
+	info, statErr := recoveryStat(path)
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
 			return nil
@@ -378,14 +390,14 @@ func (s *Store) pruneLastError(cutoff time.Time) error {
 		return statErr
 	}
 	if info.ModTime().Before(cutoff) {
-		return os.Remove(path)
+		return recoveryRemove(path)
 	}
 	return nil
 }
 
 func (s *Store) pruneEvents(cutoff time.Time) error {
 	path := s.eventsPath()
-	data, err := os.ReadFile(path)
+	data, err := recoveryReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -413,14 +425,14 @@ func (s *Store) pruneEvents(cutoff time.Time) error {
 	}
 
 	if len(kept) == 0 {
-		return os.Remove(path)
+		return recoveryRemove(path)
 	}
 	content := strings.Join(kept, "\n") + "\n"
-	return os.WriteFile(path, []byte(content), 0o600)
+	return recoveryWriteFile(path, []byte(content), 0o600)
 }
 
 func (s *Store) pruneOtherArtifacts(cutoff time.Time) error {
-	entries, err := os.ReadDir(s.dir())
+	entries, err := recoveryReadDir(s.dir())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -434,7 +446,7 @@ func (s *Store) pruneOtherArtifacts(cutoff time.Time) error {
 			continue
 		}
 		path := filepath.Join(s.dir(), name)
-		info, err := os.Stat(path)
+		info, err := recoveryStat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -442,7 +454,7 @@ func (s *Store) pruneOtherArtifacts(cutoff time.Time) error {
 			return err
 		}
 		if info.ModTime().Before(cutoff) {
-			if err := os.RemoveAll(path); err != nil && !os.IsNotExist(err) {
+			if err := recoveryRemoveAll(path); err != nil && !os.IsNotExist(err) {
 				return err
 			}
 		}

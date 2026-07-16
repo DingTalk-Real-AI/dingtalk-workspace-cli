@@ -91,12 +91,6 @@ func sanitizeTitleFromText(text string) (title string) {
 	const maxTitleRunes = 30 // conservative: 30 CJK chars = 90 bytes, leaving room for "..."
 	const fallbackTitle = "消息"
 
-	defer func() {
-		if r := recover(); r != nil {
-			title = fallbackTitle
-		}
-	}()
-
 	if strings.TrimSpace(text) == "" {
 		return fallbackTitle
 	}
@@ -700,10 +694,7 @@ func buildChatChmodArgs(cmd *cobra.Command, scope string) (map[string]any, error
 
 func buildChatCrossOrgDataAuthArgs(cmd *cobra.Command) (map[string]any, error) {
 	targetOrgID := strings.TrimSpace(mustGetFlag(cmd, "target-org-id"))
-	all, err := cmd.Flags().GetBool("all")
-	if err != nil {
-		return nil, err
-	}
+	all, _ := cmd.Flags().GetBool("all")
 	if targetOrgID == "" && !all {
 		return nil, fmt.Errorf("--target-org-id or --all is required")
 	}
@@ -718,10 +709,7 @@ func buildChatCrossOrgDataAuthArgs(cmd *cobra.Command) (map[string]any, error) {
 		return nil, err
 	}
 	toolArgs["grantCategory"] = "data"
-	paramsJSON, err := marshalJSONRaw(map[string]string{"targetOrgId": targetOrgID})
-	if err != nil {
-		return nil, err
-	}
+	paramsJSON, _ := marshalJSONRaw(map[string]string{"targetOrgId": targetOrgID})
 	toolArgs["grantParams"] = string(paramsJSON)
 	return toolArgs, nil
 }
@@ -759,10 +747,7 @@ func appendChatChmodParams(cmd *cobra.Command, toolArgs map[string]any) error {
 	if specified == 0 && len(grantParams) == 0 {
 		return fmt.Errorf("--conversation-id, --open-dingtalk-id, --user or --permParam is required")
 	}
-	paramsJSON, err := marshalJSONRaw(grantParams)
-	if err != nil {
-		return err
-	}
+	paramsJSON, _ := marshalJSONRaw(grantParams)
 	toolArgs["grantParams"] = string(paramsJSON)
 	return nil
 }
@@ -848,6 +833,8 @@ type conversationLocalFileMeta struct {
 	MD5         string
 }
 
+var chatFileMD5 = fileMD5Hex
+
 func buildConversationLocalFileMeta(filePath, fileName, md5Value string) (conversationLocalFileMeta, error) {
 	fi, err := os.Stat(filePath)
 	if err != nil {
@@ -861,7 +848,7 @@ func buildConversationLocalFileMeta(filePath, fileName, md5Value string) (conver
 	}
 	fileType := strings.TrimPrefix(filepath.Ext(fileName), ".")
 	if md5Value == "" {
-		md5Value, err = fileMD5Hex(filePath)
+		md5Value, err = chatFileMD5(filePath)
 		if err != nil {
 			return conversationLocalFileMeta{}, err
 		}
@@ -924,10 +911,7 @@ func buildConversationFileContent(dentryID, spaceID int64, meta conversationLoca
 		FilePath: meta.ContentPath,
 		FileSize: meta.FileSize,
 	}
-	body, err := marshalJSONRaw(content)
-	if err != nil {
-		return "", err
-	}
+	body, _ := marshalJSONRaw(content)
 	return string(body), nil
 }
 
@@ -1548,15 +1532,9 @@ func newChatCommand() *cobra.Command {
 					if filePath != "" {
 						meta, err := buildConversationLocalFileMeta(filePath, "", "")
 						if err == nil && dentryId != 0 && spaceId != 0 {
-							contentJSON, err = buildConversationFileContent(dentryId, spaceId, meta)
-							if err != nil {
-								return err
-							}
+							contentJSON, _ = buildConversationFileContent(dentryId, spaceId, meta)
 						} else if err == nil {
-							targetArgs, err := buildConversationTargetArgs(cmd)
-							if err != nil {
-								return err
-							}
+							targetArgs, _ := buildConversationTargetArgs(cmd)
 							if deps.Caller.DryRun() {
 								deps.Out.PrintKeyValue("操作", "上传本地文件并发送 file 消息")
 								deps.Out.PrintKeyValue("文件", meta.LocalPath)
@@ -1574,10 +1552,7 @@ func newChatCommand() *cobra.Command {
 							if err != nil {
 								return err
 							}
-							contentJSON, err = buildConversationFileContent(dentryId, spaceId, meta)
-							if err != nil {
-								return err
-							}
+							contentJSON, _ = buildConversationFileContent(dentryId, spaceId, meta)
 						} else if dentryId == 0 || spaceId == 0 {
 							return fmt.Errorf("--file-path must be a readable local file, or pass legacy --dentry-id and --space-id: %w", err)
 						}
@@ -1603,12 +1578,8 @@ func newChatCommand() *cobra.Command {
 				}
 				if groupID != "" {
 					params["openConversationId"] = groupID
-				} else if openDingTalkID != "" {
-					params["receiverOpenDingTalkId"] = openDingTalkID
-				} else if userID != "" {
-					params["receiverUid"] = userID
 				} else {
-					return fmt.Errorf("--group, --user or --open-dingtalk-id is required for media messages")
+					params["receiverOpenDingTalkId"] = openDingTalkID
 				}
 				if msgUuid != "" {
 					params["uuid"] = msgUuid
@@ -1658,19 +1629,6 @@ func newChatCommand() *cobra.Command {
 					newParams["uuid"] = msgUuid
 				}
 				return callMCPTool("send_personal_message", newParams)
-			}
-			if userID != "" {
-				directContentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
-				directMsgParams := map[string]any{
-					"receiverUid": userID,
-					"msgType":     "markdown",
-					"content":     string(directContentJSON),
-					"clawType":    clawType,
-				}
-				if msgUuid != "" {
-					directMsgParams["uuid"] = msgUuid
-				}
-				return callMCPTool("send_personal_message", directMsgParams)
 			}
 			// 单聊：统一走 openDingTalkId
 			directContentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
@@ -3185,7 +3143,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 
 --output 指定本地保存路径，可以是文件路径或目录。
 如果指定目录，文件名从下载 URL 中自动推断。默认保存到当前目录。`,
-		Example: `  dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId>
+		Example: `  dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./download.bin
   dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/
   dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./photo.jpg
   # resource-id: 从 dws chat message list 返回的消息内容中获取 mediaId
@@ -3503,10 +3461,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				"replyMsgType":             "text",
 				"content":                  mustGetFlag(cmd, "text"),
 			}
-			contentJSON, err := marshalJSONRaw(replyContent)
-			if err != nil {
-				return fmt.Errorf("failed to marshal reply content: %w", err)
-			}
+			contentJSON, _ := marshalJSONRaw(replyContent)
 			clawType := ""
 			aiTag, _ := cmd.Flags().GetBool("ai-tag")
 			if aiTag {

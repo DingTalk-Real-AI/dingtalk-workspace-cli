@@ -141,7 +141,8 @@ api_get() {
 
 list_assets() {
   api_get "$GITEE_LIST_MAX_TIME" \
-    "${base}/releases/${release_id}/attach_files?access_token=${GITEE_TOKEN}" \
+    -H "Authorization: token ${GITEE_TOKEN}" \
+    "${base}/releases/${release_id}/attach_files" \
     | python3 -c 'import json,sys
 data=json.load(sys.stdin)
 rows=data if isinstance(data,list) else data.get("attach_files",[])
@@ -214,7 +215,8 @@ delete_asset() {
   max_time="$(bounded_max_time "$GITEE_MUTATION_MAX_TIME")" || return 1
   curl -fsS --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
     --max-time "$max_time" \
-    -X DELETE "${base}/releases/${release_id}/attach_files/${asset_id}?access_token=${GITEE_TOKEN}" \
+    -H "Authorization: token ${GITEE_TOKEN}" \
+    -X DELETE "${base}/releases/${release_id}/attach_files/${asset_id}" \
     >/dev/null
 }
 
@@ -241,7 +243,7 @@ gitee_attach() {
     if response="$(curl -fsS --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
       --max-time "$max_time" \
       -X POST "${base}/releases/${release_id}/attach_files" \
-      -F "access_token=${GITEE_TOKEN}" -F "file=@${file}" 2>&1)"; then
+      -H "Authorization: token ${GITEE_TOKEN}" -F "file=@${file}" 2>&1)"; then
       status=0
     else
       status=$?

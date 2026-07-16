@@ -104,6 +104,7 @@ func TestAitableWorkflowUpdateReadsDSLFile(t *testing.T) {
 		"--base-id", "base-update",
 		"--workflow-id", "flow-existing",
 		"--dsl", "@"+path,
+		"--locale", "en-US",
 	)
 	if err != nil {
 		t.Fatalf("workflow update returned error: %v", err)
@@ -118,6 +119,7 @@ func TestAitableWorkflowUpdateReadsDSLFile(t *testing.T) {
 	wantArgs := map[string]any{
 		"baseId":     "base-update",
 		"workflowId": "flow-existing",
+		"locale":     "en-US",
 		"dsl": map[string]any{
 			"version": "workflow-dsl/v1",
 			"name":    "updated",
@@ -125,6 +127,18 @@ func TestAitableWorkflowUpdateReadsDSLFile(t *testing.T) {
 	}
 	if !reflect.DeepEqual(call.args, wantArgs) {
 		t.Fatalf("tool args = %#v, want %#v", call.args, wantArgs)
+	}
+}
+
+func TestAitableWorkflowWriteReportsStdinReadError(t *testing.T) {
+	caller, err := runAitableWorkflowCommand(t, coverageFailingReader{},
+		"create", "--base-id", "base-stdin", "--dsl", "-",
+	)
+	if err == nil || !strings.Contains(err.Error(), "--dsl stdin read failed: read failed") {
+		t.Fatalf("error = %v, want wrapped stdin read error", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("failed stdin read reached MCP: %#v", caller.calls)
 	}
 }
 

@@ -11,6 +11,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	repairJSONML        = jsonrepair.RepairJSON
+	diagnoseJSONMLError = doc.DiagnoseJSONError
+)
+
 // isInputDangerousUnicode matches the dangerous-unicode set defined by the
 // server-side RejectControlChars validator (pkg/validate/input.go).
 func isInputDangerousUnicode(r rune) bool {
@@ -93,10 +98,7 @@ func coerceJsonMLBodyShape(raw string) (string, []string, error) {
 		return raw, nil, nil
 	}
 	if _, ok := probe.([]any); ok {
-		wrapped, err := json.Marshal(map[string]any{"jsonml": probe})
-		if err != nil {
-			return raw, nil, fmt.Errorf("wrap bare jsonml array: %w", err)
-		}
+		wrapped, _ := json.Marshal(map[string]any{"jsonml": probe})
 		return string(wrapped), nil, nil
 	}
 	return raw, nil, nil
@@ -137,10 +139,7 @@ func coerceJsonMLNodeShape(raw string) (string, []string, error) {
 	case 0:
 		return "", nil, fmt.Errorf(`--content-format jsonml 输入 {"jsonml":[]}: wrapper 中 jsonml 数组为空`)
 	case 1:
-		out, err := json.Marshal(arr[0])
-		if err != nil {
-			return raw, nil, fmt.Errorf("unwrap single jsonml node: %w", err)
-		}
+		out, _ := json.Marshal(arr[0])
 		note := `输入为 {"jsonml":[node]} body 形态，已自动解包为单节点以符合 block 命令协议`
 		return string(out), []string{note}, nil
 	default:
@@ -170,7 +169,7 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 	if fixJSON {
 		var probe any
 		if err := json.Unmarshal([]byte(raw), &probe); err != nil {
-			result, repairErr := jsonrepair.RepairJSON(raw)
+			result, repairErr := repairJSONML(raw)
 			if repairErr != nil {
 				return "", fmt.Errorf("JSON 语法错误且自动修复失败: %w\n原始错误: %v", repairErr, err)
 			}
@@ -181,10 +180,7 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 	}
 
 	// Step 2: Coerce shape — bare array → {"jsonml": [...]} wrapper.
-	coerced, coerceNotes, err := coerceJsonMLBodyShape(raw)
-	if err != nil {
-		return "", err
-	}
+	coerced, coerceNotes, _ := coerceJsonMLBodyShape(raw)
 	emitFixNotes(coerceNotes)
 	raw = coerced
 
@@ -193,7 +189,7 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 	if err := json.Unmarshal([]byte(raw), &wrapper); err != nil {
 		if !fixJSON {
 			// Use parser for detailed positional diagnostics
-			detail := doc.DiagnoseJSONError([]byte(raw))
+			detail := diagnoseJSONMLError([]byte(raw))
 			if detail != "" {
 				return "", fmt.Errorf("JSON 语法错误: %w\n\n%s\n如果输入来自 LLM 生成，可通过 --fix-jsonml 尝试自动修复", err, detail)
 			}
@@ -238,10 +234,7 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 		fmt.Fprintf(os.Stderr, "[WARN] %s\n", summary)
 	}
 
-	out, err := json.Marshal(bodyArr)
-	if err != nil {
-		return "", fmt.Errorf("marshal jsonml: %w", err)
-	}
+	out, _ := json.Marshal(bodyArr)
 	cleaned := stripInputUnsafeChars(string(out))
 	return cleaned, nil
 }
@@ -265,7 +258,7 @@ func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
 	if fixJSON {
 		var probe any
 		if err := json.Unmarshal([]byte(rawElement), &probe); err != nil {
-			result, repairErr := jsonrepair.RepairJSON(rawElement)
+			result, repairErr := repairJSONML(rawElement)
 			if repairErr != nil {
 				return "", fmt.Errorf("JSON 语法错误且自动修复失败: %w\n原始错误: %v", repairErr, err)
 			}
@@ -288,14 +281,13 @@ func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
 	if err := json.Unmarshal([]byte(rawElement), &node); err != nil {
 		if !fixJSON {
 			// Use parser for detailed positional diagnostics
-			detail := doc.DiagnoseJSONError([]byte(rawElement))
+			detail := diagnoseJSONMLError([]byte(rawElement))
 			if detail != "" {
 				return "", fmt.Errorf("JSON 语法错误: %w\n\n%s\n如果输入来自 LLM 生成，可通过 --fix-jsonml 尝试自动修复", err, detail)
 			}
 			return "", fmt.Errorf("JSON 语法错误: %w\n输入不是有效的 JSON（可能缺少括号或逗号）。如果输入来自 LLM 生成，可通过 --fix-jsonml 尝试自动修复", err)
 		}
-		// fixJSON was true but repair+coerce still couldn't produce valid JSON
-		return "", fmt.Errorf("JSON 修复后仍无法解析: %w", err)
+		return "", fmt.Errorf("JSON 语法错误: %w", err)
 	}
 	if _, ok := node.([]any); !ok {
 		return "", fmt.Errorf("--content-format jsonml 要求 --element 为 JSON 数组，实际类型: %T", node)
@@ -318,10 +310,7 @@ func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
 		fmt.Fprintf(os.Stderr, "[WARN] %s\n", summary)
 	}
 
-	out, err := json.Marshal(node)
-	if err != nil {
-		return "", fmt.Errorf("marshal jsonml: %w", err)
-	}
+	out, _ := json.Marshal(node)
 	return stripInputUnsafeChars(string(out)), nil
 }
 

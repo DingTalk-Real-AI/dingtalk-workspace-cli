@@ -34,12 +34,17 @@ type connectCreds struct {
 	source       string // how they were resolved, for the [connect] log line
 }
 
+var (
+	connectStdinStat       = func() (os.FileInfo, error) { return os.Stdin.Stat() }
+	connectOnboardingSleep = sleepCtx
+)
+
 // connectStdinInteractive reports whether stdin is a real terminal (char
 // device), so the onboarding prompt only runs interactively and never blocks a
 // script, a daemon, or a piped invocation — those keep the original
 // "need a flag" error.
 func connectStdinInteractive() bool {
-	fi, err := os.Stdin.Stat()
+	fi, err := connectStdinStat()
 	if err != nil {
 		return false
 	}
@@ -171,7 +176,7 @@ func pollRobotCreateResult(runner executor.Runner, cmd *cobra.Command, taskID st
 		}
 		if attempt < maxAttempts {
 			fmt.Fprintf(out, "  建号进行中（%d/%d，状态=%s），稍候…\n", attempt, maxAttempts, status)
-			_ = sleepCtx(cmd.Context(), 3*time.Second)
+			_ = connectOnboardingSleep(cmd.Context(), 3*time.Second)
 		}
 	}
 	return connectCreds{}, apperrors.NewInternal(fmt.Sprintf("建号结果轮询超时，taskId=%s；可稍后用 `dws dev app robot result --task-id %s` 继续查询", taskID, taskID))

@@ -22,6 +22,8 @@ type DownloadConfig struct {
 	ProgressInterval time.Duration
 }
 
+var downloadAfter = time.After
+
 // DefaultDownloadConfig returns sensible download defaults.
 func DefaultDownloadConfig() *DownloadConfig {
 	return &DownloadConfig{
@@ -69,7 +71,7 @@ func DownloadWithConfig(ctx context.Context, url, destPath string, cfg *Download
 			select {
 			case <-ctx.Done():
 				return 0, ctx.Err()
-			case <-time.After(backoff):
+			case <-downloadAfter(backoff):
 			}
 		}
 

@@ -129,9 +129,6 @@ func (s *PersonalSource) Start(ctx context.Context, emit dwsevent.EmitFn) error 
 	backoff := s.cfg.ReconnectMin
 	for {
 		acked, err := s.runAttempt(ctx, emit)
-		if err == nil {
-			return nil
-		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -203,10 +200,7 @@ func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, erro
 		body["clientId"] = s.cfg.ClientID
 		body["clientSecret"] = s.cfg.ClientSecret
 	}
-	b, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
+	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.TicketURL, bytes.NewReader(b))
 	if err != nil {
 		return nil, fmt.Errorf("personal source: create ticket request: %w", err)
@@ -255,9 +249,7 @@ func (s *PersonalSource) handleFrame(conn *websocket.Conn, data []byte, emit dws
 	resp := payload.NewSuccessDataFrameResponse()
 	resp.SetHeader(payload.DataFrameHeaderKMessageId, df.GetMessageId())
 	resp.SetHeader(payload.DataFrameHeaderKContentType, payload.DataFrameContentTypeKJson)
-	if err := resp.SetJson(event.NewEventProcessResultSuccess()); err != nil {
-		return err
-	}
+	_ = resp.SetJson(event.NewEventProcessResultSuccess())
 	if err := conn.WriteJSON(resp); err != nil {
 		return retryPersonal(fmt.Errorf("personal source: write ack: %w", err))
 	}

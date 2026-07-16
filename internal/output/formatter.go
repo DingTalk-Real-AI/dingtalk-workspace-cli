@@ -56,17 +56,19 @@ var preferredListKeys = []string{
 	"result", "documents", "emailAccounts", "todoCards", "events", "messages",
 }
 
+var (
+	marshalJSON       = json.Marshal
+	unmarshalJSON     = json.Unmarshal
+	marshalJSONOutput = jsonutil.Marshal
+	marshalJSONIndent = jsonutil.MarshalIndent
+)
+
 func ResolveFormat(cmd *cobra.Command, fallback Format) Format {
 	if cmd == nil {
 		return fallback
 	}
 	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags()} {
 		if format, ok := formatFromFlagSet(flags, fallback); ok {
-			return format
-		}
-	}
-	if root := cmd.Root(); root != nil {
-		if format, ok := formatFromFlagSet(root.PersistentFlags(), fallback); ok {
 			return format
 		}
 	}
@@ -187,9 +189,6 @@ func ResolveFields(cmd *cobra.Command) string {
 		return ""
 	}
 	rootFlags := rootPersistentFlags(cmd)
-	if rootFlags == nil {
-		return ""
-	}
 	globalFlag := rootFlags.Lookup("fields")
 	if globalFlag == nil {
 		return ""
@@ -200,9 +199,6 @@ func ResolveFields(cmd *cobra.Command) string {
 		cmd.InheritedFlags(),
 		rootFlags,
 	} {
-		if flags == nil {
-			continue
-		}
 		if f := flags.Lookup("fields"); f != nil && f.Changed {
 			// To avoid collision with business flags (e.g. table create --fields),
 			// verify this flag shares the same usage string as the global one.
@@ -223,9 +219,6 @@ func ResolveJQ(cmd *cobra.Command) string {
 		return ""
 	}
 	rootFlags := rootPersistentFlags(cmd)
-	if rootFlags == nil {
-		return ""
-	}
 	globalFlag := rootFlags.Lookup("jq")
 	if globalFlag == nil {
 		return ""
@@ -236,9 +229,6 @@ func ResolveJQ(cmd *cobra.Command) string {
 		cmd.InheritedFlags(),
 		rootFlags,
 	} {
-		if flags == nil {
-			continue
-		}
 		if f := flags.Lookup("jq"); f != nil && f.Changed {
 			if f.Usage == globalFlag.Usage {
 				if v, err := flags.GetString("jq"); err == nil {
@@ -251,15 +241,15 @@ func ResolveJQ(cmd *cobra.Command) string {
 }
 
 func rootPersistentFlags(cmd *cobra.Command) *pflag.FlagSet {
-	if root := cmd.Root(); root != nil {
-		return root.PersistentFlags()
+	if cmd == nil {
+		return nil
 	}
-	return nil
+	return cmd.Root().PersistentFlags()
 }
 
 // WriteJSON marshals payload as indented JSON and writes it to w.
 func WriteJSON(w io.Writer, payload any) error {
-	data, err := jsonutil.MarshalIndent(payload, "", "  ")
+	data, err := marshalJSONIndent(payload, "", "  ")
 	if err != nil {
 		return apperrors.NewInternal("failed to encode command output as JSON")
 	}
@@ -272,7 +262,7 @@ func writeRaw(w io.Writer, payload any) error {
 		_, err := fmt.Fprintln(w, SanitizeForTerminal(text))
 		return err
 	}
-	data, err := jsonutil.Marshal(payload)
+	data, err := marshalJSONOutput(payload)
 	if err != nil {
 		return apperrors.NewInternal("failed to encode raw command output")
 	}
@@ -310,10 +300,8 @@ func writeTableish(w io.Writer, payload any) error {
 		}
 		return writeKeyValues(w, typed)
 	case []any:
-		if headers, rows, ok := rowsFromSlice(typed); ok {
-			return writeTable(w, headers, rows)
-		}
-		return writeRaw(w, normalized)
+		headers, rows := rowsFromSlice(typed)
+		return writeTable(w, headers, rows)
 	default:
 		return writeRaw(w, normalized)
 	}
@@ -326,12 +314,12 @@ func normalizePayload(payload any) (any, error) {
 	if text, ok := payload.(string); ok {
 		return text, nil
 	}
-	data, err := json.Marshal(payload)
+	data, err := marshalJSON(payload)
 	if err != nil {
 		return nil, apperrors.NewInternal("failed to normalize command output")
 	}
 	var normalized any
-	if err := json.Unmarshal(data, &normalized); err != nil {
+	if err := unmarshalJSON(data, &normalized); err != nil {
 		return nil, apperrors.NewInternal("failed to decode normalized command output")
 	}
 	return normalized, nil
@@ -366,10 +354,7 @@ func extractRowsFromMap(payload map[string]any) ([]string, [][]string, map[strin
 	if loc == nil {
 		return nil, nil, nil, false
 	}
-	headers, rows, ok := rowsFromSlice(loc.list)
-	if !ok {
-		return nil, nil, nil, false
-	}
+	headers, rows := rowsFromSlice(loc.list)
 	meta := make(map[string]any)
 	if loc.outerKey == "" {
 		for k, v := range payload {
@@ -385,26 +370,25 @@ func extractRowsFromMap(payload map[string]any) ([]string, [][]string, map[strin
 			}
 			meta[k] = v
 		}
-		if inner, ok := payload[loc.outerKey].(map[string]any); ok {
-			for k, v := range inner {
-				if k == loc.innerKey {
-					continue
-				}
-				if _, exists := meta[k]; exists {
-					// Outer wins on key collision so users see the wrapper-level
-					// sibling rather than a clobbered inner one.
-					continue
-				}
-				meta[k] = v
+		inner := payload[loc.outerKey].(map[string]any)
+		for k, v := range inner {
+			if k == loc.innerKey {
+				continue
 			}
+			if _, exists := meta[k]; exists {
+				// Outer wins on key collision so users see the wrapper-level
+				// sibling rather than a clobbered inner one.
+				continue
+			}
+			meta[k] = v
 		}
 	}
 	return headers, rows, meta, true
 }
 
-func rowsFromSlice(items []any) ([]string, [][]string, bool) {
+func rowsFromSlice(items []any) ([]string, [][]string) {
 	if len(items) == 0 {
-		return []string{"value"}, [][]string{}, true
+		return []string{"value"}, [][]string{}
 	}
 
 	allMaps := true
@@ -430,14 +414,14 @@ func rowsFromSlice(items []any) ([]string, [][]string, bool) {
 			}
 			rows = append(rows, row)
 		}
-		return headers, rows, true
+		return headers, rows
 	}
 
 	rows := make([][]string, 0, len(items))
 	for _, item := range items {
 		rows = append(rows, []string{formatValue(item)})
 	}
-	return []string{"value"}, rows, true
+	return []string{"value"}, rows
 }
 
 func writeKeyValues(w io.Writer, payload map[string]any) error {
@@ -560,7 +544,7 @@ func formatValue(value any) string {
 	case string:
 		return SanitizeForTerminal(typed)
 	default:
-		data, err := jsonutil.Marshal(typed)
+		data, err := marshalJSONOutput(typed)
 		if err != nil {
 			return SanitizeForTerminal(fmt.Sprintf("%v", typed))
 		}
