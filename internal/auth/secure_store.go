@@ -25,6 +25,30 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+type secureTempFile interface {
+	Write([]byte) (int, error)
+	Name() string
+	Sync() error
+	Close() error
+}
+
+var (
+	secureGetMAC        = security.GetMACAddress
+	secureMkdirAll      = os.MkdirAll
+	secureStat          = os.Stat
+	secureChmod         = os.Chmod
+	secureMarshalIndent = json.MarshalIndent
+	secureEncrypt       = security.Encrypt
+	secureCreateTemp    = func(dir, pattern string) (secureTempFile, error) {
+		return os.CreateTemp(dir, pattern)
+	}
+	secureRemove    = os.Remove
+	secureRename    = os.Rename
+	secureReadFile  = os.ReadFile
+	secureDecrypt   = security.Decrypt
+	secureUnmarshal = json.Unmarshal
+)
+
 const secureDataFile = ".data"
 
 // ErrTokenDecryption indicates that token decryption failed, typically
@@ -43,7 +67,7 @@ var (
 // getCachedMAC returns the cached MAC address, fetching it once if needed.
 func getCachedMAC() (string, error) {
 	cachedMACOnce.Do(func() {
-		cachedMAC, cachedMACErr = security.GetMACAddress()
+		cachedMAC, cachedMACErr = secureGetMAC()
 	})
 	return cachedMAC, cachedMACErr
 }
@@ -71,19 +95,19 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 		return err
 	}
 
-	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
+	if err := secureMkdirAll(configDir, config.DirPerm); err != nil {
 		return fmt.Errorf("creating config dir %s: %w", configDir, err)
 	}
 	// Verify the directory permissions are strict even if it already existed.
-	if info, statErr := os.Stat(configDir); statErr == nil {
+	if info, statErr := secureStat(configDir); statErr == nil {
 		if perm := info.Mode().Perm(); perm&0o077 != 0 {
-			if chErr := os.Chmod(configDir, config.DirPerm); chErr != nil {
+			if chErr := secureChmod(configDir, config.DirPerm); chErr != nil {
 				return fmt.Errorf("config dir %s has unsafe permissions %o and chmod failed: %w", configDir, perm, chErr)
 			}
 		}
 	}
 
-	plaintext, err := json.MarshalIndent(data, "", "  ")
+	plaintext, err := secureMarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling token data: %w", err)
 	}
@@ -93,17 +117,16 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 		}
 	}()
 
-	ciphertext, err := security.Encrypt(plaintext, password)
+	ciphertext, err := secureEncrypt(plaintext, password)
 	if err != nil {
 		return fmt.Errorf("encrypting token data: %w", err)
 	}
 
 	finalPath := filepath.Join(configDir, secureDataFile)
-
 	// Give every writer its own temporary file. Reusing one fixed .tmp path lets
 	// concurrent saves truncate or rename another writer's ciphertext before it
 	// is complete, which can publish a corrupt final file.
-	tmpFile, err := os.CreateTemp(configDir, secureDataFile+".tmp-*")
+	tmpFile, err := secureCreateTemp(configDir, secureDataFile+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("creating tmp file: %w", err)
 	}
@@ -113,7 +136,7 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 	defer func() {
 		if !writeSuccess {
 			tmpFile.Close()
-			_ = os.Remove(tmpPath)
+			_ = secureRemove(tmpPath)
 		}
 	}()
 
@@ -126,8 +149,8 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("closing tmp file: %w", err)
 	}
-	if err := os.Rename(tmpPath, finalPath); err != nil {
-		_ = os.Remove(tmpPath)
+	if err := secureRename(tmpPath, finalPath); err != nil {
+		_ = secureRemove(tmpPath)
 		return fmt.Errorf("renaming tmp to final: %w", err)
 	}
 	writeSuccess = true
@@ -144,12 +167,12 @@ func LoadSecureTokenData(configDir string) (*TokenData, error) {
 	}
 
 	path := filepath.Join(configDir, secureDataFile)
-	ciphertext, err := os.ReadFile(path)
+	ciphertext, err := secureReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading secure data file: %w", err)
 	}
 
-	plaintext, err := security.Decrypt(ciphertext, password)
+	plaintext, err := secureDecrypt(ciphertext, password)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrTokenDecryption, err)
 	}
@@ -161,7 +184,7 @@ func LoadSecureTokenData(configDir string) (*TokenData, error) {
 	}()
 
 	var data TokenData
-	if err := json.Unmarshal(plaintext, &data); err != nil {
+	if err := secureUnmarshal(plaintext, &data); err != nil {
 		return nil, fmt.Errorf("parsing decrypted token data: %w", err)
 	}
 
@@ -171,15 +194,15 @@ func LoadSecureTokenData(configDir string) (*TokenData, error) {
 // DeleteSecureData removes .data file from configDir.
 func DeleteSecureData(configDir string) error {
 	path := filepath.Join(configDir, secureDataFile)
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := secureRemove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("deleting secure data file: %w", err)
 	}
 	// Remove the legacy fixed temporary path and any per-writer temporary files
 	// left behind by an interrupted save.
-	_ = os.Remove(path + ".tmp")
+	_ = secureRemove(path + ".tmp")
 	tmpPaths, _ := filepath.Glob(path + ".tmp-*")
 	for _, tmpPath := range tmpPaths {
-		_ = os.Remove(tmpPath)
+		_ = secureRemove(tmpPath)
 	}
 	return nil
 }
@@ -187,6 +210,6 @@ func DeleteSecureData(configDir string) error {
 // SecureDataExists checks if the secure .data file exists in the given directory.
 func SecureDataExists(configDir string) bool {
 	path := filepath.Join(configDir, secureDataFile)
-	_, err := os.Stat(path)
+	_, err := secureStat(path)
 	return err == nil
 }

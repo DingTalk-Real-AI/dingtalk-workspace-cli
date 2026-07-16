@@ -82,6 +82,29 @@ type daemonState struct {
 // away from the real ~/.dws tree. Empty means use config.DefaultConfigDir.
 var connectDaemonDirOverride string
 
+// Process and clock hooks keep daemon lifecycle tests deterministic while the
+// production defaults remain the operating-system implementations.
+var (
+	daemonDetachEnabled = daemonDetachSupported
+	daemonExecutable    = os.Executable
+	daemonCommand       = exec.Command
+	daemonNow           = time.Now
+	daemonCreateTemp    = os.CreateTemp
+	daemonFileChmod     = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
+	daemonCopy          = io.Copy
+	daemonFileSync      = func(file *os.File) error { return file.Sync() }
+	daemonFileClose     = func(file *os.File) error { return file.Close() }
+	daemonRename        = os.Rename
+	daemonFindProcess   = os.FindProcess
+	daemonProcessAlive  = processAlive
+	daemonSignalProcess = func(process *os.Process, signal os.Signal) error {
+		return process.Signal(signal)
+	}
+	daemonSignalContext = func() (context.Context, context.CancelFunc) {
+		return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	}
+)
+
 // daemonDirKey derives a filesystem-safe directory key identifying a connector.
 // Priority: clientId (the robot's AppKey, the natural identity) > unifiedAppID.
 // Reuses sanitizeLockID (connect_lock.go) so the key matches the lock naming
@@ -128,31 +151,31 @@ func stageDaemonExecutable(src, dir string) (string, error) {
 	}
 	defer in.Close()
 
-	tmp, err := os.CreateTemp(dir, ".dws-daemon-*")
+	tmp, err := daemonCreateTemp(dir, ".dws-daemon-*")
 	if err != nil {
 		return "", err
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
 
-	if err := tmp.Chmod(daemonExecutablePerm); err != nil {
+	if err := daemonFileChmod(tmp, daemonExecutablePerm); err != nil {
 		tmp.Close()
 		return "", err
 	}
-	if _, err := io.Copy(tmp, in); err != nil {
+	if _, err := daemonCopy(tmp, in); err != nil {
 		tmp.Close()
 		return "", err
 	}
-	if err := tmp.Sync(); err != nil {
+	if err := daemonFileSync(tmp); err != nil {
 		tmp.Close()
 		return "", err
 	}
-	if err := tmp.Close(); err != nil {
+	if err := daemonFileClose(tmp); err != nil {
 		return "", err
 	}
 
 	dst := daemonExecutablePath(dir)
-	if err := os.Rename(tmpPath, dst); err != nil {
+	if err := daemonRename(tmpPath, dst); err != nil {
 		return "", err
 	}
 	return dst, nil
@@ -161,15 +184,12 @@ func stageDaemonExecutable(src, dir string) (string, error) {
 // writeDaemonState atomically persists the daemon state to daemon-state.json
 // (persistent, survives supervisor exit) so restart/list can recover config.
 func writeDaemonState(dir string, st daemonState) error {
-	data, err := json.MarshalIndent(st, "", "  ")
-	if err != nil {
-		return err
-	}
+	data, _ := json.MarshalIndent(st, "", "  ")
 	tmp := daemonStatePath(dir) + ".tmp"
 	if err := os.WriteFile(tmp, data, config.FilePerm); err != nil {
 		return err
 	}
-	return os.Rename(tmp, daemonStatePath(dir))
+	return daemonRename(tmp, daemonStatePath(dir))
 }
 
 // readDaemonState loads the daemon state. Reads daemon-state.json (persistent)
@@ -253,7 +273,7 @@ func buildWorkerArgs(args []string) []string {
 // detached from the terminal, writes nothing itself to the worker log (the
 // supervisor does), prints the pid + log path, and returns so the parent exits.
 func startDaemon(cmd *cobra.Command, dirKey, clientID, unifiedAppID, channel, notifyStaffID, profile string, alwaysOn bool) error {
-	if !daemonDetachSupported {
+	if !daemonDetachEnabled {
 		return apperrors.NewValidation("--daemon is not supported on this OS; run the foreground connector under a service manager instead")
 	}
 	dir, err := connectDaemonDir(dirKey)
@@ -263,11 +283,11 @@ func startDaemon(cmd *cobra.Command, dirKey, clientID, unifiedAppID, channel, no
 	// Refuse to start a second supervisor for the same connector. The Stream
 	// single-instance lock would also catch this at the worker layer, but a
 	// pre-flight check gives a clearer message and avoids an orphaned supervisor.
-	if st, _ := readDaemonState(dir); st != nil && st.Pid > 0 && processAlive(st.Pid) {
+	if st, _ := readDaemonState(dir); st != nil && st.Pid > 0 && daemonProcessAlive(st.Pid) {
 		return apperrors.NewValidation(fmt.Sprintf("a connect daemon is already running for %s (pid %d); use `robot connect status`/`stop`", dirKey, st.Pid))
 	}
 
-	exe, err := os.Executable()
+	exe, err := daemonExecutable()
 	if err != nil {
 		return apperrors.NewInternal("resolve executable: " + err.Error())
 	}
@@ -284,7 +304,7 @@ func startDaemon(cmd *cobra.Command, dirKey, clientID, unifiedAppID, channel, no
 	}
 	defer logFile.Close()
 
-	child := exec.Command(exe, superviseArgs...)
+	child := daemonCommand(exe, superviseArgs...)
 	child.Stdout = logFile
 	child.Stderr = logFile
 	child.Stdin = nil
@@ -375,7 +395,7 @@ func runSupervisor(cmd *cobra.Command) error {
 	}
 	st := daemonState{
 		Pid:           os.Getpid(),
-		StartUnix:     time.Now().Unix(),
+		StartUnix:     daemonNow().Unix(),
 		LogPath:       daemonLogPath(dir),
 		DirKey:        dirKey,
 		ClientID:      clientID,
@@ -404,11 +424,11 @@ func runSupervisor(cmd *cobra.Command) error {
 	// The supervisor reacts to SIGTERM/SIGINT itself (cmd.Context from root is
 	// already wired to these). We use an independent NotifyContext so cancelling
 	// it stops the loop and lets us forward the signal to the worker explicitly.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := daemonSignalContext()
 	defer stop()
 
 	workerArgs := buildWorkerArgs(os.Args[1:])
-	exe, err := os.Executable()
+	exe, err := daemonExecutable()
 	if err != nil {
 		return apperrors.NewInternal("resolve executable: " + err.Error())
 	}
@@ -422,7 +442,7 @@ func runSupervisor(cmd *cobra.Command) error {
 			case <-ctx.Done():
 				daemonNotifyStateChange(notifyStaffID, channel, clientID, "stopped", "")
 				return nil
-			case <-time.After(delay):
+			case <-helperAfter(delay):
 			}
 		}
 		if ctx.Err() != nil {
@@ -430,8 +450,8 @@ func runSupervisor(cmd *cobra.Command) error {
 			return nil
 		}
 
-		started := time.Now()
-		worker := exec.Command(exe, workerArgs...)
+		started := daemonNow()
+		worker := daemonCommand(exe, workerArgs...)
 		worker.Stdout = out
 		worker.Stderr = out
 		worker.Env = os.Environ()
@@ -449,7 +469,7 @@ func runSupervisor(cmd *cobra.Command) error {
 
 		waitErr := superviseWait(ctx, worker)
 		cleanupWorkerProcessGroup(worker.Process.Pid)
-		ran := time.Since(started)
+		ran := daemonNow().Sub(started)
 
 		if ctx.Err() != nil {
 			// We were asked to stop; the worker has been (or is being) signalled.
@@ -488,11 +508,11 @@ func superviseWait(ctx context.Context, worker *exec.Cmd) error {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		_ = worker.Process.Signal(syscall.SIGTERM)
+		_ = daemonSignalProcess(worker.Process, syscall.SIGTERM)
 		select {
 		case err := <-done:
 			return err
-		case <-time.After(daemonStopTimeout):
+		case <-helperAfter(daemonStopTimeout):
 			_ = worker.Process.Kill()
 			return <-done
 		}
@@ -513,19 +533,16 @@ func daemonStatus(w io.Writer, dirKey string, jsonOut bool) error {
 	if err != nil {
 		return apperrors.NewInternal(err.Error())
 	}
-	supervised := st != nil && st.Pid > 0 && processAlive(st.Pid)
+	supervised := st != nil && st.Pid > 0 && daemonProcessAlive(st.Pid)
 
 	hb, err := readConnectHeartbeat(dir)
 	if err != nil {
 		return apperrors.NewInternal("read connector heartbeat: " + err.Error())
 	}
-	report := deriveConnectHealth(hb, supervised, time.Now())
+	report := deriveConnectHealth(hb, supervised, daemonNow())
 
 	if jsonOut {
-		data, merr := json.MarshalIndent(report, "", "  ")
-		if merr != nil {
-			return apperrors.NewInternal(merr.Error())
-		}
+		data, _ := json.MarshalIndent(report, "", "  ")
 		fmt.Fprintln(w, string(data))
 		return nil
 	}
@@ -585,25 +602,25 @@ func daemonStop(w io.Writer, dirKey string) error {
 		fmt.Fprintf(w, "connect daemon: not running (nothing to stop)\n")
 		return nil
 	}
-	if !processAlive(st.Pid) {
+	if !daemonProcessAlive(st.Pid) {
 		_ = os.Remove(daemonPidPath(dir))
 		// The supervisor is dead, but its worker may still be alive (e.g. the
 		// supervisor was kill -9'd). Check the heartbeat for the worker pid and
 		// stop it so we don't leave an orphan.
-		if hb, _ := readConnectHeartbeat(dir); hb != nil && hb.Pid > 0 && processAlive(hb.Pid) {
+		if hb, _ := readConnectHeartbeat(dir); hb != nil && hb.Pid > 0 && daemonProcessAlive(hb.Pid) {
 			fmt.Fprintf(w, "connect daemon: supervisor (pid %d) was dead, stopping orphan worker (pid %d)...\n", st.Pid, hb.Pid)
-			if proc, perr := os.FindProcess(hb.Pid); perr == nil {
-				_ = proc.Signal(syscall.SIGTERM)
-				deadline := time.Now().Add(daemonStopTimeout)
-				for time.Now().Before(deadline) {
-					if !processAlive(hb.Pid) {
+			if proc, perr := daemonFindProcess(hb.Pid); perr == nil {
+				_ = daemonSignalProcess(proc, syscall.SIGTERM)
+				deadline := daemonNow().Add(daemonStopTimeout)
+				for daemonNow().Before(deadline) {
+					if !daemonProcessAlive(hb.Pid) {
 						break
 					}
-					time.Sleep(200 * time.Millisecond)
+					helperSleep(200 * time.Millisecond)
 				}
-				if processAlive(hb.Pid) {
-					_ = proc.Signal(syscall.SIGKILL)
-					time.Sleep(200 * time.Millisecond)
+				if daemonProcessAlive(hb.Pid) {
+					_ = daemonSignalProcess(proc, syscall.SIGKILL)
+					helperSleep(200 * time.Millisecond)
 				}
 			}
 			fmt.Fprintf(w, "connect daemon: orphan worker stopped (pid %d)\n", hb.Pid)
@@ -612,27 +629,27 @@ func daemonStop(w io.Writer, dirKey string) error {
 		fmt.Fprintf(w, "connect daemon: was not running (cleaned up stale pid file for pid %d)\n", st.Pid)
 		return nil
 	}
-	proc, err := os.FindProcess(st.Pid)
+	proc, err := daemonFindProcess(st.Pid)
 	if err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("find daemon process %d: %v", st.Pid, err))
 	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
+	if err := daemonSignalProcess(proc, syscall.SIGTERM); err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("signal daemon %d: %v", st.Pid, err))
 	}
 	fmt.Fprintf(w, "sent SIGTERM to connect daemon (pid %d), waiting for graceful stop...\n", st.Pid)
 
-	deadline := time.Now().Add(daemonStopTimeout)
-	for time.Now().Before(deadline) {
-		if !processAlive(st.Pid) {
+	deadline := daemonNow().Add(daemonStopTimeout)
+	for daemonNow().Before(deadline) {
+		if !daemonProcessAlive(st.Pid) {
 			_ = os.Remove(daemonPidPath(dir))
 			fmt.Fprintf(w, "connect daemon stopped (pid %d)\n", st.Pid)
 			return nil
 		}
-		time.Sleep(200 * time.Millisecond)
+		helperSleep(200 * time.Millisecond)
 	}
 	// Graceful window elapsed; force kill.
-	_ = proc.Signal(syscall.SIGKILL)
-	time.Sleep(200 * time.Millisecond)
+	_ = daemonSignalProcess(proc, syscall.SIGKILL)
+	helperSleep(200 * time.Millisecond)
 	_ = os.Remove(daemonPidPath(dir))
 	fmt.Fprintf(w, "connect daemon did not stop in %s; sent SIGKILL (pid %d)\n", daemonStopTimeout, st.Pid)
 	return nil
@@ -723,7 +740,7 @@ func newDevAppRobotConnectRestartCommand() *cobra.Command {
 			}
 			// Re-exec dws dev connect --daemon with the stored flags. An explicit
 			// --profile on this invocation overrides the persisted one.
-			exe, err := os.Executable()
+			exe, err := daemonExecutable()
 			if err != nil {
 				return apperrors.NewInternal("resolve executable: " + err.Error())
 			}
@@ -749,7 +766,7 @@ func newDevAppRobotConnectRestartCommand() *cobra.Command {
 			// returns quickly, so waiting here costs nothing and lets a failed
 			// relaunch (e.g. credential fetch error) surface as a non-zero exit
 			// instead of a silent success.
-			restartCmd := exec.Command(exe, args...)
+			restartCmd := daemonCommand(exe, args...)
 			restartCmd.Stdout = cmd.OutOrStdout()
 			restartCmd.Stderr = cmd.OutOrStderr()
 			restartCmd.Stdin = nil
@@ -776,17 +793,14 @@ func newDevAppRobotConnectListCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			reports, err := listConnectors(time.Now())
+			reports, err := listConnectors(daemonNow())
 			if err != nil {
 				return apperrors.NewInternal(err.Error())
 			}
 			resolveAppNames(cmd, runner, reports)
 			w := cmd.OutOrStdout()
 			if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
-				data, merr := json.MarshalIndent(reports, "", "  ")
-				if merr != nil {
-					return apperrors.NewInternal(merr.Error())
-				}
+				data, _ := json.MarshalIndent(reports, "", "  ")
 				fmt.Fprintln(w, string(data))
 				return nil
 			}
@@ -1030,12 +1044,12 @@ func daemonNotifyStateChange(notifyStaffID, channel, clientID, event, detail str
 	default:
 		return
 	}
-	exe, err := os.Executable()
+	exe, err := daemonExecutable()
 	if err != nil {
 		return
 	}
 	go func() {
-		cmd := exec.Command(exe, "chat", "message", "send",
+		cmd := daemonCommand(exe, "chat", "message", "send",
 			"--staff-id", notifyStaffID,
 			"--text", msg,
 			"--ai-tag=false",

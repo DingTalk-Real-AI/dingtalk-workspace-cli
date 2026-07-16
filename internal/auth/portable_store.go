@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,6 +32,37 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+type portableTempFile interface {
+	io.Writer
+	Name() string
+	Chmod(os.FileMode) error
+	Sync() error
+	Close() error
+}
+
+var (
+	portableRuntimeGOOS          = func() string { return runtime.GOOS }
+	portableStat                 = os.Stat
+	portableGlob                 = filepath.Glob
+	portableRel                  = filepath.Rel
+	portableWalkDir              = filepath.WalkDir
+	portableOpen                 = func(name string) (io.ReadCloser, error) { return os.Open(name) }
+	portableMkdirAll             = os.MkdirAll
+	portableChmod                = os.Chmod
+	portableCreateTemp           = func(dir, pattern string) (portableTempFile, error) { return os.CreateTemp(dir, pattern) }
+	portableRemove               = os.Remove
+	portableRename               = os.Rename
+	portableJSONMarshal          = json.MarshalIndent
+	portableConfigFilesForExport = portableConfigFiles
+	portableWriteManifest        = writePortableManifest
+	portableAddDir               = addPortableDir
+	portableAddFile              = addPortableFile
+	portablePathInRoot           = func(root, target string) bool {
+		cleanRoot := filepath.Clean(root) + string(filepath.Separator)
+		return target == filepath.Clean(root) || strings.HasPrefix(filepath.Clean(target)+string(filepath.Separator), cleanRoot)
+	}
+)
+
 // PortableImportReport summarizes bundle metadata consumed during import.
 type PortableImportReport struct {
 	BundleOS   string
@@ -40,7 +72,7 @@ type PortableImportReport struct {
 // PortableExportSupported reports whether the current platform can produce a
 // bundle that includes the file-based DEK required for import elsewhere.
 func PortableExportSupported() bool {
-	if runtime.GOOS != "darwin" {
+	if portableRuntimeGOOS() != "darwin" {
 		return true
 	}
 	return os.Getenv(keychain.DisableKeychainEnv) != ""
@@ -52,14 +84,14 @@ func PortableAuthTargetPopulated(configDir string) bool {
 	if TokenDataExistsKeychain() {
 		return true
 	}
-	if _, err := os.Stat(ProfilesPath(configDir)); err == nil {
+	if _, err := portableStat(ProfilesPath(configDir)); err == nil {
 		return true
 	}
-	if _, err := os.Stat(filepath.Join(configDir, "app.json")); err == nil {
+	if _, err := portableStat(filepath.Join(configDir, "app.json")); err == nil {
 		return true
 	}
 	encPath := filepath.Join(keychain.StorageDir(keychain.Service), keychain.AccountToken+".enc")
-	if _, err := os.Stat(encPath); err == nil {
+	if _, err := portableStat(encPath); err == nil {
 		return true
 	}
 	return false
@@ -75,7 +107,7 @@ func PortableAuthSourceReady() bool {
 }
 
 func portableAuthSourcePopulated(keychainDir string) bool {
-	_, err := os.Stat(filepath.Join(keychainDir, keychain.AccountToken+".enc"))
+	_, err := portableStat(filepath.Join(keychainDir, keychain.AccountToken+".enc"))
 	return err == nil
 }
 
@@ -100,7 +132,7 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 		return fmt.Errorf("portable export requires file-DEK mode on macOS; set %s=1 and verify auth first, resetting and re-logging in only if the existing token cannot be decrypted", keychain.DisableKeychainEnv)
 	}
 	keychainDir := keychain.StorageDir(keychain.Service)
-	if _, err := os.Stat(keychainDir); err != nil {
+	if _, err := portableStat(keychainDir); err != nil {
 		return fmt.Errorf("auth keychain directory is not available: %w", err)
 	}
 	if !portableAuthSourcePopulated(keychainDir) {
@@ -115,27 +147,27 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 	tw := tar.NewWriter(gz)
 	defer tw.Close()
 
-	configFiles, err := portableConfigFiles(configDir)
+	configFiles, err := portableConfigFilesForExport(configDir)
 	if err != nil {
 		return err
 	}
 	manifest := portableAuthBundleManifest{
 		Version:         1,
 		CreatedAt:       time.Now().UTC().Format(time.RFC3339),
-		OS:              runtime.GOOS,
+		OS:              portableRuntimeGOOS(),
 		KeychainService: keychain.Service,
 		ConfigFiles:     configFiles,
 	}
-	if err := writePortableManifest(tw, manifest); err != nil {
+	if err := portableWriteManifest(tw, manifest); err != nil {
 		return err
 	}
 
-	if err := addPortableDir(tw, keychainDir, path.Join("keychain", keychain.Service)); err != nil {
+	if err := portableAddDir(tw, keychainDir, path.Join("keychain", keychain.Service)); err != nil {
 		return err
 	}
 	for _, name := range configFiles {
 		src := filepath.Join(configDir, name)
-		if err := addPortableFile(tw, src, path.Join("config", filepath.ToSlash(name))); err != nil {
+		if err := portableAddFile(tw, src, path.Join("config", filepath.ToSlash(name))); err != nil {
 			return err
 		}
 	}
@@ -165,9 +197,6 @@ func ImportPortableAuthBundle(configDir string, r io.Reader) (PortableImportRepo
 		}
 		if err != nil {
 			return PortableImportReport{}, fmt.Errorf("read auth bundle: %w", err)
-		}
-		if hdr == nil {
-			continue
 		}
 		cleanName, err := cleanPortableName(hdr.Name)
 		if err != nil {
@@ -202,7 +231,7 @@ func ImportPortableAuthBundle(configDir string, r io.Reader) (PortableImportRepo
 	report := PortableImportReport{}
 	if manifestRead {
 		report.BundleOS = manifest.OS
-		report.OSMismatch = manifest.OS != "" && manifest.OS != runtime.GOOS
+		report.OSMismatch = manifest.OS != "" && manifest.OS != portableRuntimeGOOS()
 	}
 	return report, nil
 }
@@ -211,16 +240,16 @@ func portableConfigFiles(configDir string) ([]string, error) {
 	var files []string
 	patterns := []string{"app*.json", profilesJSONFile, "mcp_url", "terminal_url"}
 	for _, pattern := range patterns {
-		matches, err := filepath.Glob(filepath.Join(configDir, pattern))
+		matches, err := portableGlob(filepath.Join(configDir, pattern))
 		if err != nil {
 			return nil, fmt.Errorf("scan config files: %w", err)
 		}
 		for _, match := range matches {
-			info, err := os.Stat(match)
+			info, err := portableStat(match)
 			if err != nil || info.IsDir() {
 				continue
 			}
-			rel, err := filepath.Rel(configDir, match)
+			rel, err := portableRel(configDir, match)
 			if err != nil {
 				return nil, fmt.Errorf("resolve config file: %w", err)
 			}
@@ -232,7 +261,7 @@ func portableConfigFiles(configDir string) ([]string, error) {
 }
 
 func writePortableManifest(tw *tar.Writer, manifest portableAuthBundleManifest) error {
-	data, err := json.MarshalIndent(manifest, "", "  ")
+	data, err := portableJSONMarshal(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal auth bundle manifest: %w", err)
 	}
@@ -240,7 +269,7 @@ func writePortableManifest(tw *tar.Writer, manifest portableAuthBundleManifest) 
 }
 
 func addPortableDir(tw *tar.Writer, root, prefix string) error {
-	return filepath.WalkDir(root, func(filePath string, entry os.DirEntry, walkErr error) error {
+	return portableWalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -251,7 +280,7 @@ func addPortableDir(tw *tar.Writer, root, prefix string) error {
 			if filePath == root {
 				return nil
 			}
-			rel, err := filepath.Rel(root, filePath)
+			rel, err := portableRel(root, filePath)
 			if err != nil {
 				return err
 			}
@@ -263,7 +292,7 @@ func addPortableDir(tw *tar.Writer, root, prefix string) error {
 }
 
 func mustPortableRel(root, filePath string) string {
-	rel, err := filepath.Rel(root, filePath)
+	rel, err := portableRel(root, filePath)
 	if err != nil {
 		return filepath.Base(filePath)
 	}
@@ -271,14 +300,14 @@ func mustPortableRel(root, filePath string) string {
 }
 
 func addPortableFile(tw *tar.Writer, src, name string) error {
-	info, err := os.Stat(src)
+	info, err := portableStat(src)
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", src, err)
 	}
 	if info.IsDir() {
 		return nil
 	}
-	file, err := os.Open(src)
+	file, err := portableOpen(src)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", src, err)
 	}
@@ -326,12 +355,11 @@ func safeJoin(root, rel string) (string, error) {
 		return "", fmt.Errorf("empty auth bundle path")
 	}
 	rel = filepath.FromSlash(path.Clean(rel))
-	if filepath.IsAbs(rel) || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+	if rel == "." || !filepath.IsLocal(rel) {
 		return "", fmt.Errorf("unsafe auth bundle path %q", rel)
 	}
 	target := filepath.Join(root, rel)
-	cleanRoot := filepath.Clean(root) + string(filepath.Separator)
-	if target != filepath.Clean(root) && !strings.HasPrefix(filepath.Clean(target)+string(filepath.Separator), cleanRoot) {
+	if !portablePathInRoot(root, target) {
 		return "", fmt.Errorf("unsafe auth bundle path %q", rel)
 	}
 	return target, nil
@@ -340,15 +368,15 @@ func safeJoin(root, rel string) (string, error) {
 func extractPortableEntry(target string, hdr *tar.Header, r io.Reader) error {
 	switch hdr.Typeflag {
 	case tar.TypeDir:
-		if err := os.MkdirAll(target, config.DirPerm); err != nil {
+		if err := portableMkdirAll(target, config.DirPerm); err != nil {
 			return fmt.Errorf("create auth bundle directory: %w", err)
 		}
-		return os.Chmod(target, config.DirPerm)
+		return portableChmod(target, config.DirPerm)
 	case tar.TypeReg:
-		if err := os.MkdirAll(filepath.Dir(target), config.DirPerm); err != nil {
+		if err := portableMkdirAll(filepath.Dir(target), config.DirPerm); err != nil {
 			return fmt.Errorf("create auth bundle directory: %w", err)
 		}
-		tmp, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".*.tmp")
+		tmp, err := portableCreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".*.tmp")
 		if err != nil {
 			return fmt.Errorf("create auth bundle temp file: %w", err)
 		}
@@ -357,7 +385,7 @@ func extractPortableEntry(target string, hdr *tar.Header, r io.Reader) error {
 		defer func() {
 			if !success {
 				tmp.Close()
-				_ = os.Remove(tmpName)
+				_ = portableRemove(tmpName)
 			}
 		}()
 		if err := tmp.Chmod(config.FilePerm); err != nil {
@@ -372,7 +400,7 @@ func extractPortableEntry(target string, hdr *tar.Header, r io.Reader) error {
 		if err := tmp.Close(); err != nil {
 			return fmt.Errorf("close auth bundle file: %w", err)
 		}
-		if err := os.Rename(tmpName, target); err != nil {
+		if err := portableRename(tmpName, target); err != nil {
 			return fmt.Errorf("install auth bundle file: %w", err)
 		}
 		success = true

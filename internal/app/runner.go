@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -40,6 +41,9 @@ import (
 )
 
 func init() {
+	runnerHandlePatAuthCheck = handlePatAuthCheck
+	runnerRetryWithPatAuthRetry = retryWithPatAuthRetry
+
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DWS_RUNTIME_CONTENT_SCAN",
 		Category:    configmeta.CategoryRuntime,
@@ -147,6 +151,19 @@ type runtimeRunner struct {
 	auditSink          audit.Sink
 }
 
+var (
+	runnerResolveMultiProfileSelections = resolveMultiProfileSelections
+	runnerResolveProfile                = authpkg.ResolveProfile
+	runnerGetCachedRuntimeToken         = getCachedRuntimeToken
+	runnerPreflightDocDownload          = (*runtimeRunner).preflightDocDownload
+	runnerCallTool                      = (*transport.Client).CallTool
+	runnerStdioEnsureInitialized        = (*transport.StdioClient).EnsureInitialized
+	runnerStdioCallTool                 = (*transport.StdioClient).CallTool
+	runnerHandlePatAuthCheck            func(context.Context, *runtimeRunner, executor.Invocation, *apperrors.PATError, string, io.Writer) (executor.Result, error)
+	runnerRetryWithPatAuthRetry         func(context.Context, executor.Runner, executor.Invocation, *PatScopeError, string, io.Writer) (executor.Result, error)
+	runnerCaptureRuntimeFailure         = captureRuntimeFailure
+)
+
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
 	r.stampGlobalDryRun(&invocation)
 	// Global dry-run is an execution barrier, not merely a transport option.
@@ -182,7 +199,7 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		return r.runSingle(ctx, invocation, false)
 	}
 
-	selections, multi, err := resolveMultiProfileSelections(defaultConfigDir(), authpkg.RuntimeProfile())
+	selections, multi, err := runnerResolveMultiProfileSelections(defaultConfigDir(), authpkg.RuntimeProfile())
 	if err != nil {
 		return executor.Result{}, apperrors.NewValidation(err.Error())
 	}
@@ -218,7 +235,7 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 	// ~70ms on macOS; starting it here lets the load overlap with endpoint
 	// resolution and catalog loading below.
 	if shouldPrefetchRuntimeToken(prefetchToken, r.globalFlags) {
-		go getCachedRuntimeToken(ctx)
+		go runnerGetCachedRuntimeToken(ctx)
 	}
 
 	if shouldUseDirectRuntime(invocation) {
@@ -306,7 +323,7 @@ func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfil
 	if rawSelector == "" || !strings.Contains(rawSelector, ",") {
 		return nil, false, nil
 	}
-	if p, err := authpkg.ResolveProfile(configDir, rawSelector); err == nil && p != nil {
+	if p, err := runnerResolveProfile(configDir, rawSelector); err == nil && p != nil {
 		return nil, false, nil
 	}
 
@@ -318,7 +335,7 @@ func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfil
 		if selector == "" {
 			return nil, false, fmt.Errorf("--profile contains an empty profile selector: %q", rawSelector)
 		}
-		profile, err := authpkg.ResolveProfile(configDir, selector)
+		profile, err := runnerResolveProfile(configDir, selector)
 		if err != nil {
 			return nil, false, err
 		}
@@ -333,9 +350,6 @@ func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfil
 			Selector: selector,
 			Profile:  *profile,
 		})
-	}
-	if len(selections) == 0 {
-		return nil, false, nil
 	}
 	return selections, true, nil
 }
@@ -637,19 +651,19 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		defer cancel()
 	}
 
-	if err := r.preflightDocDownload(callCtx, tc, endpoint, invocation); err != nil {
+	if err := runnerPreflightDocDownload(r, callCtx, tc, endpoint, invocation); err != nil {
 		if patCheck := apperrors.AsPatAuthCheckError(err); patCheck != nil {
 			if IsPatRetrying(ctx) {
 				return executor.Result{}, patCheck
 			}
-			return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
+			return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 		}
-		captureRuntimeFailure(invocation, err, err)
+		runnerCaptureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
 	}
 
 	callStart := time.Now()
-	callResult, err := tc.CallTool(callCtx, endpoint, invocation.Tool, invocation.Params)
+	callResult, err := runnerCallTool(tc, callCtx, endpoint, invocation.Tool, invocation.Params)
 	RecordTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
 		if strictReadOnly {
@@ -660,7 +674,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		if isAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
 				if overrideErr := fn(defaultConfigDir(), err); overrideErr != nil {
-					captureRuntimeFailure(invocation, err, overrideErr)
+					runnerCaptureRuntimeFailure(invocation, err, overrideErr)
 					return executor.Result{}, overrideErr
 				}
 			}
@@ -668,10 +682,10 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// PAT scope error: offer human-readable output and retry after authorization
 		if isPatScopeError(err) {
 			scopeErr := extractPatScopeError(err)
-			captureRuntimeFailure(invocation, err, err)
-			return retryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
+			runnerCaptureRuntimeFailure(invocation, err, err)
+			return runnerRetryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
 		}
-		captureRuntimeFailure(invocation, err, err)
+		runnerCaptureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
 	}
 	if strictReadOnly {
@@ -688,7 +702,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 				if IsPatRetrying(ctx) {
 					return executor.Result{}, patCheck // already retried once, don't loop
 				}
-				return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
+				return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 			}
 			return executor.Result{}, editionErr
 		}
@@ -699,7 +713,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		if IsPatRetrying(ctx) {
 			return executor.Result{}, patCheck // already retried once, don't loop
 		}
-		return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
+		return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 	}
 
 	if callResult.IsError {
@@ -710,7 +724,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// patterns (PAT permission, gateway-auth) before generic handling.
 		if classify := edition.Get().ClassifyToolResult; classify != nil {
 			if hookErr := classify(callResult.Content); hookErr != nil {
-				captureRuntimeFailure(invocation, hookErr, hookErr)
+				runnerCaptureRuntimeFailure(invocation, hookErr, hookErr)
 				return executor.Result{}, hookErr
 			}
 		}
@@ -726,10 +740,10 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// PAT scope error in business response: offer human-readable output and retry
 		if isPatScopeError(mcpErr) {
 			scopeErr := extractPatScopeError(mcpErr)
-			captureRuntimeFailure(invocation, mcpErr, mcpErr)
-			return retryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
+			runnerCaptureRuntimeFailure(invocation, mcpErr, mcpErr)
+			return runnerRetryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
 		}
-		captureRuntimeFailure(invocation, mcpErr, mcpErr)
+		runnerCaptureRuntimeFailure(invocation, mcpErr, mcpErr)
 		return executor.Result{}, mcpErr
 	}
 
@@ -826,7 +840,7 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 		callCtx, cancel = context.WithTimeout(ctx, time.Duration(r.globalFlags.Timeout)*time.Second)
 		defer cancel()
 	}
-	if err := client.EnsureInitialized(callCtx); err != nil {
+	if err := runnerStdioEnsureInitialized(client, callCtx); err != nil {
 		return executor.Result{}, apperrors.NewAPI(
 			fmt.Sprintf("stdio initialize failed: %v", err),
 			apperrors.WithOperation("initialize"),
@@ -834,7 +848,7 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 		)
 	}
 
-	callResult, err := client.CallTool(callCtx, invocation.Tool, invocation.Params)
+	callResult, err := runnerStdioCallTool(client, callCtx, invocation.Tool, invocation.Params)
 	if err != nil {
 		return executor.Result{}, apperrors.NewAPI(
 			fmt.Sprintf("stdio call failed: %v", err),

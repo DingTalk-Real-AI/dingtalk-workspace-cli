@@ -26,11 +26,16 @@ import (
 const (
 	lockfileExclusiveLock   = 0x00000002
 	lockfileFailImmediately = 0x00000001
+	// Keep the mandatory Windows lock outside the PID payload at the start
+	// of the file. LockFileEx byte-range locks block reads through a second
+	// handle, so locking byte zero made bus status unable to read the holder
+	// PID while the daemon was running.
+	lockfileLockOffset = 1 << 30
 )
 
 func lockFile(f *os.File) error {
 	handle := windows.Handle(f.Fd())
-	ol := new(windows.Overlapped)
+	ol := &windows.Overlapped{Offset: lockfileLockOffset}
 	return windows.LockFileEx(
 		handle,
 		lockfileExclusiveLock|lockfileFailImmediately,
@@ -43,7 +48,7 @@ func lockFile(f *os.File) error {
 
 func unlockFile(f *os.File) {
 	handle := windows.Handle(f.Fd())
-	ol := new(windows.Overlapped)
+	ol := &windows.Overlapped{Offset: lockfileLockOffset}
 	_ = windows.UnlockFileEx(
 		handle,
 		0,

@@ -30,6 +30,18 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+var (
+	approvalMkdirAll   = os.MkdirAll
+	approvalCreateTemp = os.CreateTemp
+	approvalFileChmod  = func(f *os.File, mode os.FileMode) error { return f.Chmod(mode) }
+	approvalFileWrite  = func(f *os.File, data []byte) (int, error) { return f.Write(data) }
+	approvalFileClose  = func(f *os.File) error { return f.Close() }
+	approvalRename     = os.Rename
+	approvalRemove     = os.Remove
+	approvalReadDir    = os.ReadDir
+	approvalReadFile   = os.ReadFile
+)
+
 // The "digital twin" confirmation gate. When someone @-mentions the bot with an
 // *action* request ("create a todo for me"), the bot does NOT execute it: it
 // records an ApprovalRequest, sends an interactive card with [Approve]/[Reject]
@@ -416,7 +428,7 @@ func (g *approvalGate) persist(r *ApprovalRequest) {
 	if dir == "" {
 		return
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := approvalMkdirAll(dir, 0o700); err != nil {
 		fmt.Fprintf(os.Stderr, "[connect][approval][warn] 创建审批目录失败，跳过落盘：%v\n", err)
 		return
 	}
@@ -426,31 +438,31 @@ func (g *approvalGate) persist(r *ApprovalRequest) {
 		return
 	}
 	path := filepath.Join(dir, sanitizeLockID(r.ID)+".json")
-	tmp, err := os.CreateTemp(dir, "approval-*.json.tmp")
+	tmp, err := approvalCreateTemp(dir, "approval-*.json.tmp")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[connect][approval][warn] 创建审批临时文件失败，跳过落盘：%v\n", err)
 		return
 	}
 	tmpName := tmp.Name()
-	if err := tmp.Chmod(config.FilePerm); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmpName)
+	if err := approvalFileChmod(tmp, config.FilePerm); err != nil {
+		_ = approvalFileClose(tmp)
+		_ = approvalRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][approval][warn] 设置审批文件权限失败，跳过落盘：%v\n", err)
 		return
 	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmpName)
+	if _, err := approvalFileWrite(tmp, data); err != nil {
+		_ = approvalFileClose(tmp)
+		_ = approvalRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][approval][warn] 写入审批临时文件失败，跳过落盘：%v\n", err)
 		return
 	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
+	if err := approvalFileClose(tmp); err != nil {
+		_ = approvalRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][approval][warn] 关闭审批临时文件失败，跳过落盘：%v\n", err)
 		return
 	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+	if err := approvalRename(tmpName, path); err != nil {
+		_ = approvalRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][approval][warn] 原子替换审批存档失败，跳过落盘：%v\n", err)
 	}
 }
@@ -463,7 +475,7 @@ func (g *approvalGate) loadAll() {
 	if dir == "" {
 		return
 	}
-	entries, err := os.ReadDir(dir)
+	entries, err := approvalReadDir(dir)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			fmt.Fprintf(os.Stderr, "[connect][approval][warn] 读取审批目录失败，按空起：%v\n", err)
@@ -474,7 +486,7 @@ func (g *approvalGate) loadAll() {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		raw, err := approvalReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[connect][approval][warn] 读取审批存档 %s 失败，跳过：%v\n", e.Name(), err)
 			continue

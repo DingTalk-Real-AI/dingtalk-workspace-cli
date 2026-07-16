@@ -784,9 +784,6 @@ func (c *Client) isEndpointTrusted(endpoint string) bool {
 	}
 	host := parsed.Hostname()
 	domains := c.trustedDomainsList()
-	if len(domains) == 0 {
-		return true
-	}
 	for _, pattern := range domains {
 		if pattern == "*" {
 			c.warnWildcardDomains()

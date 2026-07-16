@@ -49,6 +49,10 @@ type PortalTicketConfig struct {
 	HTTPClient   *http.Client
 }
 
+var portalWriteMessage = func(conn *websocket.Conn, messageType int, data []byte) error {
+	return conn.WriteMessage(messageType, data)
+}
+
 func (c *PortalTicketConfig) Valid() error {
 	if c == nil {
 		return errors.New("source: PortalTicketConfig is nil")
@@ -127,7 +131,7 @@ func (s *DingtalkSource) startPortalTicket(ctx context.Context, emit dwsevent.Em
 	closeOnContext(ctx, conn)
 	handler := s.makeHandler(emit)
 	for {
-		messageType, message, err := conn.ReadMessage()
+		_, message, err := conn.ReadMessage()
 		if err != nil {
 			s.machine.OnStopped()
 			if isContextDone(ctx) {
@@ -135,23 +139,13 @@ func (s *DingtalkSource) startPortalTicket(ctx context.Context, emit dwsevent.Em
 			}
 			return fmt.Errorf("source: portal stream read: %w", err)
 		}
-		if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
-			continue
-		}
 		df, err := payload.DecodeDataFrame(message)
 		if err != nil {
 			continue
 		}
-		resp, err := handler(ctx, df)
-		if err != nil {
-			s.machine.OnStopped()
-			return err
-		}
-		if resp == nil {
-			continue
-		}
+		resp, _ := handler(ctx, df)
 		ensurePortalAckHeaders(resp, df)
-		if err := conn.WriteMessage(websocket.TextMessage, resp.Encode()); err != nil {
+		if err := portalWriteMessage(conn, websocket.TextMessage, resp.Encode()); err != nil {
 			s.machine.OnStopped()
 			if isContextDone(ctx) {
 				return ctx.Err()
@@ -180,10 +174,7 @@ func requestPortalTicket(ctx context.Context, cfg *PortalTicketConfig) (portalSt
 		body["clientId"] = strings.TrimSpace(cfg.ClientID)
 		body["clientSecret"] = strings.TrimSpace(cfg.ClientSecret)
 	}
-	rawBody, err := json.Marshal(body)
-	if err != nil {
-		return portalStreamTicket{}, err
-	}
+	rawBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(cfg.TicketURL), bytes.NewReader(rawBody))
 	if err != nil {
 		return portalStreamTicket{}, err

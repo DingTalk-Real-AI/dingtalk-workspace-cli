@@ -8,6 +8,75 @@
     "reviewed": true
   },
   "tools": {
+    "contact.add_employee": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps employee identity and decoded department JSON to contact/add_employee, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "org-user-name": {
+          "property": "orgUserName",
+          "required": true
+        },
+        "org-user-mobile": {
+          "property": "orgUserMobile",
+          "required": true
+        },
+        "depts": {
+          "property": "depts",
+          "required": false,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+      "cli_path": "contact user invite",
+      "runtime_gate": "none"
+    },
+    "contact.exclusive_account_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account flags to contact/exclusive_account_create, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "org-user-name": {
+          "property": "orgUserName",
+          "required": true
+        },
+        "login-id": {
+          "property": "loginId",
+          "required": true
+        },
+        "org-user-mobile": {
+          "property": "orgUserMobile",
+          "required": false
+        },
+        "email": {
+          "property": "email",
+          "required": false
+        },
+        "dept-ids": {
+          "property": "deptIds",
+          "required": false,
+          "interface_type": "array"
+        },
+        "send-pwd-via-sms": {
+          "property": "sendPwdViaSms",
+          "required": false,
+          "interface_type": "boolean"
+        }
+      },
+      "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+      "cli_path": "contact account create",
+      "runtime_gate": "none"
+    },
     "contact.get_authorized_emp_rosterInfo": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -59,6 +128,29 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "contact.org_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps organization and creator names to contact/org_create, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "org-name": {
+          "property": "orgName",
+          "required": true
+        },
+        "creator-username": {
+          "property": "creatorUsername",
+          "required": true
+        }
+      },
+      "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+      "cli_path": "contact org create",
+      "runtime_gate": "none"
     },
     "contact.query_dismission_employee_list": {
       "interface_mode": "mcp",

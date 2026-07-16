@@ -26,6 +26,7 @@ import (
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/client"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/event"
+	"github.com/open-dingtalk/dingtalk-stream-sdk-go/handler"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/payload"
 )
 
@@ -61,7 +62,17 @@ type sourceConfig struct {
 type DingtalkSource struct {
 	cfg     Config
 	machine *Machine
-	cli     *client.StreamClient
+	cli     streamClient
+}
+
+type streamClient interface {
+	RegisterAllEventRouter(handler.IFrameHandler)
+	Start(context.Context) error
+	Close()
+}
+
+var newStreamClient = func(options ...client.ClientOption) streamClient {
+	return client.NewStreamClient(options...)
 }
 
 // New constructs a DingtalkSource. Returns an error if required Config
@@ -117,7 +128,7 @@ func (s *DingtalkSource) Start(ctx context.Context, emit dwsevent.EmitFn) error 
 	options := []client.ClientOption{
 		client.WithAppCredential(client.NewAppCredentialConfig(s.cfg.ClientID, s.cfg.ClientSecret)),
 	}
-	s.cli = client.NewStreamClient(options...)
+	s.cli = newStreamClient(options...)
 	s.cli.RegisterAllEventRouter(s.makeHandler(emit))
 
 	s.machine.OnConnecting()
@@ -159,9 +170,7 @@ func (s *DingtalkSource) makeHandler(emit dwsevent.EmitFn) func(context.Context,
 		s.machine.OnEvent()
 
 		resp := payload.NewSuccessDataFrameResponse()
-		if err := resp.SetJson(event.NewEventProcessResultSuccess()); err != nil {
-			return nil, err
-		}
+		_ = resp.SetJson(event.NewEventProcessResultSuccess())
 		return resp, nil
 	}
 }

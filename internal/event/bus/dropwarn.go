@@ -30,7 +30,7 @@ const DefaultDropWarnPercent = 5
 // dropWarnTickInterval is how often the watcher samples counters. 30s
 // balances responsiveness ("see the warning while the burst is still
 // happening") with log noise (one warning per scan, not one per drop).
-const dropWarnTickInterval = 30 * time.Second
+var dropWarnTickInterval = 30 * time.Second
 
 // dropWarnState memoises the last warned drop rate per event type so we
 // only emit a fresh WARN when the situation worsens by at least
@@ -57,25 +57,29 @@ func dropWarnWatcher(ctx context.Context, counters *PerTypeCounters, log *slog.L
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			for _, et := range counters.SortedTypes() {
-				pct := counters.DropRatePercent(et)
-				if pct < threshold {
-					// drop rate is healthy → forget any prior warning so
-					// a future spike re-triggers a fresh WARN
-					delete(lastWarnedPct, et)
-					continue
-				}
-				prev, warned := lastWarnedPct[et]
-				if warned && pct < prev+dropWarnHysteresis {
-					continue // not significantly worse; suppress
-				}
-				log.Warn("bus: event type backpressure",
-					"event_type", et,
-					"drop_pct", pct,
-					"threshold_pct", threshold,
-				)
-				lastWarnedPct[et] = pct
-			}
+			scanDropWarnings(counters, log, threshold, lastWarnedPct)
 		}
+	}
+}
+
+func scanDropWarnings(counters *PerTypeCounters, log *slog.Logger, threshold int, lastWarnedPct map[string]int) {
+	for _, et := range counters.SortedTypes() {
+		pct := counters.DropRatePercent(et)
+		if pct < threshold {
+			// drop rate is healthy → forget any prior warning so
+			// a future spike re-triggers a fresh WARN
+			delete(lastWarnedPct, et)
+			continue
+		}
+		prev, warned := lastWarnedPct[et]
+		if warned && pct < prev+dropWarnHysteresis {
+			continue // not significantly worse; suppress
+		}
+		log.Warn("bus: event type backpressure",
+			"event_type", et,
+			"drop_pct", pct,
+			"threshold_pct", threshold,
+		)
+		lastWarnedPct[et] = pct
 	}
 }

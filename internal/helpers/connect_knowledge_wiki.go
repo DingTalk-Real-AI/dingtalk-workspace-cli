@@ -51,6 +51,13 @@ const (
 	knowledgeSourceDoc
 )
 
+var (
+	wikiLoadKnowledgeBase = loadKnowledgeBase
+	wikiRemoveAll         = os.RemoveAll
+	wikiMkdirAll          = os.MkdirAll
+	wikiWriteFile         = os.WriteFile
+)
+
 type knowledgeSource struct {
 	kind knowledgeSourceKind
 	// ref is the directory path (dir), the spaceId (wiki) or the nodeId (doc).
@@ -141,9 +148,6 @@ func (f runnerWikiFetcher) listNodes(ctx context.Context, spaceID string) ([]wik
 			return nil, err
 		}
 		for _, n := range collectWikiNodes(res.Response) {
-			if n.id == "" {
-				continue
-			}
 			if _, dup := seen[n.id]; dup {
 				continue
 			}
@@ -184,7 +188,7 @@ func loadWikiKnowledgeBase(ctx context.Context, fetcher wikiFetcher, src knowled
 	docs, err := pullWikiDocs(ctx, fetcher, src)
 	if err != nil {
 		// Pull failed: try the previous cache before giving up.
-		if kb, lerr := loadKnowledgeBase(cacheDir); lerr == nil {
+		if kb, lerr := wikiLoadKnowledgeBase(cacheDir); lerr == nil {
 			fmt.Fprintf(logw, "[connect][knowledge] 拉取知识库失败（%v），使用旧缓存兜底：%s\n", err, cacheDir)
 			return kb
 		}
@@ -199,7 +203,7 @@ func loadWikiKnowledgeBase(ctx context.Context, fetcher wikiFetcher, src knowled
 		return buildKnowledgeBaseFromDocs(docs)
 	}
 
-	kb, lerr := loadKnowledgeBase(cacheDir)
+	kb, lerr := wikiLoadKnowledgeBase(cacheDir)
 	if lerr != nil {
 		// Cache wrote but produced no usable chunks (e.g. all docs empty):
 		// degrade to an empty base rather than failing the connector.
@@ -279,10 +283,10 @@ func buildKnowledgeBaseFromDocs(docs []wikiDoc) *knowledgeBase {
 // .md per document) so loadKnowledgeBase can index it like any local directory.
 // It clears stale files first so deleted wiki docs do not linger in answers.
 func writeWikiCache(cacheDir string, docs []wikiDoc) error {
-	if err := os.RemoveAll(cacheDir); err != nil {
+	if err := wikiRemoveAll(cacheDir); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := wikiMkdirAll(cacheDir, 0o755); err != nil {
 		return err
 	}
 	used := map[string]int{}
@@ -299,7 +303,7 @@ func writeWikiCache(cacheDir string, docs []wikiDoc) error {
 			used[stem] = 1
 		}
 		path := filepath.Join(cacheDir, stem+".md")
-		if err := os.WriteFile(path, []byte(d.text), 0o644); err != nil {
+		if err := wikiWriteFile(path, []byte(d.text), 0o644); err != nil {
 			return err
 		}
 	}
@@ -434,21 +438,17 @@ func loadConnectKnowledgeSource(cmd *cobra.Command, runner executor.Runner, clie
 		return nil, err
 	}
 	logw := cmd.ErrOrStderr()
-	switch src.kind {
-	case knowledgeSourceDir:
+	if src.kind == knowledgeSourceDir {
 		kb, lerr := loadKnowledgeBase(src.ref)
 		if lerr != nil {
 			return nil, lerr
 		}
 		fmt.Fprintf(logw, "[connect] 知识库已加载：%d 个片段（%s）\n", len(kb.chunks), src.ref)
 		return kb, nil
-	case knowledgeSourceWiki, knowledgeSourceDoc:
-		fetcher := runnerWikiFetcher{runner: runner}
-		cacheRoot := connectKnowledgeCacheRoot(clientID)
-		return loadWikiKnowledgeBase(cmd.Context(), fetcher, src, cacheRoot, logw), nil
-	default:
-		return nil, fmt.Errorf("unsupported knowledge source kind %d", src.kind)
 	}
+	fetcher := runnerWikiFetcher{runner: runner}
+	cacheRoot := connectKnowledgeCacheRoot(clientID)
+	return loadWikiKnowledgeBase(cmd.Context(), fetcher, src, cacheRoot, logw), nil
 }
 
 // connectKnowledgeCacheRoot is the per-robot knowledge cache root:
@@ -456,8 +456,5 @@ func loadConnectKnowledgeSource(cmd *cobra.Command, runner executor.Runner, clie
 // the directory; an empty clientId degrades to a shared "default" bucket.
 func connectKnowledgeCacheRoot(clientID string) string {
 	id := sanitizeWikiStem(clientID)
-	if id == "" {
-		id = "default"
-	}
 	return filepath.Join(homeDir(), ".dws", "connect", id, "knowledge")
 }

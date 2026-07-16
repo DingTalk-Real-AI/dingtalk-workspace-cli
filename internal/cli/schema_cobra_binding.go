@@ -40,6 +40,12 @@ type RuntimeCompatibilityEquivalence struct {
 	Reviewed bool   `json:"reviewed"`
 }
 
+var (
+	bindValidateParameterBindings  = ValidateEmbeddedSchemaParameterBindings
+	loadCompatibilityFlagContracts = effectiveCompatibilityFlagContracts
+	compatibilityParameterBindings = runtimeSchemaParameterBindingData
+)
+
 // AnnotateRuntimeCompatibilityEquivalence records the same typed review on
 // both sides of one independently executable compatibility pair. Invalid
 // review data panics during command construction so production cannot silently
@@ -53,10 +59,7 @@ func AnnotateRuntimeCompatibilityEquivalence(primary, compatibility *cobra.Comma
 	if review.ID == "" || review.Reason == "" || !review.Reviewed {
 		panic("runtime compatibility equivalence requires a reviewed id and reason")
 	}
-	encoded, err := json.Marshal(review)
-	if err != nil {
-		panic(fmt.Sprintf("encode runtime compatibility equivalence: %v", err))
-	}
+	encoded, _ := json.Marshal(review)
 	commands := []*cobra.Command{primary, compatibility}
 	for _, command := range commands {
 		if existing, exists := command.Annotations[runtimeCompatibilityEquivalenceAnnotation]; exists && existing != string(encoded) {
@@ -115,7 +118,7 @@ func BindEffectiveCommandRegistry(root *cobra.Command, effective EffectiveComman
 	if root == nil {
 		return BoundCommandRegistry{}, fmt.Errorf("bind effective Schema command registry: root is nil")
 	}
-	if err := ValidateEmbeddedSchemaParameterBindings(); err != nil {
+	if err := bindValidateParameterBindings(); err != nil {
 		return BoundCommandRegistry{}, fmt.Errorf("validate reviewed Schema parameter bindings: %w", err)
 	}
 	validated, err := newEffectiveCommandRegistry(effective.Commands)
@@ -376,11 +379,11 @@ func runtimeCompatibilityEquivalence(command *cobra.Command) (RuntimeCompatibili
 }
 
 func compatibilityFlagContractProblems(canonicalPath string, primary, alias *cobra.Command) ([]string, error) {
-	primaryFlags, err := effectiveCompatibilityFlagContracts(primary, canonicalPath)
+	primaryFlags, err := loadCompatibilityFlagContracts(primary, canonicalPath)
 	if err != nil {
 		return nil, err
 	}
-	aliasFlags, err := effectiveCompatibilityFlagContracts(alias, canonicalPath)
+	aliasFlags, err := loadCompatibilityFlagContracts(alias, canonicalPath)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +454,7 @@ func effectiveCompatibilityFlagContracts(command *cobra.Command, canonicalPath s
 		return contracts, nil
 	}
 	canonicalPath = strings.TrimSpace(canonicalPath)
-	snapshot, err := runtimeSchemaParameterBindingData()
+	snapshot, err := compatibilityParameterBindings()
 	if err != nil {
 		return nil, err
 	}

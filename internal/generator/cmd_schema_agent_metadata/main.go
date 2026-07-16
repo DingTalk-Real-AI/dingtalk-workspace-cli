@@ -28,6 +28,33 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/outputguard"
 )
 
+var (
+	validateMetadataIsolation      = validateAgentMetadataOutputIsolation
+	validateMetadataAllowlist      = validateAgentMetadataOutputAllowlist
+	validateMetadataRegistryFile   = validateCommandRegistryFile
+	loadMetadataRegistryProjection = loadEffectiveCommandRegistryProjection
+	validateMetadataSelection      = validateSelectionHintInput
+	generateAgentMetadata          = agentmetadata.Generate
+	writeMetadataDirectoryOutput   = writeMetadataDirectory
+	writeMetadataFileOutput        = writeMetadataFile
+	writeMetadataAuditOutput       = writeAuditFile
+	exitMetadataProcess            = os.Exit
+
+	makeMetadataDirectory  = os.MkdirAll
+	readMetadataDirectory  = os.ReadDir
+	removeMetadataFile     = os.Remove
+	writeMetadataFileBytes = os.WriteFile
+	writeMetadataJSON      = writeJSON
+
+	newMetadataRoot              = app.NewRootCommand
+	buildEffectiveMetadata       = cli.BuildEffectiveCommandRegistry
+	bindEffectiveMetadata        = cli.BindEffectiveCommandRegistry
+	loadSelectionMetadataHints   = cli.LoadAgentHintsFromSelectionForValidation
+	validateSelectionMetadataSet = cli.ValidateManualAgentHintSet
+	validateSelectionExamples    = cli.ValidateManualAgentHintExamples
+	validateSelectionContract    = cli.ValidateManualAgentSelectionContract
+)
+
 func main() {
 	var root string
 	var skillPath string
@@ -82,29 +109,29 @@ func main() {
 	if strings.TrimSpace(legacySurfacePath) != "" {
 		protectedInputs = append(protectedInputs, outputguard.Input{Name: "deprecated Registry compatibility input", Path: legacySurfacePath})
 	}
-	if err := validateAgentMetadataOutputIsolation(root, protectedInputs, outputPath, outputDir, auditOutputPath); err != nil {
+	if err := validateMetadataIsolation(root, protectedInputs, outputPath, outputDir, auditOutputPath); err != nil {
 		fail(err)
 	}
-	if err := validateAgentMetadataOutputAllowlist(root, outputPath, outputDir, auditOutputPath); err != nil {
+	if err := validateMetadataAllowlist(root, outputPath, outputDir, auditOutputPath); err != nil {
 		fail(err)
 	}
 	if !legacyValidateSurface {
 		validateRegistry = false
 	}
 	if strings.TrimSpace(legacySurfacePath) != "" {
-		if err := validateCommandRegistryFile(root, legacySurfacePath); err != nil {
+		if err := validateMetadataRegistryFile(root, legacySurfacePath); err != nil {
 			fail(fmt.Errorf("validate deprecated -surface compatibility input: %w", err))
 		}
 	}
-	registry, err := loadEffectiveCommandRegistryProjection(root, registryPath, validateRegistry)
+	registry, err := loadMetadataRegistryProjection(root, registryPath, validateRegistry)
 	if err != nil {
 		fail(err)
 	}
-	if err := validateSelectionHintInput(root, hintsDir, registry); err != nil {
+	if err := validateMetadataSelection(root, hintsDir, registry); err != nil {
 		fail(err)
 	}
 
-	metadata, stats, err := agentmetadata.Generate(agentmetadata.Options{
+	metadata, stats, err := generateAgentMetadata(agentmetadata.Options{
 		Root:                     root,
 		SkillPath:                skillPath,
 		ProductsDir:              productsDir,
@@ -124,20 +151,17 @@ func main() {
 		fail(err)
 	}
 	if strings.TrimSpace(outputDir) != "" {
-		if err := writeMetadataDirectory(outputDir, metadata); err != nil {
+		if err := writeMetadataDirectoryOutput(outputDir, metadata); err != nil {
 			fail(err)
 		}
 		outputPath = outputDir
 	} else {
-		if strings.TrimSpace(outputPath) == "" {
-			outputPath = "internal/cli/schema_agent_metadata.json"
-		}
-		if err := writeMetadataFile(outputPath, metadata); err != nil {
+		if err := writeMetadataFileOutput(outputPath, metadata); err != nil {
 			fail(err)
 		}
 	}
 	if strings.TrimSpace(auditOutputPath) != "" {
-		if err := writeAuditFile(auditOutputPath, agentmetadata.BuildAudit(metadata, stats)); err != nil {
+		if err := writeMetadataAuditOutput(auditOutputPath, agentmetadata.BuildAudit(metadata, stats)); err != nil {
 			fail(err)
 		}
 	}
@@ -172,10 +196,10 @@ func writeAuditFile(path string, audit agentmetadata.Audit) error {
 	if path == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := makeMetadataDirectory(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create audit output directory: %w", err)
 	}
-	if err := writeJSON(path, audit); err != nil {
+	if err := writeMetadataJSON(path, audit); err != nil {
 		return fmt.Errorf("write audit: %w", err)
 	}
 	return nil
@@ -196,14 +220,11 @@ type agentMetadataDomain struct {
 }
 
 func writeMetadataFile(path string, metadata agentmetadata.File) error {
-	encoded, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode metadata: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	encoded, _ := json.MarshalIndent(metadata, "", "  ")
+	if err := makeMetadataDirectory(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
-	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+	if err := writeMetadataFileBytes(path, append(encoded, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write output: %w", err)
 	}
 	return nil
@@ -211,16 +232,16 @@ func writeMetadataFile(path string, metadata agentmetadata.File) error {
 
 func writeMetadataDirectory(dir string, metadata agentmetadata.File) error {
 	dir = strings.TrimSpace(dir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := makeMetadataDirectory(dir, 0o755); err != nil {
 		return fmt.Errorf("create metadata directory: %w", err)
 	}
-	entries, err := os.ReadDir(dir)
+	entries, err := readMetadataDirectory(dir)
 	if err != nil {
 		return fmt.Errorf("read metadata directory: %w", err)
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-			if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+			if err := removeMetadataFile(filepath.Join(dir, entry.Name())); err != nil {
 				return fmt.Errorf("remove stale metadata %s: %w", entry.Name(), err)
 			}
 		}
@@ -250,11 +271,11 @@ func writeMetadataDirectory(dir string, metadata agentmetadata.File) error {
 		Products:    metadata.Products,
 		Domains:     domains,
 	}
-	if err := writeJSON(filepath.Join(dir, "index.json"), index); err != nil {
+	if err := writeMetadataJSON(filepath.Join(dir, "index.json"), index); err != nil {
 		return err
 	}
 	for _, domain := range domains {
-		if err := writeJSON(filepath.Join(dir, domain+".json"), agentMetadataDomain{
+		if err := writeMetadataJSON(filepath.Join(dir, domain+".json"), agentMetadataDomain{
 			ProductID: domain,
 			Tools:     byDomain[domain],
 		}); err != nil {
@@ -269,7 +290,7 @@ func writeJSON(path string, value any) error {
 	if err != nil {
 		return fmt.Errorf("encode %s: %w", path, err)
 	}
-	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+	if err := writeMetadataFileBytes(path, append(encoded, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -302,12 +323,12 @@ func loadEffectiveCommandRegistryProjection(rootPath, registryPath string, valid
 	if err := validateCommandRegistryFile(rootPath, registryPath); err != nil {
 		return commandRegistryProjection{}, fmt.Errorf("validate CommandRegistry input: %w", err)
 	}
-	commandRoot := app.NewRootCommand()
-	effective, err := cli.BuildEffectiveCommandRegistry(commandRoot)
+	commandRoot := newMetadataRoot()
+	effective, err := buildEffectiveMetadata(commandRoot)
 	if err != nil {
 		return commandRegistryProjection{}, fmt.Errorf("build effective CommandRegistry: %w", err)
 	}
-	bound, err := cli.BindEffectiveCommandRegistry(commandRoot, effective)
+	bound, err := bindEffectiveMetadata(commandRoot, effective)
 	if err != nil {
 		return commandRegistryProjection{}, fmt.Errorf("bind effective CommandRegistry: %w", err)
 	}
@@ -369,7 +390,7 @@ func validateSelectionHintInput(rootPath, hintsDir string, registry commandRegis
 		}
 	}
 	selectionFS := os.DirFS(selectionRoot)
-	agentHints, err := cli.LoadAgentHintsFromSelectionForValidation(selectionFS)
+	agentHints, err := loadSelectionMetadataHints(selectionFS)
 	if err != nil {
 		return fmt.Errorf("load selection Agent hints: %w", err)
 	}
@@ -377,13 +398,13 @@ func validateSelectionHintInput(rootPath, hintsDir string, registry commandRegis
 	for canonical := range registry.CanonicalToolPaths {
 		expectedTools[canonical] = true
 	}
-	if err := cli.ValidateManualAgentHintSet(agentHints, registry.ProductIDs, expectedTools); err != nil {
+	if err := validateSelectionMetadataSet(agentHints, registry.ProductIDs, expectedTools); err != nil {
 		return fmt.Errorf("validate selection Agent hints: %w", err)
 	}
-	if err := cli.ValidateManualAgentHintExamples(registry.Bound, agentHints); err != nil {
+	if err := validateSelectionExamples(registry.Bound, agentHints); err != nil {
 		return fmt.Errorf("validate selection Agent hint examples: %w", err)
 	}
-	if _, err := cli.ValidateManualAgentSelectionContract(registry.Bound, agentHints); err != nil {
+	if _, err := validateSelectionContract(registry.Bound, agentHints); err != nil {
 		return fmt.Errorf("validate selection Agent selection contract: %w", err)
 	}
 	return nil
@@ -435,5 +456,5 @@ func validateAgentMetadataOutputAllowlist(rootPath, outputPath, outputDir, audit
 
 func fail(err error) {
 	_, _ = fmt.Fprintf(os.Stderr, "generate-schema-agent-metadata: %v\n", err)
-	os.Exit(1)
+	exitMetadataProcess(1)
 }

@@ -31,6 +31,54 @@ var (
 	ugBoldGrn = tui.Success
 )
 
+type upgradeReleaseClient interface {
+	FetchLatestReleaseForTrack(upgrade.ReleaseTrack) (*upgrade.ReleaseInfo, error)
+	FetchReleaseByTag(string) (*upgrade.ReleaseInfo, error)
+	FetchReleaseVersions(upgrade.ReleaseTrack) ([]upgrade.VersionEntry, error)
+}
+
+type upgradeRollbackManager interface {
+	ListBackups() ([]upgrade.BackupInfo, error)
+	RollbackTo(upgrade.BackupInfo) error
+	Backup(string) (string, error)
+	Cleanup(int) error
+}
+
+var (
+	newUpgradeReleaseClient = func() upgradeReleaseClient { return upgrade.NewClient() }
+	newUpgradeRollback      = func() upgradeRollbackManager { return upgrade.NewRollbackManager() }
+	ensureUpgradeDirs       = upgrade.EnsureUpgradeDirectories
+	cleanupUpgradeStale     = upgrade.CleanupStaleFiles
+	upgradeNeedsUpgrade     = upgrade.NeedsUpgrade
+	findUpgradeBinary       = upgrade.FindBinaryAsset
+	findUpgradeSkills       = upgrade.FindSkillsAsset
+	findUpgradeChecksums    = upgrade.FindChecksumsAsset
+	downloadUpgradeFile     = upgrade.Download
+	downloadUpgradeProgress = upgrade.DownloadWithProgress
+	extractUpgradeZip       = upgrade.ExtractZip
+	findExtractedBinary     = upgrade.FindBinaryInDir
+	locateUpgradeSkill      = upgrade.LocateSkillMD
+	replaceUpgradeSelf      = upgrade.ReplaceSelf
+	installUpgradeSkills    = upgrade.UpgradeSkillLocations
+	upgradeMkdirTemp        = os.MkdirTemp
+	upgradeRemoveAll        = os.RemoveAll
+	upgradeReadFile         = os.ReadFile
+	upgradeMkdirAll         = os.MkdirAll
+	verifyUpgradeFile       = strictVerifyFile
+	extractUpgradeTarGz     = extractTarGz
+	validateUpgradeBinary   = validateNewBinary
+	upgradeStat             = os.Stat
+	upgradeChmod            = os.Chmod
+	upgradeTryExecVersion   = tryExecVersion
+	upgradeRepairDarwin     = repairDarwinBinary
+	upgradeRuntimeGOOS      = runtime.GOOS
+	upgradeLookPath         = exec.LookPath
+	upgradeCommandOutput    = func(name string, args ...string) ([]byte, error) {
+		return exec.Command(name, args...).CombinedOutput()
+	}
+	upgradeUserHomeDir = os.UserHomeDir
+)
+
 const defaultListLimit = 10
 
 func newUpgradeCommand() *cobra.Command {
@@ -128,7 +176,7 @@ type upgradeOptions struct {
 // --- dws upgrade --check ---
 
 func runUpgradeCheck(cmd *cobra.Command, format string, track upgrade.ReleaseTrack) error {
-	client := upgrade.NewClient()
+	client := newUpgradeReleaseClient()
 
 	if format != "json" {
 		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("检查更新%s...", upgradeTrackSuffix(track))))
@@ -140,7 +188,7 @@ func runUpgradeCheck(cmd *cobra.Command, format string, track upgrade.ReleaseTra
 	}
 
 	currentVer := version
-	needsUpgrade := upgrade.NeedsUpgrade(currentVer, latest.Version)
+	needsUpgrade := upgradeNeedsUpgrade(currentVer, latest.Version)
 
 	if format == "json" {
 		return writeJSON(cmd.OutOrStdout(), map[string]any{
@@ -184,7 +232,7 @@ func runUpgradeCheck(cmd *cobra.Command, format string, track upgrade.ReleaseTra
 // runUpgradeList displays available versions. When limit > 0, only the most
 // recent `limit` versions are shown; pass 0 to show all (--all flag).
 func runUpgradeList(cmd *cobra.Command, format string, limit int, track upgrade.ReleaseTrack) error {
-	client := upgrade.NewClient()
+	client := newUpgradeReleaseClient()
 
 	if format != "json" {
 		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("获取版本列表%s...", upgradeTrackSuffix(track))))
@@ -264,7 +312,7 @@ func runUpgradeList(cmd *cobra.Command, format string, limit int, track upgrade.
 // --- dws upgrade --rollback ---
 
 func runUpgradeRollback(yes bool) error {
-	rm := upgrade.NewRollbackManager()
+	rm := newUpgradeRollback()
 
 	backups, err := rm.ListBackups()
 	if err != nil {
@@ -341,13 +389,13 @@ func writeDryRunPlan(w io.Writer, currentVer, binaryAssetName string, hasSkills 
 func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	fmt.Printf("  %s\n", ugDim(fmt.Sprintf("检查更新%s...", upgradeTrackSuffix(opts.track))))
 
-	if err := upgrade.EnsureUpgradeDirectories(); err != nil {
+	if err := ensureUpgradeDirs(); err != nil {
 		return fmt.Errorf("初始化目录结构失败: %w", err)
 	}
 
-	upgrade.CleanupStaleFiles()
+	cleanupUpgradeStale()
 
-	client := upgrade.NewClient()
+	client := newUpgradeReleaseClient()
 	var release *upgrade.ReleaseInfo
 	var err error
 
@@ -365,7 +413,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	}
 
 	currentVer := version
-	if !opts.force && !upgrade.NeedsUpgrade(currentVer, release.Version) {
+	if !opts.force && !upgradeNeedsUpgrade(currentVer, release.Version) {
 		fmt.Printf("\n  %s 已是最新版本 %s\n", ugBoldGrn("✔"), ugBold(ensureV(currentVer)))
 		return nil
 	}
@@ -384,11 +432,11 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	// any side effect (no backup, no download, no replace). Matches the global
 	// flag's contract: "预览操作内容，不实际执行".
 	if opts.dryRun {
-		binaryAsset, err := upgrade.FindBinaryAsset(release.Assets)
+		binaryAsset, err := findUpgradeBinary(release.Assets)
 		if err != nil {
 			return err
 		}
-		hasSkills := upgrade.FindSkillsAsset(release.Assets) != nil && !opts.skipSkills
+		hasSkills := findUpgradeSkills(release.Assets) != nil && !opts.skipSkills
 		writeDryRunPlan(os.Stdout, currentVer, binaryAsset.Name, hasSkills)
 		return nil
 	}
@@ -404,21 +452,21 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		}
 	}
 
-	binaryAsset, err := upgrade.FindBinaryAsset(release.Assets)
+	binaryAsset, err := findUpgradeBinary(release.Assets)
 	if err != nil {
 		return err
 	}
 
-	tmpDir, err := os.MkdirTemp(upgrade.DownloadCacheDir(), "upgrade-*")
+	tmpDir, err := upgradeMkdirTemp(upgrade.DownloadCacheDir(), "upgrade-*")
 	if err != nil {
-		tmpDir, err = os.MkdirTemp("", "dws-upgrade-*")
+		tmpDir, err = upgradeMkdirTemp("", "dws-upgrade-*")
 		if err != nil {
 			return fmt.Errorf("创建临时目录失败: %w", err)
 		}
 	}
-	defer os.RemoveAll(tmpDir)
+	defer upgradeRemoveAll(tmpDir)
 
-	hasSkills := upgrade.FindSkillsAsset(release.Assets) != nil && !opts.skipSkills
+	hasSkills := findUpgradeSkills(release.Assets) != nil && !opts.skipSkills
 	// Steps: 1.备份  2.下载  3.校验  4.解压验证  5.替换+安装
 	const totalSteps = 5
 	stepFmt := func(n int) string { return ugBold(fmt.Sprintf("[%d/%d]", n, totalSteps)) }
@@ -431,7 +479,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 
 	// --- Step 1: Backup ---
 	fmt.Printf("  %s 备份当前版本...", stepFmt(1))
-	rm := upgrade.NewRollbackManager()
+	rm := newUpgradeRollback()
 	_, backupErr := rm.Backup(strings.TrimPrefix(currentVer, "v"))
 	if backupErr != nil {
 		fmt.Printf(" %s %v\n", ugYellow("⚠"), backupErr)
@@ -441,11 +489,11 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 
 	// Fetch checksums.txt (needed for strict verification of both binary and skills)
 	var checksumsContent string
-	checksumsAsset := upgrade.FindChecksumsAsset(release.Assets)
+	checksumsAsset := findUpgradeChecksums(release.Assets)
 	if checksumsAsset != nil {
 		checksumsPath := filepath.Join(tmpDir, "checksums.txt")
-		if _, dlErr := upgrade.Download(checksumsAsset.BrowserDownloadURL, checksumsPath); dlErr == nil {
-			if data, readErr := os.ReadFile(checksumsPath); readErr == nil {
+		if _, dlErr := downloadUpgradeFile(checksumsAsset.BrowserDownloadURL, checksumsPath); dlErr == nil {
+			if data, readErr := upgradeReadFile(checksumsPath); readErr == nil {
 				checksumsContent = string(data)
 			}
 		}
@@ -457,7 +505,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	fmt.Print(progressPrefix)
 	start := time.Now()
 	binaryArchivePath := filepath.Join(tmpDir, binaryAsset.Name)
-	n, err := upgrade.DownloadWithProgress(ctx, binaryAsset.BrowserDownloadURL, binaryArchivePath,
+	n, err := downloadUpgradeProgress(ctx, binaryAsset.BrowserDownloadURL, binaryArchivePath,
 		func(percent float64, downloaded, total int64) {
 			bar := progressBar(percent)
 			fmt.Printf("\r  %s 下载 %s [%s] %5.1f%%", sl, ugCyan(binaryAsset.Name), ugCyan(bar), percent)
@@ -471,12 +519,12 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 
 	var skillsZipPath string
 	if hasSkills {
-		skillsAsset := upgrade.FindSkillsAsset(release.Assets)
+		skillsAsset := findUpgradeSkills(release.Assets)
 		fmt.Printf("\r%s\r%s %s %s\n", clearLine, progressPrefix, ugGreen("✓"), ugDim(fmt.Sprintf("(%.1fMB, %.1fs)", float64(n)/1024/1024, elapsed.Seconds())))
 
 		fmt.Printf("        下载 %s...", ugCyan("dws-skills.zip"))
 		skillsZipPath = filepath.Join(tmpDir, "dws-skills.zip")
-		if _, dlErr := upgrade.Download(skillsAsset.BrowserDownloadURL, skillsZipPath); dlErr != nil {
+		if _, dlErr := downloadUpgradeFile(skillsAsset.BrowserDownloadURL, skillsZipPath); dlErr != nil {
 			fmt.Printf(" %s\n", ugRed("✗"))
 			return fmt.Errorf("技能包下载失败: %w", dlErr)
 		}
@@ -486,12 +534,12 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	}
 
 	// --- Step 3: Verify SHA256 (binary + skills together) ---
-	if err := strictVerifyFile(stepFmt(3), binaryArchivePath, binaryAsset.Name, binaryAsset.Digest, checksumsContent); err != nil {
+	if err := verifyUpgradeFile(stepFmt(3), binaryArchivePath, binaryAsset.Name, binaryAsset.Digest, checksumsContent); err != nil {
 		return err
 	}
 	if hasSkills {
-		skillsAsset := upgrade.FindSkillsAsset(release.Assets)
-		if err := strictVerifyFile("     ", skillsZipPath, "dws-skills.zip", skillsAsset.Digest, checksumsContent); err != nil {
+		skillsAsset := findUpgradeSkills(release.Assets)
+		if err := verifyUpgradeFile("     ", skillsZipPath, "dws-skills.zip", skillsAsset.Digest, checksumsContent); err != nil {
 			return err
 		}
 	}
@@ -500,22 +548,22 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	fmt.Printf("  %s 解压并验证...", stepFmt(4))
 	extractDir := filepath.Join(tmpDir, "extracted")
 	if strings.HasSuffix(binaryAsset.Name, ".zip") {
-		if err := upgrade.ExtractZip(binaryArchivePath, extractDir); err != nil {
+		if err := extractUpgradeZip(binaryArchivePath, extractDir); err != nil {
 			fmt.Println()
 			return fmt.Errorf("解压失败: %w", err)
 		}
 	} else {
-		if err := extractTarGz(binaryArchivePath, extractDir); err != nil {
+		if err := extractUpgradeTarGz(binaryArchivePath, extractDir); err != nil {
 			fmt.Println()
 			return fmt.Errorf("解压失败: %w", err)
 		}
 	}
-	binaryPath := upgrade.FindBinaryInDir(extractDir)
+	binaryPath := findExtractedBinary(extractDir)
 	if binaryPath == "" {
 		fmt.Println()
 		return fmt.Errorf("在解压目录中未找到 dws 二进制文件")
 	}
-	if err := validateNewBinary(binaryPath, release.Version); err != nil {
+	if err := validateUpgradeBinary(binaryPath, release.Version); err != nil {
 		fmt.Println()
 		return fmt.Errorf("验证失败: %w", err)
 	}
@@ -523,12 +571,12 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	var skillSrc string
 	if hasSkills {
 		skillsExtractDir := filepath.Join(tmpDir, "skills-extracted")
-		os.MkdirAll(skillsExtractDir, 0755)
-		if err := upgrade.ExtractZip(skillsZipPath, skillsExtractDir); err != nil {
+		_ = upgradeMkdirAll(skillsExtractDir, 0755)
+		if err := extractUpgradeZip(skillsZipPath, skillsExtractDir); err != nil {
 			fmt.Println()
 			return fmt.Errorf("技能包解压失败 (文件可能损坏，请检查网络后重试): %w", err)
 		}
-		skillSrc = upgrade.LocateSkillMD(skillsExtractDir)
+		skillSrc = locateUpgradeSkill(skillsExtractDir)
 		if skillSrc == "" {
 			fmt.Println()
 			return fmt.Errorf("技能包结构异常 (未找到 SKILL.md)，请反馈到 GitHub Issues")
@@ -542,13 +590,13 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 
 	// --- Step 5: Replace binary + install skills ---
 	fmt.Printf("  %s 替换并安装...", stepFmt(5))
-	if err := upgrade.ReplaceSelf(binaryPath); err != nil {
+	if err := replaceUpgradeSelf(binaryPath); err != nil {
 		fmt.Printf(" %s\n", ugRed("✗"))
 		return fmt.Errorf("替换二进制失败: %w", err)
 	}
 
 	if hasSkills {
-		result, installErr := upgrade.UpgradeSkillLocations(skillSrc)
+		result, installErr := installUpgradeSkills(skillSrc)
 		if installErr != nil {
 			fmt.Printf(" %s\n", ugRed("✗"))
 			return fmt.Errorf("技能包安装失败: %w", installErr)
@@ -626,24 +674,24 @@ func strictVerifyFile(label, filePath, fileName, assetDigest, checksumsContent s
 
 // validateNewBinary checks the downloaded binary is valid.
 func validateNewBinary(binaryPath, expectedVersion string) error {
-	info, err := os.Stat(binaryPath)
+	info, err := upgradeStat(binaryPath)
 	if err != nil {
 		return fmt.Errorf("文件不存在: %w", err)
 	}
 	if info.Size() == 0 {
 		return fmt.Errorf("文件为空")
 	}
-	if err := os.Chmod(binaryPath, 0755); err != nil {
+	if err := upgradeChmod(binaryPath, 0755); err != nil {
 		return fmt.Errorf("设置执行权限失败: %w", err)
 	}
 
-	out, err := tryExecVersion(binaryPath)
+	out, err := upgradeTryExecVersion(binaryPath)
 	if err != nil {
 		// Apple Silicon kills unsigned arm64 binaries with SIGKILL via amfid.
 		// Repair the binary in-place (ad-hoc codesign + drop quarantine) and retry once.
-		if runtime.GOOS == "darwin" && isLikelyAMFIKill(err) {
-			if repairErr := repairDarwinBinary(binaryPath); repairErr == nil {
-				out, err = tryExecVersion(binaryPath)
+		if upgradeRuntimeGOOS == "darwin" && isLikelyAMFIKill(err) {
+			if repairErr := upgradeRepairDarwin(binaryPath); repairErr == nil {
+				out, err = upgradeTryExecVersion(binaryPath)
 			}
 		}
 		if err != nil {
@@ -678,12 +726,12 @@ func isLikelyAMFIKill(err error) bool {
 // Used as a self-heal step when an unsigned binary is killed by amfid on Apple Silicon.
 func repairDarwinBinary(binaryPath string) error {
 	// Best-effort: strip quarantine. Failure is fine (attribute often absent).
-	_ = exec.Command("xattr", "-d", "com.apple.quarantine", binaryPath).Run()
+	_, _ = upgradeCommandOutput("xattr", "-d", "com.apple.quarantine", binaryPath)
 
-	if _, err := exec.LookPath("codesign"); err != nil {
+	if _, err := upgradeLookPath("codesign"); err != nil {
 		return fmt.Errorf("codesign 不可用: %w", err)
 	}
-	out, err := exec.Command("codesign", "--force", "--sign", "-", binaryPath).CombinedOutput()
+	out, err := upgradeCommandOutput("codesign", "--force", "--sign", "-", binaryPath)
 	if err != nil {
 		return fmt.Errorf("codesign 失败: %v: %s", err, strings.TrimSpace(string(out)))
 	}
@@ -692,9 +740,8 @@ func repairDarwinBinary(binaryPath string) error {
 
 // extractTarGz extracts a .tar.gz file using the system tar command.
 func extractTarGz(archivePath, destDir string) error {
-	os.MkdirAll(destDir, 0755)
-	cmd := exec.Command("tar", "xzf", archivePath, "-C", destDir)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	_ = upgradeMkdirAll(destDir, 0755)
+	if out, err := upgradeCommandOutput("tar", "xzf", archivePath, "-C", destDir); err != nil {
 		return fmt.Errorf("tar 解压失败: %v: %s", err, string(out))
 	}
 	return nil
@@ -867,7 +914,7 @@ func writeJSON(w interface{ Write([]byte) (int, error) }, v any) error {
 }
 
 func shortenHome(path string) string {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := upgradeUserHomeDir()
 	if err != nil {
 		return path
 	}

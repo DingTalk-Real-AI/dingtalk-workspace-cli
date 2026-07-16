@@ -42,7 +42,10 @@ import (
 // silent (they dump every ping/pong).
 type streamSDKLogger struct{}
 
-func (streamSDKLogger) Debugf(format string, args ...interface{}) {}
+func (streamSDKLogger) Debugf(format string, args ...interface{}) {
+	_ = format
+	_ = args
+}
 func (streamSDKLogger) Infof(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "[stream] "+format+"\n", args...)
 }
@@ -67,6 +70,40 @@ type forwarder interface {
 	forward(ctx context.Context, convID, text string) (string, error)
 	label() string
 }
+
+type connectStreamClient interface {
+	RegisterChatBotCallbackRouter(chatbot.IChatBotMessageHandler)
+	RegisterCardCallbackRouter(card.ICardCallbackHandler)
+	Start(context.Context) error
+	Close()
+}
+
+type connectChatReplier interface {
+	SimpleReplyMarkdown(context.Context, string, []byte, []byte) error
+	SimpleReplyText(context.Context, string, []byte) error
+}
+
+type connectMediaClient interface {
+	downloadMessageFile(context.Context, string, string) (string, error)
+	downloadMessageFileNamed(context.Context, string, string, string) (string, error)
+	downloadRecoveredChatRecordFile(context.Context, fileInboundInfo) (string, error)
+	getUserUnionID(context.Context, string) (string, error)
+	downloadDentryFile(context.Context, int64, int64, string, string) (string, error)
+}
+
+var (
+	newConnectStreamClient = func(clientID, clientSecret string, keepAlive time.Duration) connectStreamClient {
+		return client.NewStreamClient(
+			client.WithAppCredential(client.NewAppCredentialConfig(clientID, clientSecret)),
+			client.WithAutoReconnect(true),
+			client.WithKeepAlive(keepAlive),
+		)
+	}
+	newConnectChatReplier = func() connectChatReplier { return chatbot.NewChatbotReplier() }
+	newConnectMediaClient = func(clientID, clientSecret string) connectMediaClient {
+		return newAICardClient(clientID, clientSecret, "")
+	}
+)
 
 type streamingForwarder interface {
 	forwarder
@@ -1064,6 +1101,10 @@ type connectExtras struct {
 	gate     *connectGate
 	kb       *knowledgeBase
 	approval *approvalOrchestrator
+	// onTurnDone is an optional lifecycle observer invoked after one queued
+	// batch has completely finished. It is nil in production and lets focused
+	// tests wait for ack-first work without timing sleeps.
+	onTurnDone func()
 	// persona is a role's system-prompt fragment prepended to every forwarded
 	// prompt (empty = no prefix). Sourced from RoleConfig.Persona.
 	persona string
@@ -1145,6 +1186,15 @@ func connectTurnSummary(turn connectQueuedTurn) string {
 	return "[空消息]"
 }
 
+func connectApprovalGroupReply(replier connectChatReplier, webhook, channel string) approvalReplier {
+	return func(ctx context.Context, _ string, text string) error {
+		if len([]rune(text)) > 200 {
+			return replier.SimpleReplyMarkdown(ctx, webhook, []byte(channel), []byte(text))
+		}
+		return replier.SimpleReplyText(ctx, webhook, []byte(text))
+	}
+}
+
 func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient, extras *connectExtras) error {
 	if extras == nil {
 		extras = &connectExtras{}
@@ -1173,23 +1223,21 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	health.start(ctx)
 
 	streamLoggerOnce.Do(func() { sdklogger.SetLogger(streamSDKLogger{}) })
-	replier := chatbot.NewChatbotReplier()
+	replier := newConnectChatReplier()
 	dedup := newMsgDedup(10000)
 	queue := newConvQueue()
 	// Media downloads need an authenticated API client even when cards are
 	// off (aiCardClient with an empty template is creds+HTTP only).
-	mediaCli := cardCli
-	if mediaCli == nil {
-		mediaCli = newAICardClient(clientID, clientSecret, "")
+	var mediaCli connectMediaClient
+	if cardCli != nil {
+		mediaCli = cardCli
+	} else {
+		mediaCli = newConnectMediaClient(clientID, clientSecret)
 	}
 
 	keepAlive := envDurationMS("DWS_CONNECT_KEEPALIVE_MS", 30*time.Second)
 	fmt.Fprintf(os.Stderr, "[connect] keepAlive=%s autoReconnect=true\n", keepAlive)
-	cli := client.NewStreamClient(
-		client.WithAppCredential(client.NewAppCredentialConfig(clientID, clientSecret)),
-		client.WithAutoReconnect(true),
-		client.WithKeepAlive(keepAlive),
-	)
+	cli := newConnectStreamClient(clientID, clientSecret, keepAlive)
 	cli.RegisterChatBotCallbackRouter(func(_ context.Context, data *chatbot.BotCallbackDataModel) ([]byte, error) {
 		text := strings.TrimSpace(data.Text.Content)
 		msgtype := strings.TrimSpace(data.Msgtype)
@@ -1272,14 +1320,8 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		if sender == "" {
 			sender = strings.TrimSpace(data.SenderStaffId)
 		}
-		shown := text
-		if shown == "" && len(picCodes) > 0 {
-			shown = "[图片]"
-		} else if shown == "" && len(fileInfos) > 0 {
-			shown = connectTurnSummary(connectQueuedTurn{fileInfos: fileInfos})
-		}
 		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s (convType=%s convId=%s staffId=%s msgId=%s)\n",
-			sender, truncateRunes(shown, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
+			sender, truncateRunes(text, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
 		health.onPush()
 		// Ack-first: return now, reply asynchronously via sessionWebhook (which is
 		// independent of the Stream ack). Use a background context so the in-flight
@@ -1310,6 +1352,9 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		// while a turn is running are merged into one pending follow-up instead
 		// of forming an unbounded stale FIFO.
 		queue.submit(turn, func(turns []connectQueuedTurn) {
+			if extras.onTurnDone != nil {
+				defer extras.onTurnDone()
+			}
 			turn := mergeConnectQueuedTurns(turns)
 			if len(turns) > 1 {
 				fmt.Fprintf(os.Stderr, "[connect] 合并 %d 条待处理消息 (convId=%s, latestMsgId=%s)\n", len(turns), turn.convID, turn.msgID)
@@ -1369,152 +1414,10 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			started := time.Now()
 			// Assemble the forwarded prompt: resolve an attached picture (the
 			// top Q&A inbound is an error screenshot), then knowledge-augment.
-			prompt := text
-			for _, lookup := range chatRecordLookups {
-				lookupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-				enrichment, lookupErr := recoverChatRecordUnknowns(lookupCtx, lookup, callMCPToolReturnTextOnServer)
-				cancel()
-				if lookupErr != nil {
-					fmt.Fprintf(os.Stderr, "[connect][media] unknownMsgType 补拉失败，保留原始 JSON (msgId=%s): %v\n", lookup.MsgID, lookupErr)
-					continue
-				}
-				if strings.TrimSpace(enrichment.Prompt) != "" {
-					if strings.TrimSpace(prompt) == "" {
-						prompt = enrichment.Prompt
-					} else {
-						prompt += "\n\n" + enrichment.Prompt
-					}
-				}
-				fileInfos = append(fileInfos, enrichment.Files...)
-				fmt.Fprintf(os.Stderr, "[connect][media] unknownMsgType 补拉完成: 原始附件=%d 未定位=%d (msgId=%s)\n", len(enrichment.Files), enrichment.MissingCount, lookup.MsgID)
-				if enrichment.MissingCount > 0 {
-					prompt += fmt.Sprintf("\n（其中 %d 个转发附件仍未能定位原始文件，请明确告知用户未读取到这些附件。）", enrichment.MissingCount)
-				}
-			}
-			var attachments []connectMediaAttachment
-			for i, picCode := range picCodes {
-				localPath, derr := mediaCli.downloadMessageFile(context.Background(), clientID, picCode)
-				if derr != nil {
-					fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 张图片下载失败: %v\n", i+1, derr)
-					if prompt == "" {
-						prompt = "（用户发来图片，但图片下载失败了。请告知用户图片没收到，建议补充文字描述。）"
-					} else {
-						prompt += "\n（用户同时附了一张图片，但图片下载失败，请基于现有文字回答并说明未能读取图片。）"
-					}
-					continue
-				}
-				if prompt == "" {
-					prompt = "用户发来一张图片（本地路径 " + localPath + "），请查看图片内容并回答其中的问题。"
-				} else {
-					prompt += "\n（用户同时附了一张图片，本地路径 " + localPath + "，请结合图片内容回答。）"
-				}
-				attachments = append(attachments, connectMediaAttachment{
-					LocalPath: localPath,
-					FileName:  filepath.Base(localPath),
-					MediaType: "image",
-				})
-			}
-			for i, fileInfo := range fileInfos {
-				if !fileInfo.hasActionable() {
-					continue
-				}
-				fileName := fileInfo.FileName
-				mediaType := inboundMediaType(fileInfo.MediaType)
-				mediaLabel := "文件"
-				successPrompt := "请读取文件内容并回答"
-				switch mediaType {
-				case "image":
-					mediaLabel = "图片"
-					successPrompt = "请查看图片内容并回答"
-				case "audio":
-					mediaLabel = "语音"
-					successPrompt = "请听取或转写语音内容并回答"
-				case "video":
-					mediaLabel = "视频"
-					successPrompt = "请查看并分析视频内容后回答"
-				}
-				var localPath string
-				var derr error
-				if fileInfo.DownloadCode != "" {
-					localPath, derr = mediaCli.downloadMessageFileNamed(context.Background(), clientID, fileInfo.DownloadCode, fileName)
-					if derr != nil {
-						fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 个%s下载失败: %v\n", i+1, mediaLabel, derr)
-					}
-				} else if fileInfo.MediaID != "" || fileInfo.FileID != "" {
-					downloadCtx, cancel := context.WithTimeout(context.Background(), mediaDownloadTimeout)
-					localPath, derr = mediaCli.downloadRecoveredChatRecordFile(downloadCtx, fileInfo)
-					cancel()
-					if derr != nil {
-						fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 个转发%s原始内容下载失败: %v\n", i+1, mediaLabel, derr)
-					}
-				}
-				switch {
-				case localPath != "":
-					fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 个%s已完整下载: %s\n", i+1, mediaLabel, localPath)
-					attachments = append(attachments, connectMediaAttachment{
-						LocalPath: localPath,
-						FileName:  fileName,
-						MediaType: mediaType,
-					})
-					if prompt == "" {
-						prompt = "用户发来一个" + mediaLabel + "「" + fileName + "」（本地路径 " + localPath + "），" + successPrompt + "。"
-					} else {
-						prompt += "\n（用户同时附了一个" + mediaLabel + "「" + fileName + "」，本地路径 " + localPath + "，" + successPrompt + "。）"
-					}
-				case fileInfo.DentryID != 0 && fileInfo.SpaceID != 0:
-					// API-sent file: resolve via storage API (userId→unionId,
-					// then getDownloadInfo). Falls back to metadata-only prompt
-					// if the download chain fails (e.g. missing permissions).
-					senderID := strings.TrimSpace(callbackData.SenderStaffId)
-					if unionID, uerr := mediaCli.getUserUnionID(context.Background(), senderID); uerr != nil {
-						fmt.Fprintf(os.Stderr, "[connect][media] userId→unionId 失败 (%s): %v\n", senderID, uerr)
-					} else if dp, derr := mediaCli.downloadDentryFile(context.Background(), fileInfo.SpaceID, fileInfo.DentryID, unionID, fileName); derr != nil {
-						fmt.Fprintf(os.Stderr, "[connect][media] 钉盘文件下载失败 spaceId=%d dentryId=%d: %v\n", fileInfo.SpaceID, fileInfo.DentryID, derr)
-					} else {
-						localPath = dp
-					}
-					if localPath != "" {
-						fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 个%s已完整下载: %s\n", i+1, mediaLabel, localPath)
-						attachments = append(attachments, connectMediaAttachment{
-							LocalPath: localPath,
-							FileName:  fileName,
-							MediaType: mediaType,
-						})
-						if prompt == "" {
-							prompt = "用户发来一个" + mediaLabel + "「" + fileName + "」（本地路径 " + localPath + "），" + successPrompt + "。"
-						} else {
-							prompt += "\n（用户同时附了一个" + mediaLabel + "「" + fileName + "」，本地路径 " + localPath + "，" + successPrompt + "。）"
-						}
-					} else {
-						meta := fmt.Sprintf("文件名「%s」，dentryId=%d，spaceId=%d", fileName, fileInfo.DentryID, fileInfo.SpaceID)
-						if fileInfo.FileType != "" {
-							meta += "，类型=" + fileInfo.FileType
-						}
-						if fileInfo.FileSize > 0 {
-							meta += fmt.Sprintf("，大小=%d 字节", fileInfo.FileSize)
-						}
-						if prompt == "" {
-							prompt = "用户发来一个文件（" + meta + "）。文件下载失败，请基于文件名与用户随附的文字信息回答，必要时请用户改用客户端上传或补充文字描述。"
-						} else {
-							prompt = prompt + "\n（用户同时附了一个文件：" + meta + "。文件下载失败，请结合文件名与随附文字回答。）"
-						}
-					}
-				default:
-					failure := "用户发来一个" + mediaLabel + "「" + fileName + "」，但原始内容下载失败。请明确告知用户该附件未能读取，建议重新发送或补充文字描述。"
-					if prompt == "" {
-						prompt = "（" + failure + "）"
-					} else {
-						prompt += "\n（" + failure + "）"
-					}
-				}
-			}
+			prompt, attachments := assembleConnectTurnMedia(text, clientID, callbackData.SenderStaffId, mediaCli, picCodes, fileInfos, chatRecordLookups)
 			originalAttachments := append([]connectMediaAttachment(nil), attachments...)
 			defer cleanupConnectMediaAttachments(originalAttachments)
-			if _, isOpenCode := fwd.(*opencodeForwarder); isOpenCode {
-				prepareCtx, cancel := context.WithTimeout(context.Background(), mediaDownloadTimeout)
-				prompt, attachments = prepareOpenCodeAttachments(prepareCtx, prompt, attachments)
-				cancel()
-			}
+			prompt, attachments = prepareConnectForwarderAttachments(fwd, prompt, attachments)
 			defer cleanupConnectMediaAttachments(attachments)
 			if extras.kb != nil {
 				prompt = extras.kb.augment(prompt)
@@ -1598,12 +1501,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			// posts the outcome into the group itself. handled==true means the
 			// gate owns the reply and the normal delivery below is skipped.
 			if err == nil && gateOn {
-				groupReply := func(ctx context.Context, _, text string) error {
-					if len([]rune(text)) > 200 {
-						return replier.SimpleReplyMarkdown(ctx, webhook, []byte(channel), []byte(text))
-					}
-					return replier.SimpleReplyText(ctx, webhook, []byte(text))
-				}
+				groupReply := connectApprovalGroupReply(replier, webhook, channel)
 				out, handled := extras.approval.handleReply(context.Background(), strings.TrimSpace(callbackData.SenderStaffId), convID, reply, groupReply)
 				if handled {
 					if thinking {
@@ -1636,7 +1534,9 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 						// Client-side fetch of a fresh card occasionally misses
 						// the burst and shows "内容加载失败"; a delayed repair
 						// frame triggers a re-render.
-						go cardCli.repair(context.Background(), cardInst, reply)
+						runConnectCardRepair(func() {
+							cardCli.repair(context.Background(), cardInst, reply)
+						})
 					}
 				}
 			}
@@ -1659,7 +1559,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 					if attempt < len(backoffs) {
 						fmt.Fprintf(os.Stderr, "[connect] 普通消息发送失败 (%s, attempt %d/%d, msgId=%s): %v，%v 后重试\n",
 							channel, attempt+1, len(backoffs)+1, msgID, sendErr, backoffs[attempt])
-						time.Sleep(backoffs[attempt])
+						helperSleep(backoffs[attempt])
 					}
 				}
 				if sendErr != nil {
@@ -1699,6 +1599,10 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	health.onConnected()
 	<-ctx.Done()
 	return nil
+}
+
+var runConnectCardRepair = func(repair func()) {
+	go repair()
 }
 
 // envOr returns the non-empty value of env var key, otherwise def.

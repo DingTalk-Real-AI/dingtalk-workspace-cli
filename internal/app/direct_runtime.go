@@ -309,9 +309,6 @@ func editionServerEndpoint(productID string) (string, bool) {
 		return "", false
 	}
 	hooks := edition.Get()
-	if hooks == nil {
-		return "", false
-	}
 	if endpoint, ok := endpointFromEditionServers(productID, hooks.StaticServers); ok {
 		return endpoint, true
 	}

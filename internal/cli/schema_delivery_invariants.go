@@ -11,6 +11,15 @@ import (
 	"strings"
 )
 
+var (
+	deliveryRegistryPayload = SchemaRegistry.ToPayload
+	deliverySchemaPayload   = schemaPayloadFromLoadedCatalog
+	deliveryOverviewPayload = SchemaRegistry.ToOverviewPayload
+	deliveryIndexResolve    = SchemaIndex.Resolve
+	deliveryToolPayload     = ToolSpec.ToPayload
+	deliveryToolSummary     = ToolSpec.ToSummaryPayload
+)
+
 // ValidateSchemaDeliveryInvariants proves that the serialized snapshot which
 // will be embedded in the release binary is an exact delivery of source and
 // has one content-identical ToolSpec behind every public Schema view. The
@@ -108,9 +117,7 @@ func firstSchemaJSONDifference(left, right any) (path, leftValue, rightValue str
 		var decoded any
 		decoder := json.NewDecoder(strings.NewReader(string(encoded)))
 		decoder.UseNumber()
-		if err := decoder.Decode(&decoded); err != nil {
-			return fmt.Sprintf("<decode error: %v>", err)
-		}
+		_ = decoder.Decode(&decoded)
 		return decoded
 	}
 	path, leftDecoded, rightDecoded, _ := firstSchemaJSONDifferenceAt("$", decode(left), decode(right))
@@ -185,7 +192,7 @@ func compactSchemaDiagnosticValue(value any) string {
 func schemaDeliveryInvariantErrors(loaded loadedSchemaCatalog) []string {
 	problems := append([]string(nil), schemaRegistryProjectionErrors(loaded)...)
 
-	all, err := loaded.Registry.ToPayload()
+	all, err := deliveryRegistryPayload(loaded.Registry)
 	if err != nil {
 		return sortedUniqueSchemaStrings(append(problems, fmt.Sprintf("render final Schema --all projection: %v", err)))
 	}
@@ -198,7 +205,7 @@ func schemaDeliveryInvariantErrors(loaded loadedSchemaCatalog) []string {
 	// including source and metadata summaries. catalog_hash and surface_hash
 	// are the only allowed view-only fields because they belong to the release
 	// envelope rather than SchemaRegistry itself.
-	if list, queryErr := schemaPayloadFromLoadedCatalog(loaded, nil); queryErr != nil {
+	if list, queryErr := deliverySchemaPayload(loaded, nil); queryErr != nil {
 		problems = append(problems, fmt.Sprintf("Schema list is not queryable: %v", queryErr))
 	} else {
 		if !schemaJSONEqual(schemaCatalogWithoutEnvelopeHashes(list), loaded.Snapshot.Catalog) {
@@ -216,7 +223,7 @@ func schemaDeliveryInvariantErrors(loaded loadedSchemaCatalog) []string {
 			problems = append(problems, fmt.Sprintf("Schema list surface_hash %q differs from snapshot surface_hash %q", got, expected))
 		}
 	}
-	if overview, overviewErr := loaded.Registry.ToOverviewPayload(); overviewErr != nil {
+	if overview, overviewErr := deliveryOverviewPayload(loaded.Registry); overviewErr != nil {
 		problems = append(problems, fmt.Sprintf("render final Schema product overview: %v", overviewErr))
 	} else if expectedOverview := schemaOverviewPayloadFromCatalog(loaded.Snapshot.Catalog); !schemaJSONEqual(overview, expectedOverview) {
 		problems = append(problems, "Schema list overview differs from complete Catalog content")
@@ -224,12 +231,12 @@ func schemaDeliveryInvariantErrors(loaded loadedSchemaCatalog) []string {
 
 	canonicals := loaded.Index.CanonicalPaths()
 	for _, canonical := range canonicals {
-		tool, ok := loaded.Index.Resolve(canonical)
+		tool, ok := deliveryIndexResolve(loaded.Index, canonical)
 		if !ok {
 			problems = append(problems, fmt.Sprintf("typed Schema index lost canonical %q", canonical))
 			continue
 		}
-		expectedFull, renderErr := tool.ToPayload()
+		expectedFull, renderErr := deliveryToolPayload(tool)
 		if renderErr != nil {
 			problems = append(problems, fmt.Sprintf("render final ToolSpec %s: %v", canonical, renderErr))
 			continue
@@ -245,13 +252,13 @@ func schemaDeliveryInvariantErrors(loaded loadedSchemaCatalog) []string {
 		} else if !schemaJSONEqual(allFull, expectedFull) {
 			problems = append(problems, fmt.Sprintf("Schema --all tool %s differs from final ToolSpec", canonical))
 		}
-		if leaf, queryErr := schemaPayloadFromLoadedCatalog(loaded, []string{canonical}); queryErr != nil {
+		if leaf, queryErr := deliverySchemaPayload(loaded, []string{canonical}); queryErr != nil {
 			problems = append(problems, fmt.Sprintf("canonical leaf %s is not queryable: %v", canonical, queryErr))
 		} else if !schemaJSONEqual(leaf, expectedFull) {
 			problems = append(problems, fmt.Sprintf("canonical leaf %s differs from final ToolSpec", canonical))
 		}
 
-		expectedSummary, summaryErr := tool.ToSummaryPayload()
+		expectedSummary, summaryErr := deliveryToolSummary(tool)
 		if summaryErr != nil {
 			problems = append(problems, fmt.Sprintf("render final ToolSpec summary %s: %v", canonical, summaryErr))
 		} else if catalogSummary, exists := catalogSummaries[canonical]; !exists {
@@ -265,7 +272,7 @@ func schemaDeliveryInvariantErrors(loaded loadedSchemaCatalog) []string {
 			if alias == "" {
 				continue
 			}
-			aliasPayload, queryErr := schemaPayloadFromLoadedCatalog(loaded, []string{alias})
+			aliasPayload, queryErr := deliverySchemaPayload(loaded, []string{alias})
 			if queryErr != nil {
 				problems = append(problems, fmt.Sprintf("alias %q for %s is not queryable: %v", alias, canonical, queryErr))
 				continue

@@ -28,6 +28,29 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+var (
+	profilesAcquireDualLock  = AcquireDualLock
+	profilesReadFile         = os.ReadFile
+	profilesRename           = os.Rename
+	profilesMkdirAll         = os.MkdirAll
+	profilesMarshalIndent    = json.MarshalIndent
+	profilesWriteFile        = os.WriteFile
+	profilesRemove           = os.Remove
+	profilesLoad             = LoadProfiles
+	profilesSave             = SaveProfiles
+	profilesEnsureMigration  = ensureProfilesMigrationLocked
+	profilesSyncLegacyMirror = syncLegacyTokenMirrorLocked
+	profilesTokenExists      = TokenDataExistsKeychain
+	profilesLoadLegacy       = LoadTokenDataKeychain
+	profilesSaveCorp         = SaveTokenDataKeychainForCorpID
+	profilesTokenExistsCorp  = TokenDataExistsKeychainForCorpID
+	profilesLoadCorp         = LoadTokenDataKeychainForCorpID
+	profilesSaveLegacy       = SaveTokenDataKeychain
+	profilesWriteMarker      = WriteTokenMarker
+	profilesDeleteLegacy     = DeleteTokenDataKeychain
+	profilesDeleteMarker     = DeleteTokenMarker
+)
+
 // withProfilesLock runs fn while holding the auth dual-layer lock (process +
 // cross-process file lock) so that all read-modify-write cycles on
 // profiles.json and the legacy token mirror are serialized.
@@ -37,7 +60,7 @@ import (
 // already hold the lock (e.g. OAuthProvider.lockedRefresh and the read path
 // reached from it) must likewise call the lock-free variants directly.
 func withProfilesLock(configDir string, fn func() error) error {
-	lock, err := AcquireDualLock(context.Background(), configDir)
+	lock, err := profilesAcquireDualLock(context.Background(), configDir)
 	if err != nil {
 		return err
 	}
@@ -106,7 +129,7 @@ func ProfilesPath(configDir string) string {
 // LoadProfiles reads profiles.json. A missing file returns an empty config.
 func LoadProfiles(configDir string) (*ProfilesConfig, error) {
 	path := ProfilesPath(configDir)
-	data, err := os.ReadFile(path)
+	data, err := profilesReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &ProfilesConfig{Version: 1}, nil
@@ -119,7 +142,7 @@ func LoadProfiles(configDir string) (*ProfilesConfig, error) {
 		// rebuild an empty config so the CLI can self-heal (auth reset / re-login)
 		// instead of being permanently locked out by an unreadable profiles.json.
 		quarantine := path + ".corrupt-" + time.Now().Format("20060102-150405.000")
-		_ = os.Rename(path, quarantine)
+		_ = profilesRename(path, quarantine)
 		return &ProfilesConfig{Version: 1}, nil
 	}
 	normalizeProfilesConfig(&cfg)
@@ -132,10 +155,10 @@ func SaveProfiles(configDir string, cfg *ProfilesConfig) error {
 		cfg = &ProfilesConfig{}
 	}
 	normalizeProfilesConfig(cfg)
-	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
+	if err := profilesMkdirAll(configDir, config.DirPerm); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := profilesMarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal profiles: %w", err)
 	}
@@ -145,11 +168,11 @@ func SaveProfiles(configDir string, cfg *ProfilesConfig) error {
 	// concurrent writers interleave into the same temp file and rename a
 	// corrupted result into place.
 	tmp := path + "." + uuid.New().String() + ".tmp"
-	if err := os.WriteFile(tmp, data, config.FilePerm); err != nil {
+	if err := profilesWriteFile(tmp, data, config.FilePerm); err != nil {
 		return fmt.Errorf("write profiles tmp: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := profilesRename(tmp, path); err != nil {
+		_ = profilesRemove(tmp)
 		return fmt.Errorf("rename profiles: %w", err)
 	}
 	return nil
@@ -166,21 +189,21 @@ func EnsureProfilesMigration(configDir string) error {
 }
 
 func ensureProfilesMigrationLocked(configDir string) error {
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return err
 	}
 	if len(cfg.Profiles) > 0 {
 		return nil
 	}
-	if !TokenDataExistsKeychain() {
+	if !profilesTokenExists() {
 		return nil
 	}
-	data, err := LoadTokenDataKeychain()
+	data, err := profilesLoadLegacy()
 	if err != nil || data == nil || strings.TrimSpace(data.CorpID) == "" {
 		return nil
 	}
-	if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+	if err := profilesSaveCorp(data.CorpID, data); err != nil {
 		return err
 	}
 	return upsertProfileFromToken(configDir, cfg, data, false)
@@ -200,7 +223,7 @@ func UpsertProfileFromTokenWithCurrent(configDir string, data *TokenData, makeCu
 }
 
 func upsertProfileFromTokenWithCurrentLocked(configDir string, data *TokenData, makeCurrent bool) error {
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return err
 	}
@@ -270,15 +293,15 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 	if cfg.CurrentProfile == "" {
 		cfg.CurrentProfile = corpID
 	}
-	return SaveProfiles(configDir, cfg)
+	return profilesSave(configDir, cfg)
 }
 
 // ResolveProfile returns a profile selected by name/corpId or by current/primary fallback.
 func ResolveProfile(configDir, selector string) (*Profile, error) {
-	if err := ensureProfilesMigrationLocked(configDir); err != nil {
+	if err := profilesEnsureMigration(configDir); err != nil {
 		return nil, err
 	}
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -300,10 +323,10 @@ func ResolveProfile(configDir, selector string) (*Profile, error) {
 }
 
 func resolveProfileForLoad(configDir, selector string) (*Profile, error) {
-	if err := ensureProfilesMigrationLocked(configDir); err != nil {
+	if err := profilesEnsureMigration(configDir); err != nil {
 		return nil, err
 	}
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +339,7 @@ func resolveProfileForLoad(configDir, selector string) (*Profile, error) {
 		return p, nil
 	}
 	for _, candidate := range []string{cfg.CurrentProfile, cfg.PrimaryProfile} {
-		if p := findProfile(cfg, candidate); p != nil && TokenDataExistsKeychainForCorpID(p.CorpID) {
+		if p := findProfile(cfg, candidate); p != nil && profilesTokenExistsCorp(p.CorpID) {
 			return p, nil
 		}
 	}
@@ -341,10 +364,10 @@ func SetCurrentProfile(configDir, selector string) (*Profile, error) {
 }
 
 func setCurrentProfileLocked(configDir, selector string) (*Profile, error) {
-	if err := ensureProfilesMigrationLocked(configDir); err != nil {
+	if err := profilesEnsureMigration(configDir); err != nil {
 		return nil, err
 	}
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -359,10 +382,10 @@ func setCurrentProfileLocked(configDir, selector string) (*Profile, error) {
 		cfg.CurrentProfile = p.CorpID
 	}
 	touchProfile(cfg, p.CorpID)
-	if err := SaveProfiles(configDir, cfg); err != nil {
+	if err := profilesSave(configDir, cfg); err != nil {
 		return nil, err
 	}
-	if err := syncLegacyTokenMirrorLocked(configDir); err != nil {
+	if err := profilesSyncLegacyMirror(configDir); err != nil {
 		return nil, err
 	}
 	return findProfile(cfg, p.CorpID), nil
@@ -380,10 +403,10 @@ func UsePreviousProfile(configDir string) (*Profile, error) {
 }
 
 func usePreviousProfileLocked(configDir string) (*Profile, error) {
-	if err := ensureProfilesMigrationLocked(configDir); err != nil {
+	if err := profilesEnsureMigration(configDir); err != nil {
 		return nil, err
 	}
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -397,10 +420,10 @@ func usePreviousProfileLocked(configDir string) (*Profile, error) {
 	}
 	cfg.PreviousProfile, cfg.CurrentProfile = cfg.CurrentProfile, p.CorpID
 	touchProfile(cfg, p.CorpID)
-	if err := SaveProfiles(configDir, cfg); err != nil {
+	if err := profilesSave(configDir, cfg); err != nil {
 		return nil, err
 	}
-	if err := syncLegacyTokenMirrorLocked(configDir); err != nil {
+	if err := profilesSyncLegacyMirror(configDir); err != nil {
 		return nil, err
 	}
 	return findProfile(cfg, p.CorpID), nil
@@ -418,7 +441,7 @@ func RemoveProfile(configDir, selector string) (*Profile, error) {
 }
 
 func removeProfileLocked(configDir, selector string) (*Profile, error) {
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +474,7 @@ func removeProfileLocked(configDir, selector string) (*Profile, error) {
 		cfg.CurrentProfile = ""
 		cfg.PreviousProfile = ""
 	}
-	if err := SaveProfiles(configDir, cfg); err != nil {
+	if err := profilesSave(configDir, cfg); err != nil {
 		return nil, err
 	}
 	return &removed, nil
@@ -468,7 +491,7 @@ func MarkProfileStatus(configDir, corpID, status string) error {
 }
 
 func markProfileStatusLocked(configDir, corpID, status string) error {
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return err
 	}
@@ -478,7 +501,7 @@ func markProfileStatusLocked(configDir, corpID, status string) error {
 	}
 	p.Status = strings.TrimSpace(status)
 	p.UpdatedAt = time.Now().Format(time.RFC3339)
-	return SaveProfiles(configDir, cfg)
+	return profilesSave(configDir, cfg)
 }
 
 // SyncLegacyTokenMirror mirrors the current profile token into legacy auth-token.
@@ -489,7 +512,7 @@ func SyncLegacyTokenMirror(configDir string) error {
 }
 
 func syncLegacyTokenMirrorLocked(configDir string) error {
-	cfg, err := LoadProfiles(configDir)
+	cfg, err := profilesLoad(configDir)
 	if err != nil {
 		return err
 	}
@@ -499,17 +522,17 @@ func syncLegacyTokenMirrorLocked(configDir string) error {
 		if p == nil {
 			continue
 		}
-		data, loadErr := LoadTokenDataKeychainForCorpID(p.CorpID)
+		data, loadErr := profilesLoadCorp(p.CorpID)
 		if loadErr != nil {
 			// Transient keychain read failure: do NOT touch the existing mirror.
 			hadReadError = true
 			continue
 		}
 		if data != nil {
-			if err := SaveTokenDataKeychain(data); err != nil {
+			if err := profilesSaveLegacy(data); err != nil {
 				return err
 			}
-			return WriteTokenMarker(configDir)
+			return profilesWriteMarker(configDir)
 		}
 	}
 	if hadReadError {
@@ -518,8 +541,8 @@ func syncLegacyTokenMirrorLocked(configDir string) error {
 		return nil
 	}
 	// All candidate profiles confirmed absent (no token): clear the mirror.
-	_ = DeleteTokenDataKeychain()
-	_ = DeleteTokenMarker(configDir)
+	_ = profilesDeleteLegacy()
+	_ = profilesDeleteMarker(configDir)
 	return nil
 }
 

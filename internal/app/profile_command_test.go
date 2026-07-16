@@ -110,6 +110,7 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("profile use corp_primary error = %v\noutput:\n%s", err, out.String())
 	}
+	CloseFileLogger()
 	if !bytes.Contains(out.Bytes(), []byte("组织: corp_primary org")) {
 		t.Fatalf("profile use output should include organization name:\n%s", out.String())
 	}
@@ -136,6 +137,7 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("profile use - error = %v\noutput:\n%s", err, out.String())
 	}
+	CloseFileLogger()
 	if !bytes.Contains(out.Bytes(), []byte("组织: corp_secondary org")) {
 		t.Fatalf("profile use - output should include organization name:\n%s", out.String())
 	}
@@ -202,6 +204,7 @@ func TestProfileSwitchRootCommandSupportsCorpIDFlag(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("profile switch --corpId error = %v\noutput:\n%s", err, out.String())
 	}
+	CloseFileLogger()
 	cfg, err := authpkg.LoadProfiles(configDir)
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
@@ -218,6 +221,7 @@ func TestProfileSwitchRootCommandSupportsCorpIDFlag(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("profile use --corp error = %v\noutput:\n%s", err, out.String())
 	}
+	CloseFileLogger()
 	cfg, err = authpkg.LoadProfiles(configDir)
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)

@@ -155,7 +155,7 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-time.After(wait):
+		case <-helperAfter(wait):
 		}
 
 		text, err := callMCPToolReturnText(ctx, "query_export_job", map[string]any{

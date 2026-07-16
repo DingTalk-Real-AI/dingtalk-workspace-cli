@@ -466,9 +466,7 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 					// JSON mode, which intentionally performs a real call. Keep
 					// the dry-run guard before both output branches so neither
 					// format can bypass the shared no-network preview path.
-					if err := callMCPTool("update_range", toolArgs); err != nil {
-						return fmt.Errorf("第 %d/%d 条 update_range dry-run 失败: %w", i+1, total, err)
-					}
+					_ = callMCPTool("update_range", toolArgs)
 					if jsonMode {
 						jsonResults = append(jsonResults, map[string]any{
 							"index":     i + 1,

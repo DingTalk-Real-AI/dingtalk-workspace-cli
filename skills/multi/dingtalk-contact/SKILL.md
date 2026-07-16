@@ -1,6 +1,6 @@
 ---
 name: dingtalk-contact
-description: 钉钉通讯录精确查询（按 userId 查详情、部门搜索、部门成员列表、查自己信息、离职员工查询、花名册档案）。Use when 用户说 查部门/部门成员/我的信息/按工号查/按 userId 查/orgAuthEmail/离职员工/离职名单/花名册。Distinct from dingtalk-aisearch(模糊搜人首选：找同事/查上下级/谁负责)。命令前缀：dws contact。
+description: 钉钉通讯录查询与组织管理（用户、部门、角色、花名册、离职员工、创建企业、企业账号、邀请员工）。Use when 用户说 查部门/我的信息/按 userId 查/离职员工/创建企业/企业账号/邀请员工。Distinct from dingtalk-aisearch(模糊搜人首选：找同事/查上下级/谁负责)。命令前缀：dws contact。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -57,6 +57,9 @@ metadata:
 | "部门成员列表" | `dws contact dept list-members --depts <deptId>` |
 | "离职员工/离职名单/已离职" | `dws contact user dismission search`（可加 `--name` / `--start` + `--end` / `--depts`） |
 | "花名册/员工档案/学历/银行卡/合同" | `dws contact user profile get --staff-id <STAFF_ID>`（先 `profile fields` 查字段） |
+| "创建企业/新建企业/初始化企业" | `dws contact org create --org-name "<企业名>" --creator-username "<创建者名称>"` |
+| "创建企业账号/专属账号/企业登录账号" | `dws contact account create --org-user-name "<姓名>" --login-id "<登录号>"` |
+| "邀请员工/添加员工/新员工入职" | `dws contact user invite --org-user-name "<姓名>" --org-user-mobile "<手机号>"` |
 
 ## 评测高频硬约束
 
@@ -65,6 +68,7 @@ metadata:
 - 精确找人、按工号、按手机号：先用 `dws aisearch person --keyword "<完整输入>" --dimension name/jobNumber/phone --format json` 或对应 `contact user search/search-mobile`；拿到 `userId` 后必须 `dws contact user get --ids <userId> --format json` 补部门/职位/邮箱。
 - 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --keyword "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
+- "创建企业账号"必须优先匹配长模式 `account create`，不要误路由为 `org create`；三条组织管理命令都是写操作，执行前确认当前企业与目标信息。
 
 ## 跨产品协作
 

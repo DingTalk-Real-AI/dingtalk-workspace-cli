@@ -24,6 +24,8 @@ import (
 	"time"
 )
 
+var busctlReadFull = io.ReadFull
+
 // ReadyFDEnv is the env var the spawned `event _bus` child inspects to find
 // the ready-pipe write end. The parent passes the FD number; child opens it
 // via os.NewFile(fd, "ready") and writes 'R' on success or 'E' on failure.
@@ -34,7 +36,12 @@ const ReadyFDEnv = "DWS_EVENT_BUS_READY_FD"
 // 10s is generous — bus startup is local-only work (file I/O + socket bind),
 // so 1s would normally suffice; the extra headroom covers cold-start
 // keychain prompts and slow CI machines.
-const ReadyTimeout = 10 * time.Second
+var ReadyTimeout = 10 * time.Second
+
+var (
+	spawnExecutable = os.Executable
+	spawnPipe       = os.Pipe
+)
 
 // ErrSpawnFailed is returned when the child reports startup failure via
 // the ready pipe ('E' byte). The child's exit error / log file holds the
@@ -87,7 +94,7 @@ func Spawn(cfg SpawnConfig) (pid int, err error) {
 		return 0, errors.New("busctl: SpawnConfig.ClientID is required")
 	}
 	if cfg.ExecPath == "" {
-		execPath, err := os.Executable()
+		execPath, err := spawnExecutable()
 		if err != nil {
 			return 0, fmt.Errorf("busctl: locate executable: %w", err)
 		}
@@ -97,7 +104,7 @@ func Spawn(cfg SpawnConfig) (pid int, err error) {
 		cfg.Env = os.Environ()
 	}
 
-	pr, pw, err := os.Pipe()
+	pr, pw, err := spawnPipe()
 	if err != nil {
 		return 0, fmt.Errorf("busctl: pipe: %w", err)
 	}
@@ -151,7 +158,7 @@ func waitReady(pr *os.File) error {
 	done := make(chan result, 1)
 	go func() {
 		buf := make([]byte, 1)
-		n, err := io.ReadFull(pr, buf)
+		n, err := busctlReadFull(pr, buf)
 		if err != nil {
 			done <- result{err: err}
 			return

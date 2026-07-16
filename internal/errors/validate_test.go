@@ -13,7 +13,10 @@
 
 package errors
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestResourceName(t *testing.T) {
 	t.Parallel()
@@ -93,7 +96,7 @@ func TestSafeLocalFlagPath(t *testing.T) {
 		{name: "relative-file", flagName: "--file", value: "data.json", want: "data.json"},
 		{name: "relative-nested", flagName: "--file", value: "dir/file.txt", want: "dir/file.txt"},
 		// Invalid paths
-		{name: "absolute", flagName: "--file", value: "/etc/passwd", wantErr: true},
+		{name: "absolute", flagName: "--file", value: filepath.Join(t.TempDir(), "absolute"), wantErr: true},
 		{name: "traversal", flagName: "--file", value: "../secret", wantErr: true},
 	}
 

@@ -35,6 +35,9 @@ func (c *qualityEvaluationCaller) CallTool(_ context.Context, productID, toolNam
 		if taskID == "INVALID" {
 			return nil, errors.New("task not found")
 		}
+		if taskID == "MISMATCH" {
+			return qualityEvaluationTextResult(`{"success":true,"result":{"todoDetailModel":{"taskId":"OTHER"}}}`), nil
+		}
 		return qualityEvaluationTextResult(`{"success":true,"result":{"todoDetailModel":{"taskId":"` + taskID + `"}}}`), nil
 	case "update_todo_done_status":
 		return qualityEvaluationTextResult(`{"success":true}`), nil
@@ -95,6 +98,7 @@ func TestCrossPlatformCoverageTodoCommandsRejectMissingTaskBeforeTargetCall(t *t
 		targetTool string
 	}{
 		{name: "done", args: []string{"task", "done", "--task-id", "INVALID", "--status", "true"}, targetTool: "update_todo_done_status"},
+		{name: "done with mismatched task", args: []string{"task", "done", "--task-id", "MISMATCH", "--status", "true"}, targetTool: "update_todo_done_status"},
 		{name: "list attachment", args: []string{"task", "list-attachment", "--task-id", "INVALID"}, targetTool: "list_todo_attachment"},
 	}
 

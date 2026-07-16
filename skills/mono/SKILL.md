@@ -71,7 +71,7 @@ cli_version: ">=1.0.15"
 | `attendance`      | 考勤：打卡结果/打卡流水/考勤组查询/考勤规则/汇总统计/假期类型/假期余额（P0 已落地，部分管理类命令仍属 P1） | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
 | `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/消息发送(文本/Markdown/图片/文件)/拉取消息/消息收藏/@我/特别关注/机器人群发/单聊/撤回/转发/引用回复/Webhook/机器人搜索 | [chat.md](./references/products/chat.md)                       |
-| `contact`         | 通讯录：用户查询(当前用户/搜索/详情/手机号)/花名册档案(学历/家庭/银行卡/合同)/离职员工查询(姓名/时间范围/部门)/部门查询(搜索/详情/子部门/成员)/角色查询(主管/管理员/财务/HR 等 label)/特别关注列表              | [contact.md](./references/products/contact.md)                 |
+| `contact`         | 通讯录：用户查询/部门/角色/花名册/离职员工/特别关注，以及创建企业、企业账号和邀请员工              | [contact.md](./references/products/contact.md)                 |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
@@ -95,7 +95,7 @@ cli_version: ">=1.0.15"
 用户提到"考勤/打卡/排班" → `attendance`
 用户提到"日程/日历/会议室/约会/时间建议" → `calendar`
 用户提到"群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知" → `chat`
-用户提到"通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人" → `contact`
+用户提到"通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人/创建企业/企业账号/邀请员工/新员工入职" → `contact`
 用户提到"开发/API/调用错误 文档" → `devdoc`
 用户提到"DING/紧急消息/电话提醒" → `ding`
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`

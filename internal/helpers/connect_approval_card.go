@@ -49,6 +49,10 @@ const (
 	approvalDecisionReject  = "reject"
 )
 
+var approvalOwnerDecide = func(g *approvalGate, id string, approve bool, decidedBy string) (*ApprovalRequest, bool) {
+	return g.Decide(id, approve, decidedBy)
+}
+
 // approvalCardSender delivers and updates the owner-facing confirmation card.
 // It is an interface so the orchestrator and its tests never touch the network:
 // the real sender talks to the DingTalk card API, the fake records calls.
@@ -137,7 +141,7 @@ func (s *sheetAuditSink) record(ctx context.Context, req *ApprovalRequest) {
 			return
 		}
 		if attempt < 3 && isTransientSheetErr(err) {
-			time.Sleep(time.Duration(attempt) * 600 * time.Millisecond)
+			helperSleep(time.Duration(attempt) * 600 * time.Millisecond)
 			continue
 		}
 		break
@@ -502,7 +506,7 @@ func (o *approvalOrchestrator) handleOwnerDecision(ctx context.Context, senderSt
 	if req == nil {
 		return false
 	}
-	decided, deciding := o.gate.Decide(req.ID, approve, senderStaffID)
+	decided, deciding := approvalOwnerDecide(o.gate, req.ID, approve, senderStaffID)
 	if !deciding {
 		// Already decided (e.g. a double reply): consume the keyword, do not
 		// re-execute.

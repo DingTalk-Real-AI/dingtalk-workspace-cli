@@ -19,12 +19,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	eventprocess "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/process"
 )
 
 // connectLockDir is a var so tests can isolate lock files.
 var connectLockDir = os.TempDir()
+
+var (
+	connectLockOpenFile = os.OpenFile
+	connectLockReadFile = os.ReadFile
+	connectLockRemove   = os.Remove
+)
 
 // acquireConnectLock guards against two local connectors holding Stream
 // connections for the same robot. DingTalk load-balances pushes across
@@ -35,23 +39,23 @@ var connectLockDir = os.TempDir()
 func acquireConnectLock(clientID string) (release func(), err error) {
 	path := filepath.Join(connectLockDir, "dws-connect-"+sanitizeLockID(clientID)+".pid")
 	for attempt := 0; attempt < 2; attempt++ {
-		f, openErr := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		f, openErr := connectLockOpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if openErr == nil {
 			fmt.Fprintf(f, "%d", os.Getpid())
 			f.Close()
-			return func() { _ = os.Remove(path) }, nil
+			return func() { _ = connectLockRemove(path) }, nil
 		}
 		if !os.IsExist(openErr) {
 			return nil, openErr
 		}
-		raw, readErr := os.ReadFile(path)
+		raw, readErr := connectLockReadFile(path)
 		if readErr == nil {
 			if pid, perr := strconv.Atoi(strings.TrimSpace(string(raw))); perr == nil && pid > 0 && processAlive(pid) {
 				return nil, fmt.Errorf("机器人 %s 已有连接器在本机运行 (pid %d)。同一机器人的多个 Stream 连接会随机分流消息，表现为机器人时灵时不灵；请先停掉旧进程，或确认后删除 %s", clientID, pid, path)
 			}
 		}
 		// Stale lock (owner gone or file unreadable): take over.
-		_ = os.Remove(path)
+		_ = connectLockRemove(path)
 	}
 	return nil, fmt.Errorf("无法获取连接器锁 %s", path)
 }
@@ -65,10 +69,4 @@ func sanitizeLockID(s string) string {
 		}
 		return '_'
 	}, s)
-}
-
-// processAlive reports whether pid refers to a live process using the shared
-// Unix signal-0 / Windows OpenProcess implementation.
-func processAlive(pid int) bool {
-	return eventprocess.Alive(pid)
 }

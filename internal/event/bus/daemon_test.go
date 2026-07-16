@@ -78,6 +78,9 @@ func skipOnWindows(t *testing.T, reason string) {
 // $TMPDIR (/var/folders/.../T/...) which can easily exceed that.
 func shortTempDir(t *testing.T) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		return t.TempDir()
+	}
 	dir, err := os.MkdirTemp("/tmp", "dws-bus-")
 	if err != nil {
 		t.Fatalf("mktemp: %v", err)
@@ -313,6 +316,11 @@ func TestDaemon_ConsumerEOFAutoUnregisters(t *testing.T) {
 	sockPath := filepath.Join(workDir, "bus.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	readyReader, readyWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readyReader.Close()
 
 	go Run(ctx, Config{
 		WorkDir:     workDir,
@@ -320,8 +328,15 @@ func TestDaemon_ConsumerEOFAutoUnregisters(t *testing.T) {
 		ClientID:    "ding_test",
 		Edition:     "open",
 		Source:      &fakeSource{},
+		ReadyPipe:   readyWriter,
 	})
-	waitForFile(t, sockPath, 2*time.Second)
+	ready := make([]byte, 1)
+	if err := readyReader.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := readyReader.Read(ready); err != nil || n != 1 || ready[0] != 'R' {
+		t.Fatalf("ready signal = %q (n=%d), err=%v", ready, n, err)
+	}
 
 	conn, err := transport.Dial(sockPath)
 	if err != nil {

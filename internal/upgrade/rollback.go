@@ -15,6 +15,26 @@ import (
 
 const defaultMaxBackups = 5
 
+var (
+	rollbackStat          = os.Stat
+	rollbackMkdirAll      = os.MkdirAll
+	rollbackCopyFile      = copyFile
+	rollbackReadDir       = os.ReadDir
+	rollbackRemoveAll     = os.RemoveAll
+	rollbackMarshalIndent = json.MarshalIndent
+	rollbackWriteFile     = os.WriteFile
+	rollbackReadFile      = os.ReadFile
+	rollbackReplaceFile   = replaceExeFile
+	rollbackEntryInfo     = func(entry os.DirEntry) (os.FileInfo, error) { return entry.Info() }
+	upgradeDirStat        = os.Stat
+	upgradeDirMkdirAll    = os.MkdirAll
+	upgradeDirReadDir     = os.ReadDir
+	upgradeDirEntryInfo   = func(entry os.DirEntry) (os.FileInfo, error) { return entry.Info() }
+	upgradeDirOpen        = os.Open
+	upgradeDirOpenFile    = os.OpenFile
+	upgradeDirCopy        = io.Copy
+)
+
 // BackupInfo contains information about a single backup.
 type BackupInfo struct {
 	Path       string    `json:"path"`
@@ -32,7 +52,7 @@ type RollbackManager struct {
 
 // NewRollbackManager creates a rollback manager using the standard backup directory.
 func NewRollbackManager() *RollbackManager {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := upgradeUserHomeDir()
 	if err != nil {
 		homeDir = "."
 	}
@@ -53,21 +73,21 @@ func NewRollbackManagerWithDir(backupDir string) *RollbackManager {
 // Backup creates a backup of the currently running binary.
 // Returns the backup directory path.
 func (r *RollbackManager) Backup(currentVersion string) (string, error) {
-	currentExe, err := os.Executable()
+	currentExe, err := upgradeExecutable()
 	if err != nil {
 		return "", fmt.Errorf("无法获取当前二进制路径: %w", err)
 	}
-	currentExe, err = filepath.EvalSymlinks(currentExe)
+	currentExe, err = upgradeEvalSymlinks(currentExe)
 	if err != nil {
 		return "", fmt.Errorf("无法解析符号链接: %w", err)
 	}
 
-	info, err := os.Stat(currentExe)
+	info, err := rollbackStat(currentExe)
 	if err != nil {
 		return "", fmt.Errorf("无法读取当前二进制信息: %w", err)
 	}
 
-	if err := os.MkdirAll(r.backupDir, dirPermSecure); err != nil {
+	if err := rollbackMkdirAll(r.backupDir, dirPermSecure); err != nil {
 		return "", fmt.Errorf("创建备份目录失败: %w", err)
 	}
 
@@ -75,17 +95,17 @@ func (r *RollbackManager) Backup(currentVersion string) (string, error) {
 	backupSetName := fmt.Sprintf("v%s-%s", currentVersion, timestamp)
 	backupSetPath := filepath.Join(r.backupDir, backupSetName)
 
-	if err := os.MkdirAll(backupSetPath, dirPermSecure); err != nil {
+	if err := rollbackMkdirAll(backupSetPath, dirPermSecure); err != nil {
 		return "", fmt.Errorf("创建备份集目录失败: %w", err)
 	}
 
 	binaryBackupDir := filepath.Join(backupSetPath, "binary")
-	if err := os.MkdirAll(binaryBackupDir, dirPermSecure); err != nil {
+	if err := rollbackMkdirAll(binaryBackupDir, dirPermSecure); err != nil {
 		return "", fmt.Errorf("创建二进制备份目录失败: %w", err)
 	}
 
 	binaryBackupPath := filepath.Join(binaryBackupDir, filepath.Base(currentExe))
-	if err := copyFile(currentExe, binaryBackupPath, info.Mode()); err != nil {
+	if err := rollbackCopyFile(currentExe, binaryBackupPath, info.Mode()); err != nil {
 		return "", fmt.Errorf("备份二进制失败: %w", err)
 	}
 
@@ -116,11 +136,11 @@ func (r *RollbackManager) Rollback() error {
 // RollbackTo restores a specific backup.
 // Uses replaceExeFile to handle Windows file-lock semantics correctly.
 func (r *RollbackManager) RollbackTo(backup BackupInfo) error {
-	currentExe, err := os.Executable()
+	currentExe, err := upgradeExecutable()
 	if err != nil {
 		return fmt.Errorf("无法获取当前二进制路径: %w", err)
 	}
-	currentExe, err = filepath.EvalSymlinks(currentExe)
+	currentExe, err = upgradeEvalSymlinks(currentExe)
 	if err != nil {
 		return fmt.Errorf("无法解析符号链接: %w", err)
 	}
@@ -130,17 +150,17 @@ func (r *RollbackManager) RollbackTo(backup BackupInfo) error {
 		binaryBackupPath = filepath.Join(backup.Path, "binary", BinaryName())
 	}
 
-	if _, err := os.Stat(binaryBackupPath); os.IsNotExist(err) {
+	if _, err := rollbackStat(binaryBackupPath); os.IsNotExist(err) {
 		return fmt.Errorf("备份文件不存在: %s", binaryBackupPath)
 	}
 
 	// Copy backup to a temp file first so replaceExeFile can use rename
 	tmpPath := currentExe + ".rollback-tmp"
-	if err := copyFile(binaryBackupPath, tmpPath, filePermBinary); err != nil {
+	if err := rollbackCopyFile(binaryBackupPath, tmpPath, filePermBinary); err != nil {
 		return fmt.Errorf("准备回滚文件失败: %w", err)
 	}
 
-	if err := replaceExeFile(tmpPath, currentExe); err != nil {
+	if err := rollbackReplaceFile(tmpPath, currentExe); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("恢复二进制失败: %w", err)
 	}
@@ -151,7 +171,7 @@ func (r *RollbackManager) RollbackTo(backup BackupInfo) error {
 
 // ListBackups returns all available backups, newest first.
 func (r *RollbackManager) ListBackups() ([]BackupInfo, error) {
-	entries, err := os.ReadDir(r.backupDir)
+	entries, err := rollbackReadDir(r.backupDir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -167,7 +187,7 @@ func (r *RollbackManager) ListBackups() ([]BackupInfo, error) {
 		backupPath := filepath.Join(r.backupDir, entry.Name())
 		info, err := r.loadBackupInfo(backupPath)
 		if err != nil {
-			fi, statErr := entry.Info()
+			fi, statErr := rollbackEntryInfo(entry)
 			if statErr != nil {
 				continue
 			}
@@ -197,23 +217,23 @@ func (r *RollbackManager) Cleanup(keep int) error {
 		keep = r.maxBackups
 	}
 	for i := keep; i < len(backups); i++ {
-		os.RemoveAll(backups[i].Path)
+		rollbackRemoveAll(backups[i].Path)
 	}
 	return nil
 }
 
 func (r *RollbackManager) saveBackupInfo(info BackupInfo) {
 	infoPath := filepath.Join(info.Path, "info.json")
-	data, err := json.MarshalIndent(info, "", "  ")
+	data, err := rollbackMarshalIndent(info, "", "  ")
 	if err != nil {
 		return
 	}
-	os.WriteFile(infoPath, data, filePermConfig)
+	rollbackWriteFile(infoPath, data, filePermConfig)
 }
 
 func (r *RollbackManager) loadBackupInfo(backupSetPath string) (BackupInfo, error) {
 	infoPath := filepath.Join(backupSetPath, "info.json")
-	data, err := os.ReadFile(infoPath)
+	data, err := rollbackReadFile(infoPath)
 	if err != nil {
 		return BackupInfo{}, err
 	}
@@ -252,15 +272,15 @@ func syncFileData(path string) {
 
 // copyDir recursively copies a directory from src to dst.
 func copyDir(src, dst string) error {
-	srcInfo, err := os.Stat(src)
+	srcInfo, err := upgradeDirStat(src)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+	if err := upgradeDirMkdirAll(dst, srcInfo.Mode()); err != nil {
 		return err
 	}
 
-	entries, err := os.ReadDir(src)
+	entries, err := upgradeDirReadDir(src)
 	if err != nil {
 		return err
 	}
@@ -274,20 +294,20 @@ func copyDir(src, dst string) error {
 				return err
 			}
 		} else {
-			info, err := entry.Info()
+			info, err := upgradeDirEntryInfo(entry)
 			if err != nil {
 				continue
 			}
-			srcFile, err := os.Open(srcPath)
+			srcFile, err := upgradeDirOpen(srcPath)
 			if err != nil {
 				return err
 			}
-			dstFile, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+			dstFile, err := upgradeDirOpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
 			if err != nil {
 				srcFile.Close()
 				return err
 			}
-			_, err = io.Copy(dstFile, srcFile)
+			_, err = upgradeDirCopy(dstFile, srcFile)
 			srcFile.Close()
 			dstFile.Close()
 			if err != nil {

@@ -282,7 +282,11 @@ func defaultHTTPPutFile(ctx context.Context, url string, headers map[string]stri
 }
 
 // httpGetFile downloads file content via HTTP GET. Package-level for test injection.
-var httpGetFile = defaultHTTPGetFile
+var (
+	httpGetFile          = defaultHTTPGetFile
+	docCreateDestination = os.Create
+	docCopyContent       = io.Copy
+)
 
 // SetHTTPGetFile overrides the HTTP GET function (for testing). Pass nil to restore default.
 func SetHTTPGetFile(fn func(ctx context.Context, url string, headers map[string]string, destPath string) error) {
@@ -432,13 +436,13 @@ func defaultHTTPGetFile(ctx context.Context, url string, headers map[string]stri
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	outFile, err := os.Create(destPath)
+	outFile, err := docCreateDestination(destPath)
 	if err != nil {
 		return err
 	}
 	defer outFile.Close()
 
-	if _, err := io.Copy(outFile, resp.Body); err != nil {
+	if _, err := docCopyContent(outFile, resp.Body); err != nil {
 		return err
 	}
 
@@ -730,9 +734,6 @@ func previewDocOverwriteDiff(ctx context.Context, cmd *cobra.Command, nodeID, ne
 	}
 	current := extractMarkdownField(text)
 	out := cmd.OutOrStdout()
-	if out == nil {
-		out = os.Stdout
-	}
 	fmt.Fprint(out, renderDocOverwriteDiff(nodeID, current, newMarkdown))
 	return nil
 }
@@ -1132,10 +1133,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 			if idx, _ := cmd.Flags().GetInt("index"); cmd.Flags().Lookup("index").Changed {
 				toolArgs["index"] = idx
 			}
-			if md != "" {
-				return docWritePipeline(cmd, "update_document", toolArgs, md, "doc update")
-			}
-			return callMCPTool("update_document", toolArgs)
+			return docWritePipeline(cmd, "update_document", toolArgs, md, "doc update")
 		},
 	}
 
@@ -1237,7 +1235,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 流程:
   1. 获取下载 URL 和签名请求头 (download_file)
   2. HTTP GET 下载文件二进制内容到本地`,
-		Example: `  dws doc download --node NODE_ID
+		Example: `  dws doc download --node NODE_ID --output ./download.bin
   dws doc download --node NODE_ID --output ./report.pdf
   dws doc download --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ~/downloads/`,
 		RunE: runDocDownload,
@@ -3038,7 +3036,7 @@ func pollDocExportJob(ctx context.Context, jobID string) (downloadURL string, er
 		select {
 		case <-ctx.Done():
 			return "", fmt.Errorf("导出轮询被取消 (jobId=%s): %w", jobID, ctx.Err())
-		case <-time.After(interval):
+		case <-helperAfter(interval):
 		}
 
 		text, queryErr := callMCPToolReturnText(ctx, "query_export_job", map[string]any{"jobId": jobID})

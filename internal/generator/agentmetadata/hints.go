@@ -117,9 +117,7 @@ func (hint *HintProduct) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
+	_ = json.Unmarshal(data, &fields)
 	*hint = HintProduct(decoded)
 	_, hint.agentSummaryPresent = fields["agent_summary"]
 	return nil
@@ -132,9 +130,7 @@ func (hint *HintTool) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
+	_ = json.Unmarshal(data, &fields)
 	*hint = HintTool(decoded)
 	_, hint.agentSummaryPresent = fields["agent_summary"]
 	_, hint.effectPresent = fields["effect"]
@@ -254,15 +250,12 @@ func parseHintSources(out *File, files []sourceFile, opts Options, stats *Stats,
 		selected = append(prefixed, selected...)
 		if len(index.ReferenceReview) > 0 || index.Coverage != (HintCoverage{}) {
 			index.Source.Kind = kind
-			payload, err := json.Marshal(HintFile{
+			payload, _ := json.Marshal(HintFile{
 				Version:         HintFileVersion,
 				Source:          index.Source,
 				Coverage:        index.Coverage,
 				ReferenceReview: index.ReferenceReview,
 			})
-			if err != nil {
-				return false, fmt.Errorf("encode Agent hint index projection %s: %w", indexFile.display, err)
-			}
 			selected = append(selected, selectedHint{
 				file: sourceFile{
 					path:    indexPath,

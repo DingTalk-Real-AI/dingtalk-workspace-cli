@@ -27,6 +27,11 @@ const (
 	secretKeyPrefix = "appsecret:"
 )
 
+var (
+	secretKeychainGet = keychain.Get
+	secretKeychainSet = keychain.Set
+)
+
 // SecretRef references a secret stored externally.
 type SecretRef struct {
 	Source string `json:"source"` // "keychain" | "file"
@@ -114,7 +119,7 @@ func ResolveSecret(input SecretInput) (string, error) {
 		}
 		return strings.TrimSpace(string(data)), nil
 	case "keychain":
-		val, err := keychain.Get(keychain.Service, input.Ref.ID)
+		val, err := secretKeychainGet(keychain.Service, input.Ref.ID)
 		if err != nil {
 			return "", fmt.Errorf("failed to get secret from keychain: %w", err)
 		}
@@ -132,7 +137,7 @@ func StoreSecret(clientID string, input SecretInput) (SecretInput, error) {
 		return input, nil // SecretRef → keep as-is
 	}
 	key := secretAccountKey(clientID)
-	if err := keychain.Set(keychain.Service, key, input.Plain); err != nil {
+	if err := secretKeychainSet(keychain.Service, key, input.Plain); err != nil {
 		return SecretInput{}, fmt.Errorf("keychain unavailable: %w\nhint: use file reference in config to bypass keychain", err)
 	}
 	return SecretInput{Ref: &SecretRef{Source: "keychain", ID: key}}, nil

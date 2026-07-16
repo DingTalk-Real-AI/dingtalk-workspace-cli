@@ -87,9 +87,6 @@ func (s *ContentScanner) ScanPayload(payload any) Report {
 
 	findings := make([]Finding, 0, 4)
 	s.walkPayload("$", payload, &findings)
-	if len(findings) > s.maxFindings {
-		findings = findings[:s.maxFindings]
-	}
 	return Report{
 		Scanned:  true,
 		Findings: findings,

@@ -103,6 +103,14 @@ type Config struct {
 	Logger *slog.Logger
 }
 
+var (
+	daemonMkdirAll        = os.MkdirAll
+	daemonAcquire         = Acquire
+	daemonWriteMeta       = WriteMeta
+	daemonListen          = transport.Listen
+	daemonShutdownTimeout = 2 * time.Second
+)
+
 // Run starts the bus daemon. Lifecycle (plan §4 invariant #6):
 //  1. Acquire bus.lock (single-instance enforcement)
 //  2. Write bus.meta
@@ -124,11 +132,11 @@ func Run(ctx context.Context, cfg Config) error {
 	log := cfg.Logger.With("component", "bus", "client_id", cfg.ClientID, "edition", cfg.Edition)
 
 	// 1. Acquire bus.lock
-	if err := os.MkdirAll(cfg.WorkDir, config.DirPerm); err != nil {
+	if err := daemonMkdirAll(cfg.WorkDir, config.DirPerm); err != nil {
 		return failReady(cfg.ReadyPipe, fmt.Errorf("bus: mkdir workdir: %w", err))
 	}
 	lockPath := filepath.Join(cfg.WorkDir, LockFileName)
-	lock, err := Acquire(lockPath)
+	lock, err := daemonAcquire(lockPath)
 	if err != nil {
 		return failReady(cfg.ReadyPipe, fmt.Errorf("bus: acquire lock: %w", err))
 	}
@@ -145,12 +153,12 @@ func Run(ctx context.Context, cfg Config) error {
 		SDKVersion:   cfg.SDKVersion,
 		BusPID:       os.Getpid(),
 	}
-	if err := WriteMeta(cfg.WorkDir, meta); err != nil {
+	if err := daemonWriteMeta(cfg.WorkDir, meta); err != nil {
 		return failReady(cfg.ReadyPipe, fmt.Errorf("bus: write meta: %w", err))
 	}
 
 	// 3. IPC listen
-	listener, err := transport.Listen(cfg.IPCEndpoint)
+	listener, err := daemonListen(cfg.IPCEndpoint)
 	if err != nil {
 		return failReady(cfg.ReadyPipe, fmt.Errorf("bus: ipc listen: %w", err))
 	}
@@ -498,7 +506,7 @@ func (d *daemon) shutdown() {
 	}()
 	select {
 	case <-doneCh:
-	case <-time.After(2 * time.Second):
+	case <-time.After(daemonShutdownTimeout):
 		d.log.Warn("bus: shutdown: consumer goroutines did not drain within 2s")
 	}
 }

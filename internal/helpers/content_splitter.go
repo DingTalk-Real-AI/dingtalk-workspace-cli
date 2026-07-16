@@ -216,35 +216,27 @@ func mergeBlocksIntoChunks(blocks []markdownBlock, limit int) []string {
 // hardSplitBlock splits a single oversized block at paragraph boundaries,
 // falling back to rune-level splitting.
 func hardSplitBlock(text string, limit int) []string {
-	paragraphs := strings.Split(text, "\n\n")
+	// SplitAfter keeps the paragraph separator attached to the preceding
+	// paragraph. The previous Split implementation rebuilt separators while
+	// merging, but dropped them whenever a chunk boundary fell between two
+	// paragraphs, violating the no-content-loss invariant.
+	paragraphs := strings.SplitAfter(text, "\n\n")
 	var chunks []string
 	var current strings.Builder
 	currentRunes := 0
 
-	for i, para := range paragraphs {
-		separator := ""
-		if i > 0 {
-			separator = "\n\n"
-		}
-		paraWithSep := separator + para
-		paraRunes := utf8.RuneCountInString(paraWithSep)
+	for _, para := range paragraphs {
+		paraRunes := utf8.RuneCountInString(para)
 
 		if currentRunes+paraRunes > limit && currentRunes > 0 {
 			chunks = append(chunks, current.String())
 			current.Reset()
 			currentRunes = 0
-			paraWithSep = para
-			paraRunes = utf8.RuneCountInString(paraWithSep)
 		}
 
 		// If single paragraph exceeds limit, split by runes
 		if paraRunes > limit {
-			if currentRunes > 0 {
-				chunks = append(chunks, current.String())
-				current.Reset()
-				currentRunes = 0
-			}
-			runes := []rune(paraWithSep)
+			runes := []rune(para)
 			for start := 0; start < len(runes); start += limit {
 				end := start + limit
 				if end > len(runes) {
@@ -255,7 +247,7 @@ func hardSplitBlock(text string, limit int) []string {
 			continue
 		}
 
-		current.WriteString(paraWithSep)
+		current.WriteString(para)
 		currentRunes += paraRunes
 	}
 	if currentRunes > 0 {

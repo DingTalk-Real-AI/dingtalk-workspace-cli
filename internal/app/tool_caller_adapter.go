@@ -32,6 +32,10 @@ type toolCallerAdapter struct {
 	flags  *GlobalFlags
 }
 
+var toolCallerDryRun = func(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	return (executor.EchoRunner{}).Run(ctx, invocation)
+}
+
 func newToolCallerAdapter(runner executor.Runner, flags *GlobalFlags) edition.ToolCaller {
 	return &toolCallerAdapter{runner: runner, flags: flags}
 }
@@ -45,7 +49,7 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 	// and revoke-preview contract, which must query the server for current state.
 	if a != nil && a.DryRun() && !inv.AllowReadOnlyDuringDryRun {
 		inv.DryRun = true
-		result, err := (executor.EchoRunner{}).Run(ctx, inv)
+		result, err := toolCallerDryRun(ctx, inv)
 		if err != nil {
 			return nil, err
 		}

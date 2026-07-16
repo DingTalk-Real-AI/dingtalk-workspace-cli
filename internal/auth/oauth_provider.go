@@ -36,6 +36,34 @@ var oauthHTTPClient = &http.Client{
 	Timeout: 15 * time.Second,
 }
 
+var (
+	oauthListen          = net.Listen
+	oauthOpenBrowser     = openBrowser
+	oauthLoginTimeout    = 5 * time.Minute
+	oauthApprovalTimeout = 10 * time.Minute
+	oauthPollInterval    = 5 * time.Second
+	oauthSuccessPause    = 2 * time.Second
+	oauthLoadToken       = LoadTokenData
+	oauthAcquireLock     = AcquireDualLock
+	oauthMarkProfile     = MarkProfileStatus
+	oauthFetchClientID   = FetchClientIDFromMCP
+	oauthExchange        = func(p *OAuthProvider, ctx context.Context, code string) (*TokenData, error) {
+		return p.exchangeCode(ctx, code)
+	}
+	oauthCheckStatus = func(p *OAuthProvider, ctx context.Context, token string) (*CLIAuthStatus, error) {
+		return p.CheckCLIAuthEnabled(ctx, token)
+	}
+	oauthGetAdmins     = GetSuperAdmins
+	oauthSendApply     = SendCliAuthApply
+	oauthSaveToken     = SaveTokenData
+	oauthHasAppConfig  = HasAppConfig
+	oauthSaveAppConfig = SaveAppConfig
+	oauthRefreshToken  = func(p *OAuthProvider, ctx context.Context, data *TokenData) (*TokenData, error) {
+		return p.refreshWithRefreshToken(ctx, data)
+	}
+	oauthSleep = time.Sleep
+)
+
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
 	configDir    string
@@ -81,7 +109,7 @@ func (p *OAuthProvider) output() io.Writer {
 func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, error) {
 	// Smart degradation: try silent refresh before opening browser.
 	if !force {
-		data, err := LoadTokenData(p.configDir)
+		data, err := oauthLoadToken(p.configDir)
 		if err == nil {
 			// Case 1: access_token still valid — no action needed.
 			if data.IsAccessTokenValid() {
@@ -129,7 +157,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		if p.logger != nil {
 			p.logger.Debug("fetching client ID from MCP server (OAuth flow always re-fetches)")
 		}
-		mcpClientID, mcpErr := FetchClientIDFromMCP(ctx)
+		mcpClientID, mcpErr := oauthFetchClientID(ctx)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
@@ -141,7 +169,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	}
 
 	// Find a free port for the callback server.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := oauthListen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("starting callback listener: %w", err)
 	}
@@ -234,7 +262,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		}
 
 		// Exchange code for token
-		tokenData, exchangeErr := p.exchangeCode(ctx, code)
+		tokenData, exchangeErr := oauthExchange(p, ctx, code)
 		if exchangeErr != nil {
 			// Clear in-progress state on error
 			callbackTokenMu.Lock()
@@ -266,7 +294,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		callbackTokenMu.Unlock()
 
 		// Check CLI auth enabled status (fail-closed: treat errors as disabled)
-		authStatus, statusErr := p.CheckCLIAuthEnabled(ctx, tokenData.AccessToken)
+		authStatus, statusErr := oauthCheckStatus(p, ctx, tokenData.AccessToken)
 		var denialReason string
 		if statusErr != nil {
 			denialReason = "unknown"
@@ -322,7 +350,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
 			return
 		}
-		result, err := GetSuperAdmins(ctx, token.AccessToken)
+		result, err := oauthGetAdmins(ctx, token.AccessToken)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
@@ -346,7 +374,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
 			return
 		}
-		result, err := SendCliAuthApply(ctx, token.AccessToken, adminStaffID)
+		result, err := oauthSendApply(ctx, token.AccessToken, adminStaffID)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
@@ -382,7 +410,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
 			return
 		}
-		result, err := p.CheckCLIAuthEnabled(ctx, token.AccessToken)
+		result, err := oauthCheckStatus(p, ctx, token.AccessToken)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
@@ -417,7 +445,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		p.logger.Debug("authorization URL", "url", authURL)
 	}
 	if !p.NoBrowser {
-		if err := openBrowser(authURL); err != nil && p.logger != nil {
+		if err := oauthOpenBrowser(authURL); err != nil && p.logger != nil {
 			p.logger.Warn(i18n.T("无法自动打开浏览器"), "error", err)
 		}
 	}
@@ -429,7 +457,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	_, _ = fmt.Fprintf(p.output(), i18n.T("如果浏览器未自动打开，请手动访问:\n  %s\n\n"), authURL)
 	_, _ = fmt.Fprintln(p.output(), i18n.T("⏳ 等待授权中..."))
 
-	timeout := time.NewTimer(5 * time.Minute)
+	timeout := time.NewTimer(oauthLoginTimeout)
 	defer timeout.Stop()
 
 	var result callbackResult
@@ -469,9 +497,9 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_, _ = fmt.Fprintln(p.output(), i18n.T("⏳ 该组织尚未开启 CLI 数据访问权限，请在浏览器中提交授权申请..."))
 
 		// Poll for CLI auth status while waiting
-		applyTimeout := time.NewTimer(10 * time.Minute)
+		applyTimeout := time.NewTimer(oauthApprovalTimeout)
 		defer applyTimeout.Stop()
-		pollTicker := time.NewTicker(5 * time.Second)
+		pollTicker := time.NewTicker(oauthPollInterval)
 		defer pollTicker.Stop()
 
 		elapsedSeconds := 0
@@ -494,7 +522,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				// Check if user switched to an org with CLI auth enabled
 				if currentToken != nil && !currentAuthDisabled {
 					_, _ = fmt.Fprintf(p.output(), "\r%s\n", i18n.T("✅ 权限已开启，继续登录..."))
-					time.Sleep(2 * time.Second)
+					oauthSleep(oauthSuccessPause)
 					result.token = currentToken
 					result.cliAuthDisabled = false
 					goto continueLogin
@@ -502,10 +530,10 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 
 				// Check if CLI auth is now enabled (admin approved)
 				if currentToken != nil {
-					authStatus, err := p.CheckCLIAuthEnabled(ctx, currentToken.AccessToken)
+					authStatus, err := oauthCheckStatus(p, ctx, currentToken.AccessToken)
 					if err == nil && classifyDenialReason(authStatus, os.Getenv("DWS_CHANNEL")) == "" {
 						_, _ = fmt.Fprintf(p.output(), "\r%s\n", i18n.T("✅ 权限已开启，继续登录..."))
-						time.Sleep(2 * time.Second)
+						oauthSleep(oauthSuccessPause)
 						result.token = currentToken
 						result.cliAuthDisabled = false
 						goto continueLogin
@@ -527,7 +555,7 @@ continueLogin:
 
 	// Save token data with associated client ID for refresh
 	tokenData.ClientID = p.clientID
-	if err := SaveTokenData(p.configDir, tokenData); err != nil {
+	if err := oauthSaveToken(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 
@@ -539,8 +567,8 @@ continueLogin:
 	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
 	if p.clientID != "" {
 		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
-		if !HasAppConfig(p.configDir) {
-			_ = SaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
+		if !oauthHasAppConfig(p.configDir) {
+			_ = oauthSaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
 		}
 	}
 
@@ -551,7 +579,7 @@ continueLogin:
 // Uses a file lock with double-check pattern to prevent concurrent refresh
 // from multiple CLI processes.
 func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
-	data, err := LoadTokenData(p.configDir)
+	data, err := oauthLoadToken(p.configDir)
 	if err != nil {
 		return "", errors.New(i18n.T("未登录，请运行 dws auth login"))
 	}
@@ -567,12 +595,12 @@ func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
 		if rErr == nil {
 			return refreshed.AccessToken, nil
 		}
-		_ = MarkProfileStatus(p.configDir, data.CorpID, ProfileStatusExpired)
+		_ = oauthMarkProfile(p.configDir, data.CorpID, ProfileStatusExpired)
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
 	} else {
-		_ = MarkProfileStatus(p.configDir, data.CorpID, ProfileStatusExpired)
+		_ = oauthMarkProfile(p.configDir, data.CorpID, ProfileStatusExpired)
 	}
 
 	return "", errors.New(i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"))
@@ -599,7 +627,7 @@ func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
 //	refresh API, invalidating each other's refresh_token.
 func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	// Acquire dual-layer lock (process-level + file-level)
-	lock, err := AcquireDualLock(ctx, p.configDir)
+	lock, err := oauthAcquireLock(ctx, p.configDir)
 	if err != nil {
 		return nil, fmt.Errorf("acquiring dual lock: %w", err)
 	}
@@ -607,7 +635,7 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 
 	// Double-check: re-load from disk — another goroutine/process may have refreshed
 	// while we were waiting for the lock.
-	data, err := LoadTokenData(p.configDir)
+	data, err := oauthLoadToken(p.configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -633,20 +661,20 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	if p.logger != nil {
 		p.logger.Debug("refreshing token (dual-locked)")
 	}
-	return p.refreshWithRefreshToken(ctx, data)
+	return oauthRefreshToken(p, ctx, data)
 }
 
 // ExchangeAuthCode takes an AuthCode and an optional UserID provided by an
 // external host, exchanges it for tokens, and persists them.
 func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid string) (*TokenData, error) {
-	tokenData, err := p.exchangeCode(ctx, authCode)
+	tokenData, err := oauthExchange(p, ctx, authCode)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("换取 token 失败"), err)
 	}
 	if uid != "" {
 		tokenData.UserID = uid
 	}
-	if err := SaveTokenData(p.configDir, tokenData); err != nil {
+	if err := oauthSaveToken(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 	return tokenData, nil

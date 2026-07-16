@@ -53,6 +53,21 @@ const (
 
 var openBrowserFunc = tryOpenBrowser
 
+var (
+	patAuthorizationTimeout       = PatAuthRetryTimeout
+	patAuthorizationPollInterval  = PatAuthPollInterval
+	patLoadTokenData              = authpkg.LoadTokenData
+	patWaitForAuthorization       = WaitForPatAuthorization
+	patPollDeviceFlowWithInterval = pollPatDeviceFlowWithInterval
+	patSaveAppConfig              = authpkg.SaveAppConfig
+	patExchangeCodeForToken       = authpkg.ExchangeCodeForToken
+	patSaveTokenData              = authpkg.SaveTokenData
+	patSleep                      = time.Sleep
+	patPollHTTPDo                 = (*http.Client).Do
+	patPollNewRequest             = http.NewRequestWithContext
+	patBrowserOpenCommand         = browserOpenCommand
+)
+
 type patSuppressBrowserOpenKeyType struct{}
 
 var patSuppressBrowserOpenKey = patSuppressBrowserOpenKeyType{}
@@ -241,10 +256,7 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 		data["openBrowser"] = openBrowser
 	}
 
-	encoded, err := marshalSingleLineJSONNoHTMLEscape(payload)
-	if err != nil {
-		return raw
-	}
+	encoded, _ := marshalSingleLineJSONNoHTMLEscape(payload)
 	return string(encoded)
 }
 
@@ -261,9 +273,9 @@ func patAuthorizationURIFromData(data map[string]any) string {
 // WaitForPatAuthorization polls until the user completes authorization or timeout.
 // It returns true if authorization was completed, false if timed out or cancelled.
 func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Writer) bool {
-	timeout := PatAuthRetryTimeout
+	timeout := patAuthorizationTimeout
 	deadline := time.Now().Add(timeout)
-	pollTicker := time.NewTicker(PatAuthPollInterval)
+	pollTicker := time.NewTicker(patAuthorizationPollInterval)
 	defer pollTicker.Stop()
 	start := time.Now()
 
@@ -291,7 +303,7 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 			remaining := time.Until(deadline).Truncate(time.Second)
 
 			// Check if token is now valid
-			tokenData, err := authpkg.LoadTokenData(configDir)
+			tokenData, err := patLoadTokenData(configDir)
 			if err == nil && tokenData != nil {
 				if tokenData.IsAccessTokenValid() || tokenData.IsRefreshTokenValid() {
 					fmt.Fprintf(output, "\r%s %s (%s 已用, %s 剩余)          \n",
@@ -328,7 +340,7 @@ func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocati
 	PrintPatAuthError(output, scopeErr)
 
 	// Wait for user to complete authorization
-	authorized := WaitForPatAuthorization(ctx, configDir, output)
+	authorized := patWaitForAuthorization(ctx, configDir, output)
 	if !authorized {
 		return executor.Result{}, apperrors.NewAuth(
 			"等待用户授权超时",
@@ -593,7 +605,7 @@ func handlePatAuthCheck(
 	pollCtx, cancel := context.WithTimeout(ctx, patPollTimeout)
 	defer cancel()
 
-	status, authCode, err := pollPatDeviceFlowWithInterval(
+	status, authCode, err := patPollDeviceFlowWithInterval(
 		pollCtx, patData.Data.FlowID, configDir, output,
 		resolvePATPollInterval(patData.Data.PollIntervalSecs),
 	)
@@ -608,7 +620,7 @@ func handlePatAuthCheck(
 		fmt.Fprintln(output)
 
 		if appCfg != nil {
-			if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
+			if err := patSaveAppConfig(configDir, appCfg); err != nil {
 				slog.Warn("failed to persist approved app config from PAT", "error", err)
 				fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
 			}
@@ -617,12 +629,12 @@ func handlePatAuthCheck(
 		// Exchange authCode for a fresh access token (mirrors device_flow loginOnce).
 		if authCode != "" {
 			slog.Debug("PAT retry: exchanging authCode for token", "hasCode", true)
-			tokenData, exchErr := authpkg.ExchangeCodeForToken(ctx, configDir, authCode)
+			tokenData, exchErr := patExchangeCodeForToken(ctx, configDir, authCode)
 			if exchErr != nil {
 				slog.Warn("PAT retry: exchangeCode failed, retrying with existing token", "error", exchErr)
 				fmt.Fprintf(output, "  %s 换取新 token 失败: %v (将使用现有凭证重试)\n", tui.StateMark("warning"), exchErr)
 			} else {
-				if err := authpkg.SaveTokenData(configDir, tokenData); err != nil {
+				if err := patSaveTokenData(configDir, tokenData); err != nil {
 					slog.Warn("PAT retry: failed to save new token", "error", err)
 					fmt.Fprintf(output, "  %s 保存新 token 失败: %v\n", tui.StateMark("warning"), err)
 				} else {
@@ -647,7 +659,7 @@ func handlePatAuthCheck(
 		// Workaround: brief delay to let server-side authorization state propagate
 		// before retrying.  Without this the retry may use stale credentials.
 		slog.Debug("PAT retry: waiting for server-side state propagation", "delay", "1s")
-		time.Sleep(1 * time.Second)
+		patSleep(1 * time.Second)
 
 		// Retry the original invocation with pat-retrying flag to prevent recursion.
 		fmt.Fprintf(output, "%s %s\n", tui.StateMark("ok"), tui.Bold("授权完成，正在重试..."))
@@ -719,10 +731,7 @@ func enrichPATErrorForHostControl(raw string) string {
 	apperrors.ApplyHostMutations(payload)
 
 	// stderr JSON MUST be single-line.
-	encoded, err := marshalSingleLineJSONNoHTMLEscape(payload)
-	if err != nil {
-		return raw
-	}
+	encoded, _ := marshalSingleLineJSONNoHTMLEscape(payload)
 	return string(encoded)
 }
 
@@ -753,10 +762,7 @@ func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string 
 		"data":    data,
 	}
 	// stderr JSON MUST be single-line.
-	b, err := jsonutil.Marshal(payload)
-	if err != nil {
-		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
-	}
+	b, _ := jsonutil.Marshal(payload)
 	return string(b)
 }
 
@@ -817,7 +823,7 @@ func pollPatDeviceFlowWithInterval(ctx context.Context, flowID string, configDir
 			pollCount++
 			fmt.Fprintf(output, "\r%s [%d] 等待授权中...          ", tui.Dim("⟳"), pollCount)
 
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, pollURL, nil)
+			req, err := patPollNewRequest(ctx, http.MethodGet, pollURL, nil)
 			if err != nil {
 				slog.Debug("PAT poll: failed to create request", "error", err)
 				continue
@@ -825,7 +831,7 @@ func pollPatDeviceFlowWithInterval(ctx context.Context, flowID string, configDir
 			if accessToken != "" {
 				req.Header.Set("x-user-access-token", accessToken)
 			}
-			resp, err := noRedirectClient.Do(req)
+			resp, err := patPollHTTPDo(noRedirectClient, req)
 			if err != nil {
 				slog.Debug("PAT poll: request failed", "error", err)
 				continue // transient network error, keep polling
@@ -872,9 +878,6 @@ func resolvePATPollInterval(seconds int) time.Duration {
 		return patPollInterval
 	}
 	interval := time.Duration(seconds) * time.Second
-	if interval < time.Second {
-		return time.Second
-	}
 	if interval > patMaxPollInterval {
 		return patMaxPollInterval
 	}
@@ -896,7 +899,7 @@ func browserOpenCommand(goos, rawURL string) *exec.Cmd {
 
 // tryOpenBrowser opens rawURL in the default browser; errors are silently ignored.
 func tryOpenBrowser(rawURL string) error {
-	cmd := browserOpenCommand(runtime.GOOS, rawURL)
+	cmd := patBrowserOpenCommand(runtime.GOOS, rawURL)
 	if cmd == nil {
 		return nil
 	}

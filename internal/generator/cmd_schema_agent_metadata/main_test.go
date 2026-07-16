@@ -15,6 +15,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,20 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/agentmetadata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/outputguard"
 )
+
+func TestMainGeneratesMetadataToTemporaryDirectory(t *testing.T) {
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldArgs, oldFlags := os.Args, flag.CommandLine
+	t.Cleanup(func() {
+		os.Args, flag.CommandLine = oldArgs, oldFlags
+	})
+	flag.CommandLine = flag.NewFlagSet("schema-agent-metadata-coverage", flag.ContinueOnError)
+	os.Args = []string{"cmd_schema_agent_metadata", "-root", repositoryRoot, "-output-dir", t.TempDir()}
+	main()
+}
 
 func TestLoadEffectiveCommandRegistryProjectionReconcilesAliases(t *testing.T) {
 	root := filepath.Join("..", "..", "..")

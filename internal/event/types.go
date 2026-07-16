@@ -79,13 +79,16 @@ func itoa(n int64) string {
 	var buf [20]byte
 	i := len(buf)
 	neg := n < 0
+	value := uint64(n)
 	if neg {
-		n = -n
+		// -(MinInt64) overflows int64. Adjust before negating, then restore
+		// the dropped unit in unsigned space.
+		value = uint64(-(n + 1)) + 1
 	}
-	for n > 0 {
+	for value > 0 {
 		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
+		buf[i] = byte('0' + value%10)
+		value /= 10
 	}
 	if neg {
 		i--

@@ -49,6 +49,14 @@ var knownSkillDirs = []string{
 	".hermes/skills",
 }
 
+var (
+	upgradeUserHomeDir  = os.UserHomeDir
+	upgradeExecutable   = os.Executable
+	upgradeEvalSymlinks = filepath.EvalSymlinks
+	upgradeCopyDir      = copyDir
+	upgradeEnsureDir    = ensureDir
+)
+
 // skillDirBlacklist contains parent directories whose skills are managed by
 // external mechanisms (e.g. IDE extensions) and must NOT be touched by upgrade.
 var skillDirBlacklist = []string{
@@ -109,7 +117,7 @@ func (r *SkillUpgradeResult) Failed() []SkillDirResult {
 //   - ~/.real/ and other blacklisted paths are NEVER touched
 //   - If no location was updated at all, fall back to ~/.agents/skills/dws/
 func UpgradeSkillLocations(extractedDir string) (*SkillUpgradeResult, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := upgradeUserHomeDir()
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +141,7 @@ func UpgradeSkillLocations(extractedDir string) (*SkillUpgradeResult, error) {
 		}
 
 		os.RemoveAll(destDir)
-		if err := copyDir(extractedDir, destDir); err != nil {
+		if err := upgradeCopyDir(extractedDir, destDir); err != nil {
 			result.Results = append(result.Results, SkillDirResult{Dir: destDir, Status: SkillDirFailed, Err: err})
 			continue
 		}
@@ -144,7 +152,7 @@ func UpgradeSkillLocations(extractedDir string) (*SkillUpgradeResult, error) {
 	if len(result.Succeeded()) == 0 {
 		dest := filepath.Join(homeDir, ".agents", "skills", "dws")
 		os.MkdirAll(filepath.Dir(dest), dirPermShared)
-		if err := copyDir(extractedDir, dest); err != nil {
+		if err := upgradeCopyDir(extractedDir, dest); err != nil {
 			return result, fmt.Errorf("所有技能目录安装失败，回退到主目录也失败: %w", err)
 		}
 		// Replace the earlier failed entry for this dir (if any) or append a new one
@@ -184,7 +192,7 @@ func LocateSkillMD(extractDir string) string {
 
 // EnsureUpgradeDirectories creates the directories needed for upgrade operations.
 func EnsureUpgradeDirectories() error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := upgradeUserHomeDir()
 	if err != nil {
 		return err
 	}
@@ -201,7 +209,7 @@ func EnsureUpgradeDirectories() error {
 	}
 
 	for _, d := range dirs {
-		if err := ensureDir(d.path, d.perm); err != nil {
+		if err := upgradeEnsureDir(d.path, d.perm); err != nil {
 			return err
 		}
 	}
@@ -210,22 +218,26 @@ func EnsureUpgradeDirectories() error {
 
 // DownloadCacheDir returns the path for temporary downloads during upgrade.
 func DownloadCacheDir() string {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := upgradeUserHomeDir()
 	return filepath.Join(homeDir, ".dws", "cache", "downloads")
 }
 
 // CurrentBinaryPath returns the resolved path of the currently running binary.
 func CurrentBinaryPath() (string, error) {
-	exe, err := os.Executable()
+	exe, err := upgradeExecutable()
 	if err != nil {
 		return "", err
 	}
-	return filepath.EvalSymlinks(exe)
+	return upgradeEvalSymlinks(exe)
 }
 
 // BinaryName returns the platform-specific binary name.
 func BinaryName() string {
-	if runtime.GOOS == "windows" {
+	return binaryNameFor(runtime.GOOS)
+}
+
+func binaryNameFor(goos string) string {
+	if goos == "windows" {
 		return "dws.exe"
 	}
 	return "dws"

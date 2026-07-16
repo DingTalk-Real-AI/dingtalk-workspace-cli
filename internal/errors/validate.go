@@ -25,6 +25,10 @@ import (
 var (
 	ErrInvalidResourceName = stderrors.New("invalid resource name")
 	ErrUnsafePath          = stderrors.New("unsafe path detected")
+	getWorkingDir          = os.Getwd
+	lstatPath              = os.Lstat
+	evalSymlinks           = filepath.EvalSymlinks
+	relPath                = filepath.Rel
 )
 
 func ResourceName(name string) error {
@@ -172,7 +176,7 @@ func safePath(raw, flagName string) (string, error) {
 		return "", fmt.Errorf("%s must be a relative path within the current directory, got %q (hint: cd to the target directory first, or use a relative path like ./filename)", flagName, raw)
 	}
 
-	cwd, err := os.Getwd()
+	cwd, err := getWorkingDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine working directory: %w", err)
 	}
@@ -183,8 +187,8 @@ func safePath(raw, flagName string) (string, error) {
 	// resolve its symlinks, and re-attach the remaining tail segments.
 	// This prevents TOCTOU attacks where a non-existent intermediate
 	// directory is replaced with a symlink between check and use.
-	if _, err := os.Lstat(resolved); err == nil {
-		resolved, err = filepath.EvalSymlinks(resolved)
+	if _, err := lstatPath(resolved); err == nil {
+		resolved, err = evalSymlinks(resolved)
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve symlinks: %w", err)
 		}
@@ -195,7 +199,7 @@ func safePath(raw, flagName string) (string, error) {
 		}
 	}
 
-	canonicalCwd, _ := filepath.EvalSymlinks(cwd)
+	canonicalCwd, _ := evalSymlinks(cwd)
 	if !isUnderDir(resolved, canonicalCwd) {
 		return "", fmt.Errorf("%s %q resolves outside the current working directory (hint: the path must stay within the working directory after resolving .. and symlinks)", flagName, raw)
 	}
@@ -211,8 +215,8 @@ func resolveNearestAncestor(path string) (string, error) {
 	var tail []string
 	cur := path
 	for {
-		if _, err := os.Lstat(cur); err == nil {
-			real, err := filepath.EvalSymlinks(cur)
+		if _, err := lstatPath(cur); err == nil {
+			real, err := evalSymlinks(cur)
 			if err != nil {
 				return "", err
 			}
@@ -233,7 +237,7 @@ func resolveNearestAncestor(path string) (string, error) {
 
 // isUnderDir checks whether child is under parent directory.
 func isUnderDir(child, parent string) bool {
-	rel, err := filepath.Rel(parent, child)
+	rel, err := relPath(parent, child)
 	if err != nil {
 		return false
 	}

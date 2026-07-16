@@ -29,6 +29,13 @@ import (
 
 const browserPolicyFile = "pat_policy.json"
 
+var (
+	patPolicyReadFile    = os.ReadFile
+	patPolicyUserHomeDir = os.UserHomeDir
+	patPolicyMarshal     = json.MarshalIndent
+	patPolicyAtomicWrite = helpers.AtomicWriteJSON
+)
+
 type browserPolicyValue struct {
 	OpenBrowser bool `json:"openBrowser"`
 }
@@ -56,7 +63,7 @@ func patConfigDir() string {
 	if fn := edition.Get().ConfigDir; fn != nil {
 		return fn()
 	}
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := patPolicyUserHomeDir()
 	if err != nil {
 		return ".dws"
 	}
@@ -65,7 +72,7 @@ func patConfigDir() string {
 
 func LoadBrowserPolicy(configDir string) (*BrowserPolicy, error) {
 	path := patPolicyPath(configDir)
-	data, err := os.ReadFile(path)
+	data, err := patPolicyReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &BrowserPolicy{}, nil
@@ -90,12 +97,12 @@ func saveBrowserPolicy(configDir string, policy *BrowserPolicy) error {
 	if policy.Agents == nil {
 		policy.Agents = map[string]browserPolicyValue{}
 	}
-	data, err := json.MarshalIndent(policy, "", "  ")
+	data, err := patPolicyMarshal(policy, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling PAT browser policy: %w", err)
 	}
 	data = append(data, '\n')
-	if err := helpers.AtomicWriteJSON(patPolicyPath(configDir), data); err != nil {
+	if err := patPolicyAtomicWrite(patPolicyPath(configDir), data); err != nil {
 		return fmt.Errorf("writing PAT browser policy: %w", err)
 	}
 	return nil
@@ -205,14 +212,8 @@ func newBrowserPolicyCommand() *cobra.Command {
 				return fmt.Errorf("--enabled is required")
 			}
 
-			enabled, err := cmd.Flags().GetBool("enabled")
-			if err != nil {
-				return err
-			}
-			agentCode, err := cmd.Flags().GetString("agentCode")
-			if err != nil {
-				return err
-			}
+			enabled, _ := cmd.Flags().GetBool("enabled")
+			agentCode, _ := cmd.Flags().GetString("agentCode")
 
 			selection, err := SetBrowserPolicy(patConfigDir(), agentCode, enabled)
 			if err != nil {

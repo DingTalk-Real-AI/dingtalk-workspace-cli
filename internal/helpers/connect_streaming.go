@@ -22,6 +22,8 @@ import (
 	"strings"
 )
 
+var connectStreamCommandContext = exec.CommandContext
+
 // Incremental forwarding: channels whose CLI can emit stream-json get their
 // reply streamed into the AI card as it is produced (the hermes/openclaw
 // experience), instead of one shot at the end.
@@ -54,7 +56,7 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 
 	run := func() (string, string, error) {
 		args := f.commandArgs(f.streamArgv, convID, text)
-		cmd := exec.CommandContext(ctx, f.streamArgv[0], args...)
+		cmd := connectStreamCommandContext(ctx, f.streamArgv[0], args...)
 		f.configureCommand(cmd)
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {

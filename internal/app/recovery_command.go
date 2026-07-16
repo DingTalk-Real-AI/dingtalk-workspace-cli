@@ -18,6 +18,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	recoverySavePlan     = (*recovery.Store).SavePlan
+	recoverySaveAnalysis = (*recovery.Store).SaveAnalysis
+)
+
 func newRecoveryCommand(_ context.Context, loader cli.CatalogLoader, flags *GlobalFlags) *cobra.Command {
 	var (
 		planUseLast    bool
@@ -60,7 +65,7 @@ func newRecoveryCommand(_ context.Context, loader cli.CatalogLoader, flags *Glob
 				EnableDocSearch: true,
 			})
 			recovery.HydratePlanForEvent(last.EventID, last.Context, last.Replay, &plan)
-			if err := store.SavePlan(last.EventID, plan); err != nil {
+			if err := recoverySavePlan(store, last.EventID, plan); err != nil {
 				return fmt.Errorf("保存恢复计划失败: %w", err)
 			}
 
@@ -90,7 +95,7 @@ func newRecoveryCommand(_ context.Context, loader cli.CatalogLoader, flags *Glob
 			planner := recovery.NewPlanner(runtime)
 			executor := recovery.NewExecutor(planner, runtime)
 			bundle := executor.Execute(cmd.Context(), *last)
-			if err := store.SaveAnalysis(last.EventID, bundle.Plan, bundle); err != nil {
+			if err := recoverySaveAnalysis(store, last.EventID, bundle.Plan, bundle); err != nil {
 				return fmt.Errorf("保存恢复分析失败: %w", err)
 			}
 

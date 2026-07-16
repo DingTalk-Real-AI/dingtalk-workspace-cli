@@ -31,6 +31,12 @@ import (
 
 const qoderInitializeTimeout = 60 * time.Second
 
+var (
+	qoderAbsPath     = filepath.Abs
+	qoderExecCommand = exec.Command
+	qoderUUIDString  = uuid.NewString
+)
+
 // qoderStreamForwarder keeps one qodercli stream-json subprocess alive for the
 // lifetime of `dws dev connect`. DWS sends each DingTalk turn as a JSON user
 // message with a per-conversation session_id, so Qoder keeps context without a
@@ -142,7 +148,7 @@ func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text s
 	if err := f.ensureLocked(ctx); err != nil {
 		return "", err
 	}
-	sessionID := uuid.NewString()
+	sessionID := qoderUUIDString()
 	if f.sessions != nil {
 		sessionID = f.sessions.id(convID)
 	}
@@ -234,7 +240,7 @@ func (f *qoderStreamForwarder) cwd() string {
 	if f.workDir == "" {
 		return connectWorkDir()
 	}
-	if abs, err := filepath.Abs(f.workDir); err == nil {
+	if abs, err := qoderAbsPath(f.workDir); err == nil {
 		return abs
 	}
 	return f.workDir
@@ -263,7 +269,7 @@ func (f *qoderStreamForwarder) ensureLocked(ctx context.Context) error {
 		}
 	}
 
-	cmd := exec.Command(f.bin, f.commandArgs()...)
+	cmd := qoderExecCommand(f.bin, f.commandArgs()...)
 	cmd.Dir = f.cwd()
 	cmd.Env = append(os.Environ(), f.env...)
 	stdin, err := cmd.StdinPipe()
@@ -296,7 +302,7 @@ func (f *qoderStreamForwarder) ensureLocked(ctx context.Context) error {
 func (f *qoderStreamForwarder) initializeLocked(parent context.Context) error {
 	ctx, cancel := context.WithTimeout(parent, qoderInitializeTimeout)
 	defer cancel()
-	requestID := "dws_init_" + uuid.NewString()
+	requestID := "dws_init_" + qoderUUIDString()
 	request := map[string]any{
 		"type":       "control_request",
 		"request_id": requestID,
@@ -415,7 +421,7 @@ func (f *qoderStreamForwarder) closeLocked() error {
 	if f.done != nil {
 		select {
 		case <-f.done:
-		case <-time.After(2 * time.Second):
+		case <-helperAfter(2 * time.Second):
 		}
 	}
 	f.clearProcessLocked()

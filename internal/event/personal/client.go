@@ -37,6 +37,8 @@ const (
 	subscriptionListMaxPageGuard = 10000
 )
 
+var subscriptionListMaxPages = subscriptionListMaxPageGuard
+
 type Identity struct {
 	AccessToken  string `json:"-"`
 	LocalSubject string `json:"-"`
@@ -230,7 +232,7 @@ func (c *Client) ListSubscriptions(ctx context.Context, opts ListOptions) ([]Sub
 	q.Set("pageSize", fmt.Sprintf("%d", subscriptionListPageSize))
 	all := make([]Subscription, 0, subscriptionListPageSize)
 	seen := make(map[string]struct{}, subscriptionListPageSize)
-	for pageNo := 1; pageNo <= subscriptionListMaxPageGuard; pageNo++ {
+	for pageNo := 1; pageNo <= subscriptionListMaxPages; pageNo++ {
 		q.Set("pageNo", fmt.Sprintf("%d", pageNo))
 		var result dwsSubListResult
 		if err := c.do(ctx, http.MethodGet, "/event/sublist", q, nil, &result); err != nil {
@@ -265,8 +267,8 @@ func (c *Client) ListSubscriptions(ctx context.Context, opts ListOptions) ([]Sub
 		if len(result.Items) < effectivePageSize {
 			break
 		}
-		if pageNo == subscriptionListMaxPageGuard {
-			return nil, fmt.Errorf("personal event: subscription pagination exceeded %d pages", subscriptionListMaxPageGuard)
+		if pageNo == subscriptionListMaxPages {
+			return nil, fmt.Errorf("personal event: subscription pagination exceeded %d pages", subscriptionListMaxPages)
 		}
 	}
 
@@ -462,35 +464,29 @@ func decodeResult(raw json.RawMessage, out any) error {
 		return nil
 	}
 	if sub, ok := out.(*Subscription); ok {
-		if decoded, ok, err := decodeSubscriptionResult(raw); ok || err != nil {
-			if err != nil {
-				return err
-			}
+		if decoded, ok := decodeSubscriptionResult(raw); ok {
 			*sub = decoded
 			return nil
 		}
 	}
-	if err := json.Unmarshal(raw, out); err == nil {
-		return nil
-	}
 	return json.Unmarshal(raw, out)
 }
 
-func decodeSubscriptionResult(raw json.RawMessage) (Subscription, bool, error) {
+func decodeSubscriptionResult(raw json.RawMessage) (Subscription, bool) {
 	var ids []string
 	if err := json.Unmarshal(raw, &ids); err == nil {
 		if len(ids) == 0 {
-			return Subscription{}, true, nil
+			return Subscription{}, true
 		}
-		return Subscription{SubscribeID: ids[0]}, true, nil
+		return Subscription{SubscribeID: ids[0]}, true
 	}
 	var item dwsSubscription
 	if err := json.Unmarshal(raw, &item); err == nil &&
 		(firstNonEmpty(item.SubID, item.SubscribeID) != "" ||
 			firstNonEmpty(item.EventKey, item.EventKeySnake) != "") {
-		return item.toSubscription(), true, nil
+		return item.toSubscription(), true
 	}
-	return Subscription{}, false, nil
+	return Subscription{}, false
 }
 
 func decodeAPIError(data []byte) *APIError {
@@ -571,9 +567,8 @@ func sanitizeLogPayload(data []byte) string {
 	var parsed any
 	if err := json.Unmarshal(data, &parsed); err == nil {
 		redacted := redactJSONValue(parsed)
-		if s, err := marshalLogJSON(redacted); err == nil {
-			return truncateLogPayload(s)
-		}
+		s, _ := marshalLogJSON(redacted) // JSON-decoded values are always encodable.
+		return truncateLogPayload(s)
 	}
 	return truncateLogPayload(string(data))
 }
