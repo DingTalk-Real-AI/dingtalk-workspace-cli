@@ -33,7 +33,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestBindPersistentFlags_YesDescribesConfirmedPromptSkipping(t *testing.T) {
+func TestCrossPlatformCoverageBindPersistentFlags_YesDescribesConfirmedPromptSkipping(t *testing.T) {
 	cmd := &cobra.Command{Use: "dws"}
 	flags := &GlobalFlags{}
 	bindPersistentFlags(cmd, flags)
@@ -50,7 +50,7 @@ func TestBindPersistentFlags_YesDescribesConfirmedPromptSkipping(t *testing.T) {
 	}
 }
 
-func TestIsPatScopeError_MissingScope(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_MissingScope(t *testing.T) {
 	t.Parallel()
 	err := apperrors.NewAuth("missing required scope(s): mail:user_mailbox.message:send")
 	if !isPatScopeError(err) {
@@ -58,7 +58,7 @@ func TestIsPatScopeError_MissingScope(t *testing.T) {
 	}
 }
 
-func TestIsPatScopeError_PlainString(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_PlainString(t *testing.T) {
 	t.Parallel()
 	err := &PatScopeError{
 		OriginalError: "missing_scope: user lacks required scope",
@@ -70,7 +70,7 @@ func TestIsPatScopeError_PlainString(t *testing.T) {
 	}
 }
 
-func TestIsPatScopeError_NotScopeError(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_NotScopeError(t *testing.T) {
 	t.Parallel()
 	err := apperrors.NewValidation("invalid parameter")
 	if isPatScopeError(err) {
@@ -78,14 +78,14 @@ func TestIsPatScopeError_NotScopeError(t *testing.T) {
 	}
 }
 
-func TestIsPatScopeError_Nil(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_Nil(t *testing.T) {
 	t.Parallel()
 	if isPatScopeError(nil) {
 		t.Fatal("nil error should not be detected as scope error")
 	}
 }
 
-func TestIsPatScopeError_WithReason(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_WithReason(t *testing.T) {
 	t.Parallel()
 	err := apperrors.NewAuth("API error",
 		apperrors.WithReason("missing_scope"),
@@ -95,7 +95,7 @@ func TestIsPatScopeError_WithReason(t *testing.T) {
 	}
 }
 
-func TestIsPatScopeError_InsufficientScope(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_InsufficientScope(t *testing.T) {
 	t.Parallel()
 	err := apperrors.NewAuth("insufficient_scope for resource",
 		apperrors.WithReason("insufficient_scope"),
@@ -105,7 +105,7 @@ func TestIsPatScopeError_InsufficientScope(t *testing.T) {
 	}
 }
 
-func TestExtractPatScopeError_ExtractsScope(t *testing.T) {
+func TestCrossPlatformCoverageExtractPatScopeError_ExtractsScope(t *testing.T) {
 	t.Parallel()
 	err := &PatScopeError{
 		OriginalError: "missing_scope: user needs calendar:read",
@@ -121,7 +121,7 @@ func TestExtractPatScopeError_ExtractsScope(t *testing.T) {
 	}
 }
 
-func TestPrintPatAuthError_HumanReadable(t *testing.T) {
+func TestCrossPlatformCoveragePrintPatAuthError_HumanReadable(t *testing.T) {
 	t.Parallel()
 	var buf strings.Builder
 	scopeErr := &PatScopeError{
@@ -145,7 +145,7 @@ func TestPrintPatAuthError_HumanReadable(t *testing.T) {
 	}
 }
 
-func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
+func TestCrossPlatformCoveragePrintPatAuthJSON_MachineReadable(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	// PAT browser policy is user-configurable. Isolate the config directory so
 	// this serializer test exercises the built-in CLI-owned default instead of
@@ -186,7 +186,7 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	}
 }
 
-func TestIsPatScopeError_BusinessPermissionDenied(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_BusinessPermissionDenied(t *testing.T) {
 	t.Parallel()
 	// Generic business "permission denied" should NOT trigger PAT re-auth.
 	err := apperrors.NewAuth("User has no permission to access this mailbox, permission denied")
@@ -195,7 +195,7 @@ func TestIsPatScopeError_BusinessPermissionDenied(t *testing.T) {
 	}
 }
 
-func TestIsPatScopeError_GenericForbidden(t *testing.T) {
+func TestCrossPlatformCoverageIsPatScopeError_GenericForbidden(t *testing.T) {
 	t.Parallel()
 	// HTTP 403 Forbidden should NOT trigger PAT re-auth.
 	err := apperrors.NewAuth("403 Forbidden")
@@ -204,7 +204,7 @@ func TestIsPatScopeError_GenericForbidden(t *testing.T) {
 	}
 }
 
-func TestExtractPatScopeError_ComplexScope(t *testing.T) {
+func TestCrossPlatformCoverageExtractPatScopeError_ComplexScope(t *testing.T) {
 	t.Parallel()
 	err := apperrors.NewAuth("missing required scope(s): mail:user_mailbox.message:send")
 	scopeErr := extractPatScopeError(err)
@@ -216,7 +216,7 @@ func TestExtractPatScopeError_ComplexScope(t *testing.T) {
 	}
 }
 
-func TestPatScopeError_Error(t *testing.T) {
+func TestCrossPlatformCoveragePatScopeError_Error(t *testing.T) {
 	t.Parallel()
 	err := &PatScopeError{
 		OriginalError: "test error message",
@@ -256,7 +256,7 @@ func setupPollServer(t *testing.T, statuses []authpkg.DevicePollResponse) (*http
 	return server, tmpDir
 }
 
-func TestPollPatDeviceFlow_Approved(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_Approved(t *testing.T) {
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: true, Data: authpkg.DevicePollData{Status: "PENDING"}},
 		{Success: true, Data: authpkg.DevicePollData{Status: "APPROVED", AuthCode: "code123"}},
@@ -279,7 +279,7 @@ func TestPollPatDeviceFlow_Approved(t *testing.T) {
 	}
 }
 
-func TestPollPatDeviceFlow_Rejected(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_Rejected(t *testing.T) {
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: false, Data: authpkg.DevicePollData{Status: "REJECTED"}},
 	})
@@ -301,7 +301,7 @@ func TestPollPatDeviceFlow_Rejected(t *testing.T) {
 	}
 }
 
-func TestPollPatDeviceFlow_Expired(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_Expired(t *testing.T) {
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: false, Data: authpkg.DevicePollData{Status: "EXPIRED"}},
 	})
@@ -323,7 +323,7 @@ func TestPollPatDeviceFlow_Expired(t *testing.T) {
 	}
 }
 
-func TestPollPatDeviceFlow_Cancelled(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_Cancelled(t *testing.T) {
 	// Server always returns PENDING so context cancellation is the only exit.
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: true, Data: authpkg.DevicePollData{Status: "PENDING"}},
@@ -354,7 +354,7 @@ func TestPollPatDeviceFlow_Cancelled(t *testing.T) {
 // IsPatRetrying tests
 // ---------------------------------------------------------------------------
 
-func TestIsPatRetrying_Default(t *testing.T) {
+func TestCrossPlatformCoverageIsPatRetrying_Default(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	if IsPatRetrying(ctx) {
@@ -362,7 +362,7 @@ func TestIsPatRetrying_Default(t *testing.T) {
 	}
 }
 
-func TestIsPatRetrying_WithValue(t *testing.T) {
+func TestCrossPlatformCoverageIsPatRetrying_WithValue(t *testing.T) {
 	t.Parallel()
 	ctx := context.WithValue(context.Background(), patRetryingKey, true)
 	if !IsPatRetrying(ctx) {
@@ -374,7 +374,7 @@ func TestIsPatRetrying_WithValue(t *testing.T) {
 // pollPatDeviceFlow edge cases
 // ---------------------------------------------------------------------------
 
-func TestPollPatDeviceFlow_ServerErrorFallback(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_ServerErrorFallback(t *testing.T) {
 	// When server returns success=false with empty status, should treat as EXPIRED.
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: false, Data: authpkg.DevicePollData{Status: ""}},
@@ -397,7 +397,7 @@ func TestPollPatDeviceFlow_ServerErrorFallback(t *testing.T) {
 	}
 }
 
-func TestPollPatDeviceFlow_RedirectSkipped(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_RedirectSkipped(t *testing.T) {
 	// When server returns 302 (SSO redirect), poll should continue until real response.
 	var callCount int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -435,7 +435,7 @@ func TestPollPatDeviceFlow_RedirectSkipped(t *testing.T) {
 	}
 }
 
-func TestPollPatDeviceFlow_UnknownStatusPrintsRawResponse(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_UnknownStatusPrintsRawResponse(t *testing.T) {
 	t.Setenv("DWS_DEBUG_PAT_POLL", "1")
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: true, Data: authpkg.DevicePollData{Status: ""}},
@@ -465,7 +465,7 @@ func TestPollPatDeviceFlow_UnknownStatusPrintsRawResponse(t *testing.T) {
 	}
 }
 
-func TestPollPatDeviceFlow_UnknownStatusHidesRawResponseByDefault(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_UnknownStatusHidesRawResponseByDefault(t *testing.T) {
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: true, Data: authpkg.DevicePollData{Status: ""}},
 	})
@@ -490,7 +490,7 @@ func TestPollPatDeviceFlow_UnknownStatusHidesRawResponseByDefault(t *testing.T) 
 		t.Fatalf("expected raw poll response to stay hidden by default, got %q", output)
 	}
 }
-func TestPollPatDeviceFlow_ResultEnvelopeCompatibility(t *testing.T) {
+func TestCrossPlatformCoveragePollPatDeviceFlow_ResultEnvelopeCompatibility(t *testing.T) {
 	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
 		{Success: true, Result: authpkg.DevicePollData{Status: "PENDING"}},
 		{Success: true, Result: authpkg.DevicePollData{Status: "APPROVED", AuthCode: "code-from-result"}},
@@ -517,14 +517,14 @@ func TestPollPatDeviceFlow_ResultEnvelopeCompatibility(t *testing.T) {
 // extractPatScopeError edge cases
 // ---------------------------------------------------------------------------
 
-func TestExtractPatScopeError_Nil(t *testing.T) {
+func TestCrossPlatformCoverageExtractPatScopeError_Nil(t *testing.T) {
 	t.Parallel()
 	if got := extractPatScopeError(nil); got != nil {
 		t.Fatalf("expected nil for nil error, got %+v", got)
 	}
 }
 
-func TestExtractPatScopeError_WithIdentity(t *testing.T) {
+func TestCrossPlatformCoverageExtractPatScopeError_WithIdentity(t *testing.T) {
 	t.Parallel()
 	err := apperrors.NewAuth(`insufficient_scope: identity "app_user" needs calendar:write`)
 	scopeErr := extractPatScopeError(err)
@@ -639,7 +639,7 @@ func patTestAuthorizationURL(server *httptest.Server) string {
 	return server.URL + "/pat"
 }
 
-func TestEnrichPATErrorWithOpenBrowserKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
+func TestCrossPlatformCoverageEnrichPATErrorWithOpenBrowserKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-copy%26userCode%3DQZYH-D64W#/personalAuthorization?flowId=flow-copy&userCode=QZYH-D64W"
 	raw := makePATErrorJSONWithURI("flow-copy", "test-client-id", rawURI)
 
@@ -757,7 +757,7 @@ func TestCrossPlatformCoverageHandlePatAuthCheckOrgPolicyDenied(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_Approved(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_Approved(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
@@ -800,7 +800,7 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	}
 }
 
-func TestRunDirectPATAuthCheck_ApprovedRetriesCallback(t *testing.T) {
+func TestCrossPlatformCoverageRunDirectPATAuthCheck_ApprovedRetriesCallback(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "")
 	defer server.Close()
@@ -827,7 +827,7 @@ func TestRunDirectPATAuthCheck_ApprovedRetriesCallback(t *testing.T) {
 	}
 }
 
-func TestRunDirectPATAuthCheckWaitOnly_ApprovedDoesNotRetry(t *testing.T) {
+func TestCrossPlatformCoverageRunDirectPATAuthCheckWaitOnly_ApprovedDoesNotRetry(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, _ := setupHandlePATServer(t, "APPROVED", "")
 	defer server.Close()
@@ -846,7 +846,7 @@ func TestRunDirectPATAuthCheckWaitOnly_ApprovedDoesNotRetry(t *testing.T) {
 	}
 }
 
-func TestRunDirectPATAuthCheckWaitOnly_SuppressesBrowserOpen(t *testing.T) {
+func TestCrossPlatformCoverageRunDirectPATAuthCheckWaitOnly_SuppressesBrowserOpen(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "")
 	defer server.Close()
@@ -876,7 +876,7 @@ func TestRunDirectPATAuthCheckWaitOnly_SuppressesBrowserOpen(t *testing.T) {
 	}
 }
 
-func TestResolvePATPollInterval(t *testing.T) {
+func TestCrossPlatformCoverageResolvePATPollInterval(t *testing.T) {
 	tests := []struct {
 		name    string
 		seconds int
@@ -896,7 +896,7 @@ func TestResolvePATPollInterval(t *testing.T) {
 	}
 }
 
-func TestRunDirectPATAuthCheck_JSONModeReturnsStructuredPending(t *testing.T) {
+func TestCrossPlatformCoverageRunDirectPATAuthCheck_JSONModeReturnsStructuredPending(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
@@ -943,7 +943,7 @@ func TestRunDirectPATAuthCheck_JSONModeReturnsStructuredPending(t *testing.T) {
 	}
 }
 
-func TestRunDirectPATAuthCheck_JSONModeBackfillsSingleURIFromAuthURL(t *testing.T) {
+func TestCrossPlatformCoverageRunDirectPATAuthCheck_JSONModeBackfillsSingleURIFromAuthURL(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
@@ -989,7 +989,7 @@ func TestRunDirectPATAuthCheck_JSONModeBackfillsSingleURIFromAuthURL(t *testing.
 	}
 }
 
-func TestHandlePatAuthCheck_Rejected(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_Rejected(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "REJECTED", "")
 	defer server.Close()
@@ -1019,7 +1019,7 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
 	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE.
@@ -1087,7 +1087,7 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
 	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
@@ -1143,7 +1143,7 @@ func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *te
 	}
 }
 
-func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	// No poll server needed — empty flowId means no polling, return PATError directly.
 	tmpDir := t.TempDir()
@@ -1178,7 +1178,7 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_JSONModeReturnsStructuredPATErrorWithoutRetry(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_JSONModeReturnsStructuredPATErrorWithoutRetry(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
@@ -1232,7 +1232,7 @@ func TestHandlePatAuthCheck_JSONModeReturnsStructuredPATErrorWithoutRetry(t *tes
 	}
 }
 
-func TestHandlePatAuthCheck_JSONModeYesStillCanOpenBrowserWithoutTextOutput(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_JSONModeYesStillCanOpenBrowserWithoutTextOutput(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
@@ -1309,7 +1309,7 @@ func TestHandlePatAuthCheck_JSONModeYesStillCanOpenBrowserWithoutTextOutput(t *t
 	}
 }
 
-func TestHandlePatAuthCheck_NonJSONModeYesStillPollsRetriesAndRespectsBrowserPolicy(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_NonJSONModeYesStillPollsRetriesAndRespectsBrowserPolicy(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
@@ -1366,7 +1366,7 @@ func TestHandlePatAuthCheck_NonJSONModeYesStillPollsRetriesAndRespectsBrowserPol
 	}
 }
 
-func TestRetryWithPatAuthRetry_JSONModeReturnsStructuredPATError(t *testing.T) {
+func TestCrossPlatformCoverageRetryWithPatAuthRetry_JSONModeReturnsStructuredPATError(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
@@ -1424,7 +1424,7 @@ func TestRetryWithPatAuthRetry_JSONModeReturnsStructuredPATError(t *testing.T) {
 // (no embedded newlines, no indentation), so stderr-line-scanning hosts
 // stay correct. Regression guard against accidental reintroduction of
 // json.MarshalIndent.
-func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
+func TestCrossPlatformCoverageEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
 	t.Setenv("DINGTALK_AGENT", "sales-copilot")
 
@@ -1454,7 +1454,7 @@ func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
 	}
 }
 
-func TestEnrichPATErrorForHostControlKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
+func TestCrossPlatformCoverageEnrichPATErrorForHostControlKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
 	t.Setenv("DINGTALK_AGENT", "sales-copilot")
 
@@ -1471,7 +1471,7 @@ func TestEnrichPATErrorForHostControlKeepsAuthorizationURLAmpersandReadable(t *t
 
 // TestBuildPATScopeHostJSON_SingleLineOutput mirrors the above regression
 // for the scope-error branch (PAT_SCOPE_AUTH_REQUIRED emission).
-func TestBuildPATScopeHostJSON_SingleLineOutput(t *testing.T) {
+func TestCrossPlatformCoverageBuildPATScopeHostJSON_SingleLineOutput(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
 	t.Setenv("DINGTALK_AGENT", "customer-support")
 
@@ -1500,7 +1500,7 @@ func TestBuildPATScopeHostJSON_SingleLineOutput(t *testing.T) {
 	}
 }
 
-func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
+func TestCrossPlatformCoverageRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
 	t.Setenv("DINGTALK_AGENT", "customer-support")
 
@@ -1555,7 +1555,7 @@ func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
@@ -1600,7 +1600,7 @@ func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_NormalizesLegacyHashRouteForBrowserAndOutput(t *testing.T) {
+func TestCrossPlatformCoverageHandlePatAuthCheck_NormalizesLegacyHashRouteForBrowserAndOutput(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
@@ -1646,7 +1646,7 @@ func TestHandlePatAuthCheck_NormalizesLegacyHashRouteForBrowserAndOutput(t *test
 	}
 }
 
-func TestBrowserOpenCommand_WindowsPreservesOpaquePATURI(t *testing.T) {
+func TestCrossPlatformCoverageBrowserOpenCommand_WindowsPreservesOpaquePATURI(t *testing.T) {
 	t.Parallel()
 
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Df72437f040f04a8295988ff71e690b35%26userCode%3D98JV-JSBL#/personalAuthorization?flowId=f72437f040f04a8295988ff71e690b35&userCode=98JV-JSBL"

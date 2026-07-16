@@ -37,7 +37,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
-func TestToolCallerAdapter_GlobalDryRunAllowsOnlyExactPATReadOnlyPreviews(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_GlobalDryRunAllowsOnlyExactPATReadOnlyPreviews(t *testing.T) {
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 	t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 
@@ -155,7 +155,7 @@ func (r *dryRunInvocationCaptureRunner) Run(_ context.Context, invocation execut
 	return executor.Result{Invocation: invocation, Response: map[string]any{"content": map[string]any{"ok": true}}}, nil
 }
 
-func TestToolCallerAdapter_ReadOnlyDryRunMarkerIsStrict(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunMarkerIsStrict(t *testing.T) {
 	tests := []struct {
 		name    string
 		product string
@@ -188,7 +188,7 @@ func TestToolCallerAdapter_ReadOnlyDryRunMarkerIsStrict(t *testing.T) {
 	}
 }
 
-func TestToolCallerAdapter_ReadOnlyDryRunPATChallengeHasNoAuthSideEffects(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunPATChallengeHasNoAuthSideEffects(t *testing.T) {
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 	t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 	t.Setenv(authpkg.AgentCodeEnv, "")
@@ -325,7 +325,7 @@ func TestToolCallerAdapter_ReadOnlyDryRunPATChallengeHasNoAuthSideEffects(t *tes
 	}
 }
 
-func TestToolCallerAdapter_ReadOnlyDryRunSkipsCredentialAndClassifierHooks(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunSkipsCredentialAndClassifierHooks(t *testing.T) {
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 	t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 	t.Setenv("DWS_AUDIT", "0")
@@ -424,7 +424,7 @@ func TestToolCallerAdapter_ReadOnlyDryRunSkipsCredentialAndClassifierHooks(t *te
 	}
 }
 
-func TestPreparseExplicitTokenFlag(t *testing.T) {
+func TestCrossPlatformCoveragePreparseExplicitTokenFlag(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name string
@@ -445,7 +445,7 @@ func TestPreparseExplicitTokenFlag(t *testing.T) {
 	}
 }
 
-func TestRootPATStrictDryRunPreservesRawErrorsWithoutCredentialSideEffects(t *testing.T) {
+func TestCrossPlatformCoverageRootPATStrictDryRunPreservesRawErrorsWithoutCredentialSideEffects(t *testing.T) {
 	tests := []struct {
 		name    string
 		command []string
@@ -608,7 +608,7 @@ func TestRootPATStrictDryRunPreservesRawErrorsWithoutCredentialSideEffects(t *te
 	}
 }
 
-func TestToolCallerAdapter_NormalExecutionKeepsCredentialAndHeaderHooks(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_NormalExecutionKeepsCredentialAndHeaderHooks(t *testing.T) {
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 	t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 	t.Setenv("DWS_AUDIT", "0")
@@ -681,7 +681,7 @@ func TestToolCallerAdapter_NormalExecutionKeepsCredentialAndHeaderHooks(t *testi
 	}
 }
 
-func TestToolCallerAdapter_ReadOnlyDryRunExpiredStoredTokenDoesNotRefresh(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunExpiredStoredTokenDoesNotRefresh(t *testing.T) {
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 	t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 	t.Setenv("DWS_AUDIT", "1")
@@ -806,7 +806,7 @@ func TestToolCallerAdapter_ReadOnlyDryRunExpiredStoredTokenDoesNotRefresh(t *tes
 	assertAuditIdentityCacheUnchanged(t)
 }
 
-func TestToolCallerAdapter_ReadOnlyDryRunDoesNotCreateIdentity(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunDoesNotCreateIdentity(t *testing.T) {
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 	t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 	t.Setenv("DWS_AUDIT", "1")
@@ -909,7 +909,7 @@ func TestToolCallerAdapter_ReadOnlyDryRunDoesNotCreateIdentity(t *testing.T) {
 	assertAuditIdentityCacheUnchanged(t)
 }
 
-func TestToolCallerAdapter_ReadOnlyDryRunMakesOneTransportAttempt(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapter_ReadOnlyDryRunMakesOneTransportAttempt(t *testing.T) {
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 	t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 
@@ -938,7 +938,7 @@ func TestToolCallerAdapter_ReadOnlyDryRunMakesOneTransportAttempt(t *testing.T) 
 	}
 }
 
-func TestRuntimeRunnerStrictPATDryRunRejectsMultipleProfiles(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRunnerStrictPATDryRunRejectsMultipleProfiles(t *testing.T) {
 	previousProfile := authpkg.RuntimeProfile()
 	authpkg.SetRuntimeProfile("corp-a,corp-b")
 	t.Cleanup(func() { authpkg.SetRuntimeProfile(previousProfile) })
@@ -957,7 +957,7 @@ func TestRuntimeRunnerStrictPATDryRunRejectsMultipleProfiles(t *testing.T) {
 	}
 }
 
-func TestRuntimeRunnerDryRunBoundaryHelpers(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRunnerDryRunBoundaryHelpers(t *testing.T) {
 	var nilRunner *runtimeRunner
 	nilRunner.stampGlobalDryRun(nil)
 
@@ -983,7 +983,7 @@ func TestRuntimeRunnerDryRunBoundaryHelpers(t *testing.T) {
 	}
 }
 
-func TestRuntimeRunnerExecuteInvocationDryRunUsesPluginCredentialPath(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRunnerExecuteInvocationDryRunUsesPluginCredentialPath(t *testing.T) {
 	const product = "coverage-plugin"
 	pluginAuthMu.Lock()
 	previous, existed := pluginAuthRegistry[product]
@@ -1013,7 +1013,7 @@ func TestRuntimeRunnerExecuteInvocationDryRunUsesPluginCredentialPath(t *testing
 	}
 }
 
-func TestResolveReadOnlyIdentityHeadersUsesPersistedAgentEntry(t *testing.T) {
+func TestCrossPlatformCoverageResolveReadOnlyIdentityHeadersUsesPersistedAgentEntry(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	t.Setenv(authpkg.AgentCodeEnv, "coverage-agent")
@@ -1039,7 +1039,7 @@ func TestResolveReadOnlyIdentityHeadersUsesPersistedAgentEntry(t *testing.T) {
 	}
 }
 
-func TestEnsureRuntimeClientIDEnvCoversExistingAndResolvedValues(t *testing.T) {
+func TestCrossPlatformCoverageEnsureRuntimeClientIDEnvCoversExistingAndResolvedValues(t *testing.T) {
 	t.Setenv("DWS_CLIENT_ID", "existing-client")
 	ensureRuntimeClientIDEnv()
 	if got := os.Getenv("DWS_CLIENT_ID"); got != "existing-client" {
@@ -1055,7 +1055,7 @@ func TestEnsureRuntimeClientIDEnvCoversExistingAndResolvedValues(t *testing.T) {
 	}
 }
 
-func TestConvertResultCoversSliceAndScalarContent(t *testing.T) {
+func TestCrossPlatformCoverageConvertResultCoversSliceAndScalarContent(t *testing.T) {
 	sliceResult := convertResult(executor.Result{Response: map[string]any{
 		"is_error": true,
 		"content": []any{
@@ -1073,7 +1073,7 @@ func TestConvertResultCoversSliceAndScalarContent(t *testing.T) {
 	}
 }
 
-func TestAuditIdentityReadOnlyReportsTokenErrorAndLoadsPersistedIdentity(t *testing.T) {
+func TestCrossPlatformCoverageAuditIdentityReadOnlyReportsTokenErrorAndLoadsPersistedIdentity(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	previousProfile := authpkg.RuntimeProfile()

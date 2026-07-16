@@ -334,7 +334,7 @@ func setBatchYesForTest(t *testing.T, cmd *cobra.Command) {
 	attachRootYesFlag(t, cmd, true)
 }
 
-func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
+func TestCrossPlatformCoverageRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	RegisterCommands(root, &fakeToolCaller{})
 
@@ -356,7 +356,7 @@ func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
 	}
 }
 
-func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
+func TestCrossPlatformCoveragePATHelpDocumentsBatchAuthorization(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	RegisterCommands(root, &fakeToolCaller{})
 
@@ -424,7 +424,7 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 	}
 }
 
-func TestChmod_allDryRunUsesExplicitServerPlan(t *testing.T) {
+func TestCrossPlatformCoverageChmod_allDryRunUsesExplicitServerPlan(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{
 		dryRun: true,
@@ -467,7 +467,7 @@ func TestChmod_allDryRunUsesExplicitServerPlan(t *testing.T) {
 	}
 }
 
-func TestChmod_allDryRunWithYesStillOnlyPlans(t *testing.T) {
+func TestCrossPlatformCoverageChmod_allDryRunWithYesStillOnlyPlans(t *testing.T) {
 	fake := &sequenceToolCaller{
 		dryRun: true,
 		responses: []string{
@@ -486,7 +486,7 @@ func TestChmod_allDryRunWithYesStillOnlyPlans(t *testing.T) {
 	}
 }
 
-func TestChmod_allPlansThenGrantsSelectedScopesWithYes(t *testing.T) {
+func TestCrossPlatformCoverageChmod_allPlansThenGrantsSelectedScopesWithYes(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read","chat.message:list"]}}`,
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read","chat.message:list"]}}`,
@@ -524,7 +524,7 @@ func TestChmod_allPlansThenGrantsSelectedScopesWithYes(t *testing.T) {
 	}
 }
 
-func TestChmod_allWithoutYesBlocksBeforeMCP(t *testing.T) {
+func TestCrossPlatformCoverageChmod_allWithoutYesBlocksBeforeMCP(t *testing.T) {
 	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("all", "true")
@@ -542,7 +542,7 @@ func TestChmod_allWithoutYesBlocksBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestChmod_revokeDryRunCallsReadOnlyServerTool(t *testing.T) {
+func TestCrossPlatformCoverageChmod_revokeDryRunCallsReadOnlyServerTool(t *testing.T) {
 	fake := &sequenceToolCaller{dryRun: true, responses: []string{
 		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","currentStatus":"ACTIVE","revocable":true,"changed":false,"dryRun":true,"selectedScopes":["calendar.event:read"]}}`,
 	}}
@@ -576,7 +576,7 @@ func TestChmod_revokeDryRunCallsReadOnlyServerTool(t *testing.T) {
 	}
 }
 
-func TestChmod_revokeRequiresYesWithoutCallingMCP(t *testing.T) {
+func TestCrossPlatformCoverageChmod_revokeRequiresYesWithoutCallingMCP(t *testing.T) {
 	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("revoke", "true")
@@ -590,7 +590,7 @@ func TestChmod_revokeRequiresYesWithoutCallingMCP(t *testing.T) {
 	}
 }
 
-func TestChmod_revokeScopeCannotInjectExecutableActions(t *testing.T) {
+func TestCrossPlatformCoverageChmod_revokeScopeCannotInjectExecutableActions(t *testing.T) {
 	maliciousScope := "calendar.event:read\nrm -rf /"
 	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
@@ -622,7 +622,7 @@ func TestChmod_revokeScopeCannotInjectExecutableActions(t *testing.T) {
 	}
 }
 
-func TestChmod_singleScopeRevokeWithYesCallsDedicatedTool(t *testing.T) {
+func TestCrossPlatformCoverageChmod_singleScopeRevokeWithYesCallsDedicatedTool(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","agentCode":"qoderwork","currentStatus":"REVOKED","revocable":false,"changed":true,"dryRun":false,"selectedScopes":["calendar.event:read"]}}`,
@@ -655,7 +655,7 @@ func TestChmod_singleScopeRevokeWithYesCallsDedicatedTool(t *testing.T) {
 	}
 }
 
-func TestChmod_newModeValidationFailsBeforeMCP(t *testing.T) {
+func TestCrossPlatformCoverageChmod_newModeValidationFailsBeforeMCP(t *testing.T) {
 	cases := []struct {
 		name       string
 		args       []string
@@ -820,7 +820,7 @@ func TestChmod_newModeValidationFailsBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestChmod_allNeverFallsBackToLegacyGrant(t *testing.T) {
+func TestCrossPlatformCoverageChmod_allNeverFallsBackToLegacyGrant(t *testing.T) {
 	fake := &sequenceToolCaller{
 		responses: []string{`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read"]}}`},
 		errs:      []error{nil, errors.New("tool not found")},
@@ -842,7 +842,7 @@ func TestChmod_allNeverFallsBackToLegacyGrant(t *testing.T) {
 	}
 }
 
-func TestChmod_newModesRejectUnattestedPlanBeforeOutputOrMutation(t *testing.T) {
+func TestCrossPlatformCoverageChmod_newModesRejectUnattestedPlanBeforeOutputOrMutation(t *testing.T) {
 	cases := []struct {
 		name     string
 		response string
@@ -890,7 +890,7 @@ func TestChmod_newModesRejectUnattestedPlanBeforeOutputOrMutation(t *testing.T) 
 	}
 }
 
-func TestChmod_newModesRequireStrictSelectedScopesField(t *testing.T) {
+func TestCrossPlatformCoverageChmod_newModesRequireStrictSelectedScopesField(t *testing.T) {
 	invalidFields := []struct {
 		name  string
 		field string
@@ -920,7 +920,7 @@ func TestChmod_newModesRequireStrictSelectedScopesField(t *testing.T) {
 	}
 }
 
-func TestChmod_newModesAllowExplicitEmptySelectedScopes(t *testing.T) {
+func TestCrossPlatformCoverageChmod_newModesAllowExplicitEmptySelectedScopes(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":[]}}`,
 	}}
@@ -936,7 +936,7 @@ func TestChmod_newModesAllowExplicitEmptySelectedScopes(t *testing.T) {
 	}
 }
 
-func TestChmod_newModesRequireExactAgentCodeAttestation(t *testing.T) {
+func TestCrossPlatformCoverageChmod_newModesRequireExactAgentCodeAttestation(t *testing.T) {
 	modes := []struct {
 		name                 string
 		args                 []string
@@ -983,7 +983,7 @@ func TestChmod_newModesRequireExactAgentCodeAttestation(t *testing.T) {
 	}
 }
 
-func TestChmod_singleScopeRevokeRejectsUnattestedResponse(t *testing.T) {
+func TestCrossPlatformCoverageChmod_singleScopeRevokeRejectsUnattestedResponse(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 	cases := []struct {
 		name     string
@@ -1022,7 +1022,7 @@ func TestChmod_singleScopeRevokeRejectsUnattestedResponse(t *testing.T) {
 	}
 }
 
-func TestEnsurePATScopeRevokeResponse_acceptsCoreStateMatrix(t *testing.T) {
+func TestCrossPlatformCoverageEnsurePATScopeRevokeResponse_acceptsCoreStateMatrix(t *testing.T) {
 	const scope = "calendar.event:read"
 	tests := []struct {
 		name   string
@@ -1071,7 +1071,7 @@ func TestEnsurePATScopeRevokeResponse_acceptsCoreStateMatrix(t *testing.T) {
 	}
 }
 
-func TestEnsurePATScopeRevokeResponse_rejectsUnsafeStateMatrix(t *testing.T) {
+func TestCrossPlatformCoverageEnsurePATScopeRevokeResponse_rejectsUnsafeStateMatrix(t *testing.T) {
 	const scope = "calendar.event:read"
 	tests := []struct {
 		name   string
@@ -1117,7 +1117,7 @@ func TestEnsurePATScopeRevokeResponse_rejectsUnsafeStateMatrix(t *testing.T) {
 	}
 }
 
-func TestChmod_singleScopeRevokeRequiresExactAgentCodeAttestation(t *testing.T) {
+func TestCrossPlatformCoverageChmod_singleScopeRevokeRequiresExactAgentCodeAttestation(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 	responses := []string{
 		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","currentStatus":"REVOKED","revocable":false,"changed":true,"dryRun":false,"selectedScopes":["calendar.event:read"]}}`,
@@ -1142,7 +1142,7 @@ func TestChmod_singleScopeRevokeRequiresExactAgentCodeAttestation(t *testing.T) 
 	}
 }
 
-func TestChmod_singleScopeRevokeOmitsAgentCodeWhenUnset(t *testing.T) {
+func TestCrossPlatformCoverageChmod_singleScopeRevokeOmitsAgentCodeWhenUnset(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","currentStatus":"MISSING","revocable":false,"changed":false,"dryRun":false,"selectedScopes":[]}}`,
@@ -1162,7 +1162,7 @@ func TestChmod_singleScopeRevokeOmitsAgentCodeWhenUnset(t *testing.T) {
 	}
 }
 
-func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
+func TestCrossPlatformCoverageChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"selectedScopes":["calendar.event:read","aitable.record:read"]}}`,
@@ -1214,7 +1214,7 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	}
 }
 
-func TestChmod_productsFlagWithoutYesBlocksBeforeMCP(t *testing.T) {
+func TestCrossPlatformCoverageChmod_productsFlagWithoutYesBlocksBeforeMCP(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
@@ -1233,7 +1233,7 @@ func TestChmod_productsFlagWithoutYesBlocksBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestChmod_multipleScopesWithoutYesBlocksBeforeMCP(t *testing.T) {
+func TestCrossPlatformCoverageChmod_multipleScopesWithoutYesBlocksBeforeMCP(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
@@ -1251,7 +1251,7 @@ func TestChmod_multipleScopesWithoutYesBlocksBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestChmod_singleScopeWithoutYesBlocksBeforeMCP(t *testing.T) {
+func TestCrossPlatformCoverageChmod_singleScopeWithoutYesBlocksBeforeMCP(t *testing.T) {
 	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
@@ -1266,7 +1266,7 @@ func TestChmod_singleScopeWithoutYesBlocksBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
+func TestCrossPlatformCoverageChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"selectedScopes":["calendar.event:read"]}}`,
@@ -1317,7 +1317,7 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 	}
 }
 
-func TestChmod_singleScopeReturnsServerAgentCodeInSummary(t *testing.T) {
+func TestCrossPlatformCoverageChmod_singleScopeReturnsServerAgentCodeInSummary(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"code":"OK","data":{"agentCode":"dingmbw5n9ktkkbbjv3g","grantType":"once","grantedScopes":["contact.user:get-self"]}}`,
@@ -1346,7 +1346,7 @@ func TestChmod_singleScopeReturnsServerAgentCodeInSummary(t *testing.T) {
 	}
 }
 
-func TestChmod_flagAgentCodeWinsAndReturnedAgentCodeMatches(t *testing.T) {
+func TestCrossPlatformCoverageChmod_flagAgentCodeWinsAndReturnedAgentCodeMatches(t *testing.T) {
 	t.Setenv(agentCodeEnv, "envshouldlose")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","grantType":"once","grantedScopes":["chat.bot:search"]}}`,
@@ -1376,7 +1376,7 @@ func TestChmod_flagAgentCodeWinsAndReturnedAgentCodeMatches(t *testing.T) {
 	}
 }
 
-func TestChmod_batchEntryPointMatrixRequiresYesAndReturnsAgentCode(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchEntryPointMatrixRequiresYesAndReturnsAgentCode(t *testing.T) {
 	cases := []struct {
 		name             string
 		args             []string
@@ -1503,7 +1503,7 @@ func TestChmod_batchEntryPointMatrixRequiresYesAndReturnsAgentCode(t *testing.T)
 	}
 }
 
-func TestChmod_batchPlanEntryPointsDryRunOnlyReturnPlanAgentCode(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchPlanEntryPointsDryRunOnlyReturnPlanAgentCode(t *testing.T) {
 	cases := []struct {
 		name             string
 		setFlags         func(*cobra.Command)
@@ -1572,7 +1572,7 @@ func TestChmod_batchPlanEntryPointsDryRunOnlyReturnPlanAgentCode(t *testing.T) {
 	}
 }
 
-func TestChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
+func TestCrossPlatformCoverageChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
 	cases := []struct {
 		name          string
 		grantType     string
@@ -1640,7 +1640,7 @@ func TestChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
 	}
 }
 
-func TestChmod_productsSessionDryRunUsesSessionIDFromEnv(t *testing.T) {
+func TestCrossPlatformCoverageChmod_productsSessionDryRunUsesSessionIDFromEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	t.Setenv(sessionIDEnvDWS, "env-session-123")
 	fake := &sequenceToolCaller{
@@ -1677,7 +1677,7 @@ func TestChmod_productsSessionDryRunUsesSessionIDFromEnv(t *testing.T) {
 	}
 }
 
-func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{
 		errs: []error{
@@ -1720,7 +1720,7 @@ func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 	}
 }
 
-func TestChmod_batchPlanDryRunDoesNotRetryWithoutIdentityArgs(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchPlanDryRunDoesNotRetryWithoutIdentityArgs(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	forgedIdentityErr := apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
 		apperrors.WithReason("business_error"),
@@ -1761,7 +1761,7 @@ func TestChmod_batchPlanDryRunDoesNotRetryWithoutIdentityArgs(t *testing.T) {
 	}
 }
 
-func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{
 		errs: []error{
@@ -1802,7 +1802,7 @@ func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 	}
 }
 
-func TestChmod_batchGrantIdentityFallbackRejectsMismatchedAgentCode(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchGrantIdentityFallbackRejectsMismatchedAgentCode(t *testing.T) {
 	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
 	fake := &sequenceToolCaller{
 		errs: []error{
@@ -1843,7 +1843,7 @@ func TestChmod_batchGrantIdentityFallbackRejectsMismatchedAgentCode(t *testing.T
 	}
 }
 
-func TestChmod_batchGrantIdentityFallbackRejectsMissingAgentCode(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchGrantIdentityFallbackRejectsMissingAgentCode(t *testing.T) {
 	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
 	fake := &sequenceToolCaller{
 		errs: []error{
@@ -1873,7 +1873,7 @@ func TestChmod_batchGrantIdentityFallbackRejectsMissingAgentCode(t *testing.T) {
 	}
 }
 
-func TestResolveSessionIDFromEnvMatchesHeaderPriority(t *testing.T) {
+func TestCrossPlatformCoverageResolveSessionIDFromEnvMatchesHeaderPriority(t *testing.T) {
 	t.Setenv(sessionIDEnvDingtalk, "ding-session")
 	t.Setenv(sessionIDEnvDWS, "dws-session")
 	t.Setenv(sessionIDEnvRewind, "rewind-session")
@@ -1893,7 +1893,7 @@ func TestResolveSessionIDFromEnvMatchesHeaderPriority(t *testing.T) {
 	}
 }
 
-func TestChmod_sessionModeUsesDingtalkSessionEnv(t *testing.T) {
+func TestCrossPlatformCoverageChmod_sessionModeUsesDingtalkSessionEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	t.Setenv(sessionIDEnvDingtalk, "ding-session-123")
 
@@ -1920,7 +1920,7 @@ func TestChmod_sessionModeUsesDingtalkSessionEnv(t *testing.T) {
 	}
 }
 
-func TestChmod_explicitSessionIDOverridesStaleDingtalkSessionEnv(t *testing.T) {
+func TestCrossPlatformCoverageChmod_explicitSessionIDOverridesStaleDingtalkSessionEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	t.Setenv(sessionIDEnvDingtalk, "stale-session")
 
@@ -1948,7 +1948,7 @@ func TestChmod_explicitSessionIDOverridesStaleDingtalkSessionEnv(t *testing.T) {
 	}
 }
 
-func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T) {
+func TestCrossPlatformCoverageChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"selectedScopes":["recommended.scope:read"]}}`,
@@ -1982,7 +1982,7 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 	}
 }
 
-func TestLoginRecommendAuthorizationSelectorReplansBySelectedProducts(t *testing.T) {
+func TestCrossPlatformCoverageLoginRecommendAuthorizationSelectorReplansBySelectedProducts(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历","displayName":"日程查看","operationSummary":"日历管理、日程创建"},{"scope":"doc.document:read","productCode":"doc","productName":"文档","displayName":"文档读取"}],"selectedScopes":["calendar.event:read","doc.document:read"]}}`,
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历","displayName":"日程查看"}],"selectedScopes":["calendar.event:read"]}}`,
@@ -2036,7 +2036,7 @@ func TestLoginRecommendAuthorizationSelectorReplansBySelectedProducts(t *testing
 	}
 }
 
-func TestLoginRecommendAuthorizationWithoutSelectorKeepsSinglePlan(t *testing.T) {
+func TestCrossPlatformCoverageLoginRecommendAuthorizationWithoutSelectorKeepsSinglePlan(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
 		`{"success":true,"data":{"flowId":"flow-1","userCode":"ABCD-EFGH","uri":"https://example.com/auth"}}`,
@@ -2064,7 +2064,7 @@ func TestLoginRecommendAuthorizationWithoutSelectorKeepsSinglePlan(t *testing.T)
 	}
 }
 
-func TestLoginRecommendAuthorizationRecommendedAlreadyGrantedSkipsSelectorAndGrant(t *testing.T) {
+func TestCrossPlatformCoverageLoginRecommendAuthorizationRecommendedAlreadyGrantedSkipsSelectorAndGrant(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"allGranted":false,"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":[]}}`,
 	}}
@@ -2093,7 +2093,7 @@ func TestLoginRecommendAuthorizationRecommendedAlreadyGrantedSkipsSelectorAndGra
 	}
 }
 
-func TestLoginRecommendAuthorizationAllScopeModePlansAllProductScopes(t *testing.T) {
+func TestCrossPlatformCoverageLoginRecommendAuthorizationAllScopeModePlansAllProductScopes(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"},{"scope":"calendar.event:write","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read","calendar.event:write"]}}`,
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"},{"scope":"calendar.event:write","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read","calendar.event:write"]}}`,
@@ -2128,7 +2128,7 @@ func TestLoginRecommendAuthorizationAllScopeModePlansAllProductScopes(t *testing
 	}
 }
 
-func TestLoginRecommendAuthorizationAllScopeWithoutProductsFailsBeforePlan(t *testing.T) {
+func TestCrossPlatformCoverageLoginRecommendAuthorizationAllScopeWithoutProductsFailsBeforePlan(t *testing.T) {
 	fake := &sequenceToolCaller{}
 	err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{
 		ScopeMode: LoginRecommendScopeAll,
@@ -2144,7 +2144,7 @@ func TestLoginRecommendAuthorizationAllScopeWithoutProductsFailsBeforePlan(t *te
 	}
 }
 
-func TestLoginRecommendAuthorizationConfirmedGrantsDirectly(t *testing.T) {
+func TestCrossPlatformCoverageLoginRecommendAuthorizationConfirmedGrantsDirectly(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
@@ -2172,7 +2172,7 @@ func TestLoginRecommendAuthorizationConfirmedGrantsDirectly(t *testing.T) {
 	}
 }
 
-func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
+func TestCrossPlatformCoverageChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"allGranted":true,"selectedScopes":[]}}`,
@@ -2193,7 +2193,7 @@ func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
 	}
 }
 
-func TestChmod_explicitScopesDryRunUsesServerBatchPlan(t *testing.T) {
+func TestCrossPlatformCoverageChmod_explicitScopesDryRunUsesServerBatchPlan(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{dryRun: true, responses: []string{
 		`{"success":true,"code":"OK","data":{"operation":"grant","allScopes":false,"agentCode":"qoderwork","selectedScopes":["aitable.record:read"],"missingScopes":["aitable.record:read"]}}`,
@@ -2230,7 +2230,7 @@ func TestChmod_explicitScopesDryRunUsesServerBatchPlan(t *testing.T) {
 // TestChmod_agentCode_env_fallback verifies that when --agentCode is
 // omitted but DINGTALK_DWS_AGENTCODE is exported, the resolver picks
 // the env value up for both batch arguments and gateway-compatible env.
-func TestChmod_agentCode_env_fallback(t *testing.T) {
+func TestCrossPlatformCoverageChmod_agentCode_env_fallback(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 
 	fake := &fakeToolCaller{resultOK: true}
@@ -2260,7 +2260,7 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 	}
 }
 
-func TestChmod_agentCode_reversedEnvIgnored(t *testing.T) {
+func TestCrossPlatformCoverageChmod_agentCode_reversedEnvIgnored(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 	t.Setenv("DWS_DINGTALK_AGENTCODE", "compatwork")
 
@@ -2283,7 +2283,7 @@ func TestChmod_agentCode_reversedEnvIgnored(t *testing.T) {
 	}
 }
 
-func TestChmod_withoutAgentCodeLetsServerDefault(t *testing.T) {
+func TestCrossPlatformCoverageChmod_withoutAgentCodeLetsServerDefault(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 
 	fake := &fakeToolCaller{resultOK: true}
@@ -2308,7 +2308,7 @@ func TestChmod_withoutAgentCodeLetsServerDefault(t *testing.T) {
 	}
 }
 
-func TestChmod_agentCode_envServerMismatchFails(t *testing.T) {
+func TestCrossPlatformCoverageChmod_agentCode_envServerMismatchFails(t *testing.T) {
 	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
 
 	fake := &sequenceToolCaller{responses: []string{
@@ -2337,7 +2337,7 @@ func TestChmod_agentCode_envServerMismatchFails(t *testing.T) {
 	}
 }
 
-func TestCallPATToolWithLegacyFallback_emptyCanonicalResultDoesNotRetryLegacyAlias(t *testing.T) {
+func TestCrossPlatformCoverageCallPATToolWithLegacyFallback_emptyCanonicalResultDoesNotRetryLegacyAlias(t *testing.T) {
 	fake := &fallbackToolCaller{}
 	canonicalArgs := map[string]any{
 		"agentCode": "qoderwork",
@@ -2371,7 +2371,7 @@ func TestCallPATToolWithLegacyFallback_emptyCanonicalResultDoesNotRetryLegacyAli
 	}
 }
 
-func TestChmod_emptyCanonicalResultReturnsError(t *testing.T) {
+func TestCrossPlatformCoverageChmod_emptyCanonicalResultReturnsError(t *testing.T) {
 	fake := &fallbackToolCaller{}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("agentCode", "qoderwork")
@@ -2393,7 +2393,7 @@ func TestChmod_emptyCanonicalResultReturnsError(t *testing.T) {
 	}
 }
 
-func TestCallPATToolWithLegacyFallback_toolNotFoundRetriesLegacyAlias(t *testing.T) {
+func TestCrossPlatformCoverageCallPATToolWithLegacyFallback_toolNotFoundRetriesLegacyAlias(t *testing.T) {
 	fake := &fallbackErrorToolCaller{}
 	canonicalArgs := map[string]any{
 		"agentCode": "qoderwork",
@@ -2430,7 +2430,7 @@ func TestCallPATToolWithLegacyFallback_toolNotFoundRetriesLegacyAlias(t *testing
 	}
 }
 
-func TestCallPATToolWithLegacyFallback_schemaMismatchRetriesLegacyAlias(t *testing.T) {
+func TestCrossPlatformCoverageCallPATToolWithLegacyFallback_schemaMismatchRetriesLegacyAlias(t *testing.T) {
 	fake := &fallbackSchemaMismatchToolCaller{}
 	canonicalArgs := map[string]any{
 		"agentCode": "qoderwork",
@@ -2464,7 +2464,7 @@ func TestCallPATToolWithLegacyFallback_schemaMismatchRetriesLegacyAlias(t *testi
 	}
 }
 
-func TestCallPATToolWithLegacyFallback_permissionDeniedDoesNotRetryLegacyAlias(t *testing.T) {
+func TestCrossPlatformCoverageCallPATToolWithLegacyFallback_permissionDeniedDoesNotRetryLegacyAlias(t *testing.T) {
 	fake := &fallbackPermissionDeniedToolCaller{}
 	canonicalArgs := map[string]any{
 		"agentCode": "qoderwork",
@@ -2493,7 +2493,7 @@ func TestCallPATToolWithLegacyFallback_permissionDeniedDoesNotRetryLegacyAlias(t
 	}
 }
 
-func TestCallPATToolWithLegacyFallback_patErrorDoesNotRetryLegacyAlias(t *testing.T) {
+func TestCrossPlatformCoverageCallPATToolWithLegacyFallback_patErrorDoesNotRetryLegacyAlias(t *testing.T) {
 	fake := &fallbackPATErrorToolCaller{}
 	canonicalArgs := map[string]any{
 		"agentCode": "qoderwork",
@@ -2518,7 +2518,7 @@ func TestCallPATToolWithLegacyFallback_patErrorDoesNotRetryLegacyAlias(t *testin
 	}
 }
 
-func TestCallPATToolWithLegacyFallback_patContractErrorDoesNotRetryLegacyAlias(t *testing.T) {
+func TestCrossPlatformCoverageCallPATToolWithLegacyFallback_patContractErrorDoesNotRetryLegacyAlias(t *testing.T) {
 	fake := &fallbackPATContractErrorToolCaller{}
 	canonicalArgs := map[string]any{
 		"agentCode": "qoderwork",
@@ -2547,7 +2547,7 @@ func TestCallPATToolWithLegacyFallback_patContractErrorDoesNotRetryLegacyAlias(t
 	}
 }
 
-func TestChmod_batchMetadataScopeErrorFallsBackToPATGrant(t *testing.T) {
+func TestCrossPlatformCoverageChmod_batchMetadataScopeErrorFallsBackToPATGrant(t *testing.T) {
 	fake := &sequenceToolCaller{
 		responses: []string{
 			`{"success":false,"errorCode":"PAT_BATCH_SCOPE_NOT_DECLARED","data":{"scopes":["mail:send"]}}`,
@@ -2582,14 +2582,14 @@ func TestChmod_batchMetadataScopeErrorFallsBackToPATGrant(t *testing.T) {
 	}
 }
 
-func TestIsToolNotRegisteredError_ChineseGatewayMessage(t *testing.T) {
+func TestCrossPlatformCoverageIsToolNotRegisteredError_ChineseGatewayMessage(t *testing.T) {
 	err := errors.New("pat chmod failed: business error: PARAM_ERROR - 未找到指定工具")
 	if !isToolNotRegisteredError(err) {
 		t.Fatalf("isToolNotRegisteredError(%q) = false, want true", err.Error())
 	}
 }
 
-func TestIsToolNotRegisteredError_ChineseGatewayDiagnostics(t *testing.T) {
+func TestCrossPlatformCoverageIsToolNotRegisteredError_ChineseGatewayDiagnostics(t *testing.T) {
 	err := apperrors.NewAPI("business error: success=false",
 		apperrors.WithReason("business_error"),
 		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
@@ -2602,21 +2602,21 @@ func TestIsToolNotRegisteredError_ChineseGatewayDiagnostics(t *testing.T) {
 	}
 }
 
-func TestIsPATBatchUnsupportedResultCaseInsensitive(t *testing.T) {
+func TestCrossPlatformCoverageIsPATBatchUnsupportedResultCaseInsensitive(t *testing.T) {
 	result := &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":false,"errorCode":"pat_batch_auth_unsupported"}`}}}
 	if !isPATBatchUnsupportedResult(result) {
 		t.Fatal("isPATBatchUnsupportedResult() = false, want true")
 	}
 }
 
-func TestIsPATBatchFallbackResultIncludesMetadataContractErrors(t *testing.T) {
+func TestCrossPlatformCoverageIsPATBatchFallbackResultIncludesMetadataContractErrors(t *testing.T) {
 	result := &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":false,"errorCode":"PAT_BATCH_SCOPE_NOT_DECLARED"}`}}}
 	if !isPATBatchFallbackResult(result) {
 		t.Fatal("isPATBatchFallbackResult() = false, want true")
 	}
 }
 
-func TestIsPATBatchUnsupportedErrorUsesNormalizedDiagnostics(t *testing.T) {
+func TestCrossPlatformCoverageIsPATBatchUnsupportedErrorUsesNormalizedDiagnostics(t *testing.T) {
 	err := apperrors.NewAPI("business error: success=false",
 		apperrors.WithReason("business_error"),
 		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
@@ -2628,7 +2628,7 @@ func TestIsPATBatchUnsupportedErrorUsesNormalizedDiagnostics(t *testing.T) {
 	}
 }
 
-func TestIsPATBatchFallbackErrorIncludesMetadataContractDiagnostics(t *testing.T) {
+func TestCrossPlatformCoverageIsPATBatchFallbackErrorIncludesMetadataContractDiagnostics(t *testing.T) {
 	err := apperrors.NewAPI("business error: success=false",
 		apperrors.WithReason("business_error"),
 		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
@@ -2640,7 +2640,7 @@ func TestIsPATBatchFallbackErrorIncludesMetadataContractDiagnostics(t *testing.T
 	}
 }
 
-func TestHandleToolResult_emptyResultReturnsError(t *testing.T) {
+func TestCrossPlatformCoverageHandleToolResult_emptyResultReturnsError(t *testing.T) {
 	err := handleToolResult(nil, nil, &edition.ToolResult{})
 	if err == nil {
 		t.Fatal("handleToolResult error = nil, want empty PAT authorization result error")
@@ -2650,7 +2650,7 @@ func TestHandleToolResult_emptyResultReturnsError(t *testing.T) {
 	}
 }
 
-func TestHandleToolResult_defaultSummarizesBatchPlan(t *testing.T) {
+func TestCrossPlatformCoverageHandleToolResult_defaultSummarizesBatchPlan(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().String("format", "json", "")
 	cmd := &cobra.Command{Use: "chmod"}
@@ -2697,7 +2697,7 @@ func TestHandleToolResult_defaultSummarizesBatchPlan(t *testing.T) {
 	}
 }
 
-func TestHandleToolResult_summarizesSingleScopeRevokePreviewAndResult(t *testing.T) {
+func TestCrossPlatformCoverageHandleToolResult_summarizesSingleScopeRevokePreviewAndResult(t *testing.T) {
 	plan := &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{
 		"success": true,
 		"code": "OK",
@@ -2768,14 +2768,14 @@ func TestHandleToolResult_summarizesSingleScopeRevokePreviewAndResult(t *testing
 	}
 }
 
-func TestChmodArgsRunsSelectorValidation(t *testing.T) {
+func TestCrossPlatformCoverageChmodArgsRunsSelectorValidation(t *testing.T) {
 	cmd := newChmodCommand(&sequenceToolCaller{})
 	if err := cmd.Args(cmd, nil); err == nil || !strings.Contains(err.Error(), "requires at least one positional scope") {
 		t.Fatalf("Args() error = %v, want selector validation", err)
 	}
 }
 
-func TestChmodRevokeCommandErrorBoundaries(t *testing.T) {
+func TestCrossPlatformCoverageChmodRevokeCommandErrorBoundaries(t *testing.T) {
 	toolMissing := errors.New("business error: PARAM_ERROR - 未找到指定工具")
 	tests := []struct {
 		name       string
@@ -2846,7 +2846,7 @@ func TestChmodRevokeCommandErrorBoundaries(t *testing.T) {
 	}
 }
 
-func TestChmodStrictDryRunEmitsServerFailureVerbatim(t *testing.T) {
+func TestCrossPlatformCoverageChmodStrictDryRunEmitsServerFailureVerbatim(t *testing.T) {
 	const raw = `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED","data":{"missingScope":"calendar.event:read"}}`
 	tests := []struct {
 		name     string
@@ -2884,7 +2884,7 @@ func TestChmodStrictDryRunEmitsServerFailureVerbatim(t *testing.T) {
 	}
 }
 
-func TestChmodGrantPlanCommandRejectsUnattestedResponses(t *testing.T) {
+func TestCrossPlatformCoverageChmodGrantPlanCommandRejectsUnattestedResponses(t *testing.T) {
 	tests := []struct {
 		name      string
 		args      []string
@@ -2942,7 +2942,7 @@ func TestChmodGrantPlanCommandRejectsUnattestedResponses(t *testing.T) {
 	}
 }
 
-func TestChmodPlannedGrantPropagatesSelectedScopeError(t *testing.T) {
+func TestCrossPlatformCoverageChmodPlannedGrantPropagatesSelectedScopeError(t *testing.T) {
 	caller := &sequenceToolCaller{responses: []string{`{"success":true,"data":{}}`}}
 	cmd := newChmodCommand(caller)
 	if err := cmd.Flags().Set("product", "calendar"); err != nil {
@@ -2954,7 +2954,7 @@ func TestChmodPlannedGrantPropagatesSelectedScopeError(t *testing.T) {
 	}
 }
 
-func TestPATNewModeResponseParsersFailClosedAtEveryEnvelopeBoundary(t *testing.T) {
+func TestCrossPlatformCoveragePATNewModeResponseParsersFailClosedAtEveryEnvelopeBoundary(t *testing.T) {
 	fixtures := []struct {
 		name   string
 		result *edition.ToolResult
@@ -2991,7 +2991,7 @@ func TestPATNewModeResponseParsersFailClosedAtEveryEnvelopeBoundary(t *testing.T
 	}
 }
 
-func TestPATScopeRevokeResponseParserEarlyFailures(t *testing.T) {
+func TestCrossPlatformCoveragePATScopeRevokeResponseParserEarlyFailures(t *testing.T) {
 	fixtures := []struct {
 		name   string
 		result *edition.ToolResult
@@ -3014,7 +3014,7 @@ func TestPATScopeRevokeResponseParserEarlyFailures(t *testing.T) {
 	}
 }
 
-func TestStrictPATPreviewDetectionAndEmissionBoundaries(t *testing.T) {
+func TestCrossPlatformCoverageStrictPATPreviewDetectionAndEmissionBoundaries(t *testing.T) {
 	tests := []struct {
 		name   string
 		result *edition.ToolResult
@@ -3050,7 +3050,7 @@ func TestStrictPATPreviewDetectionAndEmissionBoundaries(t *testing.T) {
 	}
 }
 
-func TestPATAuthorizationSuggestionRevokeFallbacks(t *testing.T) {
+func TestCrossPlatformCoveragePATAuthorizationSuggestionRevokeFallbacks(t *testing.T) {
 	if got := patAuthorizationSuggestion(map[string]any{"operation": "revoke"}, nil); !strings.Contains(got, "check revoke status") {
 		t.Fatalf("malformed revoke suggestion = %q", got)
 	}
@@ -3070,7 +3070,7 @@ func TestPATAuthorizationSuggestionRevokeFallbacks(t *testing.T) {
 	}
 }
 
-func TestHandleToolResult_summarizesIdempotentRevokeOutcomes(t *testing.T) {
+func TestCrossPlatformCoverageHandleToolResult_summarizesIdempotentRevokeOutcomes(t *testing.T) {
 	tests := []struct {
 		name       string
 		status     string
@@ -3118,7 +3118,7 @@ func TestHandleToolResult_summarizesIdempotentRevokeOutcomes(t *testing.T) {
 	}
 }
 
-func TestHandleToolResult_explicitJSONKeepsRawPayload(t *testing.T) {
+func TestCrossPlatformCoverageHandleToolResult_explicitJSONKeepsRawPayload(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().String("format", "json", "")
 	cmd := &cobra.Command{Use: "chmod"}
@@ -3143,7 +3143,7 @@ func TestHandleToolResult_explicitJSONKeepsRawPayload(t *testing.T) {
 	}
 }
 
-func TestHandleToolResult_verboseKeepsRawPayload(t *testing.T) {
+func TestCrossPlatformCoverageHandleToolResult_verboseKeepsRawPayload(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().Bool("verbose", false, "")
 	cmd := &cobra.Command{Use: "chmod"}
@@ -3169,7 +3169,7 @@ func TestHandleToolResult_verboseKeepsRawPayload(t *testing.T) {
 // DINGTALK_DWS_AGENTCODE value (whitespace, shell metacharacters) is
 // rejected by the regex gate in validateAgentCode before any MCP call
 // is attempted.
-func TestChmod_agentCode_env_invalid(t *testing.T) {
+func TestCrossPlatformCoverageChmod_agentCode_env_invalid(t *testing.T) {
 	t.Setenv(agentCodeEnv, "bad value with space!")
 
 	fake := &fakeToolCaller{resultOK: true}
@@ -3195,7 +3195,7 @@ func TestChmod_agentCode_env_invalid(t *testing.T) {
 // of resolveAgentCode: when both the flag and the env are set, the flag
 // wins and env is silently ignored (no warning needed because the flag is
 // the explicit, scripted intent).
-func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
+func TestCrossPlatformCoverageChmod_agentCode_flag_wins_over_env(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoder")
 
 	fake := &fakeToolCaller{resultOK: true}
@@ -3223,7 +3223,7 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 // DINGTALK_DWS_AGENTCODE is consumed as the env fallback. Legacy / draft names
 // MUST NOT be consumed as agentCode. The request is still sent so PAT-core can
 // apply its open-source default.
-func TestChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
+func TestCrossPlatformCoverageChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
 	t.Setenv(agentCodeEnvCompat, "")
 	t.Setenv("DWS_AGENTCODE", "legacyval")
@@ -3252,7 +3252,7 @@ func TestChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
 // validateAgentCode / resolveAgentCodeFromEnv unit tests
 // ---------------------------------------------------------------------------
 
-func TestValidateAgentCode(t *testing.T) {
+func TestCrossPlatformCoverageValidateAgentCode(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		in      string
@@ -3276,7 +3276,7 @@ func TestValidateAgentCode(t *testing.T) {
 	}
 }
 
-func TestResolveAgentCodeFromEnv(t *testing.T) {
+func TestCrossPlatformCoverageResolveAgentCodeFromEnv(t *testing.T) {
 	// Not parallel: mutates process env.
 
 	// DINGTALK_DWS_AGENTCODE is honoured and trimmed.

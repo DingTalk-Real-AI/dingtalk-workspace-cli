@@ -15,7 +15,7 @@ package edition
 
 import "testing"
 
-func TestClawTypeDefaultsToOSSValue(t *testing.T) {
+func TestCrossPlatformCoverageClawTypeDefaultsToOSSValue(t *testing.T) {
 	prev := Get()
 	defer Override(prev)
 
@@ -25,7 +25,7 @@ func TestClawTypeDefaultsToOSSValue(t *testing.T) {
 	}
 }
 
-func TestClawTypeUsesOverlayValue(t *testing.T) {
+func TestCrossPlatformCoverageClawTypeUsesOverlayValue(t *testing.T) {
 	prev := Get()
 	defer Override(prev)
 
@@ -35,7 +35,7 @@ func TestClawTypeUsesOverlayValue(t *testing.T) {
 	}
 }
 
-func TestOpenStaticServersIncludesCoreProducts(t *testing.T) {
+func TestCrossPlatformCoverageOpenStaticServersIncludesCoreProducts(t *testing.T) {
 	servers := openStaticServers()
 	byID := make(map[string]ServerInfo, len(servers))
 	for _, server := range servers {
@@ -55,7 +55,7 @@ func TestOpenStaticServersIncludesCoreProducts(t *testing.T) {
 	}
 }
 
-func TestOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
+func TestCrossPlatformCoverageOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
 	visible := openVisibleProducts()
 	byID := make(map[string]bool, len(visible))
 	for _, id := range visible {

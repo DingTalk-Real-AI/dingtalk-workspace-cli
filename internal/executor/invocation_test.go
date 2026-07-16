@@ -18,7 +18,7 @@ import (
 	"testing"
 )
 
-func TestInvocationSkipExecutionDuringDryRun(t *testing.T) {
+func TestCrossPlatformCoverageInvocationSkipExecutionDuringDryRun(t *testing.T) {
 	tests := []struct {
 		name       string
 		invocation Invocation
@@ -45,7 +45,7 @@ func TestInvocationSkipExecutionDuringDryRun(t *testing.T) {
 	}
 }
 
-func TestEchoRunnerHonorsReadOnlyDryRunCapability(t *testing.T) {
+func TestCrossPlatformCoverageEchoRunnerHonorsReadOnlyDryRunCapability(t *testing.T) {
 	params := map[string]any{"dryRun": true}
 	ordinary := Invocation{DryRun: true, Tool: "pat.batch_plan", Params: params}
 	result, err := (EchoRunner{}).Run(context.Background(), ordinary)

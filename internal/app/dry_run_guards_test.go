@@ -14,7 +14,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
 
-func TestToolCallerAdapterDryRunNeverInvokesRunner(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerAdapterDryRunNeverInvokesRunner(t *testing.T) {
 	runner := &countingErrorRunner{}
 	caller := newToolCallerAdapter(runner, &GlobalFlags{DryRun: true, Format: "json"})
 	result, err := caller.CallTool(context.Background(), "aitable-helper", "set_advanced_permission", map[string]any{"enabled": false})
@@ -37,7 +37,7 @@ func TestToolCallerAdapterDryRunNeverInvokesRunner(t *testing.T) {
 	}
 }
 
-func TestRuntimeRunnerGlobalDryRunStopsBeforeInjectedFallback(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRunnerGlobalDryRunStopsBeforeInjectedFallback(t *testing.T) {
 	fallback := &countingErrorRunner{}
 	runner := &runtimeRunner{globalFlags: &GlobalFlags{DryRun: true}, fallback: fallback}
 	result, err := runner.Run(context.Background(), executor.NewHelperInvocation(
@@ -57,7 +57,7 @@ func TestRuntimeRunnerGlobalDryRunStopsBeforeInjectedFallback(t *testing.T) {
 	}
 }
 
-func TestInvocationReadOnlyDryRunCapabilityIsNotSerialized(t *testing.T) {
+func TestCrossPlatformCoverageInvocationReadOnlyDryRunCapabilityIsNotSerialized(t *testing.T) {
 	invocation := executor.NewHelperInvocation("overlay.pat.pat.batch_plan", "pat", "pat.batch_plan", map[string]any{"dryRun": true})
 	invocation.DryRun = true
 	invocation.AllowReadOnlyDuringDryRun = true
@@ -86,7 +86,7 @@ func TestInvocationReadOnlyDryRunCapabilityIsNotSerialized(t *testing.T) {
 	}
 }
 
-func TestRuntimeRunnerRejectsForgedReadOnlyDryRunMarker(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRunnerRejectsForgedReadOnlyDryRunMarker(t *testing.T) {
 	tests := []struct {
 		name    string
 		product string

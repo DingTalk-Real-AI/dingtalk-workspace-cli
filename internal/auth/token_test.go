@@ -38,7 +38,7 @@ func cleanupKeychain(t *testing.T) {
 	})
 }
 
-func TestTokenSaveLoadAndDelete(t *testing.T) {
+func TestCrossPlatformCoverageTokenSaveLoadAndDelete(t *testing.T) {
 	cleanupKeychain(t)
 
 	configDir := t.TempDir()
@@ -92,7 +92,7 @@ func TestTokenSaveLoadAndDelete(t *testing.T) {
 	}
 }
 
-func TestTokenOverwrite(t *testing.T) {
+func TestCrossPlatformCoverageTokenOverwrite(t *testing.T) {
 	cleanupKeychain(t)
 
 	configDir := t.TempDir()
@@ -134,7 +134,7 @@ func TestTokenOverwrite(t *testing.T) {
 	}
 }
 
-func TestMultiProfileSaveLoadAndSwitch(t *testing.T) {
+func TestCrossPlatformCoverageMultiProfileSaveLoadAndSwitch(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -192,7 +192,7 @@ func TestMultiProfileSaveLoadAndSwitch(t *testing.T) {
 	}
 }
 
-func TestRuntimeProfileOverrideDoesNotMutateCurrent(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeProfileOverrideDoesNotMutateCurrent(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -235,7 +235,7 @@ func TestRuntimeProfileOverrideDoesNotMutateCurrent(t *testing.T) {
 	}
 }
 
-func TestDeleteProfilePreservesOtherProfiles(t *testing.T) {
+func TestCrossPlatformCoverageDeleteProfilePreservesOtherProfiles(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -267,7 +267,7 @@ func TestDeleteProfilePreservesOtherProfiles(t *testing.T) {
 	}
 }
 
-func TestUpsertProfileFromTokenOverwritesSameCorp(t *testing.T) {
+func TestCrossPlatformCoverageUpsertProfileFromTokenOverwritesSameCorp(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -306,7 +306,7 @@ func TestUpsertProfileFromTokenOverwritesSameCorp(t *testing.T) {
 	}
 }
 
-func TestUpsertProfileFromTokenPromotesCorpIDNameToCorpName(t *testing.T) {
+func TestCrossPlatformCoverageUpsertProfileFromTokenPromotesCorpIDNameToCorpName(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -339,7 +339,7 @@ func TestUpsertProfileFromTokenPromotesCorpIDNameToCorpName(t *testing.T) {
 	}
 }
 
-func TestLoadProfilesPromotesLegacyCorpIDNameToCorpName(t *testing.T) {
+func TestCrossPlatformCoverageLoadProfilesPromotesLegacyCorpIDNameToCorpName(t *testing.T) {
 	configDir := t.TempDir()
 	raw := `{
   "version": 1,
@@ -372,7 +372,7 @@ func TestLoadProfilesPromotesLegacyCorpIDNameToCorpName(t *testing.T) {
 	}
 }
 
-func TestLegacyKeychainMigrationInitializesProfile(t *testing.T) {
+func TestCrossPlatformCoverageLegacyKeychainMigrationInitializesProfile(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -399,7 +399,7 @@ func TestLegacyKeychainMigrationInitializesProfile(t *testing.T) {
 	}
 }
 
-func TestTokenDataExistsKeychain(t *testing.T) {
+func TestCrossPlatformCoverageTokenDataExistsKeychain(t *testing.T) {
 	cleanupKeychain(t)
 
 	configDir := t.TempDir()
@@ -439,7 +439,7 @@ func testToken(accessToken, corpID, corpName string) *TokenData {
 	}
 }
 
-func TestTokenValidityChecks(t *testing.T) {
+func TestCrossPlatformCoverageTokenValidityChecks(t *testing.T) {
 	t.Parallel()
 
 	valid := &TokenData{
@@ -472,7 +472,7 @@ func TestTokenValidityChecks(t *testing.T) {
 	}
 }
 
-func TestLoadValidAccessTokenReadOnlyUsesSelectedProfileWithoutProfileMutation(t *testing.T) {
+func TestCrossPlatformCoverageLoadValidAccessTokenReadOnlyUsesSelectedProfileWithoutProfileMutation(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -501,7 +501,7 @@ func TestLoadValidAccessTokenReadOnlyUsesSelectedProfileWithoutProfileMutation(t
 	}
 }
 
-func TestLoadTokenDataForProfileReadOnlyDoesNotRepairMalformedProfiles(t *testing.T) {
+func TestCrossPlatformCoverageLoadTokenDataForProfileReadOnlyDoesNotRepairMalformedProfiles(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 	profilesPath := ProfilesPath(configDir)
@@ -529,7 +529,7 @@ func TestLoadTokenDataForProfileReadOnlyDoesNotRepairMalformedProfiles(t *testin
 	}
 }
 
-func TestValidAccessTokenReadOnly(t *testing.T) {
+func TestCrossPlatformCoverageValidAccessTokenReadOnly(t *testing.T) {
 	tests := []struct {
 		name    string
 		data    *TokenData
@@ -560,7 +560,7 @@ func TestValidAccessTokenReadOnly(t *testing.T) {
 	}
 }
 
-func TestLoadTokenDataForProfileReadOnlyEditionHookContract(t *testing.T) {
+func TestCrossPlatformCoverageLoadTokenDataForProfileReadOnlyEditionHookContract(t *testing.T) {
 	previous := edition.Get()
 	t.Cleanup(func() { edition.Override(previous) })
 
@@ -624,7 +624,7 @@ func TestLoadTokenDataForProfileReadOnlyEditionHookContract(t *testing.T) {
 	}
 }
 
-func TestLoadProfilesReadOnlyMissingAndUnreadable(t *testing.T) {
+func TestCrossPlatformCoverageLoadProfilesReadOnlyMissingAndUnreadable(t *testing.T) {
 	missingDir := t.TempDir()
 	profiles, err := loadProfilesReadOnly(missingDir)
 	if err != nil {
@@ -643,7 +643,7 @@ func TestLoadProfilesReadOnlyMissingAndUnreadable(t *testing.T) {
 	}
 }
 
-func TestLoadTokenDataFromKeychainReadOnlySelectorFailures(t *testing.T) {
+func TestCrossPlatformCoverageLoadTokenDataFromKeychainReadOnlySelectorFailures(t *testing.T) {
 	cleanupKeychain(t)
 	profiles := &ProfilesConfig{Profiles: []Profile{{Name: "broken", CorpID: ""}}}
 
@@ -655,7 +655,7 @@ func TestLoadTokenDataFromKeychainReadOnlySelectorFailures(t *testing.T) {
 	}
 }
 
-func TestLoadTokenDataFromKeychainReadOnlyResolutionOrder(t *testing.T) {
+func TestCrossPlatformCoverageLoadTokenDataFromKeychainReadOnlyResolutionOrder(t *testing.T) {
 	t.Run("current missing then primary succeeds", func(t *testing.T) {
 		cleanupKeychain(t)
 		profiles := &ProfilesConfig{
@@ -732,7 +732,7 @@ func TestLoadTokenDataFromKeychainReadOnlyResolutionOrder(t *testing.T) {
 	})
 }
 
-func TestReadOnlyTokenLoadErrorClassification(t *testing.T) {
+func TestCrossPlatformCoverageReadOnlyTokenLoadErrorClassification(t *testing.T) {
 	if err := readOnlyTokenLoadError(ErrTokenDataNotFound); err == nil || !strings.Contains(err.Error(), "不会迁移旧凭证") {
 		t.Fatalf("readOnlyTokenLoadError(not found) = %v", err)
 	}

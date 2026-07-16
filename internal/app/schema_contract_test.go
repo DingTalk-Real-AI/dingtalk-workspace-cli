@@ -45,7 +45,7 @@ func fullSchemaSnapshotForTest(t testing.TB) cli.SchemaCatalogSnapshot {
 	return fullSchemaSnapshot
 }
 
-func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
+func TestCrossPlatformCoverageEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 	root := NewRootCommand()
 	effective, err := cli.BuildEffectiveCommandRegistry(root)
 	if err != nil {
@@ -112,7 +112,7 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 	}
 }
 
-func TestGeneratedSchemaContractMapsToExecutableTree(t *testing.T) {
+func TestCrossPlatformCoverageGeneratedSchemaContractMapsToExecutableTree(t *testing.T) {
 	root := NewRootCommand()
 	snapshot := fullSchemaSnapshotForTest(t)
 	bindings, err := cli.EmbeddedSchemaParameterBindings()
@@ -169,7 +169,7 @@ func TestGeneratedSchemaContractMapsToExecutableTree(t *testing.T) {
 	}
 }
 
-func TestRuntimeSchemaParameterMetadataMapsToGeneratedCatalog(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeSchemaParameterMetadataMapsToGeneratedCatalog(t *testing.T) {
 	snapshot := fullSchemaSnapshotForTest(t)
 
 	for canonicalPath, metadata := range cli.RuntimeSchemaParameterMetadataDefinitions() {
@@ -400,7 +400,7 @@ func schemaContractPayloadForBoundCanonicals(t *testing.T, root *cobra.Command, 
 	return payload
 }
 
-func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
+func TestCrossPlatformCoverageChatSchemaSeparatesSendAndReply(t *testing.T) {
 	snapshot := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(),
 		"chat.send_personal_message",
 		"chat.reply_personal_message",
@@ -423,7 +423,7 @@ func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 	}
 }
 
-func TestCalendarAttendeeDeleteSchemaMatchesRuntimeGate(t *testing.T) {
+func TestCrossPlatformCoverageCalendarAttendeeDeleteSchemaMatchesRuntimeGate(t *testing.T) {
 	root := NewRootCommand()
 	snapshot := schemaContractPayloadForBoundCanonicals(t, root, "calendar.remove_calendar_participant")
 	tool := snapshot.Tools["calendar.remove_calendar_participant"]
@@ -436,7 +436,7 @@ func TestCalendarAttendeeDeleteSchemaMatchesRuntimeGate(t *testing.T) {
 	}
 }
 
-func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
+func TestCrossPlatformCoveragePromptingWritesRequireUserConfirmation(t *testing.T) {
 	wantEffects := map[string]string{
 		"attendance.class_create":  "write",
 		"attendance.class_update":  "write",
@@ -494,7 +494,7 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 	}
 }
 
-func TestNewMainCommandInterfaceConversionsReachFinalSchema(t *testing.T) {
+func TestCrossPlatformCoverageNewMainCommandInterfaceConversionsReachFinalSchema(t *testing.T) {
 	type conversion struct {
 		canonical     string
 		flag          string
@@ -529,7 +529,7 @@ func TestNewMainCommandInterfaceConversionsReachFinalSchema(t *testing.T) {
 	}
 }
 
-func TestDefaultedPaginationSchemaFlagsAreOptional(t *testing.T) {
+func TestCrossPlatformCoverageDefaultedPaginationSchemaFlagsAreOptional(t *testing.T) {
 	wants := map[string][]string{
 		"chat.search_messages_by_time_range": {"limit"},
 		"oa.list_user_visible_process":       {"cursor", "limit"},
@@ -558,7 +558,7 @@ func TestDefaultedPaginationSchemaFlagsAreOptional(t *testing.T) {
 	}
 }
 
-func TestPATSchemaKeepsCLIContract(t *testing.T) {
+func TestCrossPlatformCoveragePATSchemaKeepsCLIContract(t *testing.T) {
 	root := NewRootCommand()
 	payload := schemaContractPayloadForBoundCanonicals(t, root, "pat.batch_grant")
 	tool := payload.Tools["pat.batch_grant"]

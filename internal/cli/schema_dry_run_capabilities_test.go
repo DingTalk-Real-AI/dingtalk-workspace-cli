@@ -5,7 +5,7 @@ package cli
 
 import "testing"
 
-func TestReviewedPATDryRunCapabilityIsRemotePlan(t *testing.T) {
+func TestCrossPlatformCoverageReviewedPATDryRunCapabilityIsRemotePlan(t *testing.T) {
 	capabilities, err := ReviewedDryRunCapabilities()
 	if err != nil {
 		t.Fatalf("ReviewedDryRunCapabilities() error = %v", err)
@@ -20,7 +20,7 @@ func TestReviewedPATDryRunCapabilityIsRemotePlan(t *testing.T) {
 	}
 }
 
-func TestPATRemotePlanExamplesHaveReviewedStatefulPreflightDisposition(t *testing.T) {
+func TestCrossPlatformCoveragePATRemotePlanExamplesHaveReviewedStatefulPreflightDisposition(t *testing.T) {
 	hints, err := loadAgentHintsFromSelection(embeddedSelectionFS, embeddedSelectionGlob)
 	if err != nil {
 		t.Fatalf("loadAgentHintsFromSelection() error = %v", err)
