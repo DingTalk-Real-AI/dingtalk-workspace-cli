@@ -30,6 +30,8 @@ metadata:
 
 选择命令、读取参数映射/组合约束与安全语义时，优先渐进查询当前二进制内嵌的 leaf Schema；真正组装参数前，用 `--help` 确认 Cobra 当前接受的 flags：
 
+本节适用于进入 Runtime Schema 的基础/原子命令。`+` shortcut 是明确例外，使用下方独立 shortcut catalog 契约。
+
 ```bash
 dws schema                                      # 产品概览
 dws schema calendar                             # 产品工具列表
@@ -42,10 +44,18 @@ dws schema "calendar event create" --compact    # 完整 leaf 契约
 | 要确认的信息 | 事实源 |
 |-------------|--------|
 | 命令是否存在、Cobra 接受哪些 flags | `dws <cli_path> --help` |
-| Agent 选命令、参数映射/约束、risk/confirmation | `dws schema "<cli_path>"` |
+| Agent 选命令、参数映射/约束、risk/confirmation（原子/基础命令） | `dws schema "<cli_path>"` |
+| shortcut 的参数、约束、risk/confirmation、示例 | `dws shortcut list --service <service> --format json` |
 | 钉钉中的文档、日程、消息等业务数据 | 真正执行对应的 `read` / `search` / `list` 命令 |
 
 Schema 与 Help 冲突属于契约漂移：参数只用 Help 接受的 flags，并报告漂移；安全语义冲突时采用更保守的确认方式。Schema 只描述命令契约，不能替代业务查询。
+
+## Shortcut 可用性
+- `shortcut` 是对常用操作的高层封装。先按产品 skill 的意图表、脚本和 recipe 路由：存在精确覆盖场景的专用脚本/recipe 时按其执行；否则可见 shortcut 优先于手写等价原子流程。
+- shortcut 有独立 catalog，按设计不进入 Runtime Schema。用 `dws shortcut list --service <service> --format json` 读取 flags、required/enum、跨参数 constraints、risk/confirmation 和 examples；不要对 `+` 路径调用 `dws schema`。
+- 真正组装参数前用叶子帮助 `dws <service> +<verb> --help` 核对 Cobra 接受的 flags；父级 `dws <service> --help` 只能用于发现子命令。
+- shortcut catalog 中 `confirmation=user_required` 时先获得用户确认，确认后才加 `--yes`；`not_required` 不额外确认。
+- 如果 shortcut 不在 help / list 中，改用产品参考里的原子命令、脚本或标准流程；不要猜测未展示的 `+` 命令。
 
 ## 多组织 / --profile（关键规则）
 dws 可同时登录多个钉钉组织，一个 profile = 一个已登录组织（corp）。当前 profile 决定本次命令用哪个组织的身份（corpId / userId 自动注入）。

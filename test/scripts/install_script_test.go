@@ -577,8 +577,8 @@ func TestBuildEntrypointsUseStripLdflags(t *testing.T) {
 			want:    `go build -ldflags="-s -w" -o $tmpBin "$Root/cmd"`,
 		},
 		{
-			relPath: filepath.Join("..", "..", "scripts", "policy", "check-command-surface.sh"),
-			want:    `go build -ldflags="-s -w" -o "$BIN_PATH" ./cmd`,
+			relPath: filepath.Join("..", "..", "scripts", "dev", "build.sh"),
+			want:    `-ldflags="-s -w"`,
 		},
 	}
 
@@ -595,6 +595,32 @@ func TestBuildEntrypointsUseStripLdflags(t *testing.T) {
 
 		if !strings.Contains(string(data), tc.want) {
 			t.Fatalf("%s missing stripped ldflags build invocation %q", scriptPath, tc.want)
+		}
+	}
+}
+
+func TestPolicyBinaryChecksReuseBuiltDWS(t *testing.T) {
+	t.Parallel()
+
+	for _, relPath := range []string{
+		filepath.Join("..", "..", "scripts", "policy", "check-command-surface.sh"),
+		filepath.Join("..", "..", "scripts", "policy", "check-schema-binary.sh"),
+	} {
+		scriptPath, err := filepath.Abs(relPath)
+		if err != nil {
+			t.Fatalf("Abs(%s) error = %v", relPath, err)
+		}
+		data, err := os.ReadFile(scriptPath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+		}
+		text := string(data)
+		if !strings.Contains(text, `BIN="${DWS_BIN:-$ROOT/dws}"`) {
+			t.Fatalf("%s does not reuse DWS_BIN", scriptPath)
+		}
+		if strings.Contains(text, `go build -o "$tmp/dws" ./cmd`) ||
+			strings.Contains(text, `go build -ldflags="-s -w"`) {
+			t.Fatalf("%s unexpectedly rebuilds dws", scriptPath)
 		}
 	}
 }

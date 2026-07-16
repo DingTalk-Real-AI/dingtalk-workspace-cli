@@ -23,6 +23,44 @@ metadata:
 
 > 命令参考：[aitable.md](references/aitable.md)；复杂命令按需加载 `references/aitable/*.md`；剧本：[06-data-analytics.md](references/06-data-analytics.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service aitable --format json` 读取参数、约束、风险和示例，并以 `dws aitable <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws aitable +base-get` | read | 获取指定 Base 的目录信息（tables / dashboards summary） |
+| `dws aitable +base-list` | read | 获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页） |
+| `dws aitable +base-search` | read | 按名称关键词搜索 AI 表格 Base |
+| `dws aitable +chart-get` | read | 获取指定 chart 的详细信息 |
+| `dws aitable +chart-widgets-example` | read | 获取所有图表类型的 widget config 示例 |
+| `dws aitable +dashboard-config-example` | read | 获取 dashboard config 的结构示例 |
+| `dws aitable +dashboard-get` | read | 获取指定 dashboard 的详细信息（含 charts summary） |
+| `dws aitable +field-get` | read | 批量获取字段详情（含类型相关完整配置） |
+| `dws aitable +find-record` | read | 在指定多维表里按关键词查记录（只读） |
+| `dws aitable +form-field-list` | read | 列出表单视图当前可见的字段及其配置 |
+| `dws aitable +form-list` | read | 列出指定数据表下的所有表单视图 |
+| `dws aitable +form-share-get` | read | 读取视图当前的分享表单配置 |
+| `dws aitable +list-tables` | read | 列出某个多维表(base)里的所有数据表（只读，投影 tableId/tableName） |
+| `dws aitable +record-history-list` | read | 按 recordId 查询单条记录的变更历史 |
+| `dws aitable +record-query` | read | 查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页） |
+| `dws aitable +record-query-empty` | read | 扫描并过滤出完全没填用户字段的空行 |
+| `dws aitable +record-share-links` | read | 批量（可 >20 条）获取多维表记录分享链接：去重+分片+合并 |
+| `dws aitable +record-share-url` | read | 按 recordId 批量获取记录分享链接，单次最多 20 条 |
+| `dws aitable +resolve-base` | read | 按名称搜索多维表 Base 并解析出唯一 baseId（只读） |
+| `dws aitable +resolve-table` | read | 在某个多维表 Base 内按名称解析出唯一的数据表 tableId（只读） |
+| `dws aitable +role-list` | read | 列出指定 Base 下的全部角色 |
+| `dws aitable +section-list-empty` | read | 列出指定 Base 下所有没有子节点的空文件夹 |
+| `dws aitable +section-list-nodes` | read | 列出指定 Base 当前版本下的全部 nsheet 节点 |
+| `dws aitable +table-get` | read | 批量获取指定数据表的表级信息、字段目录与视图目录 |
+| `dws aitable +template-search` | read | 按名称关键词搜索 AI 表格模板 |
+| `dws aitable +view-get` | read | 获取视图完整信息（列顺序、筛选、排序、分组等） |
+| `dws aitable +view-get-frozen-cols` | read | 获取视图当前冻结的左侧列数 |
+| `dws aitable +view-get-lock` | read | 获取视图锁定状态 |
+| `dws aitable +view-get-row-height` | read | 获取视图单元格行高（像素） |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 意图表
 
 | 用户说 | 命令 |

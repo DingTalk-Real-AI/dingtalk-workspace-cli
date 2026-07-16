@@ -29017,6 +29017,288 @@
         "用户要移动字段/调整列顺序时必须走本命令"
       ]
     },
+    "aitable workflow create": {
+      "agent_summary": "创建并发布 AI 表格自动化工作流。",
+      "agent_summary_source": "dws-agent-selection/aitable",
+      "availability": "available",
+      "avoid_when": [
+        "已有工作流要修改时用 workflow update；仅启停已有工作流用 enable/disable；请求结果不确定时先 list 核对，避免非幂等重复创建"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws aitable workflow create --base-id \u003cBASE_ID\u003e --dsl @workflow.json --locale zh-CN"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "创建并发布 AI 表格自动化工作流。",
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。",
+          "candidates": [
+            {
+              "value": "创建并发布 AI 表格自动化工作流。",
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "已有工作流要修改时用 workflow update；仅启停已有工作流用 enable/disable；请求结果不确定时先 list 核对，避免非幂等重复创建"
+          ],
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。",
+          "candidates": [
+            {
+              "value": [
+                "已有工作流要修改时用 workflow update；仅启停已有工作流用 enable/disable；请求结果不确定时先 list 核对，避免非幂等重复创建"
+              ],
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws aitable workflow create --base-id \u003cBASE_ID\u003e --dsl @workflow.json --locale zh-CN"
+          ],
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。",
+          "candidates": [
+            {
+              "value": [
+                "dws aitable workflow create --base-id \u003cBASE_ID\u003e --dsl @workflow.json --locale zh-CN"
+              ],
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求在已知 Base 中创建自动化，且已准备完整 workflow-dsl/v1 定义时"
+          ],
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求在已知 Base 中创建自动化，且已准备完整 workflow-dsl/v1 定义时"
+              ],
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "cobra-help:dws aitable workflow create --help",
+        "internal/cli/schema_command_registry.json#aitable.workflow_create",
+        "internal/cli/schema_hints/metadata/aitable.json",
+        "internal/cli/schema_hints/selection/aitable.json",
+        "skills/mono/references/products/aitable/aitable-workflow.md"
+      ],
+      "use_when": [
+        "用户明确要求在已知 Base 中创建自动化，且已准备完整 workflow-dsl/v1 定义时"
+      ]
+    },
     "aitable workflow disable": {
       "agent_summary": "禁用工作流（高危，需确认；status 变 STOP）。",
       "agent_summary_source": "dws-agent-selection/aitable",
@@ -30071,6 +30353,288 @@
       ],
       "use_when": [
         "查看有哪些工作流及 status/flowId 时"
+      ]
+    },
+    "aitable workflow update": {
+      "agent_summary": "用完整 DSL 更新并发布已有 AI 表格自动化工作流。",
+      "agent_summary_source": "dws-agent-selection/aitable",
+      "availability": "available",
+      "avoid_when": [
+        "新建工作流用 create；只改变运行状态用 enable/disable；不要把局部 patch 或 workflow get 返回的 flowSchema 直接当作 DSL"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws aitable workflow update --base-id \u003cBASE_ID\u003e --workflow-id \u003cFLOW_ID\u003e --dsl @workflow.json --locale zh-CN"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "用完整 DSL 更新并发布已有 AI 表格自动化工作流。",
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。",
+          "candidates": [
+            {
+              "value": "用完整 DSL 更新并发布已有 AI 表格自动化工作流。",
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "新建工作流用 create；只改变运行状态用 enable/disable；不要把局部 patch 或 workflow get 返回的 flowSchema 直接当作 DSL"
+          ],
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。",
+          "candidates": [
+            {
+              "value": [
+                "新建工作流用 create；只改变运行状态用 enable/disable；不要把局部 patch 或 workflow get 返回的 flowSchema 直接当作 DSL"
+              ],
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws aitable workflow update --base-id \u003cBASE_ID\u003e --workflow-id \u003cFLOW_ID\u003e --dsl @workflow.json --locale zh-CN"
+          ],
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。",
+          "candidates": [
+            {
+              "value": [
+                "dws aitable workflow update --base-id \u003cBASE_ID\u003e --workflow-id \u003cFLOW_ID\u003e --dsl @workflow.json --locale zh-CN"
+              ],
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求修改已知工作流，且已先留底当前详情并准备完整 workflow-dsl/v1 目标定义时"
+          ],
+          "source": "internal/cli/schema_hints/selection/aitable.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求修改已知工作流，且已先留底当前详情并准备完整 workflow-dsl/v1 目标定义时"
+              ],
+              "source": "internal/cli/schema_hints/selection/aitable.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "cobra-help:dws aitable workflow update --help",
+        "internal/cli/schema_command_registry.json#aitable.workflow_update",
+        "internal/cli/schema_hints/metadata/aitable.json",
+        "internal/cli/schema_hints/selection/aitable.json",
+        "skills/mono/references/products/aitable/aitable-workflow.md"
+      ],
+      "use_when": [
+        "用户明确要求修改已知工作流，且已先留底当前详情并准备完整 workflow-dsl/v1 目标定义时"
       ]
     }
   }

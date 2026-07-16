@@ -1367,9 +1367,10 @@ func newChatCommand() *cobra.Command {
 			timeVal := mustGetFlag(cmd, "time")
 			if groupID != "" {
 				toolArgs := map[string]any{
-					"openconversation_id": groupID,
-					"time":                timeVal,
-					"forward":             forward,
+					"openCid": groupID,
+					"cid":     groupID,
+					"time":    timeVal,
+					"forward": forward,
 				}
 				if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 					toolArgs["limit"] = v
@@ -1495,14 +1496,13 @@ func newChatCommand() *cobra.Command {
 				openDingTalkID = userID
 				userID = ""
 			}
-			// 数字 userId 尝试 lookup 转换为 openDingTalkId，让所有消息类型（文本/媒体）都走 openDingTalkId 路径
-			// lookup 失败时降级保留 userID，由下游用 receiverUserId 发送
+			// 数字 userId 尝试 lookup 转换为 openDingTalkId，让所有消息类型（文本/媒体）都走 openDingTalkId 路径。
+			// 真实后端的 send_personal_message 单聊路径稳定接受 receiverOpenDingTalkId；
+			// userId/uid 直传会被服务端判定为空，因此解析失败时直接返回明确错误。
 			if userID != "" {
 				resolved, err := resolveOpenDingTalkID(cmd.Context(), userID)
 				if err != nil {
-					if commandBoolFlag(cmd, "debug") || commandBoolFlag(cmd, "verbose") {
-						fmt.Fprintf(os.Stderr, "[debug] resolveOpenDingTalkID(%q) failed: %v, falling back to receiverUserId\n", userID, err)
-					}
+					return fmt.Errorf("cannot resolve --user %q to openDingTalkId: %w; pass --open-dingtalk-id instead", userID, err)
 				} else {
 					if commandBoolFlag(cmd, "debug") || commandBoolFlag(cmd, "verbose") {
 						fmt.Fprintf(os.Stderr, "[debug] resolved userID=%q to openDingTalkId=%q\n", userID, resolved)
@@ -1606,7 +1606,7 @@ func newChatCommand() *cobra.Command {
 				} else if openDingTalkID != "" {
 					params["receiverOpenDingTalkId"] = openDingTalkID
 				} else if userID != "" {
-					params["receiverUserId"] = userID
+					params["receiverUid"] = userID
 				} else {
 					return fmt.Errorf("--group, --user or --open-dingtalk-id is required for media messages")
 				}
@@ -1662,10 +1662,10 @@ func newChatCommand() *cobra.Command {
 			if userID != "" {
 				directContentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
 				directMsgParams := map[string]any{
-					"receiverUserId": userID,
-					"msgType":        "markdown",
-					"content":        string(directContentJSON),
-					"clawType":       clawType,
+					"receiverUid": userID,
+					"msgType":     "markdown",
+					"content":     string(directContentJSON),
+					"clawType":    clawType,
 				}
 				if msgUuid != "" {
 					directMsgParams["uuid"] = msgUuid
@@ -4431,8 +4431,8 @@ status 可选值:
   AuditIgnore  — 忽略（服务端拒绝，不可用）
   AuditRefuse  — 拒绝（服务端拒绝，不可用）
   AuditBlock   — 拒绝且不再接受该用户的申请（服务端拒绝，不可用）`,
-		Example: `  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditApprove
-  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditDelete --description "不符合入群条件"
+		Example: `  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <userId> --inviter <userId> --status AuditApprove
+  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <userId> --inviter <userId> --status AuditDelete --description "不符合入群条件"
   # 查询入群验证记录: dws chat group list-join-validations`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "group", "record-id", "applicant", "inviter", "status"); err != nil {
@@ -4443,11 +4443,11 @@ status 可选值:
 				return fmt.Errorf("--record-id must be a valid integer: %w", err)
 			}
 			toolArgs := map[string]any{
-				"openConversationId":      mustGetFlag(cmd, "group"),
-				"applyRecordId":           recordID,
-				"applicantOpenDingTalkId": mustGetFlag(cmd, "applicant"),
-				"inviterOpenDingTalkId":   mustGetFlag(cmd, "inviter"),
-				"status":                  mustGetFlag(cmd, "status"),
+				"openConversationId": mustGetFlag(cmd, "group"),
+				"applyRecordId":      recordID,
+				"applicantUid":       mustGetFlag(cmd, "applicant"),
+				"inviterUid":         mustGetFlag(cmd, "inviter"),
+				"status":             mustGetFlag(cmd, "status"),
 			}
 			if v, _ := cmd.Flags().GetString("description"); v != "" {
 				toolArgs["auditDescription"] = v
@@ -4461,9 +4461,9 @@ status 可选值:
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("record-id")
 	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作，真机仅 AuditApprove/AuditDelete 可用；AuditIgnore/AuditRefuse/AuditBlock 服务端拒绝 (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("status")
-	chatGroupAuditJoinValidationCmd.Flags().String("applicant", "", "申请人 openDingTalkId (必填)")
+	chatGroupAuditJoinValidationCmd.Flags().String("applicant", "", "申请人 userId (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("applicant")
-	chatGroupAuditJoinValidationCmd.Flags().String("inviter", "", "邀请人 openDingTalkId (必填)")
+	chatGroupAuditJoinValidationCmd.Flags().String("inviter", "", "邀请人 userId (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("inviter")
 	chatGroupAuditJoinValidationCmd.Flags().String("description", "", "审批说明（可选）")
 

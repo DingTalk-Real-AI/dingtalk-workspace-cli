@@ -1,0 +1,1476 @@
+{
+  "generated_at": "2026-07-15T16:58:39.143193",
+  "count": 210,
+  "results": [
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+base-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+base-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+base-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+chart-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+chart-widgets-example",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+dashboard-config-example",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+dashboard-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+field-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+find-record",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+form-field-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+form-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+form-share-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+list-tables",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+record-history-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+record-query",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+record-query-empty",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+record-share-links",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+record-share-url",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+resolve-base",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+resolve-table",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+role-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+section-list-empty",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+section-list-nodes",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+table-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+template-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+view-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+view-get-frozen-cols",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+view-get-lock",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "aitable",
+      "command": "+view-get-row-height",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+check-record",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+check-result",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-adjustment-rule",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-approve-template",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-checkin-record",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-leave-records",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-overtime-rule",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-schedule",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-self-setting",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+get-summary",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+list-approve",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+list-leave-types",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+my-attendance",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+query-report-data",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+search-adjustment-rule",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+search-class",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+search-group",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+search-overtime-rule",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "attendance",
+      "command": "+this-month",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+agenda",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+attendee-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "calendar",
+      "command": "+book",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+book-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+book-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "calendar",
+      "command": "+cancel-event",
+      "risk": "high-risk-write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+conflicts",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+free",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+free-slots",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+freebusy",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "calendar",
+      "command": "+invite",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+my-free",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+next-event",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "calendar",
+      "command": "+reschedule",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+room-groups",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+room-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+suggest-time",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+today",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+tomorrow",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "calendar",
+      "command": "+week",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+at-me",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+bot-find",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+bot-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+broadcast",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+category-create",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+category-delete",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+category-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+category-rename",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-bots",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-dismiss",
+      "risk": "high-risk-write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-invite-url",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-list-all",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-list-join-requests",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-list-mine",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-mute",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-role-add",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-role-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-role-query-user",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-role-set-user",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-role-update",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+chat-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-set-admin",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-set-history",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-update-alias",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+chat-update-nick",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+conversation-clear-all-red-point",
+      "risk": "high-risk-write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+conversation-info",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+conversation-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+conversation-list-top",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+dm",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+group-members",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+messages-list-direct",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+messages-list-pin",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+messages-list-unread-conversations",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+messages-mget",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+messages-query-send-status",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+messages-read-status",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+messages-send-by-webhook",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+messages-update-card",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+my-groups",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "chat",
+      "command": "+send-to-group",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "chat",
+      "command": "+unread-chats",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+by-mobile",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+dept-members",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+list-dept-members",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+list-followings",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+list-role-members",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+list-roles",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+list-sub-depts",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+lookup",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+me",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+org",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+resolve-dept",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+search-mobile",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+search-user",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "contact",
+      "command": "+team",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+create",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+delete",
+      "risk": "high-risk-write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+disable",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+enable",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+event-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+member-add",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+member-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+member-remove",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+permission-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+robot-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+update",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+version-check-approval",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+version-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+version-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+version-status",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "devapp",
+      "command": "+webapp-config",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "devapp",
+      "command": "+webapp-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "ding",
+      "command": "+list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "ding",
+      "command": "+recall-personal",
+      "risk": "high-risk-write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "ding",
+      "command": "+receiver-status",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "ding",
+      "command": "+send-personal",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+comment-create",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+comment-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+comment-reply",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+copy",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+doc-append",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+export-get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+export-submit",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+find-doc",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+move",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+share-doc",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+template-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+template-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "doc",
+      "command": "+version-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+version-revert",
+      "risk": "high-risk-write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "doc",
+      "command": "+version-save",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "drive",
+      "command": "+copy",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "drive",
+      "command": "+find-file",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "drive",
+      "command": "+info",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "drive",
+      "command": "+move",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "drive",
+      "command": "+recent",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "drive",
+      "command": "+search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "drive",
+      "command": "+search-docs",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+contact-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+find-mail-user",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+folder-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+recent-mail",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+search-mail",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+tag-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+template-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+thread-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+unread-mail",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "mail",
+      "command": "+user-search",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "minutes",
+      "command": "+detail",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "minutes",
+      "command": "+list-all",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "minutes",
+      "command": "+list-mine",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "minutes",
+      "command": "+list-shared",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "minutes",
+      "command": "+record-start",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "minutes",
+      "command": "+replace-batch",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "oa",
+      "command": "+list-cc",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "oa",
+      "command": "+list-executed",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "oa",
+      "command": "+list-forms",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "oa",
+      "command": "+list-pending",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "oa",
+      "command": "+list-submitted",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "oa",
+      "command": "+my-initiated",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "oa",
+      "command": "+search-forms",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "report",
+      "command": "+inbox-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "report",
+      "command": "+outbox-list",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "sheet",
+      "command": "+list-sheets",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "sheet",
+      "command": "+read",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "todo",
+      "command": "+assign",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "todo",
+      "command": "+assign-multi",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "todo",
+      "command": "+created-todos",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "todo",
+      "command": "+get",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "todo",
+      "command": "+get-my-tasks",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "todo",
+      "command": "+list-attachment",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "todo",
+      "command": "+list-comment",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "todo",
+      "command": "+list-sub",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "todo",
+      "command": "+overdue",
+      "risk": "read",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "todo",
+      "command": "+remind",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "write",
+      "service": "todo",
+      "command": "+todo-done",
+      "risk": "write",
+      "status": "real-ok"
+    },
+    {
+      "suite": "read",
+      "service": "wiki",
+      "command": "+space-search",
+      "risk": "read",
+      "status": "real-ok"
+    }
+  ]
+}

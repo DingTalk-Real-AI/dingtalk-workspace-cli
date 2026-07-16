@@ -466,6 +466,10 @@
           "cli_path": "aitable view update visible-fields"
         },
         {
+          "canonical_path": "aitable.workflow_create",
+          "cli_path": "aitable workflow create"
+        },
+        {
           "canonical_path": "aitable.workflow_disable",
           "cli_path": "aitable workflow disable"
         },
@@ -480,6 +484,10 @@
         {
           "canonical_path": "aitable.workflow_list",
           "cli_path": "aitable workflow list"
+        },
+        {
+          "canonical_path": "aitable.workflow_update",
+          "cli_path": "aitable workflow update"
         }
       ]
     },
@@ -2111,6 +2119,14 @@
           "cli_path": "sheet info"
         },
         {
+          "canonical_path": "sheet.import",
+          "cli_path": "sheet import create"
+        },
+        {
+          "canonical_path": "sheet.import_get",
+          "cli_path": "sheet import get"
+        },
+        {
           "canonical_path": "sheet.insert_dimension",
           "cli_path": "sheet insert-dimension"
         },
@@ -2276,6 +2292,10 @@
         {
           "canonical_path": "todo.add_todo_attachment",
           "cli_path": "todo task add-attachment"
+        },
+        {
+          "canonical_path": "todo.list_todo_attachment",
+          "cli_path": "todo task list-attachment"
         },
         {
           "canonical_path": "todo.add_task_executors",

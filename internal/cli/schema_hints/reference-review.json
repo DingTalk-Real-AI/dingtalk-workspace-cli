@@ -825,10 +825,6 @@
       "status": "stale",
       "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
     },
-    "todo task list-attachment": {
-      "status": "stale",
-      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-    },
     "todo task list-sub": {
       "status": "stale",
       "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"

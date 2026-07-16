@@ -23,6 +23,29 @@ metadata:
 
 > 命令参考：[contact.md](references/contact.md)；剧本：[08-directory.md](references/08-directory.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service contact --format json` 读取参数、约束、风险和示例，并以 `dws contact <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws contact +by-mobile` | read | 按手机号查询某人的完整资料（自动解析 userId 后取详情） |
+| `dws contact +dept-members` | read | 按部门名列出部门成员（自动解析 deptId） |
+| `dws contact +list-dept-members` | read | 查看部门成员（仅本部门，不含下级） |
+| `dws contact +list-followings` | read | 获取当前用户的特别关注列表 |
+| `dws contact +list-role-members` | read | 查询角色下的成员列表 |
+| `dws contact +list-roles` | read | 获取企业所有角色（标签）列表 |
+| `dws contact +list-sub-depts` | read | 查看指定部门的子部门 |
+| `dws contact +lookup` | read | 按姓名查询某人的完整资料（自动解析 userId 后取详情） |
+| `dws contact +me` | read | 查看我自己的通讯录资料（姓名/userId/手机/部门/组织，干净投影） |
+| `dws contact +org` | read | 按姓名查某人所在部门的详情（自动解析 userId 与 deptId） |
+| `dws contact +resolve-dept` | read | 按名称搜索部门并解析出唯一 deptId（只读） |
+| `dws contact +search-mobile` | read | 按手机号搜索通讯录用户 |
+| `dws contact +search-user` | read | 按关键词搜索通讯录用户 |
+| `dws contact +team` | read | 按姓名列出某人所在部门的成员（自动解析 userId 与 deptId） |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 意图表
 
 | 用户说 | 命令 |

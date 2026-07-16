@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "source_hash": "sha256:024b37942df489fb1b6e5a7768a5da50316c402dfe2fa8d0b40dc5a03d0aeddc",
-  "surface_hash": "sha256:e858be68701d256818eccd085a6f7f97655835b9c7cbbce6275ed930c2436dc3",
+  "source_hash": "sha256:d398f66780f4959874c4ffc48be5be08c716ba2daeed8ae3d8690504846a3906",
+  "surface_hash": "sha256:631b73b174f48cb0cca7c8449e80920739010d0db223dac2855101f4dbd0eda6",
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 564,
-    "tools_with_metadata": 564,
-    "tools_with_agent_summary": 564,
-    "tools_with_use_when": 564,
-    "tools_with_avoid_when": 564,
-    "tools_with_examples": 564,
-    "tools_with_interface_mode": 564,
-    "unmatched_skill_tools": 125,
+    "surface_tools": 569,
+    "tools_with_metadata": 569,
+    "tools_with_agent_summary": 569,
+    "tools_with_use_when": 569,
+    "tools_with_avoid_when": 569,
+    "tools_with_examples": 569,
+    "tools_with_interface_mode": 569,
+    "unmatched_skill_tools": 124,
     "unreviewed_skill_tools": 7
   },
   "products": {
@@ -1371,20 +1371,21 @@
       ]
     },
     "sheet": {
-      "agent_summary": "创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+      "agent_summary": "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
       "agent_summary_source": "dws-agent-selection/sheet",
       "avoid_when": [
-        "目标是 AI 表格 Base 的结构化记录、钉钉文档正文或本地 Excel 文件时不要使用 sheet"
+        "目标是 AI 表格 Base 的结构化记录或钉钉文档正文时不要使用 sheet",
+        "只读取已上传但未转换的 xlsx/xls 节点时先用 doc download；不要把文件节点直接传给单元格命令"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+          "value": "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
           "source": "internal/cli/schema_hints/selection/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+              "value": "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -1393,7 +1394,8 @@
         },
         "avoid_when": {
           "value": [
-            "目标是 AI 表格 Base 的结构化记录、钉钉文档正文或本地 Excel 文件时不要使用 sheet"
+            "目标是 AI 表格 Base 的结构化记录或钉钉文档正文时不要使用 sheet",
+            "只读取已上传但未转换的 xlsx/xls 节点时先用 doc download；不要把文件节点直接传给单元格命令"
           ],
           "source": "internal/cli/schema_hints/selection/sheet.json",
           "precedence": "reviewed_explicit",
@@ -1401,7 +1403,8 @@
           "candidates": [
             {
               "value": [
-                "目标是 AI 表格 Base 的结构化记录、钉钉文档正文或本地 Excel 文件时不要使用 sheet"
+                "目标是 AI 表格 Base 的结构化记录或钉钉文档正文时不要使用 sheet",
+                "只读取已上传但未转换的 xlsx/xls 节点时先用 doc download；不要把文件节点直接传给单元格命令"
               ],
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
@@ -1411,7 +1414,8 @@
         },
         "use_when": {
           "value": [
-            "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时"
+            "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时",
+            "用户要把本地 xlsx/xls 转换为新的钉钉在线电子表格时"
           ],
           "source": "internal/cli/schema_hints/selection/sheet.json",
           "precedence": "reviewed_explicit",
@@ -1419,7 +1423,8 @@
           "candidates": [
             {
               "value": [
-                "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时"
+                "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时",
+                "用户要把本地 xlsx/xls 转换为新的钉钉在线电子表格时"
               ],
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
@@ -1440,7 +1445,8 @@
         "skills/mono/references/products/sheet.md"
       ],
       "use_when": [
-        "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时"
+        "用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时",
+        "用户要把本地 xlsx/xls 转换为新的钉钉在线电子表格时"
       ]
     },
     "todo": {

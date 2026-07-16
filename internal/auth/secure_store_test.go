@@ -105,9 +105,12 @@ func TestSaveSecureTokenData_TmpFileCleanedOnSuccess(t *testing.T) {
 		t.Fatalf("SaveSecureTokenData() error = %v", err)
 	}
 
-	tmpPath := filepath.Join(configDir, secureDataFile+".tmp")
-	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
-		t.Fatalf(".data.tmp should not remain after successful save, stat err = %v", err)
+	tmpPaths, err := filepath.Glob(filepath.Join(configDir, secureDataFile+".tmp-*"))
+	if err != nil {
+		t.Fatalf("Glob() error = %v", err)
+	}
+	if len(tmpPaths) != 0 {
+		t.Fatalf("temporary files should not remain after successful save: %v", tmpPaths)
 	}
 
 	// The final file must exist.
@@ -140,9 +143,9 @@ func TestSaveSecureTokenData_ConcurrentSaves(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Under concurrency, some saves may fail due to tmp-file races. That is
-	// acceptable — the important thing is that at least one succeeds and the
-	// final file is not corrupted.
+	// Each writer owns its temporary file, so concurrent saves must not corrupt
+	// the final file. A platform may still reject simultaneous replacements, but
+	// at least one complete save must succeed.
 	successes := 0
 	for _, err := range errs {
 		if err == nil {

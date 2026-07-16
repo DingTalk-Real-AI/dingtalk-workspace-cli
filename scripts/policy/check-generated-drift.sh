@@ -7,9 +7,17 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+exec_tmp="$(policy_runtime_mktemp_dir dws-generated-drift)"
+metadata_generator="$exec_tmp/schema-agent-metadata"
+catalog_generator="$exec_tmp/schema-catalog"
+trap 'rm -rf "$tmp" "$exec_tmp"' EXIT HUP INT TERM
+
+go build -o "$metadata_generator" ./internal/generator/cmd_schema_agent_metadata
+go build -a -o "$catalog_generator" ./internal/generator/cmd_schema_catalog
 
 # CommandRegistry is a reviewed input, never a generated artifact. Keep an
 # independent byte-for-byte guard around the ordinary downstream generators.
@@ -26,7 +34,7 @@ audit_tmp="$tmp/audit.json"
 catalog_tmp="$tmp/catalog.json"
 catalog_tmp_second="$tmp/catalog-second.json"
 
-go run ./internal/generator/cmd_schema_agent_metadata \
+"$metadata_generator" \
   -root . \
   -registry internal/cli/schema_command_registry.json \
   -output-dir "$metadata_tmp" \
@@ -46,11 +54,11 @@ if ! cmp -s internal/cli/schema_agent_metadata_audit.json "$audit_tmp"; then
 	exit 1
 fi
 
-go run -a ./internal/generator/cmd_schema_catalog \
+"$catalog_generator" \
 	-root . \
 	-output "$catalog_tmp"
 
-go run -a ./internal/generator/cmd_schema_catalog \
+"$catalog_generator" \
 	-root . \
 	-output "$catalog_tmp_second"
 

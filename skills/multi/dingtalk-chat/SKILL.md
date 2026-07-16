@@ -23,6 +23,57 @@ metadata:
 
 > 命令参考：[chat.md](references/chat.md)；表情：[chat-emoji-list.md](references/chat-emoji-list.md)；剧本：[01-messaging.md](references/01-messaging.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service chat --format json` 读取参数、约束、风险和示例，并以 `dws chat <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws chat +at-me` | read | 查最近 @我 的消息（自动算时间窗，投影发送人/时间/内容/会话） |
+| `dws chat +bot-find` | read | 搜索全部可用机器人（含他人/官方，返回 openDingTalkId 可发单聊） |
+| `dws chat +bot-search` | read | 搜索当前用户自己创建的机器人 |
+| `dws chat +broadcast` | write | 按姓名逐一给多个人群发同一条单聊消息（自动解析 userId、逐个发送） |
+| `dws chat +category-create` | write | 创建用户自定义会话分组 |
+| `dws chat +category-delete` | high-risk-write | 删除用户自定义会话分组 |
+| `dws chat +category-list` | read | 获取用户自定义会话分组 |
+| `dws chat +category-rename` | write | 更新用户自定义会话分组的名称 |
+| `dws chat +chat-bots` | read | 查看群内所有机器人 |
+| `dws chat +chat-dismiss` | high-risk-write | 解散群聊（不可逆，需群主权限） |
+| `dws chat +chat-invite-url` | read | 获取群邀请链接 |
+| `dws chat +chat-list-all` | read | 分页拉取我加入的所有群列表 |
+| `dws chat +chat-list-join-requests` | read | 分页拉取入群验证记录 |
+| `dws chat +chat-list-mine` | read | 拉取我创建/管理的群 |
+| `dws chat +chat-mute` | write | 全员禁言 / 取消全员禁言 |
+| `dws chat +chat-role-add` | write | 添加群身份 |
+| `dws chat +chat-role-list` | read | 拉取会话的群身份列表 |
+| `dws chat +chat-role-query-user` | read | 查询群成员的群身份 |
+| `dws chat +chat-role-set-user` | write | 设置用户的群身份（覆盖该用户的全部群身份） |
+| `dws chat +chat-role-update` | write | 更新群身份名称 |
+| `dws chat +chat-search` | read | 按关键词搜索群聊 |
+| `dws chat +chat-set-admin` | write | 设置 / 取消群管理员 |
+| `dws chat +chat-set-history` | write | 设置新成员入群可查看历史消息范围 |
+| `dws chat +chat-update-alias` | write | 设置群备注（仅自己可见） |
+| `dws chat +chat-update-nick` | write | 设置当前用户在群内的群昵称 |
+| `dws chat +conversation-clear-all-red-point` | write | 清除所有会话红点（全部已读） |
+| `dws chat +conversation-info` | read | 获取会话信息（群聊传 --group，单聊传 --open-dingtalk-id） |
+| `dws chat +conversation-list` | read | 分页获取当前用户的全部会话列表（单聊+群聊） |
+| `dws chat +conversation-list-top` | read | 拉取置顶会话列表 |
+| `dws chat +dm` | write | 按姓名直接给某人发单聊消息（自动解析 userId） |
+| `dws chat +group-members` | read | 按群名列出群成员（自动搜群解析 openConversationId） |
+| `dws chat +messages-list-direct` | read | 拉取单聊会话消息 |
+| `dws chat +messages-list-pin` | read | 拉取会话中钉住的消息列表 |
+| `dws chat +messages-list-unread-conversations` | read | 获取有未读消息的会话列表 |
+| `dws chat +messages-mget` | read | 根据消息 ID 批量查询消息（最多 50 条） |
+| `dws chat +messages-query-send-status` | read | 查询消息发送状态 |
+| `dws chat +messages-read-status` | read | 查询消息的已读/未读状态 |
+| `dws chat +messages-send-by-webhook` | write | 自定义机器人 Webhook 发送群消息 |
+| `dws chat +messages-update-card` | write | 流式更新卡片内容（最后一次 --flow-status 应为 3） |
+| `dws chat +my-groups` | read | 列出我加入的群，可按类型过滤并投影关键字段 |
+| `dws chat +send-to-group` | write | 按群名直接给群发消息（自动搜群解析 openConversationId） |
+| `dws chat +unread-chats` | read | 列出我有未读消息的会话（投影会话名/未读数/会话ID） |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 意图表
 
 | 用户说 | 命令 |

@@ -1874,6 +1874,7 @@
     "sheet.write_image --mime-type": "local upload metadata",
     "sheet.write_image --name": "local upload metadata",
     "todo.add_todo_attachment --file-path": "local upload input used to construct attachmentList",
+    "todo.list_todo_attachment --task-id": "Reviewed unpinned adapter: --task-id is nested under todoAttachmentListRequest at runtime, while the immutable pinned MCP snapshot has no interface_ref for todo.list_todo_attachment.",
     "wiki.create_wikiSpace --icon": "runtime extension sends icon, which is absent from the pinned create_wikiSpace metadata",
     "wiki.delete_document --workspace": "local validation/authorization context; not sent to delete_document",
     "wiki.list_wikiSpaces --cursor": "composite route maps to pageToken for wiki.list_wikiSpaces or nextToken for drive.list_spaces",
