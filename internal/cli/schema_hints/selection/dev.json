@@ -239,13 +239,14 @@
     "dev.get_dev_app": {
       "agent_summary": "获取指定开放平台应用详情",
       "use_when": [
-        "已知 unifiedAppId 并需要核对应用配置或状态时"
+        "已知 unifiedAppId 或 appKey 并需要核对应用配置或状态时"
       ],
       "avoid_when": [
         "需要搜索或分页浏览多个应用时使用 dev app list"
       ],
       "examples": [
-        "dws dev app get --unified-app-id <unifiedAppId> --format json"
+        "dws dev app get --unified-app-id <unifiedAppId> --format json",
+        "dws dev app get --app-key <appKey> --format json"
       ],
       "reviewed": true,
       "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
