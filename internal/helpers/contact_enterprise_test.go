@@ -60,7 +60,7 @@ func runContactEnterpriseCommand(t *testing.T, args ...string) (*contactEnterpri
 	return caller, cmd.Execute()
 }
 
-func TestContactEnterpriseCommandsExposeExpectedFlags(t *testing.T) {
+func TestCrossPlatformCoverageContactEnterpriseCommandsExposeExpectedFlags(t *testing.T) {
 	root := newContactCommand()
 	cases := []struct {
 		path  []string
@@ -76,7 +76,7 @@ func TestContactEnterpriseCommandsExposeExpectedFlags(t *testing.T) {
 	}
 }
 
-func TestContactEnterpriseCommandsMapMCPArguments(t *testing.T) {
+func TestCrossPlatformCoverageContactEnterpriseCommandsMapMCPArguments(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
@@ -145,7 +145,7 @@ func TestContactEnterpriseCommandsMapMCPArguments(t *testing.T) {
 	}
 }
 
-func TestContactUserInviteRejectsInvalidDepartmentsJSON(t *testing.T) {
+func TestCrossPlatformCoverageContactUserInviteRejectsInvalidDepartmentsJSON(t *testing.T) {
 	caller, err := runContactEnterpriseCommand(t,
 		"user", "invite",
 		"--org-user-name", "张三",
@@ -160,7 +160,7 @@ func TestContactUserInviteRejectsInvalidDepartmentsJSON(t *testing.T) {
 	}
 }
 
-func TestContactEnterpriseCommandsRequireCoreIdentityFlags(t *testing.T) {
+func TestCrossPlatformCoverageContactEnterpriseCommandsRequireCoreIdentityFlags(t *testing.T) {
 	tests := [][]string{
 		{"org", "create", "--org-name", "测试企业"},
 		{"user", "invite", "--org-user-name", "张三"},
