@@ -60,14 +60,21 @@ jobs:
               return;
             }
 
-            const protectedPaths = files
-              .map(({ filename }) => filename)
-              .filter((filename) =>
+            const isProtectedPath = (filename) =>
+              typeof filename === 'string' &&
+              (
                 filename.startsWith('.github/workflows/') ||
+                filename.startsWith('scripts/policy/') ||
                 filename.startsWith('scripts/release/') ||
+                filename === 'test/fixtures/cli-interface-baseline.txt' ||
                 filename === '.goreleaser.yaml' ||
                 filename === 'Makefile'
               );
+            const protectedPaths = [...new Set(
+              files
+                .flatMap(({ filename, previous_filename }) => [filename, previous_filename])
+                .filter(isProtectedPath)
+            )];
 
             if (protectedPaths.length > 0) {
               await setStatus('failure', 'Modifies protected release/CI infrastructure');
