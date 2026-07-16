@@ -71,6 +71,7 @@ func TestIsPATNoPermissionCode(t *testing.T) {
 		{"PAT_LOW_RISK_NO_PERMISSION", true},
 		{"PAT_MEDIUM_RISK_NO_PERMISSION", true},
 		{"PAT_HIGH_RISK_NO_PERMISSION", true},
+		{"PAT_ORG_POLICY_DENIED", true},
 		{"AGENT_CODE_NOT_EXISTS", false},
 		{"UNKNOWN_CODE", false},
 		{"", false},
@@ -283,6 +284,50 @@ func TestClassifyToolResultContent_PATAuthRequired(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageClassifyToolResultContentPATOrgPolicyDenied(t *testing.T) {
+	t.Parallel()
+	content := map[string]any{
+		"success": false,
+		"code":    "PAT_ORG_POLICY_DENIED",
+		"message": "business error: code PAT_ORG_POLICY_DENIED",
+		"data": map[string]any{
+			"policyDesc": "组织策略禁止访问该开源数据权限",
+			"scope":      "contact.user.read",
+		},
+	}
+	err := ClassifyToolResultContent(content)
+	if err == nil {
+		t.Fatal("expected non-nil error for PAT org policy denial")
+	}
+	var patErr *PATError
+	if !stderrors.As(err, &patErr) {
+		t.Fatalf("expected *PATError, got %T", err)
+	}
+	if patErr.ExitCode() != ExitCodePermission {
+		t.Fatalf("ExitCode() = %d, want %d", patErr.ExitCode(), ExitCodePermission)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(patErr.RawJSON), &parsed); err != nil {
+		t.Fatalf("RawJSON is not valid JSON: %v; raw=%s", err, patErr.RawJSON)
+	}
+	data, ok := parsed["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("parsed.data missing or wrong type: %#v", parsed["data"])
+	}
+	if got, _ := parsed["code"].(string); got != "PAT_ORG_POLICY_DENIED" {
+		t.Fatalf("parsed.code = %q, want PAT_ORG_POLICY_DENIED", got)
+	}
+	if got, _ := data["hint"].(string); !strings.Contains(got, "组织策略") || !strings.Contains(got, "DWS/PAT") {
+		t.Fatalf("data.hint = %q, want explicit org policy hint", got)
+	}
+	if got, _ := data["scope"].(string); got != "contact.user.read" {
+		t.Fatalf("data.scope = %q, want contact.user.read", got)
+	}
+	if got, _ := data["openBrowser"].(bool); got {
+		t.Fatalf("data.openBrowser = true, want false for terminal org policy denial")
+	}
+}
+
 func TestClassifyToolResultContent_NoError(t *testing.T) {
 	t.Parallel()
 	content := map[string]any{"success": true, "data": "ok"}
@@ -394,6 +439,36 @@ func TestClassifyMCPResponseText_PATBatchAuthPending(t *testing.T) {
 	}
 	if !strings.Contains(patErr.RawJSON, "flow-1") {
 		t.Errorf("RawJSON should preserve flowId, got: %s", patErr.RawJSON)
+	}
+}
+
+func TestCrossPlatformCoverageClassifyMCPResponseTextPATOrgPolicyDenied(t *testing.T) {
+	t.Parallel()
+	text := `{"success":false,"code":"PAT_ORG_POLICY_DENIED","message":"business error: code PAT_ORG_POLICY_DENIED"}`
+	err := ClassifyMCPResponseText(text)
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	var patErr *PATError
+	if !stderrors.As(err, &patErr) {
+		t.Fatalf("expected *PATError, got %T", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(patErr.RawJSON), &parsed); err != nil {
+		t.Fatalf("RawJSON is not valid JSON: %v; raw=%s", err, patErr.RawJSON)
+	}
+	data, ok := parsed["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("parsed.data missing or wrong type: %#v", parsed["data"])
+	}
+	if got, _ := data["message"].(string); got != "business error: code PAT_ORG_POLICY_DENIED" {
+		t.Fatalf("data.message = %q, want original server message", got)
+	}
+	if got, _ := data["hint"].(string); !strings.Contains(got, "组织策略") {
+		t.Fatalf("data.hint = %q, want explicit org policy hint", got)
+	}
+	if got, _ := data["openBrowser"].(bool); got {
+		t.Fatalf("data.openBrowser = true, want false for terminal org policy denial")
 	}
 }
 

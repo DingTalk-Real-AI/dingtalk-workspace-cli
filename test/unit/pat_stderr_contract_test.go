@@ -91,6 +91,21 @@ func TestPATStderrJSON_SingleLineUnmarshalable(t *testing.T) {
 		}
 	}
 
+	orgPolicyHintPresent := func(t *testing.T, parsed map[string]any) {
+		t.Helper()
+		data, ok := parsed["data"].(map[string]any)
+		if !ok {
+			t.Fatalf("parsed.data missing or wrong type: %v", parsed["data"])
+		}
+		hint, ok := data["hint"].(string)
+		if !ok || !strings.Contains(hint, "组织策略") || !strings.Contains(hint, "DWS/PAT") {
+			t.Fatalf("parsed.data.hint missing explicit org policy guidance: %v", data["hint"])
+		}
+		if openBrowser, ok := data["openBrowser"].(bool); !ok || openBrowser {
+			t.Fatalf("parsed.data.openBrowser = %v, want false", data["openBrowser"])
+		}
+	}
+
 	cases := []struct {
 		name    string
 		code    string
@@ -157,6 +172,19 @@ func TestPATStderrJSON_SingleLineUnmarshalable(t *testing.T) {
 				},
 			},
 			extract: requiredScopesPresent,
+		},
+		{
+			name: "PAT_ORG_POLICY_DENIED",
+			code: "PAT_ORG_POLICY_DENIED",
+			body: map[string]any{
+				"success": false,
+				"code":    "PAT_ORG_POLICY_DENIED",
+				"data": map[string]any{
+					"policyDesc": "组织策略禁止访问该开源数据权限",
+					"scope":      "contact.user.read",
+				},
+			},
+			extract: orgPolicyHintPresent,
 		},
 		{
 			name: "PAT_SCOPE_AUTH_REQUIRED",
@@ -247,6 +275,7 @@ func TestPATStderrJSON_CodeEnumFrozen(t *testing.T) {
 		"PAT_LOW_RISK_NO_PERMISSION",
 		"PAT_MEDIUM_RISK_NO_PERMISSION",
 		"PAT_HIGH_RISK_NO_PERMISSION",
+		"PAT_ORG_POLICY_DENIED",
 		"PAT_SCOPE_AUTH_REQUIRED",
 		"PAT_BATCH_AUTH_PENDING",
 		"AGENT_CODE_NOT_EXISTS",
