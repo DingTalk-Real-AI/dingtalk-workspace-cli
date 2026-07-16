@@ -115,6 +115,8 @@ func newSheetCommand() *cobra.Command {
 	templateCmd := newSheetTemplateCmd()
 	tableCmds := newTableCmds()
 	pivotTableCmd := newPivotTableCmd()
+	formulaVerifyCmd := newSheetFormulaVerifyCmd()
+	versionCmd := newSheetVersionCmd()
 
 	batchUpdateCmd := newBatchUpdateCmd()
 	rangeBatchClearCmd := newRangeBatchClearCmd()
@@ -136,7 +138,7 @@ func newSheetCommand() *cobra.Command {
 	standaloneCmds = append(standaloneCmds, mediaCmds...)
 	standaloneCmds = append(standaloneCmds, floatImageCmds...)
 	standaloneCmds = append(standaloneCmds, tableCmds...)
-	standaloneCmds = append(standaloneCmds, exportCmd, importCmd, batchUpdateCmd)
+	standaloneCmds = append(standaloneCmds, exportCmd, importCmd, formulaVerifyCmd, batchUpdateCmd)
 
 	// Register cross-product aliases
 	for _, cmd := range standaloneCmds {
@@ -150,7 +152,7 @@ func newSheetCommand() *cobra.Command {
 
 	// Add all to root
 	root.AddCommand(standaloneCmds...)
-	root.AddCommand(rangeCmd, filterCmd, filterViewCmd, condFormatCmd, chartCmd, templateCmd, pivotTableCmd)
+	root.AddCommand(rangeCmd, filterCmd, filterViewCmd, condFormatCmd, chartCmd, templateCmd, pivotTableCmd, versionCmd)
 
 	// This is the reviewed runtime counterpart of the final Sheet Schema
 	// confirmation=user_required set. It is intentionally command-local: there

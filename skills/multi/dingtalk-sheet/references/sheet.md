@@ -101,6 +101,10 @@ dws sheet filter-view --help
 | `sheet append` | 在末尾追加数据行 |
 | `sheet csv-put` | 将 CSV 数据写入指定位置（纯值，自动扩容） |
 | `sheet table-put` | 写入一个或多个结构化 table（别名: table-write） |
+| `sheet formula-verify` | 扫描已落表公式并汇总错误位置，可在发现错误时返回非零退出码 |
+| `sheet version save` | 手动保存表格历史版本快照 |
+| `sheet version list` | 查看表格历史版本列表 |
+| `sheet version revert` | 回滚表格到指定历史版本（危险操作，必须确认） |
 | `sheet pivot-table list` | 列出透视表或获取指定透视表详情 |
 | `sheet pivot-table create` | 创建原生透视表 |
 | `sheet pivot-table update` | 更新透视表配置 |
@@ -211,6 +215,11 @@ dws sheet filter-view --help
 - 复制并指定名称 → `copy --title "副本名称"`
 - 复制并指定位置 → `copy --index N`
 
+用户说"保存版本/查看历史版本/回滚表格版本":
+- 保存当前快照 → `version save`
+- 查看可用版本号 → `version list`
+- 回滚 → 先 `version list` 确认版本存在，再执行 `version revert --version <N>`；回滚是危险操作，必须确认
+
 ### 数据读写
 
 用户说"读数据/看表格内容":
@@ -243,6 +252,12 @@ dws sheet filter-view --help
 - 正则替换 → `replace --use-regexp`
 - 删除匹配内容 → `replace --replacement ""`
 - 请勿用 `find` + `range update`、`range read` + `range update` 等组合来模拟替换，`replace` 是服务端原子操作，效率更高且返回替换计数
+
+用户说"检查公式错误/公式是否正确/#REF!/#DIV/0!":
+- 整本扫描 → `formula-verify --node <NODE_ID>`
+- 单个工作表或区域 → `formula-verify --node <NODE_ID> --sheet-id <SHEET_ID> [--range A1:D100]`
+- 多区域扫描 → 使用 `--targets` JSON 数组
+- 自动化门禁需要发现错误即失败 → 加 `--exit-on-error`
 
 ### 行列操作
 
@@ -390,6 +405,27 @@ dws sheet filter-view --help
 - 禁止用 `range read` 全量读取后自行拼接 xlsx 来模拟导出，必须使用 `export` 命令（服务端原子导出，保留格式/合并/公式等属性）
 - 禁止在 AI Agent 侧实现轮询或重试，CLI 内部已按渐进式退避策略完成（最多 30 次约 5 分钟）
 
+### 公式校验与历史版本
+
+```bash
+# 扫描整本表格，发现公式错误时返回非零退出码
+dws sheet formula-verify --node <NODE_ID> --exit-on-error --format json
+
+# 扫描单个目标；--range 不能带 Sheet1! 前缀
+dws sheet formula-verify --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:D100 --format json
+
+# 多目标扫描
+dws sheet formula-verify --node <NODE_ID> \
+  --targets '[{"sheetId":"Sheet1","range":"A1:D100"},{"sheetId":"Sheet2"}]' --format json
+
+# 历史版本
+dws sheet version save --node <NODE_ID> --format json
+dws sheet version list --node <NODE_ID> --limit 20 --format json
+dws sheet version revert --node <NODE_ID> --version <VERSION> --yes --format json
+```
+
+`--targets` 和 `--sheet-id/--range` 互斥；单独使用 `--range` 无效。`version revert` 会先确认目标版本存在，再要求危险操作确认；不要猜版本号。
+
 ### URL 粘贴场景
 
 用户直接粘贴表格 URL（无其他指令）:
@@ -423,6 +459,8 @@ dws sheet filter-view --help
 - ★ **单元格图片用 `write-image` 不用 `range update`**：`update_range` MCP 不支持图片参数，调用必失败
 - ★ **浮动图片用 `create-float-image` 不用 `write-image`**：两者用途不同——`write-image` 写入单元格内部，`create-float-image` 创建悬浮于单元格之上的浮动图片；`--src` 必须来自 `media-upload` 的 `resourceUrl`
 - ★ **`export` 禁止自行轮询/重试**：CLI 内部已完成渐进式退避轮询（最多 30 次约 5 分钟），失败时直接告知用户稍后再试
+- ★ **公式门禁使用 `formula-verify --exit-on-error`**：不带此 flag 时命令会输出错误汇总但保持成功退出，适合人工检查；CI/Agent 自动判定必须显式启用
+- ★ **版本回滚先 list 后 revert**：必须从 `version list` 获取真实版本号；`version revert` 是危险操作，执行前确认并在完成后回读
 - ★ **关键区分**：sheet(在线电子表格/单元格读写) vs aitable(AI多维表/结构化记录/字段定义) vs doc(文档编辑/阅读)
 
 > 完整注意事项请参见本文档末尾「注意事项（完整版）」章节。

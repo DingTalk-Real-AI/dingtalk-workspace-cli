@@ -8659,7 +8659,8 @@
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --name \"状态\" --type singleSelect"
+        "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --name \"状态\" --type singleSelect --config '{\"options\":[{\"name\":\"待办\"}]}'",
+        "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --fields '[{\"fieldName\":\"状态\",\"type\":\"text\"}]'"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -8750,7 +8751,8 @@
         },
         "examples": {
           "value": [
-            "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --name \"状态\" --type singleSelect"
+            "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --name \"状态\" --type singleSelect --config '{\"options\":[{\"name\":\"待办\"}]}'",
+            "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --fields '[{\"fieldName\":\"状态\",\"type\":\"text\"}]'"
           ],
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "precedence": "reviewed_explicit",
@@ -8759,7 +8761,8 @@
           "candidates": [
             {
               "value": [
-                "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --name \"状态\" --type singleSelect"
+                "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --name \"状态\" --type singleSelect --config '{\"options\":[{\"name\":\"待办\"}]}'",
+                "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --fields '[{\"fieldName\":\"状态\",\"type\":\"text\"}]'"
               ],
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "precedence": "reviewed_explicit",
@@ -17221,7 +17224,8 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+        "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert",
+        "cells key 优先使用 fieldId；字段名只有在当前表内唯一且精确匹配时才安全"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -17270,7 +17274,8 @@
         },
         "avoid_when": {
           "value": [
-            "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+            "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert",
+            "cells key 优先使用 fieldId；字段名只有在当前表内唯一且精确匹配时才安全"
           ],
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "precedence": "reviewed_explicit",
@@ -17279,7 +17284,8 @@
           "candidates": [
             {
               "value": [
-                "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+                "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert",
+                "cells key 优先使用 fieldId；字段名只有在当前表内唯一且精确匹配时才安全"
               ],
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "precedence": "reviewed_explicit",
@@ -21404,13 +21410,14 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "更新视图配置用对应 view update-*；删除用 view delete"
+        "更新视图配置用对应 view update-*；删除用 view delete",
+        "create --config 只接受 visibleFieldIds/filter/sort/group；description 用 --desc，其余属性创建后再 update"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws aitable view create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --view-type Grid --name \"默认表格\""
+        "dws aitable view create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --view-type Grid --name \"默认表格\" --visible-field-ids \u003cPRIMARY_FIELD_ID\u003e,\u003cSTATUS_FIELD_ID\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -21453,7 +21460,8 @@
         },
         "avoid_when": {
           "value": [
-            "更新视图配置用对应 view update-*；删除用 view delete"
+            "更新视图配置用对应 view update-*；删除用 view delete",
+            "create --config 只接受 visibleFieldIds/filter/sort/group；description 用 --desc，其余属性创建后再 update"
           ],
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "precedence": "reviewed_explicit",
@@ -21462,7 +21470,8 @@
           "candidates": [
             {
               "value": [
-                "更新视图配置用对应 view update-*；删除用 view delete"
+                "更新视图配置用对应 view update-*；删除用 view delete",
+                "create --config 只接受 visibleFieldIds/filter/sort/group；description 用 --desc，其余属性创建后再 update"
               ],
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "precedence": "reviewed_explicit",
@@ -21501,7 +21510,7 @@
         },
         "examples": {
           "value": [
-            "dws aitable view create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --view-type Grid --name \"默认表格\""
+            "dws aitable view create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --view-type Grid --name \"默认表格\" --visible-field-ids \u003cPRIMARY_FIELD_ID\u003e,\u003cSTATUS_FIELD_ID\u003e"
           ],
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "precedence": "reviewed_explicit",
@@ -21510,7 +21519,7 @@
           "candidates": [
             {
               "value": [
-                "dws aitable view create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --view-type Grid --name \"默认表格\""
+                "dws aitable view create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --view-type Grid --name \"默认表格\" --visible-field-ids \u003cPRIMARY_FIELD_ID\u003e,\u003cSTATUS_FIELD_ID\u003e"
               ],
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "precedence": "reviewed_explicit",

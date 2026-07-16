@@ -678,7 +678,8 @@
         "改字段名/配置用 field update（不可改类型）；删字段用 field delete；调列顺序用 view update"
       ],
       "examples": [
-        "dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> --name \"状态\" --type singleSelect"
+        "dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> --name \"状态\" --type singleSelect --config '{\"options\":[{\"name\":\"待办\"}]}'",
+        "dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> --fields '[{\"fieldName\":\"状态\",\"type\":\"text\"}]'"
       ],
       "reviewed": true,
       "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
@@ -1315,7 +1316,8 @@
         "需要修改已有记录若干字段时"
       ],
       "avoid_when": [
-        "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+        "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert",
+        "cells key 优先使用 fieldId；字段名只有在当前表内唯一且精确匹配时才安全"
       ],
       "examples": [
         "dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"recordId\":\"recXXX\",\"cells\":{\"fldYYY\":\"新值\"}}]'"
@@ -1635,10 +1637,11 @@
         "需要新建某种类型的视图时；创建表单也可用 form create"
       ],
       "avoid_when": [
-        "更新视图配置用对应 view update-*；删除用 view delete"
+        "更新视图配置用对应 view update-*；删除用 view delete",
+        "create --config 只接受 visibleFieldIds/filter/sort/group；description 用 --desc，其余属性创建后再 update"
       ],
       "examples": [
-        "dws aitable view create --base-id <BASE_ID> --table-id <TABLE_ID> --view-type Grid --name \"默认表格\""
+        "dws aitable view create --base-id <BASE_ID> --table-id <TABLE_ID> --view-type Grid --name \"默认表格\" --visible-field-ids <PRIMARY_FIELD_ID>,<STATUS_FIELD_ID>"
       ],
       "reviewed": true,
       "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",

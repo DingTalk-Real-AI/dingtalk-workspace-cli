@@ -649,6 +649,29 @@
         "dws-schema-live:sheet.find_cells"
       ]
     },
+    "sheet.formula_verify": {
+      "agent_summary": "扫描在线电子表格中已落表公式并汇总错误类型、数量与位置。",
+      "use_when": [
+        "用户要检查整个工作簿或指定工作表范围内是否存在公式错误时",
+        "自动化质量门禁需要在发现公式错误时通过 --exit-on-error 返回非零退出码时"
+      ],
+      "avoid_when": [
+        "只读取公式文本用 range read；需要修改公式用 range update",
+        "多目标使用 --targets，不能再同时传 --sheet-id/--range"
+      ],
+      "examples": [
+        "dws sheet formula-verify --node <NODE_ID> --format json",
+        "dws sheet formula-verify --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:D100 --exit-on-error --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.formula_verify",
+        "cobra-help:dws sheet formula-verify --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (sheet/verify_formula; composite/unpinned)"
+      ]
+    },
     "sheet.get_all_sheets": {
       "agent_summary": "列出电子表格文档内全部工作表的 ID 与名称。",
       "use_when": [
@@ -1530,6 +1553,66 @@
         "cobra-help:dws sheet update-float-image --help",
         "skills/mono/references/products/sheet.md",
         "dws-schema-live:sheet.update_float_image"
+      ]
+    },
+    "sheet.version_list": {
+      "agent_summary": "查看在线电子表格的历史版本列表。",
+      "use_when": [
+        "保存或回滚前需要确认当前表格有哪些历史版本及版本号时"
+      ],
+      "avoid_when": [
+        "创建快照用 version save；回滚用 version revert（需用户确认）"
+      ],
+      "examples": [
+        "dws sheet version list --node <NODE_ID_OR_URL> --limit 10 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.version_list",
+        "cobra-help:dws sheet version list --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (doc/list_doc_versions; composite/unpinned)"
+      ]
+    },
+    "sheet.version_revert": {
+      "agent_summary": "将在线电子表格回滚到已确认的历史版本。",
+      "use_when": [
+        "用户明确要求回滚，且已用 version list 确认目标版本存在时"
+      ],
+      "avoid_when": [
+        "只查看历史用 version list；版本号或用户意图未确认时禁止回滚"
+      ],
+      "examples": [
+        "dws sheet version revert --node <NODE_ID_OR_URL> --version 3 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.version_revert",
+        "cobra-help:dws sheet version revert --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (doc/list_doc_versions + doc/revert_doc_version; composite/unpinned)"
+      ]
+    },
+    "sheet.version_save": {
+      "agent_summary": "为在线电子表格手动保存一个历史版本快照。",
+      "use_when": [
+        "大范围编辑前要保留当前状态，或用户明确要求创建版本快照时"
+      ],
+      "avoid_when": [
+        "查看已有版本用 version list；恢复旧版本用 version revert"
+      ],
+      "examples": [
+        "dws sheet version save --node <NODE_ID_OR_URL> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.version_save",
+        "cobra-help:dws sheet version save --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (doc/save_doc_version; composite/unpinned)"
       ]
     },
     "sheet.update_pivot_table": {

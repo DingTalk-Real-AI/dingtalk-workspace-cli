@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **Wukong Drive and Sheet command parity** — adds Drive permission application and owner transfer, Drive document favorites, Sheet formula verification, and Sheet version save/list/revert commands. The new commands ship with reviewed Agent Schema, mono/multi Skill guidance, local validation and dangerous-operation guards; Aitable field/view/record writes also gain clearer runtime validation and recovery guidance.
+
 ## [1.0.53-beta.2] - 2026-07-16
 
 This beta validates the accumulated post-v1.0.52 command surface, release automation, and runtime hardening changes, including enterprise contact onboarding, declarative shortcuts, Sheet/Aitable writes, multi-platform Homebrew formulas, and credential and target-validation fixes.

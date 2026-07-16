@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:13836c65abf8ff72941830fbef2bd55bd6874f65e4aa064aa04ba816d458b2ea",
-  "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
+  "source_hash": "sha256:78a086cc0db66aa6af8717effff0dbacc2b8648014fc91ab30fe389f47c5c3c7",
+  "surface_hash": "sha256:c26d837fa8f9587eda3517c518eec3b72c4b85cfd659001ea2ddfed9bff4bc13",
   "source_files": 150,
   "hint_files": 46,
   "hint_products": 39,
-  "hint_tools": 1296,
+  "hint_tools": 1316,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -29,15 +29,15 @@
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 572,
-    "tools_with_metadata": 572,
-    "tools_with_agent_summary": 572,
-    "tools_with_use_when": 572,
-    "tools_with_avoid_when": 572,
-    "tools_with_examples": 572,
-    "tools_with_interface_mode": 572,
-    "unmatched_skill_tools": 124,
-    "unreviewed_skill_tools": 7
+    "surface_tools": 582,
+    "tools_with_metadata": 582,
+    "tools_with_agent_summary": 582,
+    "tools_with_use_when": 582,
+    "tools_with_avoid_when": 582,
+    "tools_with_examples": 582,
+    "tools_with_interface_mode": 582,
+    "unmatched_skill_tools": 125,
+    "unreviewed_skill_tools": 8
   },
   "source_products": [
     "agoal",
@@ -2865,6 +2865,16 @@
         "status": "stale",
         "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
       }
+    },
+    {
+      "tool_path": "drive star",
+      "source": "skills/mono/references/products/drive.md",
+      "line": 23,
+      "candidates": [
+        "drive star add",
+        "drive star list",
+        "drive star remove"
+      ]
     },
     {
       "tool_path": "event schema user_im_message_receive_o2o",

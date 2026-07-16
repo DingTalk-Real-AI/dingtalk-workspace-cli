@@ -310,6 +310,47 @@
         "live-mcp:dws schema doc.list_permission"
       ]
     },
+    "drive.permission_apply": {
+      "agent_summary": "向文档或知识库节点的审批人发起访问权限申请。",
+      "use_when": [
+        "已通过 permission apply-info 确认可申请角色和审批人，且用户同意发送申请时"
+      ],
+      "avoid_when": [
+        "尚未查询可申请角色/审批人时先用 permission apply-info",
+        "已有管理权限、要直接授权他人时用 permission add；不要用 apply 代替授权"
+      ],
+      "examples": [
+        "dws drive permission apply --node <NODE_ID> --role READER --users <APPROVER_USER_ID> --reason \"需要查看该文档\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.permission_apply",
+        "cobra-help:dws drive permission apply --help",
+        "skills/mono/references/products/drive.md",
+        "live-mcp:none (drive/apply_permission; composite/unpinned)"
+      ]
+    },
+    "drive.permission_apply_info": {
+      "agent_summary": "查询节点当前可申请的权限角色与审批人。",
+      "use_when": [
+        "访问节点被拒绝，需要在发起权限申请前获取 availableRoles 和 approvers 时"
+      ],
+      "avoid_when": [
+        "只查看现有协作者用 permission list；真正发送申请用 permission apply"
+      ],
+      "examples": [
+        "dws drive permission apply-info --node <NODE_ID_OR_URL> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.permission_apply_info",
+        "cobra-help:dws drive permission apply-info --help",
+        "skills/mono/references/products/drive.md",
+        "live-mcp:none (drive/query_permission_apply_info; composite/unpinned)"
+      ]
+    },
     "drive.list_spaces": {
       "agent_summary": "兼容查询钉盘空间列表",
       "use_when": [
@@ -382,6 +423,27 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#drive.permission_remove",
         "structured-hint:internal/cli/schema_hints/products/drive.json",
         "live-mcp:dws schema doc.remove_permission"
+      ]
+    },
+    "drive.permission_transfer_owner": {
+      "agent_summary": "将文档节点或整个知识库的所有权转交给指定用户。",
+      "use_when": [
+        "用户明确要求转交节点或知识库所有者，并已确认新所有者、原所有者保留角色和递归范围时"
+      ],
+      "avoid_when": [
+        "只需授予编辑或管理权限时用 permission add/update，不要转移所有权",
+        "目标、新所有者或递归范围未确认时禁止执行"
+      ],
+      "examples": [
+        "dws drive permission transfer-owner --node <NODE_ID> --new-owner <USER_ID> --reserve-role EDITOR --recursive=false --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.permission_transfer_owner",
+        "cobra-help:dws drive permission transfer-owner --help",
+        "skills/mono/references/products/drive.md",
+        "live-mcp:none (doc/transfer_owner; composite/unpinned)"
       ]
     },
     "drive.permission_update": {
@@ -592,6 +654,66 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#drive.search_files",
         "structured-hint:internal/cli/schema_hints/products/drive.json",
         "live-mcp:dws schema drive.search_files"
+      ]
+    },
+    "drive.star_add": {
+      "agent_summary": "收藏指定文档空间节点。",
+      "use_when": [
+        "用户要把某个文档、表格或文件夹加入个人收藏时"
+      ],
+      "avoid_when": [
+        "收藏聊天消息应使用 chat message add-favorite；两者不是同一种收藏"
+      ],
+      "examples": [
+        "dws drive star add --node <NODE_ID_OR_URL> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.star_add",
+        "cobra-help:dws drive star add --help",
+        "skills/mono/references/products/drive.md",
+        "live-mcp:none (drive/mark_star; composite/unpinned)"
+      ]
+    },
+    "drive.star_list": {
+      "agent_summary": "列出当前用户收藏的文档资源。",
+      "use_when": [
+        "用户要查看个人收藏的文档、表格、文件夹或知识库时"
+      ],
+      "avoid_when": [
+        "查看聊天消息收藏用 chat message list-favorites；最近访问用 drive recent"
+      ],
+      "examples": [
+        "dws drive star list --content-types doc,sheet --limit 20 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：只读分页查询文档资源收藏。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.star_list",
+        "cobra-help:dws drive star list --help",
+        "skills/mono/references/products/drive.md",
+        "live-mcp:none (drive/get_star_list; composite/unpinned)"
+      ]
+    },
+    "drive.star_remove": {
+      "agent_summary": "取消收藏指定文档空间节点。",
+      "use_when": [
+        "用户要从个人文档资源收藏中移除某节点时"
+      ],
+      "avoid_when": [
+        "删除文档用 drive delete；取消聊天消息收藏用 chat message remove-favorite"
+      ],
+      "examples": [
+        "dws drive star remove --node <NODE_ID_OR_URL> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：仅取消个人收藏，不删除资源。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.star_remove",
+        "cobra-help:dws drive star remove --help",
+        "skills/mono/references/products/drive.md",
+        "live-mcp:none (drive/unmark_star; composite/unpinned)"
       ]
     },
     "drive.upload": {

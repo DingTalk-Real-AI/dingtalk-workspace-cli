@@ -2,8 +2,8 @@
   "version": 3,
   "baseline": {
     "manifest": "schema-parameter-bindings-v3",
-    "sha256": "sha256:9008afd72243232d4bcb37b46f1e8fc10e2bc283c8af26c59fbdb4901ebeef2f",
-    "reason": "Reviewed v3 baseline for the complete active canonical/flag/property manifest after splitting the fixed-scope minutes list commands into distinct registry identities.",
+    "sha256": "sha256:70d87f32e07604c5c87f871fc38a61fbbee7a22013b5b8e6944fdf0eff58db7e",
+    "reason": "Reviewed v3 baseline after synchronizing the public Wukong Drive permission/star, Sheet formula/version, and Aitable view-create parameter contracts.",
     "reviewed": true
   },
   "removals": {
@@ -88,7 +88,8 @@
     },
     "aitable.view_create": {
       "desc": "viewDescription",
-      "name": "viewName"
+      "name": "viewName",
+      "visible-field-ids": "config.visibleFieldIds"
     },
     "aitable.view_duplicate": {
       "new-name": "newViewName",
@@ -725,9 +726,26 @@
       "node": "nodeId",
       "workspace": "workspaceId"
     },
+    "drive.permission_apply": {
+      "node": "nodeId",
+      "notify-mode": "notifyMode",
+      "reason": "reason",
+      "role": "roleId",
+      "users": "receivers"
+    },
+    "drive.permission_apply_info": {
+      "node": "nodeId"
+    },
     "drive.permission_remove": {
       "node": "nodeId",
       "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "drive.permission_transfer_owner": {
+      "new-owner": "newOwnerId",
+      "node": "nodeId",
+      "recursive": "recursiveChange",
+      "reserve-role": "reserveOldOwnerRole",
       "workspace": "workspaceId"
     },
     "drive.permission_update": {
@@ -750,6 +768,20 @@
       "modified-to": "modifiedTimeTo",
       "query": "keyword",
       "target": "searchTarget"
+    },
+    "drive.star_add": {
+      "node": "nodeId"
+    },
+    "drive.star_list": {
+      "content-types": "contentTypes",
+      "cursor": "cursor",
+      "limit": "limit",
+      "order-by": "orderBy",
+      "resource-types": "supportResourceTypes",
+      "sort": "sortType"
+    },
+    "drive.star_remove": {
+      "node": "nodeId"
     },
     "mail.batch_move_message": {
       "folder": "destinationFolderId"
@@ -1080,6 +1112,14 @@
       "query": "text",
       "use-regexp": "useRegExp"
     },
+    "sheet.formula_verify": {
+      "max-cells": "maxCells",
+      "max-locations-per-error": "maxLocationsPerError",
+      "node": "nodeId",
+      "range": "targets[].range",
+      "sheet-id": "targets[].sheetId",
+      "targets": "targets"
+    },
     "sheet.get_all_sheets": {
       "node": "nodeId"
     },
@@ -1215,6 +1255,18 @@
     },
     "sheet.update_sheet": {
       "name": "title",
+      "node": "nodeId"
+    },
+    "sheet.version_list": {
+      "cursor": "nextCursor",
+      "limit": "maxResults",
+      "node": "nodeId"
+    },
+    "sheet.version_revert": {
+      "node": "nodeId",
+      "version": "version"
+    },
+    "sheet.version_save": {
       "node": "nodeId"
     },
     "sheet.write_image": {
@@ -1828,6 +1880,7 @@
     "sheet.filter_view_get_criteria --filter-view-id": "local post-filter over get_filter_views response",
     "sheet.filter_view_info --filter-view-id": "local post-filter over get_filter_views response",
     "sheet.filter_view_list_criteria --filter-view-id": "local post-filter over get_filter_views response",
+    "sheet.formula_verify --exit-on-error": "CLI-local exit status control evaluated after verify_formula returns; it is never sent to the MCP tool.",
     "sheet.filter_view_update_criteria --column": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --column is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.filter_view_update_criteria --filter-criteria": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --filter-criteria is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.filter_view_update_criteria --filter-view-id": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --filter-view-id is a CLI wrapper input and does not publish a direct interface property.",

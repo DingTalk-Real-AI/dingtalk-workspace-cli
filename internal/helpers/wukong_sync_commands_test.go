@@ -96,6 +96,25 @@ func TestWukongSyncDocCommands(t *testing.T) {
 	requireWukongSyncFlags(t, importGetCmd, "task-id")
 }
 
+func TestWukongSyncDrivePermissionAndStarCommands(t *testing.T) {
+	root := newDriveCommand()
+	cases := []struct {
+		path  []string
+		flags []string
+	}{
+		{[]string{"permission", "apply-info"}, []string{"node"}},
+		{[]string{"permission", "apply"}, []string{"node", "role", "users", "notify-mode", "reason"}},
+		{[]string{"permission", "transfer-owner"}, []string{"node", "workspace", "new-owner", "reserve-role", "recursive"}},
+		{[]string{"star", "add"}, []string{"node"}},
+		{[]string{"star", "remove"}, []string{"node"}},
+		{[]string{"star", "list"}, []string{"limit", "cursor", "order-by", "sort", "resource-types", "content-types"}},
+	}
+	for _, tc := range cases {
+		cmd := requireWukongSyncCommand(t, root, tc.path...)
+		requireWukongSyncFlags(t, cmd, tc.flags...)
+	}
+}
+
 func TestWukongSyncSheetCommands(t *testing.T) {
 	root := newSheetCommand()
 	importCmd := requireWukongSyncCommand(t, root, "import")
@@ -115,6 +134,18 @@ func TestWukongSyncSheetCommands(t *testing.T) {
 
 	ungroupCmd := requireWukongSyncCommand(t, root, "ungroup-dimension")
 	requireWukongSyncFlags(t, ungroupCmd, "node", "sheet-id", "range")
+
+	formulaVerifyCmd := requireWukongSyncCommand(t, root, "formula-verify")
+	requireWukongSyncFlags(t, formulaVerifyCmd, "node", "sheet-id", "range", "targets", "max-locations-per-error", "max-cells", "exit-on-error")
+
+	versionSaveCmd := requireWukongSyncCommand(t, root, "version", "save")
+	requireWukongSyncFlags(t, versionSaveCmd, "node")
+
+	versionListCmd := requireWukongSyncCommand(t, root, "version", "list")
+	requireWukongSyncFlags(t, versionListCmd, "node", "limit", "cursor")
+
+	versionRevertCmd := requireWukongSyncCommand(t, root, "version", "revert")
+	requireWukongSyncFlags(t, versionRevertCmd, "node", "version")
 }
 
 func TestWukongSyncSheetBatchDimensionGroupMapping(t *testing.T) {

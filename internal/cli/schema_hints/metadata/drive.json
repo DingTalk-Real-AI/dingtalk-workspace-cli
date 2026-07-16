@@ -95,6 +95,29 @@
       "availability": "available",
       "reviewed": true
     },
+    "drive.permission_apply": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/apply_permission, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+      "runtime_gate": "confirm_dangerous"
+    },
+    "drive.permission_apply_info": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/query_permission_apply_info, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+    },
     "drive.list_spaces": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -121,6 +144,18 @@
       "availability": "available",
       "reviewed": true,
       "runtime_gate": "none"
+    },
+    "drive.permission_transfer_owner": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls doc/transfer_owner, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+      "runtime_gate": "confirm_dangerous"
     },
     "drive.permission_update": {
       "interface_ref": {
@@ -208,6 +243,36 @@
     "drive.search_files": {
       "interface_mode": "mcp",
       "availability": "available",
+      "reviewed": true
+    },
+    "drive.star_add": {
+      "effect": "write",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/mark_star, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true
+    },
+    "drive.star_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/get_star_list, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true
+    },
+    "drive.star_remove": {
+      "effect": "write",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/unmark_star, which is absent from the pinned MCP metadata snapshot.",
       "reviewed": true
     },
     "drive.upload": {

@@ -10199,6 +10199,274 @@
         "要查找包含某文本或公式的单元格位置时，必须用服务端 find"
       ]
     },
+    "sheet formula-verify": {
+      "agent_summary": "扫描在线电子表格中已落表公式并汇总错误类型、数量与位置。",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "只读取公式文本用 range read；需要修改公式用 range update",
+        "多目标使用 --targets，不能再同时传 --sheet-id/--range"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet formula-verify --node \u003cNODE_ID\u003e --format json",
+        "dws sheet formula-verify --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range A1:D100 --exit-on-error --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "扫描在线电子表格中已落表公式并汇总错误类型、数量与位置。",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。",
+          "candidates": [
+            {
+              "value": "扫描在线电子表格中已落表公式并汇总错误类型、数量与位置。",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只读取公式文本用 range read；需要修改公式用 range update",
+            "多目标使用 --targets，不能再同时传 --sheet-id/--range"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。",
+          "candidates": [
+            {
+              "value": [
+                "只读取公式文本用 range read；需要修改公式用 range update",
+                "多目标使用 --targets，不能再同时传 --sheet-id/--range"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet formula-verify --node \u003cNODE_ID\u003e --format json",
+            "dws sheet formula-verify --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range A1:D100 --exit-on-error --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet formula-verify --node \u003cNODE_ID\u003e --format json",
+                "dws sheet formula-verify --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range A1:D100 --exit-on-error --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls sheet/verify_formula, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls sheet/verify_formula, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户要检查整个工作簿或指定工作表范围内是否存在公式错误时",
+            "自动化质量门禁需要在发现公式错误时通过 --exit-on-error 返回非零退出码时"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。",
+          "candidates": [
+            {
+              "value": [
+                "用户要检查整个工作簿或指定工作表范围内是否存在公式错误时",
+                "自动化质量门禁需要在发现公式错误时通过 --exit-on-error 返回非零退出码时"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls sheet/verify_formula, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws sheet formula-verify --help",
+        "internal/cli/schema_command_registry.json#sheet.formula_verify",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json",
+        "live-mcp:none (sheet/verify_formula; composite/unpinned)",
+        "skills/mono/references/products/sheet.md"
+      ],
+      "use_when": [
+        "用户要检查整个工作簿或指定工作表范围内是否存在公式错误时",
+        "自动化质量门禁需要在发现公式错误时通过 --exit-on-error 返回非零退出码时"
+      ]
+    },
     "sheet get-dropdown": {
       "agent_summary": "查询指定范围的下拉列表配置。",
       "agent_summary_source": "dws-agent-selection/sheet",
@@ -21132,6 +21400,831 @@
       ],
       "use_when": [
         "需要移动/缩放/替换已有浮动图片时"
+      ]
+    },
+    "sheet version list": {
+      "agent_summary": "查看在线电子表格的历史版本列表。",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "创建快照用 version save；回滚用 version revert（需用户确认）"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet version list --node \u003cNODE_ID_OR_URL\u003e --limit 10 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查看在线电子表格的历史版本列表。",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。",
+          "candidates": [
+            {
+              "value": "查看在线电子表格的历史版本列表。",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "创建快照用 version save；回滚用 version revert（需用户确认）"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。",
+          "candidates": [
+            {
+              "value": [
+                "创建快照用 version save；回滚用 version revert（需用户确认）"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet version list --node \u003cNODE_ID_OR_URL\u003e --limit 10 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet version list --node \u003cNODE_ID_OR_URL\u003e --limit 10 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/list_doc_versions, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/list_doc_versions, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "保存或回滚前需要确认当前表格有哪些历史版本及版本号时"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。",
+          "candidates": [
+            {
+              "value": [
+                "保存或回滚前需要确认当前表格有哪些历史版本及版本号时"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/list_doc_versions, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws sheet version list --help",
+        "internal/cli/schema_command_registry.json#sheet.version_list",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json",
+        "live-mcp:none (doc/list_doc_versions; composite/unpinned)",
+        "skills/mono/references/products/sheet.md"
+      ],
+      "use_when": [
+        "保存或回滚前需要确认当前表格有哪些历史版本及版本号时"
+      ]
+    },
+    "sheet version revert": {
+      "agent_summary": "将在线电子表格回滚到已确认的历史版本。",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "只查看历史用 version list；版本号或用户意图未确认时禁止回滚"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet version revert --node \u003cNODE_ID_OR_URL\u003e --version 3 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "将在线电子表格回滚到已确认的历史版本。",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。",
+          "candidates": [
+            {
+              "value": "将在线电子表格回滚到已确认的历史版本。",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只查看历史用 version list；版本号或用户意图未确认时禁止回滚"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。",
+          "candidates": [
+            {
+              "value": [
+                "只查看历史用 version list；版本号或用户意图未确认时禁止回滚"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet version revert --node \u003cNODE_ID_OR_URL\u003e --version 3 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet version revert --node \u003cNODE_ID_OR_URL\u003e --version 3 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this Sheet wrapper preflights with doc/list_doc_versions and then calls doc/revert_doc_version.",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this Sheet wrapper preflights with doc/list_doc_versions and then calls doc/revert_doc_version.",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求回滚，且已用 version list 确认目标版本存在时"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求回滚，且已用 version list 确认目标版本存在时"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper preflights with doc/list_doc_versions and then calls doc/revert_doc_version.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "cobra-help:dws sheet version revert --help",
+        "internal/cli/schema_command_registry.json#sheet.version_revert",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json",
+        "live-mcp:none (doc/list_doc_versions + doc/revert_doc_version; composite/unpinned)",
+        "skills/mono/references/products/sheet.md"
+      ],
+      "use_when": [
+        "用户明确要求回滚，且已用 version list 确认目标版本存在时"
+      ]
+    },
+    "sheet version save": {
+      "agent_summary": "为在线电子表格手动保存一个历史版本快照。",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "查看已有版本用 version list；恢复旧版本用 version revert"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet version save --node \u003cNODE_ID_OR_URL\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "为在线电子表格手动保存一个历史版本快照。",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。",
+          "candidates": [
+            {
+              "value": "为在线电子表格手动保存一个历史版本快照。",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "查看已有版本用 version list；恢复旧版本用 version revert"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。",
+          "candidates": [
+            {
+              "value": [
+                "查看已有版本用 version list；恢复旧版本用 version revert"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet version save --node \u003cNODE_ID_OR_URL\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet version save --node \u003cNODE_ID_OR_URL\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/save_doc_version, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/save_doc_version, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "大范围编辑前要保留当前状态，或用户明确要求创建版本快照时"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。",
+          "candidates": [
+            {
+              "value": [
+                "大范围编辑前要保留当前状态，或用户明确要求创建版本快照时"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/save_doc_version, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "cobra-help:dws sheet version save --help",
+        "internal/cli/schema_command_registry.json#sheet.version_save",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json",
+        "live-mcp:none (doc/save_doc_version; composite/unpinned)",
+        "skills/mono/references/products/sheet.md"
+      ],
+      "use_when": [
+        "大范围编辑前要保留当前状态，或用户明确要求创建版本快照时"
       ]
     },
     "sheet write-image": {

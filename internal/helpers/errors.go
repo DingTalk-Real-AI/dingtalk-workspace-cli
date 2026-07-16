@@ -227,8 +227,8 @@ func WrapErrorWithOperation(err error, operation string) error {
 	// Permission denied
 	if errContainsWord(msg, "403") || errContainsAny(msg, "forbidden", "permission") {
 		suggestion := "Verify your account has permission for this resource"
-		if errContainsAny(msg, "doc", "文档", "节点") {
-			suggestion = "Contact document owner for access, or check if removed from collaborators"
+		if errContainsAny(msg, "doc", "文档", "节点") || errContainsAny(operation, "doc/", "drive/", "get_document", "get_dentry") {
+			suggestion = permissionApplyGuidance
 		} else if errContainsAny(msg, "aitable", "table", "base", "record", "字段") {
 			suggestion = "Run: dws aitable base list"
 		} else if errContainsAny(msg, "chat", "群", "会话") {
@@ -265,8 +265,9 @@ func WrapErrorWithOperation(err error, operation string) error {
 		if errContainsAny(msg, "群不存在", "已解散", "被移出") {
 			suggestion = "Group may have been disbanded or you were removed. Run: dws chat search"
 		}
-		if errContainsAny(msg, "文档", "doc", "节点") {
-			suggestion = "Document may have been deleted or moved"
+		if errContainsAny(msg, "文档", "doc", "节点") ||
+			errContainsAny(operation, "doc/", "drive/", "get_document", "get_dentry") {
+			suggestion = "Document may have been deleted or moved. 文档不存在，或你对该文档无访问权限。若确认文档存在，可申请权限:\n" + permissionApplySteps
 		}
 		if errContainsAny(msg, "MCP不存在", "PARAM_ERROR") {
 			return &CLIError{
@@ -383,6 +384,12 @@ func suggestForBusinessErrorText(text string) string {
 		return "后端工具未注册或已下线；这不是参数格式问题。请升级到包含该工具注册的后端/静态端点版本，或改用当前可用替代命令。"
 	case strings.Contains(text, "参数错误") || strings.Contains(text, "param error"):
 		return "Check input parameters. Use --help for available flags"
+	case strings.Contains(text, "无权限访问") || strings.Contains(text, "没有访问权限") ||
+		strings.Contains(text, "没有权限") || strings.Contains(text, "权限不足") ||
+		strings.Contains(strings.ToLower(text), "no permission") ||
+		strings.Contains(strings.ToLower(text), "permission denied") ||
+		strings.Contains(strings.ToLower(text), "forbidden.no.auth"):
+		return permissionApplyGuidance
 	default:
 		return ""
 	}
@@ -408,6 +415,14 @@ func ClassifyToolResultContent(content map[string]any) error {
 			return &PATError{RawJSON: cleanPATJSON(content, code)}
 		}
 	}
+	if isNoPermissionError(content) {
+		message := businessErrorMessage(content)
+		if message == "" {
+			raw, _ := json.Marshal(content)
+			message = string(raw)
+		}
+		return &CLIError{Code: CodeAuthPermission, Message: message, Suggestion: permissionApplyGuidance}
+	}
 	return nil
 }
 
@@ -418,6 +433,18 @@ var patNoPermissionCodes = map[string]bool{
 	"PAT_MEDIUM_RISK_NO_PERMISSION": true,
 	"PAT_HIGH_RISK_NO_PERMISSION":   true,
 }
+
+var noPermissionServerCodes = map[string]bool{
+	"NO_PERMISSION":     true,
+	"FORBIDDEN":         true,
+	"forbidden.no.auth": true,
+}
+
+const permissionApplySteps = "  1) 查可申请角色与审批人: dws drive permission apply-info --node <节点ID或URL>\n" +
+	"  2) 选定角色与审批人后发起申请: dws drive permission apply --node <节点ID或URL> --role <EDITOR|DOWNLOADER|READER> --users <审批人userId>"
+
+const permissionApplyGuidance = "Contact document owner for access, or check if removed from collaborators.\n" +
+	"若你对该文档/知识库暂无访问权限，可发起权限申请:\n" + permissionApplySteps
 
 // ClassifyMCPResponseText classifies a text response returned by an MCP tool call.
 // Returns a typed error for known gateway auth failures, PAT interceptions,
@@ -449,6 +476,14 @@ func ClassifyMCPResponseText(text string) error {
 	for _, key := range []string{"code", "errorCode"} {
 		if code, ok := body[key].(string); ok && patNoPermissionCodes[code] {
 			return &PATError{RawJSON: cleanPATJSON(body, code)}
+		}
+	}
+
+	if isNoPermissionError(body) {
+		return &CLIError{
+			Code:       CodeAuthPermission,
+			Message:    text,
+			Suggestion: permissionApplyGuidance,
 		}
 	}
 

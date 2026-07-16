@@ -312,6 +312,17 @@
       "availability": "available",
       "reviewed": true
     },
+    "sheet.formula_verify": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls sheet/verify_formula, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
+    },
     "sheet.get_all_sheets": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -682,6 +693,37 @@
     "sheet.update_float_image": {
       "interface_mode": "mcp",
       "availability": "available",
+      "reviewed": true
+    },
+    "sheet.version_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/list_doc_versions, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true
+    },
+    "sheet.version_revert": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper preflights with doc/list_doc_versions and then calls doc/revert_doc_version.",
+      "reviewed": true,
+      "runtime_gate": "confirm_dangerous"
+    },
+    "sheet.version_save": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/save_doc_version, which is absent from the pinned MCP metadata snapshot.",
       "reviewed": true
     },
     "sheet.update_pivot_table": {

@@ -43,7 +43,7 @@
 |------|------|----------|----------|
 | `field get` | 获取字段完整配置 | `--base-id` `--table-id` | 按需展开少量字段 |
 | `field list` | 获取字段信息（`field get` 的别名） | `--base-id` `--table-id` | 与 `field get` 等价 |
-| `field create` | 创建字段 | `--base-id` `--table-id` + (`--name --type` 或 `--fields`) | 支持单字段/批量模式 |
+| `field create` | 创建字段 | `--base-id` `--table-id` + (`--name --type` 或 `--fields`) | 同时传入时 `--fields` 优先，单字段参数忽略 |
 | `field update` | 更新字段名/配置 | `--base-id` `--table-id` `--field-id` | 不可变更字段类型 |
 | `field delete` | 删除字段 | `--base-id` `--table-id` `--field-id` | 不可逆 |
 | `field search-options` | 搜索单选/多选字段的选项 | `--base-id` `--table-id` `--field-id` | 仅 singleSelect/multipleSelect；`--keyword` 模糊过滤，不传返回全部 |
@@ -57,7 +57,7 @@
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
 | `record query-empty` | 查询完全没填用户字段的空行 | — | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]，`--cursor` 翻页 |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
-| `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；只传需改字段；**没有** `--record-id` `--cells` flag |
+| `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；cells key 可用 fieldId 或表内唯一字段名，推荐 fieldId |
 | `record batch-update` | 把同一份 cells 批量应用到多条记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | `--record-ids`（≤100）+ `--cells` 共享 patch |
 | `record upsert` | 批量创建或更新（有 recordId 走更新，无则创建） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | `--records`/`--records-file`；单次最多 100 条 |
 | `record delete` | 删除记录 | [aitable-record-delete.md](./aitable/aitable-record-delete.md) | 不可逆，需先 query 确认 |
@@ -71,7 +71,7 @@
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
 | `view get` | 获取视图配置 | `--base-id` `--table-id` | 不传 `--view-ids` 返回全部视图 |
-| `view create` | 创建视图 | `--base-id` `--table-id` `--view-type` | 类型: Grid/Kanban/Gantt/Calendar/Gallery/FormDesigner |
+| `view create` | 创建视图 | `--base-id` `--table-id` `--view-type` | `--config` 仅支持 visibleFieldIds/filter/sort/group；可见字段也可用 `--visible-field-ids` CSV |
 | `view update` | 更新视图（**调整字段顺序的入口**） | `--base-id` `--table-id` `--view-id` | `visibleFieldIds` 重排字段顺序 |
 | `view delete` | 删除视图 | `--base-id` `--table-id` `--view-id` | 不可删最后一个/锁定视图 |
 

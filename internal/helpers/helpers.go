@@ -580,15 +580,33 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 // suggestForBusinessError returns a user-facing suggestion for known business
 // error patterns in a parsed JSON body, or "" if no specific suggestion applies.
 func suggestForBusinessError(body map[string]any) string {
-	msg := ""
-	if v, ok := body["errorMsg"].(string); ok {
-		msg = v
-	} else if v, ok := body["message"].(string); ok {
-		msg = v
-	} else if v, ok := body["error"].(string); ok {
-		msg = v
+	return suggestForBusinessErrorText(businessErrorMessage(body))
+}
+
+func businessErrorMessage(body map[string]any) string {
+	for _, key := range []string{"errorMsg", "message", "error"} {
+		if value, ok := body[key].(string); ok && value != "" {
+			return value
+		}
 	}
-	return suggestForBusinessErrorText(msg)
+	return ""
+}
+
+func isNoPermissionError(body map[string]any) bool {
+	for _, key := range []string{"code", "errorCode", "server_error_code"} {
+		if code, ok := body[key].(string); ok && noPermissionServerCodes[code] {
+			return true
+		}
+	}
+	message := businessErrorMessage(body)
+	if message == "" {
+		return false
+	}
+	lower := strings.ToLower(message)
+	return strings.Contains(message, "无权限访问") || strings.Contains(message, "没有访问权限") ||
+		strings.Contains(message, "没有权限") || strings.Contains(message, "权限不足") ||
+		strings.Contains(lower, "no permission") || strings.Contains(lower, "permission denied") ||
+		strings.Contains(lower, "forbidden.no.auth")
 }
 
 // confirmDelete is a convenience wrapper around cmdutil.ConfirmDelete that
