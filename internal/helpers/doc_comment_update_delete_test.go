@@ -56,6 +56,7 @@ func executeDocCommentMutationCommand(t *testing.T, caller *docCommentMutationCa
 	deps.Out.w = io.Discard
 	os.Args = processArgs
 	cmd := newDocCommand()
+	cmd.PersistentFlags().Bool("yes", false, "skip confirmation")
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
@@ -147,8 +148,8 @@ func TestDocCommentMutationsRejectMissingRequiredFlags(t *testing.T) {
 
 func TestDocCommentDeleteMapsArgumentsAfterYesConfirmation(t *testing.T) {
 	caller := &docCommentMutationCaller{}
-	err := executeDocCommentMutationCommand(t, caller, []string{"dws", "doc", "comment", "delete", "--yes"},
-		"comment", "delete", "--id", "doc-1", "--comment-key", "comment-1")
+	err := executeDocCommentMutationCommand(t, caller, []string{"dws", "doc"},
+		"comment", "delete", "--id", "doc-1", "--comment-key", "comment-1", "--yes")
 	if err != nil {
 		t.Fatalf("doc comment delete returned error: %v", err)
 	}

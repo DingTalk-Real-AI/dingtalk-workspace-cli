@@ -1,0 +1,2148 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "imported",
+    "name": "dws-wukong-envelope",
+    "repository": "dws-wukong",
+    "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
+    "channel": "prod",
+    "source_hash": "sha256:62d219f6115eeb6029c437965c4bcdd626e6320f53bf9d123a10e6638a286489"
+  },
+  "coverage": {
+    "source_products": 31,
+    "matched_products": 17,
+    "source_tools": 279,
+    "eligible_tools": 245,
+    "matched_tools": 147,
+    "unmatched_tools": 98
+  },
+  "products": {
+    "aitable": {
+      "agent_summary": "AI 表格操作",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json"
+      ]
+    },
+    "attendance": {
+      "agent_summary": "考勤打卡 / 排班 / 统计",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json"
+      ]
+    },
+    "calendar": {
+      "agent_summary": "日历日程 / 会议室 / 闲忙查询",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json"
+      ]
+    },
+    "chat": {
+      "agent_summary": "群聊 / 消息 / 机器人",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json"
+      ]
+    },
+    "conference": {
+      "agent_summary": "视频会议 / 预约",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.conference.prod.json"
+      ]
+    },
+    "contact": {
+      "agent_summary": "通讯录 / 用户 / 部门",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json"
+      ]
+    },
+    "devdoc": {
+      "agent_summary": "开放平台文档搜索",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.devdoc.prod.json"
+      ]
+    },
+    "ding": {
+      "agent_summary": "DING 消息 / 发送 / 撤回",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json"
+      ]
+    },
+    "doc": {
+      "agent_summary": "钉钉文档管理",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json"
+      ]
+    },
+    "drive": {
+      "agent_summary": "钉盘文件管理",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json"
+      ]
+    },
+    "live": {
+      "agent_summary": "直播列表 / 信息",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.live.prod.json"
+      ]
+    },
+    "mail": {
+      "agent_summary": "邮箱 / 邮件收发",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json"
+      ]
+    },
+    "minutes": {
+      "agent_summary": "AI 听记 / 会议纪要：列表 / 详情 / 摘要 / 转写 / 待办 / 思维导图 / 发言人 / 热词 / 文件上传",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json"
+      ]
+    },
+    "oa": {
+      "agent_summary": "OA 审批 / 同意 / 拒绝 / 撤销",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json"
+      ]
+    },
+    "report": {
+      "agent_summary": "日志：模版 / 收件箱 / 发件箱 / 单条详情 / 统计（资源.动词命令树，与 mail 对齐）",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json"
+      ]
+    },
+    "sheet": {
+      "agent_summary": "钉钉表格管理",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json"
+      ]
+    },
+    "todo": {
+      "agent_summary": "待办任务管理",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json"
+      ]
+    }
+  },
+  "tools": {
+    "aitable.attachment_upload": {
+      "agent_summary": "申请 attachment 字段 OSS 直传地址（不直接上传）",
+      "examples": [
+        "dws aitable attachment upload --base-id BASE_ID --file-name report.xlsx --size 204800",
+        "dws aitable attachment upload --base-id BASE_ID --file-name photo.png --size 1024 --mime-type image/png"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.prepare_attachment_upload"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "prepare_attachment_upload"
+      }
+    },
+    "aitable.base_create": {
+      "agent_summary": "创建 AI 表格 Base",
+      "examples": [
+        "dws aitable base create --name \"项目跟踪\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_base"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_base"
+      }
+    },
+    "aitable.base_delete": {
+      "agent_summary": "删除 Base（高风险、不可逆）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws aitable base delete --base-id BASE_ID --yes  # 查询 baseId: dws aitable base list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_base"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_base"
+      }
+    },
+    "aitable.base_get": {
+      "agent_summary": "获取 Base 资源目录（tables、dashboards summary）",
+      "examples": [
+        "dws aitable base get --base-id BASE_ID  # 查询 baseId: dws aitable base list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_base"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_base"
+      }
+    },
+    "aitable.base_list": {
+      "agent_summary": "获取 AI 表格列表（最近访问）",
+      "examples": [
+        "dws aitable base list",
+        "dws aitable base list --limit 5 --cursor NEXT_CURSOR"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.list_bases"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "list_bases"
+      }
+    },
+    "aitable.base_update": {
+      "agent_summary": "更新 Base 名称 / 备注",
+      "examples": [
+        "dws aitable base update --base-id BASE_ID --name \"新名称\"  # 查询 baseId: dws aitable base list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_base"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_base"
+      }
+    },
+    "aitable.chart_create": {
+      "agent_summary": "在 dashboard 下创建 chart（需 --config 与 --layout）",
+      "examples": [
+        "dws aitable chart create --base-id BASE_ID --dashboard-id DASHBOARD_ID --config '{\"chartName\":\"销售柱图\",\"chartType\":\"bar\",...}' --layout '{\"x\":0,\"y\":0,\"w\":6,\"h\":4}'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_chart"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_chart"
+      }
+    },
+    "aitable.chart_delete": {
+      "agent_summary": "删除 chart（同步删除其 dashboard 布局项；不可逆）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws aitable chart delete --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_chart"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_chart"
+      }
+    },
+    "aitable.chart_get": {
+      "agent_summary": "获取 chart 详细信息（widget.config + 布局）",
+      "examples": [
+        "dws aitable chart get --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_chart"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_chart"
+      }
+    },
+    "aitable.chart_share_get": {
+      "agent_summary": "获取 chart 分享配置",
+      "examples": [
+        "dws aitable chart share get --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_chart_share"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_chart_share"
+      }
+    },
+    "aitable.chart_share_update": {
+      "agent_summary": "更新 chart 分享开关与类型",
+      "examples": [
+        "dws aitable chart share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --enabled true --share-type ORG",
+        "dws aitable chart share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --enabled false"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_chart_share"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_chart_share"
+      }
+    },
+    "aitable.chart_update": {
+      "agent_summary": "更新 chart 配置 / 布局",
+      "examples": [
+        "dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --config '{\"chartName\":\"新柱图名\",...}'",
+        "dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --layout '{\"x\":0,\"y\":4,\"w\":12,\"h\":4}'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_chart"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_chart"
+      }
+    },
+    "aitable.chart_widgets_example": {
+      "agent_summary": "返回所有图表类型的 widget config 示例（JSONC）",
+      "examples": [
+        "dws aitable chart widgets-example"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_dashboard_widgets_example"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard_widgets_example"
+      }
+    },
+    "aitable.dashboard_config_example": {
+      "agent_summary": "返回 dashboard config 结构示例（JSONC）",
+      "examples": [
+        "dws aitable dashboard config-example"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_dashboard_config_example"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard_config_example"
+      }
+    },
+    "aitable.dashboard_delete": {
+      "agent_summary": "删除 dashboard（级联删除其下 chart；不可逆）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws aitable dashboard delete --base-id BASE_ID --dashboard-id DASHBOARD_ID --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_dashboard"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_dashboard"
+      }
+    },
+    "aitable.dashboard_get": {
+      "agent_summary": "获取 dashboard 详情（含 charts summary）",
+      "examples": [
+        "dws aitable dashboard get --base-id BASE_ID --dashboard-id DASHBOARD_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_dashboard"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard"
+      }
+    },
+    "aitable.dashboard_share_get": {
+      "agent_summary": "获取 dashboard 分享配置",
+      "examples": [
+        "dws aitable dashboard share get --base-id BASE_ID --dashboard-id DASHBOARD_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_dashboard_share"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard_share"
+      }
+    },
+    "aitable.dashboard_share_update": {
+      "agent_summary": "更新 dashboard 分享开关与类型",
+      "examples": [
+        "dws aitable dashboard share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --enabled true --share-type PUBLIC",
+        "dws aitable dashboard share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --enabled false"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_dashboard_share"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_dashboard_share"
+      }
+    },
+    "aitable.export_data": {
+      "agent_summary": "导出数据（不传 --task-id 创建新任务并等待，传入 --task-id 继续等待）",
+      "examples": [
+        "dws aitable export data --base-id BASE_ID --scope all --format excel",
+        "dws aitable export data --base-id BASE_ID --scope table --table-id TABLE_ID --format excel",
+        "dws aitable export data --base-id BASE_ID --scope view --table-id TABLE_ID --view-id VIEW_ID --format excel"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.export_data"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "export_data"
+      }
+    },
+    "aitable.field_delete": {
+      "agent_summary": "删除字段（不可逆，禁止删除主字段与最后一个字段）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws aitable field delete --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_field"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_field"
+      }
+    },
+    "aitable.field_get": {
+      "agent_summary": "批量获取字段详细信息（含完整配置）",
+      "examples": [
+        "dws aitable field get --base-id BASE_ID --table-id TABLE_ID",
+        "dws aitable field get --base-id BASE_ID --table-id TABLE_ID --field-ids fld1,fld2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_fields"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_fields"
+      }
+    },
+    "aitable.field_update": {
+      "agent_summary": "更新字段名称 / 配置 / AI 配置（至少传一项）",
+      "examples": [
+        "dws aitable field update --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --name \"新字段名\"",
+        "dws aitable field update --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --config '{\"options\":[{\"name\":\"A\"},{\"name\":\"B\"}]}'",
+        "dws aitable field update --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --ai-config '{\"outputType\":\"text\",\"prompt\":[{\"type\":\"text\",\"value\":\"请总结\"}]}'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_field"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_field"
+      }
+    },
+    "aitable.import_data": {
+      "agent_summary": "触发导入并等待结果；每个 Sheet 新建为独立表",
+      "examples": [
+        "dws aitable import data --import-id IMPORT_ID",
+        "dws aitable import data --import-id IMPORT_ID --timeout 30"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.import_data"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "import_data"
+      }
+    },
+    "aitable.import_upload": {
+      "agent_summary": "申请导入文件 OSS 直传地址，返回 uploadUrl 与 importId",
+      "examples": [
+        "dws aitable import upload --base-id BASE_ID --file-name data.xlsx --file-size 204800"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.prepare_import_upload"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "prepare_import_upload"
+      }
+    },
+    "aitable.query_records": {
+      "agent_summary": "查询记录（支持按 ID 取或 filters/sort/分页遍历）",
+      "examples": [
+        "dws aitable record query --base-id BASE_ID --table-id TABLE_ID",
+        "dws aitable record query --base-id BASE_ID --table-id TABLE_ID --record-ids rec1,rec2",
+        "dws aitable record query --base-id BASE_ID --table-id TABLE_ID --filters '{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fld_xxx\",\"本科\"]}]}'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.query_records"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "query_records"
+      }
+    },
+    "aitable.record_create": {
+      "agent_summary": "批量新增记录（单次最多 100 条）",
+      "examples": [
+        "dws aitable record create --base-id BASE_ID --table-id TABLE_ID --records '[{\"cells\":{\"fldTextId\":\"文本内容\",\"fldNumId\":123}}]'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_records"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_records"
+      }
+    },
+    "aitable.record_delete": {
+      "agent_summary": "批量删除记录（不可逆，单次最多 100 条）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws aitable record delete --base-id BASE_ID --table-id TABLE_ID --record-ids rec1,rec2 --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_records"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_records"
+      }
+    },
+    "aitable.record_update": {
+      "agent_summary": "批量更新记录（单次最多 100 条）",
+      "examples": [
+        "dws aitable record update --base-id BASE_ID --table-id TABLE_ID --records '[{\"recordId\":\"recXXX\",\"cells\":{\"fldStatusId\":\"已完成\"}}]'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_records"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_records"
+      }
+    },
+    "aitable.table_create": {
+      "agent_summary": "创建数据表并附带初始字段（最多 15 个）",
+      "examples": [
+        "dws aitable table create --base-id BASE_ID --name \"任务表\" --fields '[{\"fieldName\":\"任务名称\",\"type\":\"text\"},{\"fieldName\":\"优先级\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}}]'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_table"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_table"
+      }
+    },
+    "aitable.table_delete": {
+      "agent_summary": "删除数据表（不可逆，高风险）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws aitable table delete --base-id BASE_ID --table-id TABLE_ID --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_table"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_table"
+      }
+    },
+    "aitable.table_get": {
+      "agent_summary": "批量获取数据表目录与字段、视图 summary",
+      "examples": [
+        "dws aitable table get --base-id BASE_ID",
+        "dws aitable table get --base-id BASE_ID --table-ids tbl1,tbl2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_tables"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_tables"
+      }
+    },
+    "aitable.table_update": {
+      "agent_summary": "重命名数据表",
+      "examples": [
+        "dws aitable table update --base-id BASE_ID --table-id TABLE_ID --name \"新表名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_table"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_table"
+      }
+    },
+    "aitable.template_search": {
+      "agent_summary": "按关键词搜索 AI 表格模板（不传返回热门模板）",
+      "examples": [
+        "dws aitable template search --query \"项目管理\"",
+        "dws aitable template search"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.search_templates"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_templates"
+      }
+    },
+    "aitable.view_create": {
+      "agent_summary": "创建视图（Grid/FormDesigner/Gantt/Calendar/Kanban/Gallery）",
+      "examples": [
+        "dws aitable view create --base-id BASE_ID --table-id TABLE_ID --view-type Grid",
+        "dws aitable view create --base-id BASE_ID --table-id TABLE_ID --view-type Kanban --name \"看板视图\"",
+        "dws aitable view create --base-id BASE_ID --table-id TABLE_ID --view-type Grid --config '{\"visibleFieldIds\":[\"fld1\",\"fld2\"]}'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_view"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_view"
+      }
+    },
+    "aitable.view_delete": {
+      "agent_summary": "删除视图（不可逆；禁止删除最后一个视图或锁定视图）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws aitable view delete --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_view"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_view"
+      }
+    },
+    "attendance.batch_get_employee_shifts": {
+      "agent_summary": "批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）",
+      "examples": [
+        "dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07  # 查询 userId: dws contact user search --keyword \"姓名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.batch_get_employee_shifts"
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "batch_get_employee_shifts"
+      }
+    },
+    "attendance.get_attendance_summary": {
+      "agent_summary": "查询某个人的考勤统计摘要",
+      "examples": [
+        "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_attendance_summary"
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "get_attendance_summary"
+      }
+    },
+    "attendance.get_user_attendance_record": {
+      "agent_summary": "查询个人考勤详情",
+      "examples": [
+        "dws attendance record get --user USER_ID --date 2026-03-08  # 查询 userId: dws contact user search --keyword \"姓名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_user_attendance_record"
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "get_user_attendance_record"
+      }
+    },
+    "attendance.query_attendance_group_or_rules": {
+      "agent_summary": "查询考勤组与考勤规则",
+      "examples": [
+        "dws attendance rules --date 2026-03-14",
+        "dws attendance rules --date \"2026-03-14 09:00:00\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.query_attendance_group_or_rules"
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "query_attendance_group_or_rules"
+      }
+    },
+    "calendar.add_calendar_participant": {
+      "agent_summary": "添加参与者",
+      "examples": [
+        "dws calendar participant add --event EVENT_ID --users userId1,userId2",
+        "dws calendar participant add --event EVENT_ID --users userId1 --optional"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.add_calendar_participant"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "add_calendar_participant"
+      }
+    },
+    "calendar.add_meeting_room": {
+      "agent_summary": "预定会议室",
+      "examples": [
+        "dws calendar room add --event EVENT_ID --rooms room1,room2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.add_meeting_room"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "add_meeting_room"
+      }
+    },
+    "calendar.delete_calendar_event": {
+      "agent_summary": "删除日程",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws calendar event delete --id EVENT_ID --yes  # 查询 eventId: dws calendar event list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.delete_calendar_event"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "delete_calendar_event"
+      }
+    },
+    "calendar.delete_meeting_room": {
+      "agent_summary": "移除会议室",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws calendar room delete --event EVENT_ID --rooms room1 --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.delete_meeting_room"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "delete_meeting_room"
+      }
+    },
+    "calendar.get_calendar_detail": {
+      "agent_summary": "获取日程详情",
+      "examples": [
+        "dws calendar event get --id EVENT_ID  # 查询 eventId: dws calendar event list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.get_calendar_detail"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "get_calendar_detail"
+      }
+    },
+    "calendar.get_calendar_participants": {
+      "agent_summary": "查看参与者",
+      "examples": [
+        "dws calendar participant list --event EVENT_ID  # 查询 eventId: dws calendar event list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.get_calendar_participants"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "get_calendar_participants"
+      }
+    },
+    "calendar.list_meeting_room_groups": {
+      "agent_summary": "会议室分组列表",
+      "examples": [
+        "dws calendar room list-groups"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.list_meeting_room_groups"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "list_meeting_room_groups"
+      }
+    },
+    "calendar.list_suggested_event_times": {
+      "agent_summary": "根据参会人推荐可用时间",
+      "examples": [
+        "dws calendar event suggest --users userId1,userId2 --duration 60",
+        "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1",
+        "dws calendar event suggest --users userId1 --duration 30 --timezone Asia/Tokyo"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.list_suggested_event_times"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "list_suggested_event_times"
+      }
+    },
+    "calendar.query_busy_status": {
+      "agent_summary": "查询用户闲忙状态",
+      "examples": [
+        "dws calendar busy search --users userId1,userId2 --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.query_busy_status"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "query_busy_status"
+      }
+    },
+    "calendar.remove_calendar_participant": {
+      "agent_summary": "移除参与者",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws calendar participant delete --event EVENT_ID --users userId1 --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.remove_calendar_participant"
+      ],
+      "interface_ref": {
+        "product_id": "calendar",
+        "rpc_name": "remove_calendar_participant"
+      }
+    },
+    "chat.add_group_member": {
+      "agent_summary": "向群中添加成员",
+      "examples": [
+        "dws chat group members add --id \u003copenconversation_id\u003e --users userId1,userId2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.add_group_member"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "add_group_member"
+      }
+    },
+    "chat.add_robot_to_group": {
+      "agent_summary": "将机器人添加到群中",
+      "examples": [
+        "dws chat group members add-bot --robot-code \u003crobot-code\u003e --id \u003copenconversation_id\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.add_robot_to_group"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "add_robot_to_group"
+      }
+    },
+    "chat.get_group_members": {
+      "agent_summary": "查看群成员列表",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.get_group_members"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "get_group_members"
+      }
+    },
+    "chat.list_special_focus_messages": {
+      "agent_summary": "拉取特别关注人的消息",
+      "examples": [
+        "dws chat message list-focused --limit 50",
+        "dws chat message list-focused --limit 20 --cursor \u003cnextCursor\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.list_special_focus_messages"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "list_special_focus_messages"
+      }
+    },
+    "chat.list_topic_replies": {
+      "agent_summary": "拉取群话题回复消息列表",
+      "examples": [
+        "dws chat message list-topic-replies --group \u003copenconversation_id\u003e --topic-id \u003ctopicId\u003e",
+        "dws chat message list-topic-replies --group \u003copenconversation_id\u003e --topic-id \u003ctopicId\u003e --time \"2025-03-01 00:00:00\" --limit 20"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.list_topic_replies"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "list_topic_replies"
+      }
+    },
+    "chat.remove_group_member": {
+      "agent_summary": "从群中移除成员",
+      "examples": [
+        "dws chat group members remove --id \u003copenconversation_id\u003e --users userId1,userId2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.remove_group_member"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "remove_group_member"
+      }
+    },
+    "chat.search_at_me_message": {
+      "agent_summary": "拉取 @我 的消息",
+      "examples": [
+        "dws chat message list-mentions --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0",
+        "dws chat message list-mentions --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-14T00:00:00+08:00\" --limit 20 --cursor 0",
+        "dws chat message list-mentions --group \u003copenconversation_id\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_at_me_message"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_at_me_message"
+      }
+    },
+    "chat.search_common_groups": {
+      "agent_summary": "搜索共同群（指定昵称列表，查询共同所在的群聊）",
+      "examples": [
+        "dws chat search-common --nicks \"风雷,山乔\" --limit 20 --cursor 0",
+        "dws chat search-common --nicks \"天鸡,乐函\" --match-mode OR --limit 20 --cursor 0",
+        "dws chat search-common --nicks \"风雷,山乔,天鸡\" --limit 10 --cursor \u003cnextCursor\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_common_groups"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_common_groups"
+      }
+    },
+    "chat.search_groups": {
+      "agent_summary": "根据名称搜索会话列表",
+      "examples": [
+        "dws chat search --query \"项目冲刺\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_groups_by_keyword"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_groups_by_keyword"
+      }
+    },
+    "chat.search_messages_by_keyword": {
+      "agent_summary": "按关键词搜索消息",
+      "examples": [
+        "dws chat message search --keyword \"changefree\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\" --limit 50 --cursor 0",
+        "dws chat message search --keyword \"codereview\" --group \u003copenconversation_id\u003e --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\" --limit 100 --cursor 0",
+        "dws chat message search --keyword \"链接\" --start \"2026-04-15T00:00:00+08:00\" --end \"2026-04-16T00:00:00+08:00\" --limit 100 --cursor \u003cnextCursor\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_messages_by_keyword"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_messages_by_keyword"
+      }
+    },
+    "chat.search_messages_by_sender": {
+      "agent_summary": "拉取指定发送者的消息（含单聊 / 群聊；两者互斥）",
+      "examples": [
+        "dws chat message list-by-sender --sender-user-id \u003cuserId\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0",
+        "dws chat message list-by-sender --sender-open-dingtalk-id \u003copenDingTalkId\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0",
+        "dws chat message list-by-sender --sender-user-id \u003cuserId\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --limit 20 --cursor 0"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_messages_by_sender"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_messages_by_sender"
+      }
+    },
+    "chat.search_messages_by_time_range": {
+      "agent_summary": "拉取指定时间范围内当前用户的所有会话消息",
+      "examples": [
+        "dws chat message list-all --start \"2025-03-01 00:00:00\" --end \"2025-03-31 23:59:59\" --limit 50",
+        "dws chat message list-all --start \"2025-03-01 00:00:00\" --end \"2025-03-31 23:59:59\" --limit 50 --cursor \"abc123token\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_messages_by_time_range"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_messages_by_time_range"
+      }
+    },
+    "chat.search_my_robots": {
+      "agent_summary": "搜索我创建的机器人",
+      "examples": [
+        "dws chat bot search --page 1",
+        "dws chat bot search --page 1 --size 10 --name \"日报\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_my_robots"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_my_robots"
+      }
+    },
+    "chat.send_message_by_custom_robot": {
+      "agent_summary": "自定义机器人 Webhook 发送群消息",
+      "examples": [
+        "dws chat message send-by-webhook --token \u003cwebhook-token\u003e --title \"告警\" --text \"CPU 超 90%\" --at-all",
+        "dws chat message send-by-webhook --token \u003cwebhook-token\u003e --title \"test\" --text \"hi @118785\" --at-users 118785"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.send_message_by_custom_robot"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "send_message_by_custom_robot"
+      }
+    },
+    "chat.unread_message_conversation_list": {
+      "agent_summary": "获取未读会话列表",
+      "examples": [
+        "dws chat message list-unread-conversations",
+        "dws chat message list-unread-conversations --count 20"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.unread_message_conversation_list"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "unread_message_conversation_list"
+      }
+    },
+    "chat.update_group_name": {
+      "agent_summary": "更新群名称",
+      "examples": [
+        "dws chat group rename --id \u003copenconversation_id\u003e --name \"新群名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.update_group_name"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "update_group_name"
+      }
+    },
+    "contact.get_current_user_profile": {
+      "agent_summary": "获取当前用户信息",
+      "examples": [
+        "dws contact user get-self"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_current_user_profile"
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "get_current_user_profile"
+      }
+    },
+    "contact.get_dept_members_by_deptId": {
+      "agent_summary": "查看部门成员（逗号分隔 deptId）",
+      "examples": [
+        "dws contact dept list-members --ids 12345,67890  # 查询 deptId: dws contact dept list-children"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_dept_members_by_deptId"
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "get_dept_members_by_deptId"
+      }
+    },
+    "contact.get_user_info_by_user_ids": {
+      "agent_summary": "批量获取用户详情（逗号分隔 userId）",
+      "examples": [
+        "dws contact user get --ids userId1,userId2  # 查询 userId: dws contact user search --keyword \"姓名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_user_info_by_user_ids"
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "get_user_info_by_user_ids"
+      }
+    },
+    "contact.search_contact_by_key_word": {
+      "agent_summary": "按关键词搜索用户",
+      "examples": [
+        "dws contact user search --query \"张三\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_contact_by_key_word"
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "search_contact_by_key_word"
+      }
+    },
+    "contact.search_dept_by_keyword": {
+      "agent_summary": "按关键词搜索部门",
+      "examples": [
+        "dws contact dept search --query \"技术部\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_dept_by_keyword"
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "search_dept_by_keyword"
+      }
+    },
+    "contact.search_user_by_mobile": {
+      "agent_summary": "按手机号搜索用户",
+      "examples": [
+        "dws contact user search-mobile --mobile 13800138000"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_user_by_mobile"
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "search_user_by_mobile"
+      }
+    },
+    "devdoc.search_open_platform_docs_rag": {
+      "agent_summary": "按关键词搜索 open.dingtalk.com 开放平台文档",
+      "examples": [
+        "dws devdoc article search \"MCP\"",
+        "dws devdoc article search --query \"MCP\" --page 1 --size 10",
+        "dws devdoc article search --query \"openConversationId\" --page 2 --size 5"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.devdoc.prod.json#devdoc.search_open_platform_docs"
+      ],
+      "interface_ref": {
+        "product_id": "devdoc",
+        "rpc_name": "search_open_platform_docs"
+      }
+    },
+    "ding.recall_ding_message": {
+      "agent_summary": "撤回 DING 消息",
+      "examples": [
+        "dws ding message recall --robot-code \u003crobot-code\u003e --id \u003copen-ding-id\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.recall_ding_message"
+      ],
+      "interface_ref": {
+        "product_id": "ding",
+        "rpc_name": "recall_ding_message"
+      }
+    },
+    "ding.send_ding_message": {
+      "agent_summary": "发送 DING 消息（应用内 / 短信 / 电话）",
+      "examples": [
+        "dws ding message send --robot-code \u003crobot-code\u003e --users userId1,userId2 --content \"请查看\"",
+        "dws ding message send --robot-code \u003crobot-code\u003e --type call --users userId1 --content \"紧急告警\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.send_ding_message"
+      ],
+      "interface_ref": {
+        "product_id": "ding",
+        "rpc_name": "send_ding_message"
+      }
+    },
+    "doc.create_comment": {
+      "agent_summary": "创建文档评论",
+      "examples": [
+        "dws doc comment create --node DOC_ID --content \"这里需要修改\"",
+        "dws doc comment create --node DOC_ID --content \"请review\" --mention uid1,uid2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_comment"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_comment"
+      }
+    },
+    "doc.create_document": {
+      "agent_summary": "创建一篇新的在线文档",
+      "examples": [
+        "dws doc create --name \"项目周报\"",
+        "dws doc create --name \"Q1 总结\" --content \"# Q1 总结\" --folder FOLDER_ID",
+        "dws doc create --name \"知识库文档\" --workspace WS_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_document"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_document"
+      }
+    },
+    "doc.create_file": {
+      "agent_summary": "创建文件（文档/表格/脑图/白板/多维表/文件夹等）",
+      "examples": [
+        "dws doc file create --name \"项目周报\" --type adoc",
+        "dws doc file create --name \"数据统计\" --type axls --folder FOLDER_ID",
+        "dws doc file create --name \"思维导图\" --type amind --workspace WS_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_file"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_file"
+      }
+    },
+    "doc.create_folder": {
+      "agent_summary": "创建文件夹",
+      "examples": [
+        "dws doc folder create --name \"项目资料\"",
+        "dws doc folder create --name \"子文件夹\" --folder PARENT_FOLDER_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_folder"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_folder"
+      }
+    },
+    "doc.delete_document_block": {
+      "agent_summary": "删除块元素（不可逆）",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --keyword \"...\" 或 dws doc list  # 查询 blockId: dws doc block list --node \u003cnodeId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.delete_document_block"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "delete_document_block"
+      }
+    },
+    "doc.get_document_content": {
+      "agent_summary": "读取文档内容（Markdown）",
+      "examples": [
+        "dws doc read --node DOC_ID",
+        "dws doc read --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.get_document_content"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "get_document_content"
+      }
+    },
+    "doc.get_document_info": {
+      "agent_summary": "获取文档元信息（标题/类型/创建者/权限等）",
+      "examples": [
+        "dws doc info --node DOC_ID",
+        "dws doc info --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.get_document_info"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "get_document_info"
+      }
+    },
+    "doc.list_comments": {
+      "agent_summary": "查询文档评论列表",
+      "examples": [
+        "dws doc comment list --node DOC_ID",
+        "dws doc comment list --node \"https://alidocs.dingtalk.com/i/nodes/xxx\" --page-size 20",
+        "dws doc comment list --node DOC_ID --type inline --resolve-status unresolved"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.list_comments"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_comments"
+      }
+    },
+    "doc.list_document_blocks": {
+      "agent_summary": "查询文档一级块元素列表",
+      "examples": [
+        "dws doc block list --node DOC_ID",
+        "dws doc block list --node DOC_ID --start-index 0 --end-index 5",
+        "dws doc block list --node DOC_ID --block-type heading"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.list_document_blocks"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_document_blocks"
+      }
+    },
+    "doc.list_nodes": {
+      "agent_summary": "遍历文件夹或知识库下的直接子节点",
+      "examples": [
+        "dws doc list",
+        "dws doc list --folder FOLDER_ID",
+        "dws doc list --workspace WS_ID --page-size 20"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.list_nodes"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_nodes"
+      }
+    },
+    "doc.reply_comment": {
+      "agent_summary": "回复文档评论",
+      "examples": [
+        "dws doc comment reply --node DOC_ID --comment-key COMMENT_KEY --content \"同意\"",
+        "dws doc comment reply --node DOC_ID --comment-key COMMENT_KEY --content \"比心\" --emoji",
+        "dws doc comment reply --node DOC_ID --comment-key COMMENT_KEY --content \"请确认\" --mention uid1,uid2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.reply_comment"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "reply_comment"
+      }
+    },
+    "doc.search_documents": {
+      "agent_summary": "搜索文档（不传关键词返回最近访问）",
+      "examples": [
+        "dws doc search --query \"会议纪要\"",
+        "dws doc search",
+        "dws doc search --extensions pdf,docx"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.search_documents"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "search_documents"
+      }
+    },
+    "doc.update_document": {
+      "agent_summary": "更新文档内容（追加 / 覆盖）",
+      "examples": [
+        "dws doc update --node DOC_ID --content \"# 新内容\" --mode append",
+        "dws doc update --node DOC_ID --content \"# 完整替换\" --mode overwrite"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.update_document"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "update_document"
+      }
+    },
+    "drive.commit_upload": {
+      "agent_summary": "提交文件上传",
+      "examples": [
+        "dws drive commit --file-name \"报告.pdf\" --file-size 102400 --upload-id \u003cuploadId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.commit_upload"
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "commit_upload"
+      }
+    },
+    "drive.create_folder": {
+      "agent_summary": "创建文件夹",
+      "examples": [
+        "dws drive mkdir --name \"项目资料\"",
+        "dws drive mkdir --name \"子目录\" --parent-id \u003cdentryUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.create_folder"
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "create_folder"
+      }
+    },
+    "drive.download_file": {
+      "agent_summary": "获取文件下载链接",
+      "examples": [
+        "dws drive download --file-id \u003cdentryUuid\u003e  # 查询 fileId: dws drive list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.download_file"
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "download_file"
+      }
+    },
+    "drive.get_file_info": {
+      "agent_summary": "获取文件元数据信息",
+      "examples": [
+        "dws drive info --file-id \u003cdentryUuid\u003e  # 查询 fileId: dws drive list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.get_file_info"
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "get_file_info"
+      }
+    },
+    "drive.get_upload_info": {
+      "agent_summary": "获取文件上传信息",
+      "examples": [
+        "dws drive upload-info --file-name \"报告.pdf\" --file-size 102400",
+        "dws drive upload-info --file-name \"readme.txt\" --file-size 1024 --parent-id \u003cdentryUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.get_upload_info"
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "get_upload_info"
+      }
+    },
+    "drive.list_files": {
+      "agent_summary": "获取文件/文件夹列表",
+      "examples": [
+        "dws drive list --max 20",
+        "dws drive list --max 20 --parent-id \u003cdentryUuid\u003e --order-by name --order asc"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.list_files"
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "list_files"
+      }
+    },
+    "live.get_my_lives": {
+      "agent_summary": "查看我的直播列表",
+      "examples": [
+        "dws live stream list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.live.prod.json#live.get_my_lives"
+      ],
+      "interface_ref": {
+        "product_id": "live",
+        "rpc_name": "get_my_lives"
+      }
+    },
+    "mail.create_mail_folder": {
+      "agent_summary": "创建邮件文件夹",
+      "examples": [
+        "dws mail folder create --email user@company.com --name \"项目资料\"",
+        "dws mail folder create --email user@company.com --name \"子文件夹\" --folder \u003cfolderId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.create_mail_folder"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "create_mail_folder"
+      }
+    },
+    "mail.delete_mail_folder": {
+      "agent_summary": "删除邮件文件夹",
+      "examples": [
+        "dws mail folder delete --email user@company.com --id \u003cfolderId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.delete_mail_folder"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "delete_mail_folder"
+      }
+    },
+    "mail.get_email_by_message_id": {
+      "agent_summary": "查看邮件完整内容",
+      "examples": [
+        "dws mail message get --email user@company.com --id \u003cmessageId\u003e  # 查询邮箱: dws mail mailbox list; 查询邮件 ID: dws mail message search"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.get_email_by_message_id"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "get_email_by_message_id"
+      }
+    },
+    "mail.get_thread": {
+      "agent_summary": "获取会话详情",
+      "examples": [
+        "dws mail thread get --email user@company.com --id \u003cconversationId\u003e  # 查询邮箱: dws mail mailbox list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.get_thread"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "get_thread"
+      }
+    },
+    "mail.list_folders": {
+      "agent_summary": "列举邮件文件夹",
+      "examples": [
+        "dws mail folder list --email user@company.com",
+        "dws mail folder list --email user@company.com --folder-id \u003cfolderId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.list_folders"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "list_folders"
+      }
+    },
+    "mail.list_tags": {
+      "agent_summary": "列举邮件标签",
+      "examples": [
+        "dws mail tag list --email user@company.com"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.list_tags"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "list_tags"
+      }
+    },
+    "mail.list_user_mailboxes": {
+      "agent_summary": "查询可用邮箱地址",
+      "examples": [
+        "dws mail mailbox list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.list_user_mailboxes"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "list_user_mailboxes"
+      }
+    },
+    "mail.search_emails": {
+      "agent_summary": "搜索邮件 (KQL 语法)",
+      "examples": [
+        "dws mail message search --email user@company.com --query \"subject:\\\"周报\\\"\" --size 20  # 查询邮箱: dws mail mailbox list",
+        "dws mail message search --email user@company.com --query \"from:alice AND date\u003e2025-06-01T00:00:00Z\" --size 10"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.search_emails"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "search_emails"
+      }
+    },
+    "mail.send_email": {
+      "agent_summary": "发送邮件",
+      "examples": [
+        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --body \"本周...\"  # 查询邮箱: dws mail mailbox list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.send_email"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "send_email"
+      }
+    },
+    "mail.update_mail_folder": {
+      "agent_summary": "更新邮件文件夹",
+      "examples": [
+        "dws mail folder update --email user@company.com --id \u003cfolderId\u003e --name \"新文件夹名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.update_mail_folder"
+      ],
+      "interface_ref": {
+        "product_id": "mail",
+        "rpc_name": "update_mail_folder"
+      }
+    },
+    "minutes.add_personal_hot_word": {
+      "agent_summary": "添加个人热词 (优化识别专有名词 / 人名)",
+      "examples": [
+        "dws minutes hot-word add --words \"钉钉\"",
+        "dws minutes hot-word add --words \"OKR,钉钉,Copilot\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.add_personal_hot_word"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "add_personal_hot_word"
+      }
+    },
+    "minutes.batch_get_minutes_details": {
+      "agent_summary": "批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 / 状态)",
+      "examples": [
+        "dws minutes get batch --ids uuid1,uuid2,uuid3"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.batch_get_minutes_details"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "batch_get_minutes_details"
+      }
+    },
+    "minutes.cancel_upload_session": {
+      "agent_summary": "取消文件上传会话，释放服务端资源",
+      "examples": [
+        "dws minutes upload cancel --session-id \u003csessionId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.cancel_upload_session"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "cancel_upload_session"
+      }
+    },
+    "minutes.complete_upload_session": {
+      "agent_summary": "完成文件上传并创建听记（幂等：同一 sessionId 重复调用返回已有任务）",
+      "examples": [
+        "dws minutes upload complete --session-id \u003csessionId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.complete_upload_session"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "complete_upload_session"
+      }
+    },
+    "minutes.create_mind_graph": {
+      "agent_summary": "触发思维导图生成任务 (完成状态走 mind-graph status 轮询)",
+      "examples": [
+        "dws minutes mind-graph create --id \u003ctaskUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.create_mind_graph"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "create_mind_graph"
+      }
+    },
+    "minutes.create_upload_session": {
+      "agent_summary": "创建文件上传会话（获取预签名 URL，供 HTTP PUT 上传）",
+      "examples": [
+        "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400",
+        "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400 --title \"周会录音\"",
+        "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400 --input-language \"zh\" --enable-message-card"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.create_upload_session"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "create_upload_session"
+      }
+    },
+    "minutes.get_minutes_ai_summary": {
+      "agent_summary": "获取听记 AI 摘要 (Markdown 格式)",
+      "examples": [
+        "dws minutes get summary --id \u003ctaskUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_ai_summary"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_ai_summary"
+      }
+    },
+    "minutes.get_minutes_basic_info": {
+      "agent_summary": "获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接)",
+      "examples": [
+        "dws minutes get info --id \u003ctaskUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_basic_info"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_basic_info"
+      }
+    },
+    "minutes.get_minutes_keywords": {
+      "agent_summary": "获取听记关键字列表",
+      "examples": [
+        "dws minutes get keywords --id \u003ctaskUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_keywords"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_keywords"
+      }
+    },
+    "minutes.get_minutes_transcription": {
+      "agent_summary": "获取听记语音转写原文 (含发言人 / 时间戳)",
+      "examples": [
+        "dws minutes get transcription --id \u003ctaskUuid\u003e",
+        "dws minutes get transcription --id \u003ctaskUuid\u003e --direction 1"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_transcription"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_transcription"
+      }
+    },
+    "minutes.list_minutes_todos": {
+      "agent_summary": "获取听记中提取的待办事项",
+      "examples": [
+        "dws minutes get todos --id \u003ctaskUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.list_minutes_todos"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_minutes_todos"
+      }
+    },
+    "minutes.query_mind_graph_status": {
+      "agent_summary": "查询思维导图任务状态 (0=进行中 / 1=成功 / 2=失败)",
+      "examples": [
+        "dws minutes mind-graph status --id \u003ctaskUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.query_mind_graph_status"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "query_mind_graph_status"
+      }
+    },
+    "minutes.replace_minutes_text": {
+      "agent_summary": "在段落 + 纪要中全量替换文字 (区分大小写，精确匹配)",
+      "examples": [
+        "dws minutes replace-text --id \u003ctaskUuid\u003e --search \"旧文字\" --replace \"新文字\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.replace_minutes_text"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "replace_minutes_text"
+      }
+    },
+    "minutes.replace_speaker": {
+      "agent_summary": "批量替换听记中指定发言人",
+      "examples": [
+        "dws minutes speaker replace --id \u003ctaskUuid\u003e --from \"张三\" --to \"李四\"",
+        "dws minutes speaker replace --id \u003ctaskUuid\u003e --from \"张三\" --to \"李四\" --target-uid \u003cuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.replace_speaker"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "replace_speaker"
+      }
+    },
+    "minutes.update_minutes_summary": {
+      "agent_summary": "全量覆盖纪要内容 (不触发 AI 重算)",
+      "examples": [
+        "dws minutes update summary --id \u003ctaskUuid\u003e --content \"新的纪要内容\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.update_minutes_summary"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "update_minutes_summary"
+      }
+    },
+    "minutes.update_minutes_title": {
+      "agent_summary": "修改听记标题",
+      "examples": [
+        "dws minutes update title --id \u003ctaskUuid\u003e --title \"Q2 复盘会议\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.update_minutes_title"
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "update_minutes_title"
+      }
+    },
+    "oa.approve_processInstance": {
+      "agent_summary": "同意审批",
+      "examples": [
+        "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e  # 查询 instanceId: dws oa approval list-pending; taskId 来自 dws oa approval tasks",
+        "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.approve_processInstance"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "approve_processInstance"
+      }
+    },
+    "oa.get_processInstance_detail": {
+      "agent_summary": "获取审批实例详情",
+      "examples": [
+        "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e  # 查询 instanceId: dws oa approval list-pending"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_detail"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_processInstance_detail"
+      }
+    },
+    "oa.get_processInstance_records": {
+      "agent_summary": "获取审批操作记录",
+      "examples": [
+        "dws oa approval records --instance-id \u003cprocessInstanceId\u003e  # 查询 instanceId: dws oa approval list-pending"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_records"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_processInstance_records"
+      }
+    },
+    "oa.list_initiated_instances": {
+      "agent_summary": "查询已发起的审批实例列表",
+      "examples": [
+        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --next-token 0 --max-results 20  # processCode 来自管理后台配置"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_initiated_instances"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_initiated_instances"
+      }
+    },
+    "oa.list_pending_approvals": {
+      "agent_summary": "查询待我处理的审批",
+      "examples": [
+        "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_approvals"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_pending_approvals"
+      }
+    },
+    "oa.list_pending_tasks": {
+      "agent_summary": "查询待我审批的任务 ID",
+      "examples": [
+        "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e  # 查询 instanceId: dws oa approval list-pending"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_tasks"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_pending_tasks"
+      }
+    },
+    "oa.list_user_visible_process": {
+      "agent_summary": "获取当前用户可见的审批表单列表",
+      "examples": [
+        "dws oa approval list-forms --cursor 0 --size 100"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_user_visible_process"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_user_visible_process"
+      }
+    },
+    "oa.reject_processInstance": {
+      "agent_summary": "拒绝审批",
+      "examples": [
+        "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不同意\"  # 查询 instanceId: dws oa approval list-pending; taskId 来自 dws oa approval tasks"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.reject_processInstance"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "reject_processInstance"
+      }
+    },
+    "oa.revoke_processInstance": {
+      "agent_summary": "撤销已发起的审批",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws oa approval revoke --instance-id \u003cid\u003e --yes  # 查询 instanceId: dws oa approval list-pending",
+        "dws oa approval revoke --instance-id \u003cid\u003e --remark \"误发起\" --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.revoke_processInstance"
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "revoke_processInstance"
+      }
+    },
+    "report.create_report": {
+      "agent_summary": "提交一份新日报（按模版）",
+      "examples": [
+        "dws report entry submit --template-id TPL_ID --contents '[{\"content\":\"完成开发\",\"sort\":\"0\",\"key\":\"今日完成\",\"contentType\":\"markdown\",\"type\":\"1\"}]'",
+        "dws report entry submit --template-id TPL_ID --contents-file ./report.json",
+        "dws report entry submit --template-id TPL_ID --contents '[...]' --to-chat --to-user-ids userId1,userId2"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.create_report"
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "create_report"
+      }
+    },
+    "report.get_available_report_templates": {
+      "agent_summary": "获取当前用户可用的日志模版列表",
+      "examples": [
+        "dws report template list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_available_report_templates"
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_available_report_templates"
+      }
+    },
+    "report.get_received_report_list": {
+      "agent_summary": "列出我收到的日报",
+      "examples": [
+        "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_received_report_list"
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_received_report_list"
+      }
+    },
+    "report.get_report_entry_details": {
+      "agent_summary": "读取单份日报正文（含字段明细 + 钉钉跳转链接）",
+      "examples": [
+        "dws report entry get --report-id \u003creportId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_entry_details"
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_entry_details"
+      }
+    },
+    "report.get_report_statistics_by_id": {
+      "agent_summary": "读取单份日报的已读统计",
+      "examples": [
+        "dws report entry stats --report-id \u003creportId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_statistics_by_id"
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_statistics_by_id"
+      }
+    },
+    "report.get_send_report_list": {
+      "agent_summary": "列出我发出的日报",
+      "examples": [
+        "dws report outbox list --cursor 0 --size 20",
+        "dws report outbox list --cursor 0 --size 20 --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
+        "dws report outbox list --cursor 0 --size 20 --template-name \"日报\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_send_report_list"
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_send_report_list"
+      }
+    },
+    "report.get_template_details_by_name": {
+      "agent_summary": "读取单个日志模版的字段定义",
+      "examples": [
+        "dws report template get --name \u003ctemplateName\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_template_details_by_name"
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_template_details_by_name"
+      }
+    },
+    "sheet.create_sheet": {
+      "agent_summary": "新建工作表",
+      "examples": [
+        "dws sheet new --node NODE_ID --name \"Sheet2\"",
+        "dws sheet new --node NODE_ID --name \"数据汇总\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.create_sheet"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "create_sheet"
+      }
+    },
+    "sheet.create_workspace_sheet": {
+      "agent_summary": "创建钉钉表格文档",
+      "examples": [
+        "dws sheet create --name \"销售数据\"",
+        "dws sheet create --name \"Q1 数据\" --folder FOLDER_ID",
+        "dws sheet create --name \"知识库表格\" --workspace WS_ID"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.create_workspace_sheet"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "create_workspace_sheet"
+      }
+    },
+    "sheet.get_all_sheets": {
+      "agent_summary": "获取全部工作表列表",
+      "examples": [
+        "dws sheet list --node NODE_ID",
+        "dws sheet list --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.get_all_sheets"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_all_sheets"
+      }
+    },
+    "sheet.info": {
+      "agent_summary": "获取指定工作表详情",
+      "examples": [
+        "dws sheet info --node NODE_ID",
+        "dws sheet info --node NODE_ID --sheet-id SHEET_ID",
+        "dws sheet info --node NODE_ID --sheet-id \"Sheet1\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.get_sheet"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_sheet"
+      }
+    },
+    "sheet.range_read": {
+      "agent_summary": "读取工作表数据",
+      "examples": [
+        "dws sheet range read --node NODE_ID",
+        "dws sheet range read --node NODE_ID --sheet-id SHEET_ID",
+        "dws sheet range read --node NODE_ID --sheet-id \"Sheet1\" --range \"A1:D10\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.get_range"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_range"
+      }
+    },
+    "sheet.range_update": {
+      "agent_summary": "更新工作表指定区域内容（--values 与 --hyperlinks 至少传一项）",
+      "examples": [
+        "dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range \"A1:B2\" --values '[[\"姓名\",\"分数\"],[\"张三\",90]]'",
+        "dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range \"C2\" --values '[[\"=A2\u0026B2\"]]'",
+        "dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range \"A1\" --hyperlinks '[[{\"type\":\"path\",\"link\":\"https://dingtalk.com\",\"text\":\"钉钉\"}]]'"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.update_range"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "update_range"
+      }
+    },
+    "todo.create_personal_todo": {
+      "agent_summary": "创建待办",
+      "examples": [
+        "dws todo task create --title \"修复线上Bug\" --executors userId1,userId2 --priority 40",
+        "dws todo task create --title \"提交报告\" --executors userId1 --due \"2026-03-10T18:00:00+08:00\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.create_personal_todo"
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "create_personal_todo"
+      }
+    },
+    "todo.delete_todo": {
+      "agent_summary": "删除待办",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws todo task delete --task-id \u003ctaskId\u003e",
+        "dws todo task delete --task-id \u003ctaskId\u003e --yes"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.delete_todo"
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "delete_todo"
+      }
+    },
+    "todo.get_todo_detail": {
+      "agent_summary": "待办详情",
+      "examples": [
+        "dws todo task get --task-id \u003ctaskId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.get_todo_detail"
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "get_todo_detail"
+      }
+    },
+    "todo.update_todo_done_status": {
+      "agent_summary": "修改执行者的待办完成状态",
+      "examples": [
+        "dws todo task done --task-id \u003ctaskId\u003e --status true",
+        "dws todo task done --task-id \u003ctaskId\u003e --status false"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_done_status"
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "update_todo_done_status"
+      }
+    },
+    "todo.update_todo_task": {
+      "agent_summary": "修改待办任务",
+      "examples": [
+        "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\"",
+        "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\"",
+        "dws todo task update --task-id \u003ctaskId\u003e --done true"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_task"
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "update_todo_task"
+      }
+    }
+  }
+}

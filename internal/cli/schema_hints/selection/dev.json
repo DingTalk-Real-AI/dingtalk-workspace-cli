@@ -1,0 +1,725 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/dev",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "dev.add_dev_app_members": {
+      "agent_summary": "向应用添加开发者或管理员成员",
+      "use_when": [
+        "需要授予指定用户应用协作角色时"
+      ],
+      "avoid_when": [
+        "只查看现有成员时使用 dev app member list"
+      ],
+      "examples": [
+        "dws dev app member add --unified-app-id <unifiedAppId> --user-ids userId1,userId2 --member-type DEVELOPER --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.add_dev_app_members",
+        "cobra-help:dws dev app member add",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.apply_dev_app_permissions": {
+      "agent_summary": "为应用申请一个或多个接口权限",
+      "use_when": [
+        "已确认 scopeValue 并需要新增权限时"
+      ],
+      "avoid_when": [
+        "查找或核对已有权限时使用 dev app permission list"
+      ],
+      "examples": [
+        "dws dev app permission add --unified-app-id <unifiedAppId> --scope-values Contact.User.mobile --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.apply_dev_app_permissions",
+        "cobra-help:dws dev app permission add",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.connect_status": {
+      "agent_summary": "查看后台连接器守护进程状态",
+      "use_when": [
+        "需要确认本地 connect 守护进程是否在跑、pid/日志路径"
+      ],
+      "avoid_when": [
+        "要停止守护进程时用 dev connect stop"
+      ],
+      "examples": [
+        "dws dev connect status --unified-app-id <unifiedAppId> --json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.connect_status",
+        "cobra-help:dws dev connect status",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md",
+        "live-dws-schema:dev.connect_status#FAILED"
+      ]
+    },
+    "dev.connect_stop": {
+      "agent_summary": "优雅停止后台连接器守护进程",
+      "use_when": [
+        "用户明确要求停止本地 Stream/连接器守护进程"
+      ],
+      "avoid_when": [
+        "只想查看状态时用 dev connect status"
+      ],
+      "examples": [
+        "dws dev connect stop --unified-app-id <unifiedAppId>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.connect_stop",
+        "cobra-help:dws dev connect stop",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md",
+        "live-dws-schema:dev.connect_stop#FAILED"
+      ]
+    },
+    "dev.create_dev_app": {
+      "agent_summary": "创建钉钉开放平台应用并返回 unifiedAppId/凭证信息",
+      "use_when": [
+        "需要新建企业内部应用或三方个人应用并拿到 unifiedAppId"
+      ],
+      "avoid_when": [
+        "应用已存在只需改信息时用 dev app update",
+        "只查文档时用 devdoc"
+      ],
+      "examples": [
+        "dws dev app create --name \"我的 AI 机器人\" --desc \"接 opencode\" --dry-run --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.create_dev_app",
+        "cobra-help:dws dev app create",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md",
+        "live-dws-schema:dev app create",
+        "helper:devAppRequireWriteGuard"
+      ]
+    },
+    "dev.create_dev_app_version": {
+      "agent_summary": "为应用当前配置创建待发布版本",
+      "use_when": [
+        "配置变更完成后需要生成版本进入发布流程时"
+      ],
+      "avoid_when": [
+        "只是查看已有版本时使用 dev app version list"
+      ],
+      "examples": [
+        "dws dev app version create --unified-app-id <unifiedAppId> --desc \"新增机器人能力\" --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.create_dev_app_version",
+        "cobra-help:dws dev app version create",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.delete_dev_app": {
+      "agent_summary": "删除开放平台企业内部应用（不可恢复）",
+      "use_when": [
+        "用户明确要求永久删除应用，且接受不可恢复后果"
+      ],
+      "avoid_when": [
+        "只需临时下架时用 dev app disable",
+        "用户未确认应用名/影响范围时不要删除"
+      ],
+      "examples": [
+        "dws dev app delete --unified-app-id <unified-app-id> --dry-run --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.delete_dev_app",
+        "cobra-help:dws dev app delete",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md",
+        "live-dws-schema:dev app delete",
+        "helper:devAppRequireWriteGuard"
+      ]
+    },
+    "dev.disable_dev_app": {
+      "agent_summary": "停用指定开放平台应用",
+      "use_when": [
+        "需要让应用暂时不可用但保留配置时"
+      ],
+      "avoid_when": [
+        "永久删除应用使用 dev app delete"
+      ],
+      "examples": [
+        "dws dev app disable --unified-app-id <unifiedAppId> --dry-run --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.disable_dev_app",
+        "cobra-help:dws dev app disable",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.disable_dev_app_robot": {
+      "agent_summary": "停用指定应用的机器人能力",
+      "use_when": [
+        "需要暂时让应用机器人离线时"
+      ],
+      "avoid_when": [
+        "停用整个应用使用 dev app disable"
+      ],
+      "examples": [
+        "dws dev app robot disable --unified-app-id <unifiedAppId> --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.disable_dev_app_robot",
+        "cobra-help:dws dev app robot disable",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.enable_dev_app": {
+      "agent_summary": "启用指定开放平台应用",
+      "use_when": [
+        "需要恢复一个已停用应用时"
+      ],
+      "avoid_when": [
+        "启用应用内机器人能力使用 dev app robot enable"
+      ],
+      "examples": [
+        "dws dev app enable --unified-app-id <unifiedAppId> --dry-run --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.enable_dev_app",
+        "cobra-help:dws dev app enable",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.enable_dev_app_robot": {
+      "agent_summary": "启用指定应用的机器人能力",
+      "use_when": [
+        "机器人配置存在但处于 OFFLINE 时"
+      ],
+      "avoid_when": [
+        "建立本地 Stream 连接使用 dev connect"
+      ],
+      "examples": [
+        "dws dev app robot enable --unified-app-id <unifiedAppId> --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.enable_dev_app_robot",
+        "cobra-help:dws dev app robot enable",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.get_dev_app": {
+      "agent_summary": "获取指定开放平台应用详情",
+      "use_when": [
+        "已知 unifiedAppId 并需要核对应用配置或状态时"
+      ],
+      "avoid_when": [
+        "需要搜索或分页浏览多个应用时使用 dev app list"
+      ],
+      "examples": [
+        "dws dev app get --unified-app-id <unifiedAppId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.get_dev_app",
+        "cobra-help:dws dev app get",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.get_dev_app_credentials": {
+      "agent_summary": "读取指定应用的客户端凭证",
+      "use_when": [
+        "已知 unifiedAppId 且需要 clientId 或 clientSecret 时"
+      ],
+      "avoid_when": [
+        "不要把凭证内容用于普通应用详情查询或写入日志"
+      ],
+      "examples": [
+        "dws dev app credentials get --unified-app-id <unifiedAppId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.get_dev_app_credentials",
+        "cobra-help:dws dev app credentials get",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.get_dev_app_version_detail": {
+      "agent_summary": "获取指定应用版本的详细内容",
+      "use_when": [
+        "已知 versionId 并需要核对版本配置时"
+      ],
+      "avoid_when": [
+        "查看发布进度时使用 dev app version status"
+      ],
+      "examples": [
+        "dws dev app version get --unified-app-id <unifiedAppId> --version-id <versionId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.get_dev_app_version_detail",
+        "cobra-help:dws dev app version get",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.get_dev_app_version_status": {
+      "agent_summary": "查询指定应用版本的发布或审批状态",
+      "use_when": [
+        "需要判断版本是否已发布、审核中或受阻时"
+      ],
+      "avoid_when": [
+        "需要版本配置详情时使用 dev app version get"
+      ],
+      "examples": [
+        "dws dev app version status --unified-app-id <unifiedAppId> --version-id <versionId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.get_dev_app_version_status",
+        "cobra-help:dws dev app version status",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.get_extension_robot_config": {
+      "agent_summary": "获取指定应用的机器人配置和状态",
+      "use_when": [
+        "需要判断机器人是否未配置、离线或在线时"
+      ],
+      "avoid_when": [
+        "查询机器人建号异步任务使用 dev app robot result"
+      ],
+      "examples": [
+        "dws dev app robot get --unified-app-id <unifiedAppId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.get_extension_robot_config",
+        "cobra-help:dws dev app robot get",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.get_extension_webapp_config": {
+      "agent_summary": "获取指定应用的网页入口配置",
+      "use_when": [
+        "需要核对应用 H5 或 PC 首页地址时"
+      ],
+      "avoid_when": [
+        "修改网页入口时使用 dev app webapp config"
+      ],
+      "examples": [
+        "dws dev app webapp get --unified-app-id <unifiedAppId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.get_extension_webapp_config",
+        "cobra-help:dws dev app webapp get",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.list_dev_app": {
+      "agent_summary": "按条件分页查询开放平台应用",
+      "use_when": [
+        "需要按名称、创建人或应用键筛选应用时"
+      ],
+      "avoid_when": [
+        "已经持有明确 unifiedAppId 时使用 dev app get"
+      ],
+      "examples": [
+        "dws dev app list --name \"DemoApp\" --page-size 20 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.list_dev_app",
+        "cobra-help:dws dev app list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.list_dev_app_events": {
+      "agent_summary": "列出或搜索应用可订阅的事件",
+      "use_when": [
+        "需要查事件码、事件名称或当前事件列表时"
+      ],
+      "avoid_when": [
+        "订阅或退订事件使用对应写命令"
+      ],
+      "examples": [
+        "dws dev app event list --unified-app-id <unifiedAppId> --keyword \"审批\" --page-size 20"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.list_dev_app_events",
+        "cobra-help:dws dev app event list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.list_dev_app_members": {
+      "agent_summary": "列出指定应用的协作成员",
+      "use_when": [
+        "需要查看应用开发者和管理员清单时"
+      ],
+      "avoid_when": [
+        "新增或移除成员使用对应 member 写命令"
+      ],
+      "examples": [
+        "dws dev app member list --unified-app-id <unifiedAppId>"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.list_dev_app_members",
+        "cobra-help:dws dev app member list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.list_dev_app_permissions": {
+      "agent_summary": "查询应用权限及其授权状态",
+      "use_when": [
+        "需要按关键词、范围或状态查权限时"
+      ],
+      "avoid_when": [
+        "新增或移除权限使用对应 permission 写命令"
+      ],
+      "examples": [
+        "dws dev app permission list --unified-app-id <unifiedAppId> --keyword \"通讯录\" --page-size 20"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.list_dev_app_permissions",
+        "cobra-help:dws dev app permission list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.list_dev_app_versions": {
+      "agent_summary": "分页列出应用的历史和待发布版本",
+      "use_when": [
+        "需要查找 versionId 或浏览版本记录时"
+      ],
+      "avoid_when": [
+        "已知版本并需详情或状态时使用 get 或 status"
+      ],
+      "examples": [
+        "dws dev app version list --unified-app-id <unifiedAppId> --page-size 20"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.list_dev_app_versions",
+        "cobra-help:dws dev app version list",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.publish_dev_app_version": {
+      "agent_summary": "发布开放平台应用指定版本（可先预检）",
+      "use_when": [
+        "版本已创建，需要预检或正式发布到线上"
+      ],
+      "avoid_when": [
+        "还没有 versionId 时先 version create / list / get",
+        "含高敏权限但尚未确认时不要正式发布"
+      ],
+      "examples": [
+        "dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versionId> --dry-run --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.publish_dev_app_version",
+        "cobra-help:dws dev app version publish",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md",
+        "live-dws-schema:dev app version publish",
+        "helper:devAppRequireWriteGuard"
+      ]
+    },
+    "dev.query_robot_create_result": {
+      "agent_summary": "查询机器人建号异步任务结果",
+      "use_when": [
+        "已有 taskId，需要轮询 WAITING、SUCCESS 或审批状态时"
+      ],
+      "avoid_when": [
+        "没有建号任务时先使用 dev app robot submit"
+      ],
+      "examples": [
+        "dws dev app robot result --task-id <taskId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.query_robot_create_result",
+        "cobra-help:dws dev app robot result",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.remove_dev_app_members": {
+      "agent_summary": "从应用移除开发者或管理员成员",
+      "use_when": [
+        "需要撤销指定用户的应用协作角色时"
+      ],
+      "avoid_when": [
+        "删除应用本身或只查看成员时不要使用"
+      ],
+      "examples": [
+        "dws dev app member remove --unified-app-id <unifiedAppId> --user-ids userId1,userId2 --member-type DEVELOPER --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.remove_dev_app_members",
+        "cobra-help:dws dev app member remove",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.remove_dev_app_permissions": {
+      "agent_summary": "移除应用的一个或多个接口权限",
+      "use_when": [
+        "需要撤销已知 scopeValue 的权限时"
+      ],
+      "avoid_when": [
+        "只查看权限状态时使用 dev app permission list"
+      ],
+      "examples": [
+        "dws dev app permission remove --unified-app-id <unifiedAppId> --scope-values Contact.User.mobile --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.remove_dev_app_permissions",
+        "cobra-help:dws dev app permission remove",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.search_open_platform_docs_rag": {
+      "agent_summary": "通过 dev 兼容入口搜索开放平台文档",
+      "use_when": [
+        "明确需要验证或使用 dev doc search 入口时"
+      ],
+      "avoid_when": [
+        "常规开放平台文档检索优先使用可用的 devdoc article search"
+      ],
+      "examples": [
+        "dws dev doc search --query \"MCP\" --size 10"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.search_open_platform_docs_rag",
+        "cobra-help:dws dev doc search",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.set_extension_robot_config": {
+      "agent_summary": "创建或更新应用的机器人能力配置",
+      "use_when": [
+        "已有 unifiedAppId 并需要配置机器人名称、回调或技能时"
+      ],
+      "avoid_when": [
+        "机器人建号使用 robot submit，本地建联使用 dev connect"
+      ],
+      "examples": [
+        "dws dev app robot config --unified-app-id <unifiedAppId> --name \"小助手\" --brief \"审批助手\" --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.set_extension_robot_config",
+        "cobra-help:dws dev app robot config",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.set_extension_webapp_config": {
+      "agent_summary": "创建或更新应用网页入口配置",
+      "use_when": [
+        "需要设置 H5、PC 首页或 OMP 地址时"
+      ],
+      "avoid_when": [
+        "只查看当前网页配置时使用 dev app webapp get"
+      ],
+      "examples": [
+        "dws dev app webapp config --unified-app-id <unifiedAppId> --homepage-url https://example.com --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.set_extension_webapp_config",
+        "cobra-help:dws dev app webapp config",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.submit_robot_create_task": {
+      "agent_summary": "提交机器人建号异步任务",
+      "use_when": [
+        "需要创建新的机器人账号并取得 taskId 时"
+      ],
+      "avoid_when": [
+        "已有任务应先用 robot result 轮询，不能重复提交"
+      ],
+      "examples": [
+        "dws dev app robot submit --name \"我的智能体\" --robot-name \"小助手\" --desc \"处理审批问答\" --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.submit_robot_create_task",
+        "cobra-help:dws dev app robot submit",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.subscribe_dev_app_events": {
+      "agent_summary": "为应用订阅指定事件码",
+      "use_when": [
+        "已确认事件码并需要新增事件订阅时"
+      ],
+      "avoid_when": [
+        "查询事件码或已有订阅时先使用 dev app event list"
+      ],
+      "examples": [
+        "dws dev app event subscribe --unified-app-id <unifiedAppId> --event-codes bpms_task_change --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.subscribe_dev_app_events",
+        "cobra-help:dws dev app event subscribe",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.unsubscribe_dev_app_events": {
+      "agent_summary": "取消应用的指定事件订阅",
+      "use_when": [
+        "需要停止接收一个或多个已订阅事件时"
+      ],
+      "avoid_when": [
+        "只是查看事件订阅时使用 dev app event list"
+      ],
+      "examples": [
+        "dws dev app event unsubscribe --unified-app-id <unifiedAppId> --event-codes bpms_task_change --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.unsubscribe_dev_app_events",
+        "cobra-help:dws dev app event unsubscribe",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev.update_dev_app": {
+      "agent_summary": "更新开放平台应用名称/描述/图标等基础信息",
+      "use_when": [
+        "已有 unifiedAppId，需要修改应用基础信息"
+      ],
+      "avoid_when": [
+        "创建新应用用 create；停用/启用用 disable/enable；改安全配置用 security config"
+      ],
+      "examples": [
+        "dws dev app update --unified-app-id <unifiedAppId> --name <新名称> --dry-run --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.update_dev_app",
+        "cobra-help:dws dev app update",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md",
+        "live-dws-schema:dev app update",
+        "helper:devAppRequireWriteGuard"
+      ]
+    },
+    "dev.update_dev_app_security_config": {
+      "agent_summary": "更新应用 IP 白名单、回调和单点登录地址",
+      "use_when": [
+        "需要调整应用安全相关 URL 或白名单时"
+      ],
+      "avoid_when": [
+        "普通应用名称和描述更新使用 dev app update"
+      ],
+      "examples": [
+        "dws dev app security config --unified-app-id <unifiedAppId> --ip-whitelist 192.0.2.10 --redirect-urls https://callback.example.invalid/callback --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#dev.update_dev_app_security_config",
+        "cobra-help:dws dev app security config",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/dev.md"
+      ]
+    }
+  },
+  "products": {
+    "dev": {
+      "agent_summary": "管理开放平台应用、权限、机器人、版本发布与本地连接器",
+      "use_when": [
+        "创建/配置开放平台应用、机器人、权限、事件订阅或发布版本"
+      ],
+      "avoid_when": [
+        "只查开放平台文档用 devdoc；业务聊天/邮信用 chat/mail"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "skills/mono/references/products/dev.md",
+        "CommandRegistry:product=dev",
+        "Skill:skills/mono/references/products/dev.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

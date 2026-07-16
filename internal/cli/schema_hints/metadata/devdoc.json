@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/devdoc",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "devdoc.devdoc_rag_pretest": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "devdoc.search_dingtalk_open_docs": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "devdoc.search_open_error_code_rag": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "devdoc.search_open_platform_docs": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "devdoc.search_open_platform_docs_rag": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "query": {
+          "required": false
+        }
+      },
+      "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -> keyword.",
+      "cli_path": "devdoc article search",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    }
+  }
+}

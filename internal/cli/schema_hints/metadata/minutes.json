@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/minutes",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "minutes.add_member_permission": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.add_personal_hot_word": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.batch_get_minutes_details": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.cancel_upload_session": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.complete_upload_session": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.create_mind_graph": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.create_speaker_summary": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.create_upload_session": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.get_minutes_ai_summary": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.get_minutes_basic_info": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.get_minutes_keywords": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.get_minutes_transcription": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.get_speaker_summary": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.list_accessible_minutes": {
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.list_by_keyword_and_time_range": {
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.list_minutes_todos": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.list_my_hotwords": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.list_shared_minutes": {
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.query_mind_graph_status": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.query_minutes_audio_url": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.query_minutes_by_tag_id": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.query_user_tag_list": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.record_pause": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "minutes.record_resume": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "minutes.record_start": {
+      "effect": "write",
+      "risk": "medium",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "minutes.record_stop": {
+      "effect": "write",
+      "risk": "medium",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "minutes.remove_member_permission": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "minutes.replace_minutes_text": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "minutes.replace_speaker": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.update_minutes_summary": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "minutes.update_minutes_title": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

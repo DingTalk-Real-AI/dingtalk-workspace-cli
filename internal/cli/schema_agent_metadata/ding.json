@@ -1,0 +1,584 @@
+{
+  "product_id": "ding",
+  "tools": {
+    "ding message recall": {
+      "agent_summary": "撤回已发送的机器人 DING",
+      "agent_summary_source": "dws-agent-selection/ding",
+      "availability": "available",
+      "avoid_when": [
+        "需要以用户身份撤回 DING 时不要使用本命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "撤回已发送的机器人 DING",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": "撤回已发送的机器人 DING",
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要以用户身份撤回 DING 时不要使用本命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "需要以用户身份撤回 DING 时不要使用本命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": "user_required",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": "destructive",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "ding.recall_ding_message",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "ding.recall_ding_message",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "ding.recall_ding_message",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": "high",
+              "source": "skills/mono/SKILL.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill danger table explicitly reviews this operation"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
+          ],
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
+              ],
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "ding",
+        "rpc_name": "recall_ding_message"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=ding.recall_ding_message",
+        "Skill:skills/mono/references/products/ding.md",
+        "cobra-help:dws ding message recall",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.recall_ding_message",
+        "internal/cli/schema_command_registry.json#ding.recall_ding_message",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/ding.json",
+        "internal/cli/schema_hints/selection/ding.json",
+        "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message",
+        "live-dws-schema:ding.recall_ding_message",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/ding.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#ding.recall_ding_message",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#ding.recall_ding_message"
+      ],
+      "use_when": [
+        "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
+      ]
+    },
+    "ding message send": {
+      "agent_summary": "以企业机器人发送应用内/短信/电话 DING",
+      "agent_summary_source": "dws-agent-selection/ding",
+      "availability": "available",
+      "avoid_when": [
+        "普通聊天消息用 chat message send / send-by-bot",
+        "需要用户身份 DING 时不要用本命令（机器人身份）",
+        "短信/电话有成本，用户未确认前不要发 call/sms"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "以企业机器人发送应用内/短信/电话 DING",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": "以企业机器人发送应用内/短信/电话 DING",
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "普通聊天消息用 chat message send / send-by-bot",
+            "需要用户身份 DING 时不要用本命令（机器人身份）",
+            "短信/电话有成本，用户未确认前不要发 call/sms"
+          ],
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "普通聊天消息用 chat message send / send-by-bot",
+                "需要用户身份 DING 时不要用本命令（机器人身份）",
+                "短信/电话有成本，用户未确认前不要发 call/sms"
+              ],
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+            "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+                "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "ding.send_ding_message",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "ding.send_ding_message",
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "precedence": "imported",
+              "selected": true
+            },
+            {
+              "value": "ding.send_ding_message",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
+          ],
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
+              ],
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "ding",
+        "rpc_name": "send_ding_message"
+      },
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=ding.send_ding_message",
+        "Skill:skills/mono/references/products/ding.md",
+        "cobra-help:dws ding message send",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.send_ding_message",
+        "internal/cli/schema_command_registry.json#ding.send_ding_message",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/ding.json",
+        "internal/cli/schema_hints/selection/ding.json",
+        "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message",
+        "live-dws-schema:ding.send_ding_message",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/ding.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#ding.send_ding_message",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#ding.send_ding_message"
+      ],
+      "use_when": [
+        "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
+      ]
+    }
+  }
+}

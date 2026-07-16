@@ -1215,7 +1215,7 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !confirmDelete("互联网公开设置", nodeID) {
+			if !confirmDangerousAction(cmd, "enable internet publishing", nodeID) {
 				return nil
 			}
 			toolArgs := map[string]any{
@@ -1243,7 +1243,7 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !confirmDelete("互联网公开关闭", nodeID) {
+			if !confirmDangerousAction(cmd, "disable internet publishing", nodeID) {
 				return nil
 			}
 			return callMCPTool("set_file_publish", map[string]any{

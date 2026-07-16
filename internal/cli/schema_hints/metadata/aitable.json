@@ -1,0 +1,1061 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/aitable",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "aitable.advperm_disable": {
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_advanced_permission"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.advperm_enable": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_advanced_permission"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.advperm_role_create": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "create_role"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.advperm_role_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "delete_role"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.advperm_role_get": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_role"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.advperm_role_list": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_roles"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.advperm_role_update": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "patch_role"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.attachment_upload": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.base_copy": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "copy_base"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.base_create": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.base_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.base_get": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.base_get_primary_doc_id": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_base_primary_doc_id"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.base_list": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.base_search": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_bases"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.base_update": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.chart_create": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.chart_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.chart_get": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.chart_share_get": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.chart_share_update": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.chart_update": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.chart_widgets_example": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.create": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_base"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.dashboard_arrange": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "align_dashboard"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.dashboard_config_example": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.dashboard_create": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_dashboard"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.dashboard_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.dashboard_get": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.dashboard_share_get": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.dashboard_share_update": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.dashboard_update": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_dashboard"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.export_data": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.field_create": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_fields"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.field_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.field_get": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.field_list": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_fields"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.field_search_options": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_field_options"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.field_update": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.form_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed composite wrapper: the CLI constrains pinned aitable/create_view to FormDesigner and applies form-specific argument semantics, so it is not a direct parameter-equivalent RPC projection.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.form_field_hide": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "aitable.form_field_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_field_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_questions_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed composite wrapper: the CLI converts single-question flags or batch JSON into the pinned aitable/create_fields request, so it is not a direct parameter-equivalent RPC projection.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_questions_delete": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_field"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.form_share_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_share_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.form_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.import_data": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.import_upload": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.info": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_base"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.list": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "list_bases"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.query_records": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "record-ids": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed query command supports both an optional ID lookup mode and a table scan/filter mode, so --record-ids is not unconditionally required.",
+      "cli_path": "aitable record query",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "aitable.record_batch_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed composite wrapper: the CLI expands record IDs and shared cells into the pinned aitable/update_records request, so it is not a direct parameter-equivalent RPC projection.",
+      "reviewed": true,
+      "review_reason": "migrated to reviewed metadata block"
+    },
+    "aitable.record_create": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.record_get": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "query_records"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_history_list": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "query_record_history"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_primary_doc_create": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "create_primary_doc"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_primary_doc_get": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_primary_doc"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_query_empty": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "query_empty_records"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_share_url": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_record_share_url"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_update": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.record_upsert": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "record_upsert"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.search": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_bases"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.section_create": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "create_section"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.section_delete": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "delete_section"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "aitable.section_list_empty": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_empty_sections"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.section_list_nodes": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_nsheet_nodes"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.section_move_node": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "move_nsheet_node"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.section_rename": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "rename_section"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.section_reorder": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "reorder_section"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.table_create": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.table_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.table_get": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.table_list": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_tables"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.table_update": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.template_search": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_create": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_delete": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.view_duplicate": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "duplicate_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_aggregate": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_card": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_field_widths": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_fill_color_rule": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_filter": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_frozen_cols": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_frozen_columns_of_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_group": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_lock": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_view_lock_status"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_row_height": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_cell_height_of_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_sort": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_timebar": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_get_visible_fields": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_list": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_lock": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "lock_or_unlock_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_aggregate": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+      "reviewed": true,
+      "parameters": {
+        "json": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed CLI accepts --json, a --field-id/--action pair, or --clear-field-id; the registered typed constraints describe those alternatives.",
+      "cli_path": "aitable view update aggregate",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "aitable.view_update_card": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+      "reviewed": true,
+      "parameters": {
+        "json": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed CLI merges optional typed card flags over an optional --json block; the registered typed constraints require at least one real update field.",
+      "cli_path": "aitable view update card",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "aitable.view_update_field_widths": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+      "reviewed": true,
+      "parameters": {
+        "json": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed CLI accepts either --json or the paired --field-id/--width form, which is represented by typed require-one-of and require-together constraints.",
+      "cli_path": "aitable view update field-widths",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "aitable.view_update_fill_color_rule": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "set_view_fill_color_rule"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_filter": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_frozen_cols": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_frozen_columns_of_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_group": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_name": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_row_height": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_cell_height_of_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_sort": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.view_update_timebar": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+      "reviewed": true,
+      "parameters": {
+        "json": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed CLI accepts either a complete --json block or one or more typed Gantt timebar fields; --json is therefore not unconditionally required.",
+      "cli_path": "aitable view update timebar",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "aitable.view_update_visible_fields": {
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.workflow_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "base-id": {
+          "property": "baseId",
+          "required": true
+        },
+        "dsl": {
+          "property": "dsl",
+          "required": true,
+          "interface_type": "object"
+        },
+        "locale": {
+          "property": "locale"
+        }
+      },
+      "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+      "cli_path": "aitable workflow create",
+      "runtime_gate": "none"
+    },
+    "aitable.workflow_disable": {
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "disable_workflow"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "aitable.workflow_enable": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "enable_workflow"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.workflow_get": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_workflow"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.workflow_list": {
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_workflows"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "aitable.workflow_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "base-id": {
+          "property": "baseId",
+          "required": true
+        },
+        "workflow-id": {
+          "property": "workflowId",
+          "required": true
+        },
+        "dsl": {
+          "property": "dsl",
+          "required": true,
+          "interface_type": "object"
+        },
+        "locale": {
+          "property": "locale"
+        }
+      },
+      "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+      "cli_path": "aitable workflow update",
+      "runtime_gate": "none"
+    }
+  }
+}

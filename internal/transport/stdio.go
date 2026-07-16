@@ -42,6 +42,10 @@ type StdioClient struct {
 	mu      sync.Mutex // serializes JSON-RPC requests
 	nextID  int64
 	started bool
+
+	lifecycleMu sync.Mutex
+	initialized bool
+	initResult  InitializeResult
 }
 
 // NewStdioClient creates a StdioClient for the given command.
@@ -108,10 +112,14 @@ func (s *StdioClient) Start(ctx context.Context) error {
 // Stop kills the subprocess and waits for it to exit.
 // A non-zero exit code after Kill is expected and not treated as an error.
 func (s *StdioClient) Stop() error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if !s.started || s.cmd == nil {
+		s.initialized = false
+		s.initResult = InitializeResult{}
 		return nil
 	}
 
@@ -121,15 +129,43 @@ func (s *StdioClient) Stop() error {
 		_ = s.cmd.Process.Kill()
 		_ = s.cmd.Wait()
 		s.started = false
+		s.initialized = false
+		s.initResult = InitializeResult{}
 		return nil
 	}
 	err := s.cmd.Wait()
 	s.started = false
+	s.initialized = false
+	s.initResult = InitializeResult{}
 	return err
 }
 
 // Initialize sends the JSON-RPC initialize request.
 func (s *StdioClient) Initialize(ctx context.Context) (InitializeResult, error) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	return s.initialize(ctx)
+}
+
+// EnsureInitialized lazily starts the subprocess and performs the MCP
+// initialize handshake exactly once for the current process lifecycle.
+func (s *StdioClient) EnsureInitialized(ctx context.Context) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.initialized {
+		return nil
+	}
+	if err := s.Start(context.Background()); err != nil {
+		return err
+	}
+	_, err := s.initialize(ctx)
+	return err
+}
+
+func (s *StdioClient) initialize(ctx context.Context) (InitializeResult, error) {
+	if s.initialized {
+		return s.initResult, nil
+	}
 	params := map[string]any{
 		"protocolVersion": supportedProtocolVersions[0],
 		"capabilities":    map[string]any{},
@@ -143,6 +179,8 @@ func (s *StdioClient) Initialize(ctx context.Context) (InitializeResult, error) 
 	if err := s.call(ctx, "initialize", params, &result); err != nil {
 		return InitializeResult{}, err
 	}
+	s.initialized = true
+	s.initResult = result
 	return result, nil
 }
 

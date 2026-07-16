@@ -492,7 +492,7 @@ Flags:
 
 #### 拉取会话消息内容 — 拉取指定群聊或单聊的会话消息内容
 
---group 指定群聊，--user 指定单聊用户（通过 userId），--open-dingtalk-id 指定单聊用户（通过 openDingTalkId），三者互斥。用 --direction 控制时间方向：newer=从给定时间往现在拉，older=从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。
+--group 指定群聊，--user 指定单聊用户（通过 userId），--open-dingtalk-id 指定单聊用户（通过 openDingTalkId），三者互斥。用 --direction 控制时间方向：newer=从给定时间往现在拉，older=从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会带 `quotedMessage`；被引用的原消息是合并转发或图片时，其类型与内容也会保留在引用上下文中。
 ```
 Usage:
   dws chat message list [flags]
@@ -516,6 +516,7 @@ Flags:
     - --open-dingtalk-id 传 openDingTalkId（三方应用或跨组织场景常用，无法获取 userId 时使用）
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
+  - 处理引用回复时读取 quotedMessage，不要只看回复正文；合并转发与图片引用的原消息内容也在该上下文中
   - 话题圈消息拉取流程：如果返回的会话消息中包含 openConvThreadId 字段，说明是话题类消息。要获取完整的话题内容，需要两步操作：(1) 先通过 dws chat message list 拉取话题主消息（即话题帖子本身）；(2) 再调用 dws chat message list-topic-replies --group <openConversationId> --topic-id <openConvThreadId> 分页拉取该话题下的所有回复消息。只有话题主消息 + 回复列表合在一起，才是一条话题的完整内容。
 ```
 
@@ -773,7 +774,7 @@ Flags:
 
 #### 拉取指定时间范围内当前用户的所有会话消息 — 分页拉取当前登录用户在指定时间范围内的所有会话消息
 
---start 和 --end 限定时间范围，--limit 指定每页数量，--cursor 传分页游标（首页传 "0"，后续从响应中的 nextCursor 获取）。服务端按 cursor 分页返回，hasMore=true 时用返回的 nextCursor 值作为下次 --cursor 继续翻页。
+--start 和 --end 限定时间范围，--limit 指定每页数量，--cursor 传分页游标（首页传 "0"，后续从响应中的 nextCursor 获取）。服务端按 cursor 分页返回，hasMore=true 时用返回的 nextCursor 值作为下次 --cursor 继续翻页。若当前账号没有消息搜索权益，CLI 会透传服务端的友好提示与开通入口。
 ```
 Usage:
   dws chat message list-all [flags]
@@ -791,6 +792,7 @@ Flags:
   - 与 chat message list 的区别：list 拉取指定单个会话（群聊或单聊）的消息，list-all 拉取当前用户所有会话的消息
   - 翻页：hasMore=true 时，用响应中的 nextCursor 值作为下次 --cursor 参数继续翻页
   - 时间格式统一为 yyyy-MM-dd HH:mm:ss
+  - 权限/权益错误不是空结果；应把返回的 friendly_hint 与 action_url 展示给用户，不要继续盲目翻页
 ```
 
 #### 拉取指定发送者的消息 — 搜索特定人发送给我的消息（包含单聊和群聊）

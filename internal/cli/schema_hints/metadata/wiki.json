@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/wiki",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "wiki.add_member": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.create_file": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_file"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.create_wikiSpace": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.delete_document": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "delete_document"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "wiki.delete_wikiSpace": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
+    "wiki.get_wikiSpace": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.list_member": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.list_nodes": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_nodes"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.list_wikiSpaces": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI command routes by --type between wiki/list_wikiSpaces and drive/list_spaces, so the reviewed executable wrapper has no single direct MCP interface.",
+      "reviewed": true
+    },
+    "wiki.node_copy": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "copy_document"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.node_move": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "move_document"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.node_search": {
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "search_documents"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.remove_member": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "wiki.search_wikiSpaces": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "wiki.update_member": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

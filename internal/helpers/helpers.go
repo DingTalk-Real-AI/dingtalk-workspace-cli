@@ -182,6 +182,14 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 	return "", nil
 }
 
+// CallMCPToolTextOnServer invokes an MCP tool and returns its raw text response
+// WITHOUT printing anything, applying the same error classification as the
+// print path. Exported for the shortcut layer's multi-step ("smart") shortcuts,
+// which chain several tool calls and need each intermediate result as data.
+func CallMCPToolTextOnServer(serverID, toolName string, args map[string]any) (string, error) {
+	return callMCPToolReturnTextOnServer(context.Background(), serverID, toolName, args)
+}
+
 // callMCPTool 是通用的 MCP 工具调用入口：自动路由 → 调用 → 格式化输出。
 // 通过 resolveProductID() 自动确定目标 MCP Server，JSON 输出使用默认的 HTML 转义。
 func callMCPTool(toolName string, args map[string]any) error {
@@ -452,8 +460,33 @@ func buildMinimalPATJSON(code string) string {
 
 // isBusinessError checks if a parsed JSON body represents a business-level error.
 func isBusinessError(body map[string]any) bool {
-	if _, ok := body["error"].(string); ok {
+	if v, ok := body["error"]; ok {
+		switch t := v.(type) {
+		case string:
+			if strings.TrimSpace(t) != "" {
+				return true
+			}
+		case map[string]any:
+			if len(t) > 0 {
+				return true
+			}
+		case []any:
+			if len(t) > 0 {
+				return true
+			}
+		default:
+			if t != nil {
+				return true
+			}
+		}
+	}
+	if v, ok := body["status"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "error") {
 		return true
+	}
+	for _, key := range []string{"errorCode", "error_code", "code"} {
+		if isErrorCodeValue(body[key]) {
+			return true
+		}
 	}
 	if v, ok := body["success"].(bool); ok && !v {
 		return true
@@ -462,6 +495,32 @@ func isBusinessError(body map[string]any) bool {
 		return true
 	}
 	return false
+}
+
+func isErrorCodeValue(v any) bool {
+	switch t := v.(type) {
+	case string:
+		code := strings.TrimSpace(t)
+		if code == "" {
+			return false
+		}
+		switch strings.ToLower(code) {
+		case "0", "ok", "success", "succeed":
+			return false
+		default:
+			return true
+		}
+	case float64:
+		return t != 0
+	case int:
+		return t != 0
+	case int64:
+		return t != 0
+	case json.Number:
+		return strings.TrimSpace(t.String()) != "" && t.String() != "0"
+	default:
+		return false
+	}
 }
 
 // isNotLoggedInError checks if the error body indicates missing authentication.
@@ -557,6 +616,32 @@ func confirmDelete(resourceType, resourceName string) bool {
 	}
 
 	deps.Out.PrintInfo("Operation cancelled")
+	return false
+}
+
+// confirmDangerousAction confirms a high-impact action whose semantics are
+// not deletion. Keeping this separate from confirmDelete prevents enable,
+// disable, or publication operations from being described as deletes.
+func confirmDangerousAction(cmd *cobra.Command, action, resourceName string) bool {
+	if cmd == nil {
+		return false
+	}
+	if yes, err := cmd.Flags().GetBool("yes"); err == nil && yes {
+		return true
+	}
+
+	output := cmd.ErrOrStderr()
+	fmt.Fprintf(output, "About to %s: %s\n", action, resourceName)
+	fmt.Fprint(output, "Confirm action? (yes/no): ")
+
+	reader := bufio.NewReader(cmd.InOrStdin())
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	if answer == "yes" || answer == "y" {
+		return true
+	}
+
+	fmt.Fprintln(output, "Operation cancelled")
 	return false
 }
 

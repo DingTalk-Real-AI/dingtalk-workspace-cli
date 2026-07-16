@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/audit",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "audit.export": {
+      "agent_summary": "按日期范围导出本地操作审计日志（jsonl 或 csv）",
+      "use_when": [
+        "需要把本地审计日志导出为 jsonl/csv，或按 --since/--until 取一段时间"
+      ],
+      "avoid_when": [
+        "只看最近几条用 audit tail",
+        "只校验哈希链完整性用 audit verify"
+      ],
+      "examples": [
+        "dws audit export --format jsonl",
+        "dws audit export --since 2026-07-01 --until 2026-07-14 --format csv"
+      ],
+      "reviewed": true,
+      "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#audit.export",
+        "cobra-help:dws audit export --help",
+        "internal/app/audit_command.go"
+      ]
+    },
+    "audit.tail": {
+      "agent_summary": "查看本地操作审计日志最近 N 条记录",
+      "use_when": [
+        "需要快速查看最近写入的审计记录（默认最近 20 条）"
+      ],
+      "avoid_when": [
+        "需要按日期范围整段导出用 audit export",
+        "需要校验哈希链用 audit verify"
+      ],
+      "examples": [
+        "dws audit tail",
+        "dws audit tail --lines 50"
+      ],
+      "reviewed": true,
+      "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#audit.tail",
+        "cobra-help:dws audit tail --help",
+        "internal/app/audit_command.go"
+      ]
+    },
+    "audit.verify": {
+      "agent_summary": "校验本地审计日志文件的哈希链完整性",
+      "use_when": [
+        "怀疑审计文件被篡改，或需要确认最新/指定文件哈希链是否完整"
+      ],
+      "avoid_when": [
+        "只浏览或导出日志内容时用 audit tail / audit export"
+      ],
+      "examples": [
+        "dws audit verify",
+        "dws audit verify --file /path/to/audit.jsonl"
+      ],
+      "reviewed": true,
+      "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#audit.verify",
+        "cobra-help:dws audit verify --help",
+        "internal/app/audit_command.go"
+      ]
+    }
+  },
+  "products": {
+    "audit": {
+      "agent_summary": "查看、导出和校验本地操作审计日志",
+      "use_when": [
+        "需要排查本机 CLI 操作审计记录，或验证审计文件完整性"
+      ],
+      "avoid_when": [
+        "查钉钉业务数据或发消息请用对应产品命令，不要用 audit"
+      ],
+      "reviewed": true,
+      "review_reason": "产品级路由：本地审计日志管理，不涉及 MCP。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#audit",
+        "cobra-help:dws audit --help",
+        "CommandRegistry:product=audit"
+      ]
+    }
+  }
+}

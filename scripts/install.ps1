@@ -336,7 +336,7 @@ function Resolve-SkillMode {
 function Write-MultiModeNotice {
     Write-Say ""
     Write-Say "🧪 Skill mode: multi (EXPERIMENTAL / preview) — automatic skill install skipped."
-    Write-Say "   ⚠ multi is not yet stable. 20 product-scoped skills pass dispatch verifier,"
+    Write-Say "   ⚠ multi is not yet stable. All product-scoped skills pass dispatch verifier,"
     Write-Say "     but interface, naming and cross-skill references may change in future releases."
     Write-Say "     For production / shared environments, use mono mode (--mode mono)."
     Write-Say ""

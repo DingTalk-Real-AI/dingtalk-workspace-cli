@@ -141,16 +141,18 @@ dws event status --event user_im_message_receive_group
 停止指定订阅：
 
 ```bash
-dws event stop <subscribe_id>
+dws event stop <subscribe_id> --dry-run
+dws event stop <subscribe_id> --yes
 ```
 
 清理当前身份下本地记录的全部个人订阅：
 
 ```bash
-dws event stop --all
+dws event stop --all --dry-run
+dws event stop --all --yes
 ```
 
-裸 `dws event stop` 不会取消订阅。前台 `consume` 进程用 Ctrl+C 只会停止本地进程；需要取消服务端订阅时，使用事件输出或 `status` 里的 `subscribe_id` 执行 `dws event stop <subscribe_id>`。
+裸 `dws event stop` 不会取消订阅。前台 `consume` 进程用 Ctrl+C 只会停止本地进程；需要取消服务端订阅时，使用事件输出或 `status` 里的 `subscribe_id`，先执行 `dws event stop <subscribe_id> --dry-run`，确认预览后再加 `--yes`。
 
 ## Troubleshooting
 

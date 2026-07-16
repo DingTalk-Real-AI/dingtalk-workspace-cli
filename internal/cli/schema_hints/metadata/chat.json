@@ -1,0 +1,654 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/chat",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "chat.add_custom_group_role": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.add_emoji_reaction": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "chat": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "conversation-id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "group": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        }
+      },
+      "review_reason": "The four reviewed conversation locator flags are aliases for one openConversationId property; the typed require-one-of constraint owns their conditional requirement.",
+      "cli_path": "chat message add-emoji",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.add_group_member": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.add_message_favorite": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "chat.add_robot_to_group": {
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "add_robot_to_group"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.add_text_emotion": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "chat": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "conversation-id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "group": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        }
+      },
+      "review_reason": "The four reviewed conversation locator flags are aliases for one openConversationId property; the typed require-one-of constraint owns their conditional requirement.",
+      "cli_path": "chat message add-text-emotion",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.combine_forward_messages": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.create_and_send_card": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.create_group_conversation": {
+      "interface_ref": {
+        "product_id": "im",
+        "rpc_name": "create_group_conversation"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.create_smart_conv_category": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "keywords": {
+          "description": "群名称关键词列表，逗号分隔（可选）",
+          "interface_type": "array",
+          "property": "groupNameKeywords",
+          "required": false
+        },
+        "members": {
+          "description": "群内成员 openDingTalkId 列表，逗号分隔（可选）",
+          "interface_type": "array",
+          "property": "memberOpenDingTalkIds",
+          "required": false
+        },
+        "name": {
+          "description": "分组名称 (必填)",
+          "property": "categoryName",
+          "required": true
+        }
+      },
+      "review_reason": "Expose the existing smart-category helper through the reviewed Agent Schema and preserve its CLI-to-interface parameter contract.",
+      "cli_path": "chat category create-smart",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.create_text_emotion": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.dismiss_group": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "chat.download_media": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+      "reviewed": true
+    },
+    "chat.forward_message": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.forward_topic": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.get_conv_info_by_group_id": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.get_conversation_info": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.get_group_invite_url": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.get_group_members": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_conversation_message_v2": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_conversations_by_category": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_custom_group_roles": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_group_bots": {
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "list_group_bots"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_individual_chat_message": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_message_favorites": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "size": {
+          "interface_type": "string"
+        }
+      },
+      "review_reason": "Preserve the reviewed CLI-to-interface conversion: Cobra validates --size as an integer from 1 to 100, then the helper serializes it to the string-valued list_message_favorites size property.",
+      "cli_path": "chat message list-favorites",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.list_messages_by_ids": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_owned_or_admin_groups": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "limit": {
+          "required": false
+        },
+        "role": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed CLI lists all owned or administered groups when --role and --limit are omitted; both flags are optional filters despite stricter imported interface metadata.",
+      "cli_path": "chat group list-my-groups",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.list_pin_messages": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_special_focus_messages": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_top_conversations": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_topic_replies": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.list_user_define_conv_categories": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.query_custom_user_roles": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.query_message_send_status": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.query_msg_read_status": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.quit_group": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.recall_message": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.recall_robot_message": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.remove_custom_group_role": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.remove_custom_user_roles": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.remove_emoji_reaction": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "chat": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "conversation-id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "group": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        }
+      },
+      "review_reason": "The four reviewed conversation locator flags are aliases for one openConversationId property; the typed require-one-of constraint owns their conditional requirement.",
+      "cli_path": "chat message remove-emoji",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.remove_group_member": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.remove_message_favorite": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true
+    },
+    "chat.remove_robot_in_group": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "remove_robot_in_group"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.remove_text_emotion": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "chat": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "conversation-id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "group": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        }
+      },
+      "review_reason": "The four reviewed conversation locator flags are aliases for one openConversationId property; the typed require-one-of constraint owns their conditional requirement.",
+      "cli_path": "chat message remove-text-emotion",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.reply_personal_message": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "send_personal_message"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_at_me_message": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_bots": {
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "search_bots"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_common_groups": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_groups": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls im/search_groups with a flat payload, while the pinned snapshot only contains the incompatible chat/search_groups_by_keyword contract.",
+      "reviewed": true
+    },
+    "chat.search_messages": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_messages_by_keyword": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_messages_by_sender": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_messages_by_time_range": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.search_my_robots": {
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "search_my_robots"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.send_message_by_custom_robot": {
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "send_message_by_custom_robot"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.send_personal_message": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "send_personal_message"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.send_robot_message": {
+      "effect": "write",
+      "risk": "medium",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+      "reviewed": true
+    },
+    "chat.set_custom_user_roles": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.set_group_member_mute_list": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "off": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed Cobra contract makes --off an optional mode switch: omission adds members to the mute list, while --off removes them. The shared MCP schema incorrectly marks the boolean as unconditionally required.",
+      "cli_path": "chat group-mute-member",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.set_group_mute": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "off": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed optional --off switch selects unmute; omission deliberately selects mute, so false is a valid default rather than missing required input.",
+      "cli_path": "chat group-mute",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.set_pin_message": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.set_top_conversation": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "off": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed optional --off switch selects unpin; omission deliberately selects pin, so false is a valid default rather than missing required input.",
+      "cli_path": "chat set-top",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.transfer_group_owner": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.unread_message_conversation_list": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.unset_pin_message": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.update_conv_member_roles": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "off": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed optional --off switch selects administrator removal; omission deliberately selects administrator assignment.",
+      "cli_path": "chat group set-admin",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.update_custom_group_role": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.update_group_icon": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.update_group_name": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.update_group_settings": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.update_notification_off": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "parameters": {
+        "chat": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "conversation-id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "off": {
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed locator aliases feed one openConversationId property, while optional --off selects unmute; typed constraints require one locator without making the mode switch mandatory.",
+      "cli_path": "chat mute",
+      "runtime_gate": "none",
+      "confirmation": "not_required"
+    },
+    "chat.update_show_history_msg_option": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    },
+    "chat.update_streaming_card": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true
+    }
+  }
+}

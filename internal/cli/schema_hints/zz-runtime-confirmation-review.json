@@ -1,0 +1,323 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "runtime-confirmation-review-v2",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source"
+  },
+  "coverage": {
+    "source_tools": 37,
+    "matched_tools": 37
+  },
+  "tools": {
+    "doc.delete_comment": {
+      "agent_summary": "永久删除指定文档中的一条评论。",
+      "use_when": [
+        "用户明确要求并确认永久删除已知文档中的指定评论时。"
+      ],
+      "avoid_when": [
+        "只需修改或回复评论、目标评论不明确，或用户尚未确认永久删除时不要使用。"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "doc.version_revert": {
+      "agent_summary": "将文档回滚到指定版本",
+      "use_when": [
+        "用户明确要求并确认将文档回滚到指定历史版本时"
+      ],
+      "avoid_when": [
+        "只需查看版本或保存快照时不要使用；未明确目标版本时不要回滚"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "drive.publish_set": {
+      "agent_summary": "开启文件的互联网公开发布",
+      "use_when": [
+        "用户明确要求开启文件的互联网公开发布时"
+      ],
+      "avoid_when": [
+        "只需查询公开状态或关闭公开发布时不要使用；目标文件和公开范围未明确时不要开启"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "drive.publish_unset": {
+      "agent_summary": "关闭文件的互联网公开发布",
+      "use_when": [
+        "用户明确要求关闭文件的互联网公开发布时"
+      ],
+      "avoid_when": [
+        "只需查询公开状态或开启公开发布时不要使用；目标文件未明确时不要关闭"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "drive.create_shortcut": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "reviewed": true
+    },
+    "sheet.chart_delete": {
+      "agent_summary": "删除钉钉电子表格中指定的浮动图表。",
+      "use_when": [
+        "当用户需要删除钉钉电子表格中指定的浮动图表，并能提供命令所需的查询条件时使用。"
+      ],
+      "avoid_when": [
+        "当用户实际需要获取钉钉电子表格指定工作表中的浮动图表时，改用 dws sheet chart list。"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.create_pivot_table": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "reviewed": true
+    },
+    "sheet.delete_pivot_table": {
+      "agent_summary": "永久删除指定在线表格中的一张透视表。",
+      "use_when": [
+        "用户明确要求并确认永久删除已知工作表中的指定透视表时。"
+      ],
+      "avoid_when": [
+        "只需更新或读取透视表、目标 ID 不明确，或用户尚未确认永久删除时不要使用。"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.hide_gridline": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.show_gridline": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "aitable.form_field_hide": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "chat.dismiss_group": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "drive.recycle_restore": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "minutes.create_speaker_summary": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.clear_range": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.batch_update": {
+      "agent_summary": "批量执行多个工作表写操作，其中可包含清除、删除等不可恢复子操作。",
+      "use_when": [
+        "用户明确要求将多个已审查的工作表写操作作为一个批次执行时。"
+      ],
+      "avoid_when": [
+        "只需读取或预览、子操作未完整审查，或用户尚未确认可能的清除/删除影响时不要实际执行。"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.group_dimension": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.ungroup_dimension": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.add_dev_app_members": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.apply_dev_app_permissions": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.create_dev_app": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.create_dev_app_version": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.delete_dev_app": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.disable_dev_app": {
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.disable_dev_app_robot": {
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.enable_dev_app": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.enable_dev_app_robot": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.publish_dev_app_version": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.remove_dev_app_members": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.remove_dev_app_permissions": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.set_extension_robot_config": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.set_extension_webapp_config": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.submit_robot_create_task": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.subscribe_dev_app_events": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.unsubscribe_dev_app_events": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.update_dev_app": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.update_dev_app_security_config": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    }
+  }
+}

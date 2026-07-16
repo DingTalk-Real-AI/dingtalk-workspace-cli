@@ -116,6 +116,27 @@ func TestSheetTableGetBuildsToolArgs(t *testing.T) {
 	}
 }
 
+func TestSheetTableCommandsConsumeNodeAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "get", args: []string{"table-get", "--file-id", "node1"}},
+		{name: "put", args: []string{"table-put", "--doc-id", "node1", "--sheets", `[{"name":"Sheet1","columns":["name"],"data":[["Alice"]]}]`}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &sheetTableCaller{}
+			if err := executeSheetTableCommand(t, caller, nil, tt.args...); err != nil {
+				t.Fatalf("%s returned error: %v", strings.Join(tt.args, " "), err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].args["nodeId"] != "node1" {
+				t.Fatalf("calls = %#v, want nodeId=node1", caller.calls)
+			}
+		})
+	}
+}
+
 func TestSheetTableGetOmitsUnsetOptionalArgs(t *testing.T) {
 	caller := &sheetTableCaller{}
 	if err := executeSheetTableCommand(t, caller, nil, "table-get", "--node", "node1"); err != nil {

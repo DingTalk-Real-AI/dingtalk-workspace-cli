@@ -15,13 +15,13 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/spf13/cobra"
 )
@@ -67,61 +67,59 @@ func NewMCPCommand(_ context.Context, _ CatalogLoader, _ executor.Runner, _ *pip
 	return cmd
 }
 
-// NewSchemaCommand returns a stub schema command since the canonical
-// catalog discovery has been removed.
-func NewSchemaCommand(_ CatalogLoader, helperTools HelperToolFetcher) *cobra.Command {
+// NewSchemaCommand serves the versioned embedded typed contract. A malformed
+// release snapshot fails closed; falling back to the live Cobra tree would
+// hide a broken delivery artifact and reintroduce a second Schema data path.
+func NewSchemaCommand(_ CatalogLoader) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schema [path]",
-		Short: "查看有限的本地 Schema（静态端点模式）",
-		Long: `查看有限的本地 Schema 元数据。
+		Short: "渐进查看命令 Schema (产品 / 分组 / 工具参数)",
+		Long: `查看当前可运行命令的 Schema 元数据。
 
-服务发现和动态 schema 已下线。静态端点模式下，schema 覆盖两类命令：
-  1. helper-only 子树（如 dev）：CONTENT 从其绑定的 MCP 服务实时取，source 为 mcp:<server>；
-  2. 登记的本地命令（如 event）：从二进制注册的 cobra flag 合成，source 为 cobra。
-其余普通产品命令和 flag 仍以当前二进制的 --help 为准。`,
+不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。--all 输出全部工具的完整 leaf Schema（包括参数和约束，用于审计/CI）。--compact 去除 provenance / debug 字段，仅保留 Agent 选参所需信息（适合 Agent 上下文）。helper、MCP 与本地 Cobra 命令均须先进入 reviewed Registry，并从同一内嵌 ToolSpec 投影；查询不执行服务发现或临时合成第二份 Schema。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			all, _ := cmd.Flags().GetBool("all")
+			compact, _ := cmd.Flags().GetBool("compact")
 			cliPath, _ := cmd.Flags().GetString("cli-path")
 			cliPath = strings.TrimSpace(cliPath)
+			if cliPath != "" && len(args) > 0 {
+				return apperrors.NewValidation("--cli-path and positional argument are mutually exclusive")
+			}
+			if len(args) == 1 && strings.EqualFold(strings.TrimSpace(args[0]), "list") {
+				args = nil
+			}
+			if all && (cliPath != "" || len(args) > 0) {
+				return apperrors.NewValidation("--all cannot be combined with a schema path")
+			}
 			if cliPath != "" {
-				if len(args) > 0 {
-					return apperrors.NewValidation("--cli-path and positional argument are mutually exclusive")
-				}
 				args = []string{cliPath}
 			}
-
-			// Helper-only subtrees: schema CONTENT fetched live from the MCP server.
-			if len(args) > 0 && helperTools != nil {
-				payload, ok, err := renderHelperSchema(cmd.Context(), cmd.Root(), args[0], helperTools)
-				if err != nil {
-					return err
-				}
-				if ok {
-					data, _ := json.MarshalIndent(payload, "", "  ")
-					fmt.Fprintln(cmd.OutOrStdout(), string(data))
-					return nil
-				}
+			if err := embeddedSchemaCatalogError(); err != nil {
+				return fmt.Errorf("load embedded typed Schema registry: %w", err)
 			}
-
-			// Registered local subtrees (event, …): schema synthesized from cobra flags.
-			if len(args) > 0 {
-				payload, ok, err := renderCobraSchema(cmd.Root(), args[0])
-				if err != nil {
-					return err
-				}
-				if ok {
-					data, _ := json.MarshalIndent(payload, "", "  ")
-					fmt.Fprintln(cmd.OutOrStdout(), string(data))
-					return nil
-				}
+			var payload map[string]any
+			var err error
+			if all {
+				payload, err = embeddedSchemaAllPayload()
+			} else if len(args) == 0 {
+				payload, err = embeddedSchemaOverviewPayload()
+			} else {
+				payload, err = embeddedSchemaPayload(args)
 			}
-
-			fmt.Fprintln(cmd.OutOrStdout(), `{"kind":"schema","count":0,"products":[],"note":"static endpoint mode"}`)
-			return nil
+			if err != nil {
+				return err
+			}
+			if compact {
+				payload = stripSchemaPayloadCompact(payload)
+			}
+			return output.WriteFiltered(cmd.OutOrStdout(), output.ResolveFormat(cmd, output.FormatJSON), payload, output.ResolveFields(cmd), output.ResolveJQ(cmd))
 		},
 	}
-	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询 (等同于位置参数，便于脚本使用无需转义)")
+	cmd.Flags().Bool("all", false, "输出全部工具的完整 leaf Schema（包括参数和约束，用于审计/CI）")
+	cmd.Flags().Bool("compact", false, "去除 provenance/debug 字段，仅保留 Agent 选参所需信息")
+	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询")
 	return cmd
 }
 

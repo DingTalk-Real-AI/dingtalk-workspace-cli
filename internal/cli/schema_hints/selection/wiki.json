@@ -1,0 +1,376 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/wiki",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "wiki.add_member": {
+      "agent_summary": "为指定知识库添加一个或多个成员，并授予指定角色",
+      "use_when": [
+        "给知识库容器添加成员（USER + 角色）；新员工入职开通整库访问时"
+      ],
+      "avoid_when": [
+        "「我的文档」不支持容器成员——改用 drive/doc permission add 做节点授权",
+        "单篇文档分享用节点 permission，不要用 member add"
+      ],
+      "examples": [
+        "dws wiki member add --workspace <WS_ID> --users uid1 --role READER --format json",
+        "dws wiki member add --workspace <WS_ID> --users uid1,uid2 --role EDITOR --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.add_member",
+        "cobra-help:dws wiki member add",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.add_member",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.add_member"
+      ]
+    },
+    "wiki.create_file": {
+      "agent_summary": "在指定知识库中创建文档、文件夹或其他类型的节点",
+      "use_when": [
+        "在知识库内创建空节点：adoc/axls/appt/adraw/amind/able/folder（必须 --workspace）时"
+      ],
+      "avoid_when": [
+        "要带初始 Markdown 的文字文档可用 doc create",
+        "钉盘普通文件夹用 drive mkdir（无需 workspace）",
+        "type 不要用 asheet，在线表格用 axls"
+      ],
+      "examples": [
+        "dws wiki node create --workspace <workspaceId> --name \"新文档\" --format json",
+        "dws wiki node create --workspace <workspaceId> --name \"方案目录\" --type folder --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.create_file",
+        "cobra-help:dws wiki node create",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.create_file",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema doc.create_file"
+      ]
+    },
+    "wiki.create_wikiSpace": {
+      "agent_summary": "创建一个新的钉钉文档知识库（WikiSpace）",
+      "use_when": [
+        "用户要新建一个知识库容器时"
+      ],
+      "avoid_when": [
+        "在已有知识库内建文档/文件夹用 node create，不要反复 create space"
+      ],
+      "examples": [
+        "dws wiki space create --name \"产品文档库\" --format json",
+        "dws wiki space create --name \"技术方案\" --desc \"团队技术方案归档\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.create_wikiSpace",
+        "cobra-help:dws wiki space create",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.create_wikiSpace",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.create_wikiSpace"
+      ]
+    },
+    "wiki.delete_document": {
+      "agent_summary": "将知识库中的节点移入回收站",
+      "use_when": [
+        "用户确认后删除知识库内节点（移入回收站；需 --workspace 校验权限）时"
+      ],
+      "avoid_when": [
+        "删整个知识库用 space delete",
+        "未确认或 node 不明时不要删"
+      ],
+      "examples": [
+        "dws wiki node delete --workspace <workspaceId> --node <nodeId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.delete_document",
+        "cobra-help:dws wiki node delete",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.delete_document",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema doc.delete_document"
+      ]
+    },
+    "wiki.delete_wikiSpace": {
+      "agent_summary": "将指定知识库移入回收站",
+      "use_when": [
+        "用户明确要求删除整个知识库（移入回收站），且已确认 workspace 与影响范围时"
+      ],
+      "avoid_when": [
+        "只删库内某个节点用 wiki node delete",
+        "未确认或只要看详情用 space get"
+      ],
+      "examples": [
+        "dws wiki space delete --workspace <workspaceId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.delete_wikiSpace",
+        "cobra-help:dws wiki space delete",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.delete_wikiSpace",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.delete_wikiSpace"
+      ]
+    },
+    "wiki.get_wikiSpace": {
+      "agent_summary": "获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员数量等",
+      "use_when": [
+        "查看指定知识库详情（名称、描述、创建者等）时"
+      ],
+      "avoid_when": [
+        "列知识库用 list；删库用 space delete（需确认）"
+      ],
+      "examples": [
+        "dws wiki space get --workspace <workspaceId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.get_wikiSpace",
+        "cobra-help:dws wiki space get",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.get_wikiSpace",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.get_wikiSpace"
+      ]
+    },
+    "wiki.list_member": {
+      "agent_summary": "查询指定知识库的成员列表，返回每位成员的 userId、姓名、角色等信息",
+      "use_when": [
+        "查看知识库成员名单与角色时"
+      ],
+      "avoid_when": [
+        "返回无 userId：要 update/remove 需另用 contact user search 反查",
+        "增删改成员用 add/update/remove"
+      ],
+      "examples": [
+        "dws wiki member list --workspace <WS_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.list_member",
+        "cobra-help:dws wiki member list",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.list_member",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.list_member"
+      ]
+    },
+    "wiki.list_nodes": {
+      "agent_summary": "列出指定知识库下的直接子节点（文档、文件夹、表格等）",
+      "use_when": [
+        "在已知 workspace 下浏览知识库根目录或某文件夹子节点时"
+      ],
+      "avoid_when": [
+        "库内关键词搜索用 node search；全局搜用 drive search",
+        "读文档内容拿到 nodeId 后用 doc read"
+      ],
+      "examples": [
+        "dws wiki node list --workspace <workspaceId> --format json",
+        "dws wiki node list --workspace <workspaceId> --folder <parentNodeId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.list_nodes",
+        "cobra-help:dws wiki node list",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.list_nodes",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema doc.list_nodes"
+      ]
+    },
+    "wiki.list_wikiSpaces": {
+      "agent_summary": "列出当前用户可访问的知识库或钉盘空间",
+      "use_when": [
+        "列出组织知识库（默认）、我的文档(--type myWikiSpace)、钉盘企业空间(--type orgSpace)或我的文件(--type mySpace)时",
+        "需要 workspaceId / rootFolderId 作为后续 node/drive 操作前置时"
+      ],
+      "avoid_when": [
+        "按名称搜知识库用 space search",
+        "看单个知识库详情用 space get"
+      ],
+      "examples": [
+        "dws wiki space list --format json",
+        "dws wiki space list --type myWikiSpace --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.list_wikiSpaces",
+        "cobra-help:dws wiki space list",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.list_wikiSpaces",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.list_wikiSpaces"
+      ]
+    },
+    "wiki.node_copy": {
+      "agent_summary": "将知识库中的节点复制到指定位置",
+      "use_when": [
+        "在知识库上下文内复制节点到同库某文件夹（需 --workspace + --node）时"
+      ],
+      "avoid_when": [
+        "跨产品/默认文档空间复制优先 dws drive copy",
+        "要移动不留副本用 node move"
+      ],
+      "examples": [
+        "dws wiki node copy --workspace <workspaceId> --node <nodeId> --folder <targetFolderId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.node_copy",
+        "cobra-help:dws wiki node copy",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.node_copy",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema doc.copy_document"
+      ]
+    },
+    "wiki.node_move": {
+      "agent_summary": "将知识库中的节点移动到指定位置",
+      "use_when": [
+        "在知识库内移动节点到目标文件夹时"
+      ],
+      "avoid_when": [
+        "要保留副本用 node copy / drive copy"
+      ],
+      "examples": [
+        "dws wiki node move --workspace <workspaceId> --node <nodeId> --folder <targetFolderId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.node_move",
+        "cobra-help:dws wiki node move",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.node_move",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema doc.move_document"
+      ]
+    },
+    "wiki.node_search": {
+      "agent_summary": "在指定知识库内搜索文档/文件夹/表格等节点",
+      "use_when": [
+        "在指定知识库内按关键词搜节点（可 --extensions）时"
+      ],
+      "avoid_when": [
+        "全局/钉盘搜索用 drive search；浏览目录用 node list"
+      ],
+      "examples": [
+        "dws wiki node search --workspace <workspaceId> --query \"方案\" --format json",
+        "dws wiki node search --workspace <workspaceId> --query \"周报\" --extensions adoc --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.node_search",
+        "cobra-help:dws wiki node search",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.node_search",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema doc.search_documents"
+      ]
+    },
+    "wiki.remove_member": {
+      "agent_summary": "从指定知识库中移除一个或多个成员（仅支持 USER 类型）",
+      "use_when": [
+        "从知识库移除成员访问（离职/清理）时"
+      ],
+      "avoid_when": [
+        "改角色用 update；节点级权限用 drive permission remove",
+        "OWNER 不可移除此接口"
+      ],
+      "examples": [
+        "dws wiki member remove --workspace <WS_ID> --users uid1 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.remove_member",
+        "cobra-help:dws wiki member remove",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.remove_member",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.remove_member"
+      ]
+    },
+    "wiki.search_wikiSpaces": {
+      "agent_summary": "根据关键词搜索当前用户有权限访问的知识库列表，匹配知识库名称和描述",
+      "use_when": [
+        "按关键词搜索有权访问的组织知识库时"
+      ],
+      "avoid_when": [
+        "直接列全部知识库用 space list；我的文档用 list --type myWikiSpace"
+      ],
+      "examples": [
+        "dws wiki space search --query \"产品文档\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.search_wikiSpaces",
+        "cobra-help:dws wiki space search",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.search_wikiSpaces",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.search_wikiSpaces"
+      ]
+    },
+    "wiki.update_member": {
+      "agent_summary": "更新指定知识库已有成员的角色",
+      "use_when": [
+        "调整知识库成员角色（如升为 EDITOR/MANAGER）时"
+      ],
+      "avoid_when": [
+        "新加成员用 add；移除用 remove；OWNER 不可经此变更"
+      ],
+      "examples": [
+        "dws wiki member update --workspace <WS_ID> --users uid1 --role EDITOR --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=wiki.update_member",
+        "cobra-help:dws wiki member update",
+        "Skill:skills/mono/references/products/wiki.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#wiki.update_member",
+        "structured-hint:internal/cli/schema_hints/products/wiki.json",
+        "live-mcp:dws schema wiki.update_member"
+      ]
+    }
+  },
+  "products": {
+    "wiki": {
+      "agent_summary": "管理钉钉知识库空间、节点与成员权限",
+      "use_when": [
+        "查找或管理知识库、知识库内节点及知识库成员时"
+      ],
+      "avoid_when": [
+        "需要编辑在线文档正文时使用 doc；只管理钉盘普通文件时使用 drive"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 CommandRegistry 命令分区与对应产品 Skill 审阅产品级选择边界。",
+      "source_refs": [
+        "CommandRegistry:product=wiki",
+        "Skill:skills/mono/references/products/wiki.md"
+      ]
+    }
+  }
+}

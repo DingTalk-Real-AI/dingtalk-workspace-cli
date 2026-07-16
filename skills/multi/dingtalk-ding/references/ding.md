@@ -27,6 +27,9 @@ Flags:
 ```
 
 ### 查询 DING 消息历史
+
+列表项会同时返回 DING 的 `content`、`openDingId` 与状态，可直接读取钉内容，无需再调用详情接口。
+
 ```
 Usage:
   dws ding message list [flags]

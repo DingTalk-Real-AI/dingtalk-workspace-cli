@@ -80,6 +80,58 @@ func (f *qoderStreamForwarder) forward(ctx context.Context, convID, text string)
 	return f.forwardStream(ctx, convID, text, nil)
 }
 
+// forwardWithAttachments uses qodercli's native --attachment transport for a
+// media turn. The persistent stream-json protocol has no documented file-part
+// shape, so sending the same session through a one-shot CLI process is the
+// only reliable way to provide the original bytes without enabling broad file
+// tools for every ordinary chat message.
+func (f *qoderStreamForwarder) forwardWithAttachments(ctx context.Context, convID, text string, attachments []connectMediaAttachment) (string, error) {
+	if len(attachments) == 0 {
+		return f.forward(ctx, convID, text)
+	}
+	ctx, cancel := applyTimeout(ctx, f.timeout)
+	defer cancel()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	args := []string{"--print", "--output-format", "text", "--max-turns", "30"}
+	if f.sessions != nil {
+		args = append(args, f.sessions.args(convID)...)
+	}
+	if f.yolo {
+		args = append(args, "--permission-mode", "bypass_permissions", "--dangerously-skip-permissions")
+	} else {
+		args = append(args, "--system-prompt", "", "--setting-sources", "", "--tools", "")
+	}
+	if f.model != "" {
+		args = append(args, "--model", f.model)
+	}
+	for _, attachment := range attachments {
+		if path := strings.TrimSpace(attachment.LocalPath); path != "" {
+			args = append(args, "--attachment", path)
+		}
+	}
+	args = append(args, "-p", text)
+	cmd := exec.CommandContext(ctx, f.bin, args...)
+	cmd.Dir = f.cwd()
+	cmd.Env = append(os.Environ(), f.env...)
+	out, err := cmd.Output()
+	reply := strings.TrimSpace(string(out))
+	if reply != "" && !agentReplyIsError(reply) {
+		return brandReply(f.name, reply), nil
+	}
+	if reply != "" {
+		return agentBackendErrorReply(reply), nil
+	}
+	if err != nil {
+		if f.sessions != nil {
+			f.sessions.reset(convID)
+		}
+		return "", fmt.Errorf("本地 %s agent 附件调用失败：%s", f.name, truncateRunes(execErrorMessage(err), 300))
+	}
+	return "（本地 agent 无文本输出）", nil
+}
+
 func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
 	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()

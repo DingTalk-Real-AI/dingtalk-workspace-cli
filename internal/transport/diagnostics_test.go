@@ -8,7 +8,7 @@ import (
 
 func TestExtractServerDiagnostics_SnakeCase(t *testing.T) {
 	t.Parallel()
-	data := json.RawMessage(`{"trace_id":"abc123","code":"PARAM_ERROR","technical_detail":"field required","retryable":false}`)
+	data := json.RawMessage(`{"trace_id":"abc123","code":"PARAM_ERROR","technical_detail":"field required","friendly_hint":"请开通消息搜索权益","action_url":"https://example.test/enable-search","retryable":false}`)
 	diag := ExtractServerDiagnostics(data)
 	if diag.TraceID != "abc123" {
 		t.Fatalf("TraceID = %q, want abc123", diag.TraceID)
@@ -19,6 +19,12 @@ func TestExtractServerDiagnostics_SnakeCase(t *testing.T) {
 	if diag.TechnicalDetail != "field required" {
 		t.Fatalf("TechnicalDetail = %q, want 'field required'", diag.TechnicalDetail)
 	}
+	if diag.FriendlyHint != "请开通消息搜索权益" {
+		t.Fatalf("FriendlyHint = %q, want search entitlement guidance", diag.FriendlyHint)
+	}
+	if diag.ActionURL != "https://example.test/enable-search" {
+		t.Fatalf("ActionURL = %q, want entitlement URL", diag.ActionURL)
+	}
 	if diag.ServerRetryable == nil || *diag.ServerRetryable != false {
 		t.Fatalf("ServerRetryable = %v, want false", diag.ServerRetryable)
 	}
@@ -26,13 +32,16 @@ func TestExtractServerDiagnostics_SnakeCase(t *testing.T) {
 
 func TestExtractServerDiagnostics_CamelCase(t *testing.T) {
 	t.Parallel()
-	data := json.RawMessage(`{"traceId":"xyz789","errorCode":"AUTH_ERROR"}`)
+	data := json.RawMessage(`{"traceId":"xyz789","errorCode":"AUTH_ERROR","friendlyHint":"request access","actionUrl":"https://example.test/request"}`)
 	diag := ExtractServerDiagnostics(data)
 	if diag.TraceID != "xyz789" {
 		t.Fatalf("TraceID = %q, want xyz789", diag.TraceID)
 	}
 	if diag.ServerErrorCode != "AUTH_ERROR" {
 		t.Fatalf("ServerErrorCode = %q, want AUTH_ERROR", diag.ServerErrorCode)
+	}
+	if diag.FriendlyHint != "request access" || diag.ActionURL != "https://example.test/request" {
+		t.Fatalf("guidance = (%q, %q), want camelCase values", diag.FriendlyHint, diag.ActionURL)
 	}
 }
 
@@ -82,9 +91,11 @@ func TestExtractServerDiagnosticsFromMapNestedBusinessCode(t *testing.T) {
 		"trace_id": "trace-002",
 		"code":     "BUSINESS_ERROR",
 		"result": map[string]any{
-			"success":   false,
-			"errorCode": "ROBOT_NOT_FOUND",
-			"errorMsg":  "robot info is not exist",
+			"success":       false,
+			"errorCode":     "ROBOT_NOT_FOUND",
+			"errorMsg":      "robot info is not exist",
+			"friendly_hint": "请检查机器人是否仍在群内",
+			"action_url":    "https://example.test/robots",
 		},
 	}
 	diag := ExtractServerDiagnosticsFromMap(content)
@@ -93,6 +104,9 @@ func TestExtractServerDiagnosticsFromMapNestedBusinessCode(t *testing.T) {
 	}
 	if diag.ServerErrorCode != "ROBOT_NOT_FOUND" {
 		t.Fatalf("ServerErrorCode = %q, want ROBOT_NOT_FOUND", diag.ServerErrorCode)
+	}
+	if diag.FriendlyHint != "请检查机器人是否仍在群内" || diag.ActionURL != "https://example.test/robots" {
+		t.Fatalf("nested guidance = (%q, %q), want nested values", diag.FriendlyHint, diag.ActionURL)
 	}
 }
 

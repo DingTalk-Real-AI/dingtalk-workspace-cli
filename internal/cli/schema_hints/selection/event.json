@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/event",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "event.consume": {
+      "agent_summary": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+      "use_when": [
+        "需要实时监听 @我、指定单聊或指定群的后续消息事件"
+      ],
+      "avoid_when": [
+        "只查历史聊天记录时用 chat 查询命令",
+        "只看事件目录/字段时用 event list / event schema"
+      ],
+      "examples": [
+        "dws event consume user_im_message_receive_at --max-events 1 --format ndjson"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#event.consume",
+        "cobra-help:dws event consume --help",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md",
+        "live-dws-schema:event.consume#FAILED",
+        "cobra-help:dws event consume"
+      ]
+    },
+    "event.list": {
+      "agent_summary": "列出支持的个人事件目录与状态说明",
+      "use_when": [
+        "尚不知道可用 event_key，需要先盘点个人事件目录"
+      ],
+      "avoid_when": [
+        "已知 event_key 要看 payload 字段时用 event schema",
+        "要开始监听时用 event consume"
+      ],
+      "examples": [
+        "dws event list --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#event.list",
+        "cobra-help:dws event list --help",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md",
+        "live-dws-schema:event.list#FAILED"
+      ]
+    },
+    "event.schema": {
+      "agent_summary": "查询指定个人事件码的 payload 字段结构",
+      "use_when": [
+        "已知 event_key，消费前需要理解 payload 字段"
+      ],
+      "avoid_when": [
+        "查询 CLI 命令参数契约时用顶层 dws schema",
+        "要实际收事件时用 event consume"
+      ],
+      "examples": [
+        "dws event schema user_im_message_receive_at --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#event.schema",
+        "cobra-help:dws event schema --help",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md",
+        "live-dws-schema:event.schema#FAILED"
+      ]
+    },
+    "event.status": {
+      "agent_summary": "查看个人事件订阅、本地 bus 与消费进程状态",
+      "use_when": [
+        "需要确认订阅是否活跃、bus/consume 是否仍在运行"
+      ],
+      "avoid_when": [
+        "取消订阅用 event stop；列事件目录用 event list"
+      ],
+      "examples": [
+        "dws event status --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#event.status",
+        "cobra-help:dws event status --help",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md",
+        "live-dws-schema:event.status#FAILED"
+      ]
+    },
+    "event.stop": {
+      "agent_summary": "取消个人事件订阅并停止对应本地消费",
+      "use_when": [
+        "用户明确要求取消已知 subscribe_id（或清理全部）并停止消费"
+      ],
+      "avoid_when": [
+        "只需检查状态时用 event status",
+        "目标订阅不明确或用户未确认时不要停止"
+      ],
+      "examples": [
+        "dws event stop SUBSCRIBE_ID --dry-run"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#event.stop",
+        "cobra-help:dws event stop --help",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md",
+        "live-dws-schema:event.stop#FAILED",
+        "note:examples-omit-yes-use-dry-run-first"
+      ]
+    }
+  },
+  "products": {
+    "event": {
+      "agent_summary": "订阅/消费个人消息事件，并查询目录、Schema、状态或停止订阅",
+      "use_when": [
+        "需要实时监听个人消息事件，或管理个人事件订阅生命周期"
+      ],
+      "avoid_when": [
+        "查历史聊天或主动发消息分别用 chat 查询/发送命令"
+      ],
+      "reviewed": true,
+      "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#event",
+        "cobra-help:dws event --help",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md",
+        "CommandRegistry:product=event",
+        "Skill:skills/mono/references/products/event.md",
+        "live-dws-schema:product-batch-2026-07-14"
+      ]
+    }
+  }
+}

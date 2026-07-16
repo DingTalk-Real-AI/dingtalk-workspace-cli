@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/event",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "event.consume": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
+      "reviewed": true
+    },
+    "event.list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",
+      "reviewed": true
+    },
+    "event.schema": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
+      "reviewed": true
+    },
+    "event.status": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result.",
+      "reviewed": true
+    },
+    "event.stop": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "runtime_gate": "typed_yes",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow.",
+      "reviewed": true,
+      "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate."
+    }
+  }
+}

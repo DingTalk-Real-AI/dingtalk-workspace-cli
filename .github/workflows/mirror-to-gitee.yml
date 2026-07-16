@@ -42,8 +42,7 @@ jobs:
           REMOTE="https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
 
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
-            git fetch --force --tags origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-            git push --force "$REMOTE" "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+            VERSION="$GITHUB_REF_NAME" ./scripts/release/sync-gitee-tag.sh
             echo "✅ 已镜像 tag ${GITHUB_REF_NAME} 到 Gitee ${GITEE_REPO}"
             exit 0
           fi
@@ -83,5 +82,7 @@ jobs:
 
           # 镜像对齐（force：Gitee 始终跟随 GitHub + Gitee 专属 README 本地化）
           git push --force "$REMOTE" 'gitee-main:refs/heads/main'
-          git push --force --tags "$REMOTE"
+          # Release tags are immutable. Push only missing tags and fail closed
+          # on a conflicting existing ref instead of trying to move it.
+          timeout --signal=TERM 180s git push --tags "$REMOTE"
           echo "✅ 已镜像 main(+Gitee README 本地化) + tags 到 Gitee ${GITEE_REPO}"

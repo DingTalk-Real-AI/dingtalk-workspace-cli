@@ -58,6 +58,7 @@ func executeSheetPivotGridlineCommand(t *testing.T, caller *sheetPivotGridlineCa
 	deps.Out.w = io.Discard
 	os.Args = append([]string{"dws", "sheet"}, args...)
 	root := newSheetCommand()
+	root.PersistentFlags().Bool("yes", false, "skip confirmation")
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
@@ -179,19 +180,8 @@ func TestSheetPivotUpdateAllowsPartialProperties(t *testing.T) {
 
 func TestSheetPivotDeleteBuildsToolArgsAfterConfirmation(t *testing.T) {
 	caller := &sheetPivotGridlineCaller{}
-	previousArgs := os.Args
-	t.Cleanup(func() { os.Args = previousArgs })
-	os.Args = []string{"dws", "sheet", "pivot-table", "delete", "--yes"}
-
-	previousDeps := deps
-	t.Cleanup(func() { deps = previousDeps })
-	InitDeps(caller)
-	deps.Out.w = io.Discard
-	root := newSheetCommand()
-	root.SilenceErrors = true
-	root.SilenceUsage = true
-	root.SetArgs([]string{"pivot-table", "delete", "--node", "node1", "--sheet-id", "sheet1", "--pivot-table-id", "pivot1"})
-	if err := root.Execute(); err != nil {
+	if err := executeSheetPivotGridlineCommand(t, caller,
+		"pivot-table", "delete", "--node", "node1", "--sheet-id", "sheet1", "--pivot-table-id", "pivot1", "--yes"); err != nil {
 		t.Fatalf("pivot-table delete returned error: %v", err)
 	}
 	wantArgs := map[string]any{"nodeId": "node1", "sheetId": "sheet1", "pivotTableId": "pivot1"}
@@ -258,14 +248,15 @@ func TestSheetPivotAndGridlineRequireMandatoryFlags(t *testing.T) {
 func TestSheetGridlineCommandsBuildToolArgs(t *testing.T) {
 	for _, tt := range []struct {
 		command    string
+		nodeFlag   string
 		visibility string
 	}{
-		{"show-gridline", "visible"},
-		{"hide-gridline", "hidden"},
+		{"show-gridline", "node-id", "visible"},
+		{"hide-gridline", "file-id", "hidden"},
 	} {
 		t.Run(tt.command, func(t *testing.T) {
 			caller := &sheetPivotGridlineCaller{}
-			if err := executeSheetPivotGridlineCommand(t, caller, tt.command, "--node", "node1", "--sheet-id", "sheet1"); err != nil {
+			if err := executeSheetPivotGridlineCommand(t, caller, tt.command, "--"+tt.nodeFlag, "node1", "--sheet-id", "sheet1"); err != nil {
 				t.Fatalf("%s returned error: %v", tt.command, err)
 			}
 			want := sheetPivotGridlineCall{

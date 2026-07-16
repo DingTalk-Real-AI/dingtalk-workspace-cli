@@ -1,0 +1,794 @@
+{
+  "product_id": "audit",
+  "tools": {
+    "audit export": {
+      "agent_summary": "按日期范围导出本地操作审计日志（jsonl 或 csv）",
+      "agent_summary_source": "dws-agent-selection/audit",
+      "availability": "available",
+      "avoid_when": [
+        "只看最近几条用 audit tail",
+        "只校验哈希链完整性用 audit verify"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws audit export --format jsonl",
+        "dws audit export --since 2026-07-01 --until 2026-07-14 --format csv"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按日期范围导出本地操作审计日志（jsonl 或 csv）",
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": "按日期范围导出本地操作审计日志（jsonl 或 csv）",
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只看最近几条用 audit tail",
+            "只校验哈希链完整性用 audit verify"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "只看最近几条用 audit tail",
+                "只校验哈希链完整性用 audit verify"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws audit export --format jsonl",
+            "dws audit export --since 2026-07-01 --until 2026-07-14 --format csv"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "dws audit export --format jsonl",
+                "dws audit export --since 2026-07-01 --until 2026-07-14 --format csv"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "local",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "local",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log export from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log export from #555; no remote RPC."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要把本地审计日志导出为 jsonl/csv，或按 --since/--until 取一段时间"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "需要把本地审计日志导出为 jsonl/csv，或按 --since/--until 取一段时间"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读导出，示例不含 --yes。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "interface_reason": "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws audit export --help",
+        "internal/app/audit_command.go",
+        "internal/cli/schema_command_registry.json#audit.export",
+        "internal/cli/schema_hints/metadata/audit.json",
+        "internal/cli/schema_hints/selection/audit.json"
+      ],
+      "use_when": [
+        "需要把本地审计日志导出为 jsonl/csv，或按 --since/--until 取一段时间"
+      ]
+    },
+    "audit tail": {
+      "agent_summary": "查看本地操作审计日志最近 N 条记录",
+      "agent_summary_source": "dws-agent-selection/audit",
+      "availability": "available",
+      "avoid_when": [
+        "需要按日期范围整段导出用 audit export",
+        "需要校验哈希链用 audit verify"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws audit tail",
+        "dws audit tail --lines 50"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查看本地操作审计日志最近 N 条记录",
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": "查看本地操作审计日志最近 N 条记录",
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要按日期范围整段导出用 audit export",
+            "需要校验哈希链用 audit verify"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "需要按日期范围整段导出用 audit export",
+                "需要校验哈希链用 audit verify"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws audit tail",
+            "dws audit tail --lines 50"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "dws audit tail",
+                "dws audit tail --lines 50"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "local",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "local",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit log tail from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit log tail from #555; no remote RPC."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要快速查看最近写入的审计记录（默认最近 20 条）"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "需要快速查看最近写入的审计记录（默认最近 20 条）"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读查看，示例不含 --yes。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "interface_reason": "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws audit tail --help",
+        "internal/app/audit_command.go",
+        "internal/cli/schema_command_registry.json#audit.tail",
+        "internal/cli/schema_hints/metadata/audit.json",
+        "internal/cli/schema_hints/selection/audit.json"
+      ],
+      "use_when": [
+        "需要快速查看最近写入的审计记录（默认最近 20 条）"
+      ]
+    },
+    "audit verify": {
+      "agent_summary": "校验本地审计日志文件的哈希链完整性",
+      "agent_summary_source": "dws-agent-selection/audit",
+      "availability": "available",
+      "avoid_when": [
+        "只浏览或导出日志内容时用 audit tail / audit export"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws audit verify",
+        "dws audit verify --file /path/to/audit.jsonl"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "校验本地审计日志文件的哈希链完整性",
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": "校验本地审计日志文件的哈希链完整性",
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只浏览或导出日志内容时用 audit tail / audit export"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "只浏览或导出日志内容时用 audit tail / audit export"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws audit verify",
+            "dws audit verify --file /path/to/audit.jsonl"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "dws audit verify",
+                "dws audit verify --file /path/to/audit.jsonl"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "local",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "local",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Local audit hash-chain verify from #555; no remote RPC.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Local audit hash-chain verify from #555; no remote RPC."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "怀疑审计文件被篡改，或需要确认最新/指定文件哈希链是否完整"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "怀疑审计文件被篡改，或需要确认最新/指定文件哈希链是否完整"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "纳入 #555 公开 audit leaf 的 Agent 选型文案；本地只读校验，示例不含 --yes。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "interface_reason": "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws audit verify --help",
+        "internal/app/audit_command.go",
+        "internal/cli/schema_command_registry.json#audit.verify",
+        "internal/cli/schema_hints/metadata/audit.json",
+        "internal/cli/schema_hints/selection/audit.json"
+      ],
+      "use_when": [
+        "怀疑审计文件被篡改，或需要确认最新/指定文件哈希链是否完整"
+      ]
+    }
+  }
+}

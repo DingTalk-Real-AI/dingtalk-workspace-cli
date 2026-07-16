@@ -1,0 +1,884 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "reviewed-interface-disposition-v2",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "chat.create_smart_conv_category": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.add_dev_app_members": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.apply_dev_app_permissions": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.create_dev_app": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.create_dev_app_version": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.delete_dev_app": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.disable_dev_app": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.disable_dev_app_robot": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.enable_dev_app": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.enable_dev_app_robot": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.get_dev_app": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.get_dev_app_credentials": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.get_dev_app_version_detail": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.get_dev_app_version_status": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.get_extension_robot_config": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.get_extension_webapp_config": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.list_dev_app": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.list_dev_app_events": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.list_dev_app_members": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.list_dev_app_permissions": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.list_dev_app_versions": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.publish_dev_app_version": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.query_robot_create_result": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.remove_dev_app_members": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.remove_dev_app_permissions": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.set_extension_robot_config": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.set_extension_webapp_config": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.submit_robot_create_task": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.subscribe_dev_app_events": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.unsubscribe_dev_app_events": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.update_dev_app": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "dev.update_dev_app_security_config": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "minutes.record_pause": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "minutes.record_resume": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "minutes.record_start": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "minutes.record_stop": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.filter_view_update_criteria": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "chat.add_message_favorite": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "chat.list_message_favorites": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "chat.remove_message_favorite": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "doc.delete_comment": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "doc.update_comment": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "drive.create_shortcut": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "drive.get_node_stats": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.create_pivot_table": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.delete_pivot_table": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.hide_gridline": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.list_pivot_tables": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.show_gridline": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.table_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.table_put": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "sheet.update_pivot_table": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_ref": null
+    },
+    "aitable.form_create": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed composite wrapper: the CLI constrains pinned aitable/create_view to FormDesigner and applies form-specific argument semantics, so it is not a direct parameter-equivalent RPC projection."
+    },
+    "aitable.form_delete": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_field_hide": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_field_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_field_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_questions_create": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed composite wrapper: the CLI converts single-question flags or batch JSON into the pinned aitable/create_fields request, so it is not a direct parameter-equivalent RPC projection."
+    },
+    "aitable.form_questions_delete": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_field"
+      }
+    },
+    "aitable.form_share_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_share_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.form_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "aitable.record_batch_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed composite wrapper: the CLI expands record IDs and shared cells into the pinned aitable/update_records request, so it is not a direct parameter-equivalent RPC projection."
+    },
+    "attendance.adjustment_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.adjustment_search": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.approve_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.approve_templates": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.boss_check": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.check_record": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.check_result": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.checkin_records": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.class_create": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.class_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.class_search": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.class_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.globalsetting_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.globalsetting_save": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.group_create": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.group_filtered_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.group_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.group_search": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.group_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.group_update_members": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.overtime_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.overtime_search": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.report_columns": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.report_query_data": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.report_query_leave": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.schedule_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.schedule_import": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.selfsetting_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.selfsetting_save": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.vacation_balance": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.vacation_records": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.vacation_save_balance": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.vacation_types": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.vacation_update_type": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "doc.import_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "doc.template_apply": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "doc.template_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "doc.template_search": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "doc.version_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "doc.version_revert": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "doc.version_save": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "drive.publish_get": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "drive.publish_set": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "drive.publish_unset": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "drive.recent": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "drive.recycle_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "drive.recycle_restore": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.batch_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.chart_create": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.chart_delete": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.chart_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.chart_update": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.group_dimension": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.range_batch_clear": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.template_apply": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.template_list": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.template_search": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "sheet.ungroup_dimension": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+    },
+    "attendance.get_attendance_summary": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls attendance-wukong/get_user_attendance_summary, which is absent from the pinned MCP metadata snapshot; the incompatible attendance/get_attendance_summary contract must not be advertised."
+    },
+    "chat.search_groups": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls im/search_groups with a flat payload, while the pinned snapshot only contains the incompatible chat/search_groups_by_keyword contract."
+    },
+    "sheet.range_read": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls sheet/get_cell_infos, which is absent from the pinned MCP metadata snapshot; the incompatible sheet/get_range contract must not be advertised."
+    },
+    "event.consume": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow."
+    },
+    "event.status": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result."
+    },
+    "event.stop": {
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow."
+    },
+    "aitable.view_get_aggregate": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_card": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_field_widths": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_fill_color_rule": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_filter": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_group": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_sort": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_timebar": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "aitable.view_get_visible_fields": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
+    },
+    "minutes.list_accessible_minutes": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      }
+    },
+    "minutes.list_by_keyword_and_time_range": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      }
+    },
+    "minutes.list_shared_minutes": {
+      "interface_mode": "mcp",
+      "availability": "available",
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      }
+    }
+  }
+}

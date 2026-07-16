@@ -461,6 +461,27 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 					continue
 				}
 				fmt.Fprintf(os.Stderr, "[%d/%d] update_range sheet=%s range=%s\n", i+1, total, item.SheetID, item.Range)
+				if deps.Caller.DryRun() {
+					// The batch command normally uses callMCPToolReturnText in
+					// JSON mode, which intentionally performs a real call. Keep
+					// the dry-run guard before both output branches so neither
+					// format can bypass the shared no-network preview path.
+					if err := callMCPTool("update_range", toolArgs); err != nil {
+						return fmt.Errorf("第 %d/%d 条 update_range dry-run 失败: %w", i+1, total, err)
+					}
+					if jsonMode {
+						jsonResults = append(jsonResults, map[string]any{
+							"index":     i + 1,
+							"sheetId":   item.SheetID,
+							"range":     item.Range,
+							"ok":        true,
+							"dryRun":    true,
+							"tool":      "update_range",
+							"arguments": toolArgs,
+						})
+					}
+					continue
+				}
 				if jsonMode {
 					text, cerr := callMCPToolReturnText(ctx, "update_range", toolArgs)
 					entry := map[string]any{"index": i + 1, "sheetId": item.SheetID, "range": item.Range}

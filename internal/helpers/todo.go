@@ -387,28 +387,37 @@ func newTodoCommand() *cobra.Command {
 	todoTaskAddReminderCmd := &cobra.Command{
 		Use:   "add-reminder",
 		Short: "添加待办提醒",
-		Example: `  dws todo task add-reminder --task-id <taskId> --base-time <baseTime> --due-date-offset <dueDateOffset>
-			dws todo task add-reminder --task-id <taskId> --base-time <baseTime> --reminder-time-stamp <reminderTimeStamp>
+		Example: `  dws todo task add-reminder --task-id <taskId> --base-time dueTime --due-date-offset -30
+			dws todo task add-reminder --task-id <taskId> --base-time customTime --reminder-time-stamp 2026-03-10T18:00:00+08:00
   # 查询 taskId: dws todo task list
   # 查询 userId: dws contact user search --query "姓名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "task-id", "base-time"); err != nil {
 				return err
 			}
-			baseTime := mustGetFlag(cmd, "base-time")
+			baseTime := strings.TrimSpace(mustGetFlag(cmd, "base-time"))
 			dueDateOffset := any(nil)
 			reminderTimeStamp := any(nil)
-			if baseTime == "dueTime" {
-				dueDateOffset = mustGetFlag(cmd, "due-date-offset")
-				// dueDateOffset should not be empty
-			} else if baseTime == "customTime" {
-				if v, _ := cmd.Flags().GetString("reminder-time-stamp"); v != "" {
-					ms, err := parseISOTimeToMillis("reminder-time-stamp", v)
-					if err != nil {
-						return err
-					}
-					reminderTimeStamp = ms
+			switch baseTime {
+			case "dueTime":
+				value := strings.TrimSpace(mustGetFlag(cmd, "due-date-offset"))
+				if value == "" {
+					return fmt.Errorf("--due-date-offset is required when --base-time=dueTime")
 				}
+				dueDateOffset = value
+			case "customTime":
+				value, _ := cmd.Flags().GetString("reminder-time-stamp")
+				value = strings.TrimSpace(value)
+				if value == "" {
+					return fmt.Errorf("--reminder-time-stamp is required when --base-time=customTime")
+				}
+				ms, err := parseISOTimeToMillis("reminder-time-stamp", value)
+				if err != nil {
+					return err
+				}
+				reminderTimeStamp = ms
+			default:
+				return fmt.Errorf("--base-time must be one of dueTime or customTime, got %q", baseTime)
 			}
 			return callMCPTool("add_todo_reminder", map[string]any{
 				"todoReminderAddRequest": map[string]any{
@@ -547,7 +556,7 @@ func newTodoCommand() *cobra.Command {
 			}
 			taskId := mustGetFlag(cmd, "task-id")
 			attachmentId := mustGetFlag(cmd, "attachment-id")
-			if !confirmDelete("附件", attachmentId) {
+			if !commandDryRun(cmd) && !confirmDelete("附件", attachmentId) {
 				return nil
 			}
 			return callMCPTool("remove_todo_attachment", map[string]any{
@@ -572,7 +581,7 @@ func newTodoCommand() *cobra.Command {
 	todoTaskCreateSubCmd.Flags().String("priority", "", "优先级: 10低/20普通/30较高/40紧急")
 	todoTaskCreateSubCmd.Flags().String("recurrence", "", "循环待办 (需先设置 --due); 格式: DTSTART:20260320T100000Z\\nRRULE:FREQ=DAILY;INTERVAL=1")
 
-	todoTaskListCmd.Flags().String("page", "1", "页码 (必填)")
+	todoTaskListCmd.Flags().String("page", "1", "页码（默认 1）")
 	todoTaskListCmd.Flags().String("size", "20", "获取数量，超过 20 自动分页 (默认 20)")
 	todoTaskListCmd.Flags().String("status", "", "true=已完成, false=未完成")
 	todoTaskListCmd.Flags().String("priority", "", "优先级: 10 低/20 普通/30 较高/40 紧急")

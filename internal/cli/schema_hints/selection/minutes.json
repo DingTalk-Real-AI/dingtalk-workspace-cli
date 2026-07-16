@@ -1,0 +1,711 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/minutes",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "minutes.add_member_permission": {
+      "agent_summary": "批量给多个听记增加成员，并设置成员的权限。",
+      "use_when": [
+        "已知听记 uuid，需要批量给听记增加成员并设置权限（policy 0管理员/1所有者/2可编辑/3可查看下载/4仅查看）时"
+      ],
+      "avoid_when": [
+        "要移除成员权限时改用 dws minutes permission remove",
+        "成员、权限策略或听记 id 未确认时不要添加"
+      ],
+      "examples": [
+        "dws minutes permission add --ids <uuid1,uuid2> --member-uids 123456,789012 --policy 3",
+        "dws minutes permission add --ids <uuid> --member-uids 123456 --policy 2 --cover"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes permission add --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.add_member_permission"
+      ]
+    },
+    "minutes.add_personal_hot_word": {
+      "agent_summary": "添加听记个人热词，用于优化语音识别中专有名词、人名等的识别准确率。",
+      "use_when": [
+        "需要添加听记个人热词以优化专有名词/人名识别时（单词不超过约10汉字）"
+      ],
+      "avoid_when": [
+        "要查看已有热词时改用 dws minutes hot-word list"
+      ],
+      "examples": [
+        "dws minutes hot-word add --words \"钉钉\"",
+        "dws minutes hot-word add --words \"OKR,钉钉,Copilot\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes hot-word add --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.add_personal_hot_word"
+      ]
+    },
+    "minutes.batch_get_minutes_details": {
+      "agent_summary": "根据 taskUuid 列表批量查询听记详情。",
+      "use_when": [
+        "已知多个 taskUuid，需要批量查询听记标题/时长/参与人/状态等详情时"
+      ],
+      "avoid_when": [
+        "只要 AI 摘要/转写/关键字时改用 get summary/transcription/keywords",
+        "未知 uuid 时先用 list mine/shared/all"
+      ],
+      "examples": [
+        "dws minutes get batch --ids uuid1,uuid2,uuid3"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes get batch --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.batch_get_minutes_details"
+      ]
+    },
+    "minutes.cancel_upload_session": {
+      "agent_summary": "取消 create 创建的上传会话，传入要取消的会话 ID。",
+      "use_when": [
+        "需要取消已创建的文件上传会话并释放资源时"
+      ],
+      "avoid_when": [
+        "要完成上传创建听记时改用 upload complete",
+        "要新建上传会话时改用 upload create"
+      ],
+      "examples": [
+        "dws minutes upload cancel --session-id <sessionId>",
+        "dws minutes upload cancel --session-id <sessionId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes upload cancel --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.cancel_upload_session"
+      ]
+    },
+    "minutes.complete_upload_session": {
+      "agent_summary": "文件上传完成后，创建听记。",
+      "use_when": [
+        "预签名 PUT 上传完成后，需要通知服务端完成会话并创建听记时（同 sessionId 幂等）"
+      ],
+      "avoid_when": [
+        "尚未 PUT 上传文件时不要 complete",
+        "要取消会话时改用 upload cancel"
+      ],
+      "examples": [
+        "dws minutes upload complete --session-id <sessionId>",
+        "dws minutes upload complete --session-id <sessionId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes upload complete --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.complete_upload_session"
+      ]
+    },
+    "minutes.create_mind_graph": {
+      "agent_summary": "触发创建听记思维导图任务。触发成功后，可通过 query_mind_graph_status 轮询任务状态。",
+      "use_when": [
+        "已知 taskUuid，需要触发听记思维导图生成任务时"
+      ],
+      "avoid_when": [
+        "要查询任务状态时改用 mind-graph status 并轮询"
+      ],
+      "examples": [
+        "dws minutes mind-graph create --id <taskUuid>",
+        "dws minutes mind-graph create --id <taskUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes mind-graph create --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.create_mind_graph"
+      ]
+    },
+    "minutes.create_speaker_summary": {
+      "agent_summary": "触发创建发言人的段落总结任务，将听记中每位发言人的所有发言内容汇总总结。",
+      "use_when": [
+        "已知听记 uuid，需要触发发言人段落总结异步任务时"
+      ],
+      "avoid_when": [
+        "要取结果时改用 speaker summary get（需等待后轮询）"
+      ],
+      "examples": [
+        "dws minutes speaker summary create --ids <uuid1,uuid2>",
+        "dws minutes speaker summary create --task-uuids <uuid1,uuid2>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes speaker summary create --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/10-minutes-speaker-match.md",
+        "live-dws-schema:minutes.create_speaker_summary"
+      ]
+    },
+    "minutes.create_upload_session": {
+      "agent_summary": "创建文件上传会话，获取预签名上传URL。",
+      "use_when": [
+        "需要把本地音视频上传转成听记：先创建上传会话取得预签名 URL 与 sessionId 时"
+      ],
+      "avoid_when": [
+        "会话已存在只需 complete/cancel 时不要重复 create"
+      ],
+      "examples": [
+        "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400",
+        "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400 --title \"周会录音\""
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes upload create --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.create_upload_session"
+      ]
+    },
+    "minutes.get_minutes_ai_summary": {
+      "agent_summary": "获取由 AI 对听记转写原文进行结构化提炼生成的摘要，返回 Markdown 格式。",
+      "use_when": [
+        "已知 taskUuid，需要获取 AI 生成的 Markdown 听记摘要时"
+      ],
+      "avoid_when": [
+        "要完整转写原文时改用 get transcription",
+        "要基础元数据时改用 get info"
+      ],
+      "examples": [
+        "dws minutes get summary --id <taskUuid>",
+        "dws minutes get summary --id <taskUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes get summary --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.get_minutes_ai_summary"
+      ]
+    },
+    "minutes.get_minutes_basic_info": {
+      "agent_summary": "获取指定听记的基础元数据信息。",
+      "use_when": [
+        "已知 taskUuid，需要获取创建人/起止时间/标题/访问链接等基础信息时"
+      ],
+      "avoid_when": [
+        "要摘要或转写时改用 get summary/transcription"
+      ],
+      "examples": [
+        "dws minutes get info --id <taskUuid>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes get info --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.get_minutes_basic_info"
+      ]
+    },
+    "minutes.get_minutes_keywords": {
+      "agent_summary": "获取指定听记的关键字列表。",
+      "use_when": [
+        "已知 taskUuid，需要获取听记关键字列表时"
+      ],
+      "avoid_when": [
+        "要摘要/转写/待办时改用对应 get 命令"
+      ],
+      "examples": [
+        "dws minutes get keywords --id <taskUuid>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes get keywords --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.get_minutes_keywords"
+      ]
+    },
+    "minutes.get_minutes_transcription": {
+      "agent_summary": "获取指定听记的语音转写原文。",
+      "use_when": [
+        "已知 taskUuid，需要拉取完整语音转写原文（发言人/文本/时间戳）时"
+      ],
+      "avoid_when": [
+        "只要结构化摘要时改用 get summary"
+      ],
+      "examples": [
+        "dws minutes get transcription --id <taskUuid>",
+        "dws minutes get transcription --id <taskUuid> --direction 1"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes get transcription --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.get_minutes_transcription"
+      ]
+    },
+    "minutes.get_speaker_summary": {
+      "agent_summary": "查询发言人段落总结任务的结果，返回每位发言人的发言汇总。",
+      "use_when": [
+        "已触发 create_speaker_summary 后，需要查询发言人段落总结结果时"
+      ],
+      "avoid_when": [
+        "尚未 create 任务时先 create；不要把本命令当触发器"
+      ],
+      "examples": [
+        "dws minutes speaker summary get --ids <uuid1,uuid2>",
+        "dws minutes speaker summary get --task-uuids <uuid1,uuid2>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes speaker summary get --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/10-minutes-speaker-match.md",
+        "live-dws-schema:minutes.get_speaker_summary"
+      ]
+    },
+    "minutes.list_accessible_minutes": {
+      "agent_summary": "查询当前用户有权限访问的全部听记，包括自己创建和他人共享的听记，并支持分页、关键字和时间范围筛选。",
+      "use_when": [
+        "需要按关键词/时间范围覆盖全部可访问听记（含他人共享）时"
+      ],
+      "avoid_when": [
+        "明确只要自己创建的听记时改用 list mine；只要共享给我的时改用 list shared"
+      ],
+      "examples": [
+        "dws minutes list all --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes list all --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.list_accessible_minutes"
+      ]
+    },
+    "minutes.list_by_keyword_and_time_range": {
+      "agent_summary": "查询当前用户自己创建的听记列表，支持分页、关键字和时间范围筛选。",
+      "use_when": [
+        "需要按关键词/时间范围查询我自己创建的听记并提取 taskUuid 时"
+      ],
+      "avoid_when": [
+        "只要共享听记时改用 list shared；要覆盖全部可访问时改用 list all"
+      ],
+      "examples": [
+        "dws minutes list mine --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes list mine --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.list_by_keyword_and_time_range"
+      ]
+    },
+    "minutes.list_minutes_todos": {
+      "agent_summary": "查询指定听记中由系统提取的待办事项列表。",
+      "use_when": [
+        "已知 taskUuid，需要提取听记中的待办事项列表时"
+      ],
+      "avoid_when": [
+        "要管理钉钉个人待办时改用 todo 产品命令"
+      ],
+      "examples": [
+        "dws minutes get todos --id <taskUuid>",
+        "dws minutes get todos --id <taskUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes get todos --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.list_minutes_todos"
+      ]
+    },
+    "minutes.list_my_hotwords": {
+      "agent_summary": "查询当前用户配置的所有听记热词列表。",
+      "use_when": [
+        "需要查看当前用户已配置的听记个人热词列表时"
+      ],
+      "avoid_when": [
+        "要添加热词时改用 hot-word add"
+      ],
+      "examples": [
+        "dws minutes hot-word list"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes hot-word list --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.list_my_hotwords"
+      ]
+    },
+    "minutes.list_shared_minutes": {
+      "agent_summary": "查询他人共享给当前用户的听记列表，支持分页、关键字和时间范围筛选。",
+      "use_when": [
+        "需要查看别人共享给我的听记，或在共享范围内按关键词/时间搜索时"
+      ],
+      "avoid_when": [
+        "只要自己创建时改用 list mine；要全部可访问时改用 list all"
+      ],
+      "examples": [
+        "dws minutes list shared --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes list shared --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.list_shared_minutes"
+      ]
+    },
+    "minutes.query_mind_graph_status": {
+      "agent_summary": "查询指定听记的思维导图生成状态。",
+      "use_when": [
+        "已 create 思维导图后，需要查询任务状态（0进行中/1成功/2失败）时"
+      ],
+      "avoid_when": [
+        "尚未触发创建时先用 mind-graph create"
+      ],
+      "examples": [
+        "dws minutes mind-graph status --id <taskUuid>",
+        "dws minutes mind-graph status --id <taskUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes mind-graph status --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.query_mind_graph_status"
+      ]
+    },
+    "minutes.query_minutes_audio_url": {
+      "agent_summary": "查询听记的音频/视频文件地址（OSS 链接）。",
+      "use_when": [
+        "已知 taskUuid 且有读权限，需要获取听记音视频地址以下载或播放时"
+      ],
+      "avoid_when": [
+        "听记已删除、无痕模式或媒体未就绪时可能无地址；不要用本命令改内容"
+      ],
+      "examples": [
+        "dws minutes get audio --id <taskUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes get audio --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.query_minutes_audio_url"
+      ]
+    },
+    "minutes.query_minutes_by_tag_id": {
+      "agent_summary": "根据用户的标签或分组 ID 查询该标签下的听记列表。",
+      "use_when": [
+        "已知 tagId，需要查询该标签/分组下的听记列表时"
+      ],
+      "avoid_when": [
+        "不知道标签时先用 tag list"
+      ],
+      "examples": [
+        "dws minutes tag query --tag-id <tagId>",
+        "dws minutes tag query --tag-id <tagId> --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes tag query --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.query_minutes_by_tag_id"
+      ]
+    },
+    "minutes.query_user_tag_list": {
+      "agent_summary": "查询当前用户的听记标签或分组列表。",
+      "use_when": [
+        "需要列出我的听记标签或分组时"
+      ],
+      "avoid_when": [
+        "已知 tagId 要查听记时改用 tag query"
+      ],
+      "examples": [
+        "dws minutes tag list"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes tag list --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.query_user_tag_list"
+      ]
+    },
+    "minutes.record_pause": {
+      "agent_summary": "暂停正在进行的听记录音。",
+      "use_when": [
+        "已知进行中的听记 taskUuid，需要暂停听记录音时"
+      ],
+      "avoid_when": [
+        "要恢复时改用 record resume；要结束时改用 record stop；要开始新听记时改用 record start"
+      ],
+      "examples": [
+        "dws minutes record pause --id <taskUuid>",
+        "dws minutes record pause --id <taskUuid> --session-id <sessionId>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes record pause --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.record_pause"
+      ]
+    },
+    "minutes.record_resume": {
+      "agent_summary": "恢复已暂停的听记录音。",
+      "use_when": [
+        "已知已暂停的听记 taskUuid，需要恢复听记录音时"
+      ],
+      "avoid_when": [
+        "要暂停/结束/新开始时改用 pause/stop/start"
+      ],
+      "examples": [
+        "dws minutes record resume --id <taskUuid>",
+        "dws minutes record resume --id <taskUuid> --session-id <sessionId>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes record resume --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.record_resume"
+      ]
+    },
+    "minutes.record_start": {
+      "agent_summary": "发起听记并开始录音。",
+      "use_when": [
+        "需要发起听记并开始录音，取得 taskUuid 时"
+      ],
+      "avoid_when": [
+        "已有进行中的录音只需 pause/resume/stop 时不要重复 start"
+      ],
+      "examples": [
+        "dws minutes record start",
+        "dws minutes record start --session-id <sessionId>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes record start --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.record_start"
+      ]
+    },
+    "minutes.record_stop": {
+      "agent_summary": "结束正在进行的听记录音。",
+      "use_when": [
+        "已知 taskUuid，需要结束听记录音时"
+      ],
+      "avoid_when": [
+        "只需暂停时可改用 pause；尚未 start 时不要 stop"
+      ],
+      "examples": [
+        "dws minutes record stop --id <taskUuid>",
+        "dws minutes record stop --id <taskUuid> --session-id <sessionId>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes record stop --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.record_stop"
+      ]
+    },
+    "minutes.remove_member_permission": {
+      "agent_summary": "批量移除多个听记的成员权限。移除后，对应成员将失去对这些听记的访问权限。",
+      "use_when": [
+        "用户明确要求批量移除听记成员权限，使其失去访问时"
+      ],
+      "avoid_when": [
+        "要添加权限时改用 permission add",
+        "成员或听记 id 未确认时不要移除"
+      ],
+      "examples": [
+        "dws minutes permission remove --ids <uuid1,uuid2> --member-uids 123456,789012",
+        "dws minutes permission remove --ids <uuid> --member-uids 123456"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes permission remove --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.remove_member_permission"
+      ]
+    },
+    "minutes.replace_minutes_text": {
+      "agent_summary": "把听记中所有出现的原文字替换为目标文字，包括转写段落和纪要摘要中出现的原文字都会被替换。",
+      "use_when": [
+        "用户明确要求在转写段落与纪要中把原文精确替换为目标文字时"
+      ],
+      "avoid_when": [
+        "搜索词/替换词或 taskUuid 未确认时不要执行",
+        "只要改标题时改用 update title"
+      ],
+      "examples": [
+        "dws minutes replace-text --id <taskUuid> --search \"旧文字\" --replace \"新文字\"",
+        "dws minutes replace-text --id <taskUuid> --search \"发言人1\" --replace \"张三\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes replace-text --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.replace_minutes_text"
+      ]
+    },
+    "minutes.replace_speaker": {
+      "agent_summary": "批量替换听记转写中指定发言人，将源发言人（speakerNick）精确匹配的所有段落替换为目标发言人。",
+      "use_when": [
+        "用户明确要求把转写中指定发言人昵称批量替换为目标发言人时"
+      ],
+      "avoid_when": [
+        "源/目标发言人或 taskUuid 未确认时不要替换"
+      ],
+      "examples": [
+        "dws minutes speaker replace --id <taskUuid> --from \"张三\" --to \"李四\"",
+        "dws minutes speaker replace --id <taskUuid> --from \"张三\" --to \"李四\" --target-uid <uid>"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes speaker replace --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/10-minutes-speaker-match.md",
+        "live-dws-schema:minutes.replace_speaker"
+      ]
+    },
+    "minutes.update_minutes_summary": {
+      "agent_summary": "用传入的摘要文本全量覆盖听记的纪要内容，不触发 AI 重新生成。",
+      "use_when": [
+        "已知 taskUuid，需要用新文本全量覆盖纪要且不触发 AI 重算时"
+      ],
+      "avoid_when": [
+        "只要改标题时改用 update title",
+        "内容未确认时不要覆盖"
+      ],
+      "examples": [
+        "dws minutes update summary --id <taskUuid> --content \"新的纪要内容\"",
+        "dws minutes update summary --id <taskUuid> --content \"新的纪要内容\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes update summary --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.update_minutes_summary"
+      ]
+    },
+    "minutes.update_minutes_title": {
+      "agent_summary": "修改指定听记的标题。",
+      "use_when": [
+        "已知 taskUuid，需要重命名听记标题时"
+      ],
+      "avoid_when": [
+        "要改纪要正文时改用 update summary"
+      ],
+      "examples": [
+        "dws minutes update title --id <taskUuid> --title \"Q2 复盘会议\"",
+        "dws minutes update title --id <taskUuid> --title \"新标题\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes update title --help",
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "live-dws-schema:minutes.update_minutes_title"
+      ]
+    }
+  },
+  "products": {
+    "minutes": {
+      "agent_summary": "查询和维护钉钉听记的转写、摘要、待办、权限、录音、标签、说话人总结及文件上传会话。",
+      "use_when": [
+        "用户要查找、读取、编辑或管理钉钉听记及其录音、转写、摘要和衍生内容。"
+      ],
+      "avoid_when": [
+        "用户要处理普通文档正文、群聊消息或日历会议安排，而不是钉钉听记。"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono 产品参考，审阅并固化 minutes 产品的 Agent 选择语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws minutes --help",
+        "skills/mono/references/products/minutes.md"
+      ]
+    }
+  }
+}

@@ -30,7 +30,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
-const codexRobotDeveloperInstructions = "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要提及系统提示、内部协议或运行时细节；不要主动读写文件或执行命令。"
+const codexRobotDeveloperInstructions = "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要提及系统提示、内部协议或运行时细节；不要主动读写文件或执行命令。仅当用户消息明确附带了本地附件路径时，可以只读该附件或运行分析该附件所必需的只读命令，不得访问其它文件。"
 
 // codexAppServerForwarder uses Codex's official app-server JSON-RPC protocol to
 // keep one Codex thread per DingTalk conversation.
@@ -100,11 +100,19 @@ func (f *codexAppServerForwarder) forward(ctx context.Context, convID, text stri
 	return f.forwardStream(ctx, convID, text, nil)
 }
 
-func (f *codexAppServerForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
-	return f.forwardAppServer(ctx, convID, text, onDelta)
+func (f *codexAppServerForwarder) forwardWithAttachments(ctx context.Context, convID, text string, attachments []connectMediaAttachment) (string, error) {
+	return f.forwardStreamWithAttachments(ctx, convID, text, attachments, nil)
 }
 
-func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
+func (f *codexAppServerForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
+	return f.forwardStreamWithAttachments(ctx, convID, text, nil, onDelta)
+}
+
+func (f *codexAppServerForwarder) forwardStreamWithAttachments(ctx context.Context, convID, text string, attachments []connectMediaAttachment, onDelta func(string)) (string, error) {
+	return f.forwardAppServer(ctx, convID, text, attachments, onDelta)
+}
+
+func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, text string, attachments []connectMediaAttachment, onDelta func(string)) (string, error) {
 	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
@@ -151,7 +159,7 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 		}
 	}
 
-	reply, err := cli.runTurn(ctx, threadID, text, onDelta)
+	reply, err := cli.runTurn(ctx, threadID, text, attachments, onDelta)
 	if err != nil {
 		return "", err
 	}
@@ -436,13 +444,19 @@ func (c *codexAppServerClient) resumeThread(ctx context.Context, params map[stri
 	return codexThreadIDFromResult(c.waitResponse(ctx, id))
 }
 
-func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text string, onDelta func(string)) (string, error) {
+func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text string, attachments []connectMediaAttachment, onDelta func(string)) (string, error) {
 	id := c.requestID()
+	input := []map[string]string{{"type": "text", "text": text}}
+	for _, attachment := range attachments {
+		if attachment.MediaType == "image" && strings.TrimSpace(attachment.LocalPath) != "" {
+			input = append(input, map[string]string{"type": "localImage", "path": attachment.LocalPath})
+		}
+	}
 	if err := c.send(map[string]any{
 		"id":     id,
 		"method": "turn/start",
 		"params": map[string]any{
-			"input":    []map[string]string{{"type": "text", "text": text}},
+			"input":    input,
 			"threadId": threadID,
 		},
 	}); err != nil {

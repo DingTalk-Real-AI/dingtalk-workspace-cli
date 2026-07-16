@@ -66,6 +66,22 @@ func resolveAisearchKeyword(cmd *cobra.Command) string {
 	return ""
 }
 
+func addAisearchPersonFlags(cmd *cobra.Command) {
+	cmd.Flags().StringP("keyword", "w", "", "搜索关键词 (必填，如人名、技能关键词等)")
+	cmd.Flags().StringP("dimension", "d", "all", "查询维度: all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，多个用逗号分隔")
+	for _, alias := range aisearchKeywordAliases {
+		cmd.Flags().String(alias, "", "")
+		_ = cmd.Flags().MarkHidden(alias)
+	}
+}
+
+func addAisearchKeywordCompatibilityFlag(cmd *cobra.Command) {
+	cmd.Flags().String("keyword", "", "--queries 的兼容别名")
+	_ = cmd.Flags().MarkHidden("keyword")
+	cmd.Flags().String("query", "", "--queries 的兼容别名")
+	_ = cmd.Flags().MarkHidden("query")
+}
+
 // runAisearchPerson 是 aisearch person 的实际执行体，被 personCmd 和 root
 // 的智能 RunE（裸调兜底）共享调用。
 func runAisearchPerson(cmd *cobra.Command, _ []string) error {
@@ -157,17 +173,13 @@ func newAisearchCommand() *cobra.Command {
 		},
 	}
 
-	// flag 提到 root 作为 PersistentFlag，这样：
+	// root 和 person 各自定义同一组本地 flag，这样：
 	//   - dws aisearch --keyword xxx           ← root 自己能解析
-	//   - dws aisearch person --keyword xxx    ← person 通过继承拿到
-	//   - dws aisearch search --keyword xxx    ← search 是 person 的 alias，同上
-	root.PersistentFlags().StringP("keyword", "w", "", "搜索关键词 (必填，如人名、技能关键词等)")
-	root.PersistentFlags().StringP("dimension", "d", "all", "查询维度: all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，多个用逗号分隔")
-	// keyword 的同义 flag（隐藏，仅作模型瞎猜兜底）
-	for _, alias := range aisearchKeywordAliases {
-		root.PersistentFlags().String(alias, "", "")
-		_ = root.PersistentFlags().MarkHidden(alias)
-	}
+	//   - dws aisearch person --keyword xxx    ← person 本地 flag
+	//   - dws aisearch search --keyword xxx    ← search 是 person 的 alias
+	// 不能放在 product PersistentFlags：否则 enterprise/behavior 会公开接受
+	// 它们不拥有的 person-only dimension，破坏 Help ↔ Schema 完整性。
+	addAisearchPersonFlags(root)
 
 	personCmd := &cobra.Command{
 		Use: "person",
@@ -209,6 +221,7 @@ func newAisearchCommand() *cobra.Command {
   dws aisearch person --keyword "W12345" --dimension jobNumber`,
 		RunE: runAisearchPerson,
 	}
+	addAisearchPersonFlags(personCmd)
 
 	enterpriseCmd := &cobra.Command{
 		Use:     "enterprise",
@@ -238,6 +251,7 @@ func newAisearchCommand() *cobra.Command {
 	enterpriseCmd.Flags().String("time-range", "", "时间范围，仅当用户显式给出时间词时填写，如 今天/本周/9月/过去一周")
 	enterpriseCmd.Flags().String("timeRange", "", "--time-range 的别名")
 	_ = enterpriseCmd.Flags().MarkHidden("timeRange")
+	addAisearchKeywordCompatibilityFlag(enterpriseCmd)
 
 	behaviorCmd := &cobra.Command{
 		Use:   "behavior",
@@ -268,6 +282,7 @@ func newAisearchCommand() *cobra.Command {
 	behaviorCmd.Flags().String("timeRange", "", "--time-range 的别名")
 	_ = behaviorCmd.Flags().MarkHidden("timeRange")
 	behaviorCmd.Flags().String("direction", "", `交互方向，如 "我->汐峰"、"汐峰->我"、"我<->汐峰"`)
+	addAisearchKeywordCompatibilityFlag(behaviorCmd)
 
 	root.AddCommand(personCmd, enterpriseCmd, behaviorCmd)
 	return root

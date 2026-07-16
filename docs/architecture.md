@@ -1,22 +1,26 @@
 # Architecture
 
-`dws` is a Go CLI that turns DingTalk MCP metadata into a command-line surface for both humans and AI agents.
+`dws` is a Go CLI with a versioned, static command surface for DingTalk MCP capabilities. Cobra help serves humans; the embedded Command Catalog serves AI agents.
 
 ## High-Level Flow
 
 1. `cmd` is the CLI entrypoint, invoking `internal/app` to build the root Cobra command tree.
-2. `internal/app` wires static utility commands (`auth`, `audit`, `schema`, `completion`), product helper commands, and plugin commands.
+2. `internal/app` wires static utility commands (`auth`, `audit`, `schema`, `completion`), product helpers, and versioned plugin descriptors.
 3. `internal/helpers` contains the main command handlers for all product surfaces (`dev`, `chat`, `calendar`, `contact`, `aitable`, etc.).
 4. `internal/executor` and `internal/transport` execute MCP JSON-RPC calls; `internal/output` formats responses.
 5. `internal/auth` manages login state, PAT tokens, and agent-code detection.
+6. Schema generation starts from the reviewed `CommandRegistry`, binds each identity to the exact current Cobra leaf, and then resolves typed constraints, sanitized MCP snapshots, Agent hints, and Skills into one `SchemaRegistry`. Startup and Schema queries do not call MCP `tools/list`.
+7. The embedded Catalog is a downstream release artifact and never backfills identity or participates in regeneration. Stable flag-to-interface property bindings come from the reviewed, content-addressed v3 manifest in `schema_parameter_bindings.json`; its exact active tuples, corrections, removals, and mapping exclusions are validated against the final bound `SchemaRegistry`. CLI `required` and constraints come from the resolved typed contract, while MCP `required` remains interface-only metadata.
+8. Agent selection results are fixed in versioned review inputs. Every public tool has explicit use/avoid/example and interface disposition metadata; Skill references that are not current leaves require an explicit alias/group/stale/out-of-surface review instead of fuzzy runtime matching.
 
 ## Repository Structure
 
 - `cmd`: CLI entrypoint
 - `internal/app`: root command wiring, static utility commands, and plugin loading
 - `internal/helpers`: product command handlers (dev, chat, calendar, contact, etc.)
-- `internal/plugin`: plugin-based dynamic command loader
-- `internal/cli`: catalog types and endpoint loader (static endpoint mode)
+- `internal/plugin`: versioned plugin manifest, hook, skill, and transport descriptor loading
+- `internal/cli`: embedded Agent Command Catalog, static schema query, and catalog contracts
+- `internal/generator`: deterministic Agent metadata and Command Catalog generators
 - `internal/executor`: invocation dispatch and result handling
 - `internal/transport`: MCP HTTP client and request signing
 - `internal/auth`: login, token management, agent-code detection, identity

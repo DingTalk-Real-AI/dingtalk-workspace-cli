@@ -1,0 +1,1313 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "runtime-surface-completeness-v1",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source"
+  },
+  "coverage": {
+    "source_tools": 568,
+    "matched_tools": 71
+  },
+  "tools": {
+    "aitable.form_create": {
+      "agent_summary": "在指定数据表下创建一个新的表单视图（FormDesigner 类型）",
+      "use_when": [
+        "1) 创建表单 → 取返回的 data.viewId 作为 VIEW_ID"
+      ],
+      "avoid_when": [
+        "不需要在指定数据表下创建一个新的表单视图（FormDesigner 类型）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form create --base-id BASE_ID --table-id TABLE_ID --name \"员工信息收集\" --format json"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "aitable.form_delete": {
+      "agent_summary": "删除指定数据表下的表单视图（不可逆）",
+      "use_when": [
+        "删除指定数据表下的表单视图（不可逆）"
+      ],
+      "avoid_when": [
+        "不需要删除指定数据表下的表单视图（不可逆）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form delete --help"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "aitable.form_field_hide": {
+      "agent_summary": "切换表单视图中某个字段的隐藏/显示状态",
+      "use_when": [
+        "5) 隐藏不需要的题目"
+      ],
+      "avoid_when": [
+        "不需要切换表单视图中某个字段的隐藏/显示状态时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form field hide --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id FIELD_ID --hidden true --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "aitable.form_field_list": {
+      "agent_summary": "列出指定表单视图当前可见的字段及其配置",
+      "use_when": [
+        "3) 查看表单字段配置"
+      ],
+      "avoid_when": [
+        "不需要列出指定表单视图当前可见的字段及其配置时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form field list --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "aitable.form_field_update": {
+      "agent_summary": "更新表单视图中某个字段的必填状态或描述",
+      "use_when": [
+        "4) 设置题目必填（FIELD_ID 来自步骤 2）"
+      ],
+      "avoid_when": [
+        "不需要更新表单视图中某个字段的必填状态或描述时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id FIELD_ID --required true --format json"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "aitable.form_get": {
+      "agent_summary": "按 viewId 获取单个表单视图的元信息（name/title/createdAt/shareFormUuid）",
+      "use_when": [
+        "2) 查看单个表单详情"
+      ],
+      "avoid_when": [
+        "不需要按 viewId 获取单个表单视图的元信息（name/title/createdAt/shareFormUuid）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "aitable.form_list": {
+      "agent_summary": "列出指定数据表下的所有表单视图",
+      "use_when": [
+        "1) 列出数据表下的表单视图"
+      ],
+      "avoid_when": [
+        "不需要列出指定数据表下的所有表单视图时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form list --base-id BASE_ID --table-id TABLE_ID --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "aitable.form_questions_create": {
+      "agent_summary": "在数据表中创建字段，即向表单添加题目",
+      "use_when": [
+        "2) 添加题目 → 取返回的 data.results[].fieldId 作为 FIELD_ID"
+      ],
+      "avoid_when": [
+        "不需要在数据表中创建字段，即向表单添加题目时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form questions create --base-id BASE_ID --table-id TABLE_ID --fields '[{\"fieldName\":\"姓名\",\"type\":\"text\"},{\"fieldName\":\"邮箱\",\"type\":\"text\"}]' --format json"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "aitable.form_questions_delete": {
+      "agent_summary": "删除指定字段（即表单题目）",
+      "use_when": [
+        "删除指定字段（即表单题目）"
+      ],
+      "avoid_when": [
+        "不需要删除指定字段（即表单题目）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form questions delete --help"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "aitable.form_share_get": {
+      "agent_summary": "读取指定视图当前的分享表单配置",
+      "use_when": [
+        "4) 查看分享配置"
+      ],
+      "avoid_when": [
+        "不需要读取指定视图当前的分享表单配置时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "aitable.form_share_update": {
+      "agent_summary": "开启或关闭指定视图的分享表单",
+      "use_when": [
+        "6) 开启分享（注意：开启后需 UI 刷新页面才会看到分享面板）"
+      ],
+      "avoid_when": [
+        "不需要开启或关闭指定视图的分享表单时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --format json"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "aitable.form_update": {
+      "agent_summary": "更新表单整体配置（标题、描述）",
+      "use_when": [
+        "3) 配置表单标题与描述"
+      ],
+      "avoid_when": [
+        "不需要更新表单整体配置（标题、描述）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable form update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --title \"员工信息收集\" --description \"请填写您的基本信息\" --format json"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "aitable.record_batch_update": {
+      "agent_summary": "将同一份 cells JSON 批量应用到多条记录上",
+      "use_when": [
+        "将同一份 cells JSON 批量应用到多条记录上"
+      ],
+      "avoid_when": [
+        "不需要将同一份 cells JSON 批量应用到多条记录上时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws aitable record batch-update --help"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.adjustment_get": {
+      "agent_summary": "调用 MCP 工具 get_adjustment_rule_detail，根据补卡规则主键 ID 查询对应的补卡规则详情",
+      "use_when": [
+        "查询补卡规则详情"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_adjustment_rule_detail，根据补卡规则主键 ID 查询对应的补卡规则详情时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance adjustment get --adjustment-id 12345",
+        "dws attendance adjustment get --adjustment-id 12345 --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.adjustment_search": {
+      "agent_summary": "根据用户权限查询补卡规则列表，入参封装在 ATRuleQueryParam 对象中",
+      "use_when": [
+        "查询补卡规则",
+        "补卡规则/补卡设置",
+        "补卡规则详情/某条补卡规则的具体信息"
+      ],
+      "avoid_when": [
+        "不需要根据用户权限查询补卡规则列表，入参封装在 ATRuleQueryParam 对象中时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance adjustment search --page 1 --limit 20",
+        "dws attendance adjustment search --query \"标准\" --page 1 --limit 50"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.approve_list": {
+      "agent_summary": "查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）",
+      "use_when": [
+        "审批单/请假记录/加班记录/出差记录/补卡记录",
+        "查/提交 请假/加班/补卡 审批单；考勤业务审批单"
+      ],
+      "avoid_when": [
+        "不需要查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance approve list --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30",
+        "dws attendance approve list --users userId1 --types trip --start 2026-04-01 --end 2026-04-30      # 同时返回出差与外出"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.approve_templates": {
+      "agent_summary": "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接",
+      "use_when": [
+        "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接"
+      ],
+      "avoid_when": [
+        "不需要当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance approve templates --type leave",
+        "dws attendance approve templates --type REPAIR_CHECK"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.boss_check": {
+      "agent_summary": "调用 MCP 工具 boss_check 修改员工打卡记录",
+      "use_when": [
+        "假设返回 id: 948964045503 (OffDuty 下班打卡)",
+        "同时修改打卡时间"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 boss_check 修改员工打卡记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance boss-check --help"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.check_record": {
+      "agent_summary": "查询指定用户的打卡流水记录",
+      "use_when": [
+        "打卡记录/出勤/考勤",
+        "指定用户打卡流水/打卡详情/打卡时间地点/打卡记录详情"
+      ],
+      "avoid_when": [
+        "不需要查询指定用户的打卡流水记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance check record --users userId1 --start 2026-04-01 --end 2026-04-30"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.check_result": {
+      "agent_summary": "查询指定用户的打卡结果记录",
+      "use_when": [
+        "指定用户打卡结果/考勤结果/迟到早退/缺卡异常"
+      ],
+      "avoid_when": [
+        "不需要查询指定用户的打卡结果记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance check result --users userId1,userId2 --start 2026-04-01 --end 2026-04-30 --limit 50"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.checkin_records": {
+      "agent_summary": "查询指定员工在一段时间内的签到记录",
+      "use_when": [
+        "查询签到记录",
+        "签到/签到记录"
+      ],
+      "avoid_when": [
+        "不需要查询指定员工在一段时间内的签到记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance checkin records --operator-corp-id corp001 --operator-staff-id op001 --staff-ids user001,user002 --start \"2026-04-01 00:00:00\" --end \"2026-04-07 00:00:00\"",
+        "dws attendance checkin records --operator-corp-id corp001 --operator-staff-id op001 --staff-ids user001,user002 --start \"2026-04-01 00:00:00\" --end \"2026-04-07 00:00:00\" --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.class_create": {
+      "agent_summary": "调用 MCP 工具 create_class_setting，创建一个新的班次",
+      "use_when": [
+        "调用 MCP 工具 create_class_setting，创建一个新的班次"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 create_class_setting，创建一个新的班次时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance class create --name \"早班\" --class-vo '{\"sections\":[{\"times\":[{\"checkType\":\"OnDuty\",\"checkTime\":\"08:00\",\"across\":0},{\"checkType\":\"OffDuty\",\"checkTime\":\"17:00\",\"across\":0}]}]}' --timeout 10"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.class_get": {
+      "agent_summary": "调用 MCP 工具 get_class_detail，根据班次 ID 查询该班次的详细信息",
+      "use_when": [
+        "查询班次详情"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_class_detail，根据班次 ID 查询该班次的详细信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance class get --class-id 1170996821",
+        "dws attendance class get --class-id 1170996821 --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.class_search": {
+      "agent_summary": "查询当前用户有权管理的班次列表（班次定义），支持按名称搜索和类型过滤",
+      "use_when": [
+        "查询可管理的班次列表",
+        "班次定义/班次列表/有哪些班次/我负责的班次",
+        "班次详情/某个班次的具体信息"
+      ],
+      "avoid_when": [
+        "不需要查询当前用户有权管理的班次列表（班次定义），支持按名称搜索和类型过滤时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance class search",
+        "dws attendance class search --query \"早班\" --filter-type MINE_OWN"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.class_update": {
+      "agent_summary": "调用 MCP 工具 update_class_setting，更新一个已有的班次",
+      "use_when": [
+        "更新班次",
+        "更新班次/修改班次/班次改名/修改上下班时间"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 update_class_setting，更新一个已有的班次时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance class update --class-id 1170996821 --name \"新早班\" --timeout 10",
+        "dws attendance class update --class-id 1170996821 --class-vo '{\"sections\":[{\"times\":[{\"checkType\":\"OnDuty\",\"checkTime\":\"08:30\",\"across\":0},{\"checkType\":\"OffDuty\",\"checkTime\":\"17:30\",\"across\":0}]}]}' --timeout 10"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.globalsetting_get": {
+      "agent_summary": "查询全局规则设置，仅管理员可以调用",
+      "use_when": [
+        "查询全局规则设置，仅管理员可以调用"
+      ],
+      "avoid_when": [
+        "不需要查询全局规则设置，仅管理员可以调用时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance globalsetting get --scope 企业 --setting-scene checkRemind --format json",
+        "dws attendance globalsetting get --scope 全公司 --setting-scene bossAttendStatNotify --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.globalsetting_save": {
+      "agent_summary": "更新保存全局规则设置，仅管理员可以调用",
+      "use_when": [
+        "更新保存全局规则设置，仅管理员可以调用"
+      ],
+      "avoid_when": [
+        "不需要更新保存全局规则设置，仅管理员可以调用时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance globalsetting save --help"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.group_create": {
+      "agent_summary": "调用 MCP 工具 create_group_setting，创建一个新的考勤组",
+      "use_when": [
+        "创建考勤组",
+        "创建考勤组/新建考勤组/添加考勤组"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 create_group_setting，创建一个新的考勤组时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance group create --name \"研发考勤组\" --type FIXED --group-vo '{\"defaultClassId\":1170996821,\"workDayClassList\":[0,1170996821,0,0,0,0,0]}' --timeout 10",
+        "dws attendance group create --name \"自由工时分组\" --type NONE --timeout 10"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.group_filtered_get": {
+      "agent_summary": "调用 MCP 工具 get_group_filtered_detail，根据考勤组 ID 仅返回关心的字段子集， 强烈建议在仅需查询成员信息、打卡地址、蓝牙、W",
+      "use_when": [
+        "1. 获取考勤组成员",
+        "按需查询考勤组成员/地址/蓝牙/Wifi",
+        "考勤组成员/打卡地址/打卡wifi/打卡蓝牙"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_group_filtered_detail，根据考勤组 ID 仅返回关心的字段子集， 强烈建议在仅需查询成员信息、打卡地址、蓝牙、W时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance group filtered-get --group-id <groupId> --member --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.group_get": {
+      "agent_summary": "调用 MCP 工具 get_group_detail，根据考勤组 ID 查询该考勤组的全量信息",
+      "use_when": [
+        "查询考勤组全量信息",
+        "考勤组详情/全量考勤组信息",
+        "获取考勤组详情（含绑定的班次列表）"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_group_detail，根据考勤组 ID 查询该考勤组的全量信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance group get --group-id <groupId> --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.group_search": {
+      "agent_summary": "根据当前用户的权限和筛选条件获取考勤组简要信息",
+      "use_when": [
+        "1. 确认考勤组并获取关联班次（先查后排）",
+        "1. 获取考勤组成员",
+        "查询考勤组列表",
+        "考勤组列表/有哪些考勤组"
+      ],
+      "avoid_when": [
+        "不需要根据当前用户的权限和筛选条件获取考勤组简要信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance group search --query \"<考勤组名称>\" --type TURN --format json",
+        "dws attendance group search --query \"研发组\" --type TURN --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.group_update": {
+      "agent_summary": "调用 MCP 工具 update_group_setting，更新考勤组配置信息",
+      "use_when": [
+        "修改考勤组/更新考勤组配置/考勤组改名/改变考勤组绑定的班次/修改打卡范围/设置考勤组负责人",
+        "更新考勤组配置"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 update_group_setting，更新考勤组配置信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance group update --group-id 123456 --name \"研发考勤组\" --timeout 10",
+        "dws attendance group update --group-id 123456 --owner userId1 --timeout 10"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.group_update_members": {
+      "agent_summary": "调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作",
+      "use_when": [
+        "更新考勤组成员",
+        "更新考勤组成员/添加考勤人员/删除考勤人员/添加考勤部门/删除考勤部门/加入考勤组/移出考勤组/设置无需考勤/取消无需考勤"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance group update-members --group-id 123456 --add-users userId1,userId2",
+        "dws attendance group update-members --group-id 123456 --remove-users userId1"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.overtime_get": {
+      "agent_summary": "调用 MCP 工具 get_overtime_rule_detail，根据加班规则主键 ID 查询对应的加班规则详情",
+      "use_when": [
+        "查询加班规则详情"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_overtime_rule_detail，根据加班规则主键 ID 查询对应的加班规则详情时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance overtime get --overtime-id 12345",
+        "dws attendance overtime get --overtime-id 12345 --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.overtime_search": {
+      "agent_summary": "根据用户权限查询加班规则列表，入参封装在 ATRuleQueryParam 对象中",
+      "use_when": [
+        "加班规则/加班设置/加班计算",
+        "加班规则详情/某条加班规则的具体信息",
+        "查询加班规则"
+      ],
+      "avoid_when": [
+        "不需要根据用户权限查询加班规则列表，入参封装在 ATRuleQueryParam 对象中时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance overtime search --page 1 --limit 20",
+        "dws attendance overtime search --query \"节假日\" --page 1 --limit 50"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.report_columns": {
+      "agent_summary": "根据操作者的列权限，过滤并返回其有权查看的考勤字段列表",
+      "use_when": [
+        "考勤字段/考勤列",
+        "获取考勤字段列表（管理员）"
+      ],
+      "avoid_when": [
+        "不需要根据操作者的列权限，过滤并返回其有权查看的考勤字段列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance report columns"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.report_query_data": {
+      "agent_summary": "根据字段查询考勤数据，含列权限过滤和用户查看权限校验",
+      "use_when": [
+        "根据字段查询考勤数据（管理员）",
+        "考勤数据/查询考勤报表数据"
+      ],
+      "avoid_when": [
+        "不需要根据字段查询考勤数据，含列权限过滤和用户查看权限校验时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance report query-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\"",
+        "dws attendance report query-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\" --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.report_query_leave": {
+      "agent_summary": "查询用户假期数据，含用户查看权限校验",
+      "use_when": [
+        "假期数据/年假/病假/请假记录",
+        "查询用户假期数据（管理员）"
+      ],
+      "avoid_when": [
+        "不需要查询用户假期数据，含用户查看权限校验时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance report query-leave --users userId1,userId2 --leave-names 年假,病假 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\"",
+        "dws attendance report query-leave --users userId1,userId2 --leave-names 年假,病假 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\" --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.schedule_get": {
+      "agent_summary": "获取指定用户在一段时间内的排班记录",
+      "use_when": [
+        "步骤1：获取排班记录的 planId"
+      ],
+      "avoid_when": [
+        "不需要获取指定用户在一段时间内的排班记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance schedule get --userIdList 03642229451220076 --workDateBegin 2026-05-13 --workDateEnd 2026-05-13 -f json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.schedule_import": {
+      "agent_summary": "为排班制考勤组导入排班记录",
+      "use_when": [
+        "导入排班记录"
+      ],
+      "avoid_when": [
+        "不需要为排班制考勤组导入排班记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance schedule import --help"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.selfsetting_get": {
+      "agent_summary": "查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项",
+      "use_when": [
+        "查看指定用户的打卡提醒设置",
+        "查看指定用户的极速打卡设置",
+        "查询个人规则设置/查看打卡提醒/查看极速打卡/查看缺卡提醒/查看打卡结果通知/查看个人考勤统计通知/查看团队考勤统计通知"
+      ],
+      "avoid_when": [
+        "不需要查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance selfsetting get --setting-scene checkRemind --user <USER_ID> --format json",
+        "dws attendance selfsetting get --setting-scene fastCheck --user <USER_ID> --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.selfsetting_save": {
+      "agent_summary": "更新保存个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项",
+      "use_when": [
+        "开启打卡结果通知（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）",
+        "开启指定用户的打卡结果通知",
+        "更新个人规则设置/保存打卡提醒/修改极速打卡/关闭缺卡提醒/开启打卡结果通知/设置个人考勤统计通知/设置团队考勤统计通知",
+        "更新打卡提醒设置（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）",
+        "更新指定用户的极速打卡设置",
+        "更新极速打卡设置（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）"
+      ],
+      "avoid_when": [
+        "不需要更新保存个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance selfsetting save --help"
+      ],
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.vacation_balance": {
+      "agent_summary": "调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额",
+      "use_when": [
+        "1. 查询当前余额",
+        "1. 查询当前余额（假设返回5天）",
+        "增加假期余额/发放年假/给员工加年假",
+        "查看指定员工假期余额",
+        "查看指定员工某类假期余额",
+        "病假余额/年假余额/事假剩余假期",
+        "设置假期余额/调整假期额度/更新假期余额"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance vacation balance --users userId1,userId2 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "dws attendance vacation balance --users userId1,userId2 --leave-code <假期类型code> --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.vacation_records": {
+      "agent_summary": "调用 MCP 工具 get_leave_balance_records 查询指定员工的假期余额变更记录",
+      "use_when": [
+        "假期变更/假期记录/请假扣减",
+        "查看指定员工假期余额变更记录"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_leave_balance_records 查询指定员工的假期余额变更记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance vacation records --user USER_ID --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --start 2026-04-01 --end 2026-04-22",
+        "dws attendance vacation records --user USER_ID --leave-code <假期类型code> --start 2026-04-01 --end 2026-04-22 --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.vacation_save_balance": {
+      "agent_summary": "调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量",
+      "use_when": [
+        "3. 执行设置（SET操作，会替换当前余额）",
+        "3. 设置新总额度",
+        "设置员工年假余额为8天",
+        "设置带有效期的假期余额"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance vacation save-balance --target user001 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --num 8 --reason \"年度发放\"",
+        "dws attendance vacation save-balance --target user001 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --num 8 --reason \"年度发放\" --start 2024-01-01 --end 2024-12-31"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "attendance.vacation_types": {
+      "agent_summary": "调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表",
+      "use_when": [
+        "假期/我的假期/假期规则",
+        "查看假期规则列表"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance vacation types"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "attendance.vacation_update_type": {
+      "agent_summary": "调用 MCP 工具 save_leave_type 更新已有假期规则",
+      "use_when": [
+        "更新假期单位",
+        "更新假期规则/修改假期类型/编辑假期规则",
+        "更新假期规则名称",
+        "更新适用范围"
+      ],
+      "avoid_when": [
+        "不需要调用 MCP 工具 save_leave_type 更新已有假期规则时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws attendance vacation update-type --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --name \"事假（修改版）\"",
+        "dws attendance vacation update-type --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --unit hour --per-hours 8"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "doc.import_get": {
+      "agent_summary": "根据 taskId 查询文档导入任务的执行结果",
+      "use_when": [
+        "根据 taskId 查询文档导入任务的执行结果"
+      ],
+      "avoid_when": [
+        "不需要根据 taskId 查询文档导入任务的执行结果时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws doc import get --task-id <TASK_ID>",
+        "dws doc import get --task-id <TASK_ID> --format json"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "doc.template_apply": {
+      "agent_summary": "使用指定模板创建新文档",
+      "use_when": [
+        "使用指定模板创建新文档"
+      ],
+      "avoid_when": [
+        "不需要使用指定模板创建新文档时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws doc template apply --help"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "doc.template_list": {
+      "agent_summary": "获取当前用户可用的文档模板列表，支持按来源筛选",
+      "use_when": [
+        "获取当前用户可用的文档模板列表，支持按来源筛选"
+      ],
+      "avoid_when": [
+        "不需要获取当前用户可用的文档模板列表，支持按来源筛选时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws doc template list --help"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "doc.template_search": {
+      "agent_summary": "根据关键词搜索文档模板",
+      "use_when": [
+        "根据关键词搜索文档模板"
+      ],
+      "avoid_when": [
+        "不需要根据关键词搜索文档模板时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws doc template search --help"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "doc.version_list": {
+      "agent_summary": "查看文档历史版本列表",
+      "use_when": [
+        "查看文档历史版本列表"
+      ],
+      "avoid_when": [
+        "不需要查看文档历史版本列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws doc version list --help"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "doc.version_revert": {
+      "agent_summary": "回滚文档到指定版本",
+      "use_when": [
+        "回滚文档到指定版本"
+      ],
+      "avoid_when": [
+        "不需要回滚文档到指定版本时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws doc version revert --help"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "doc.version_save": {
+      "agent_summary": "手动保存文档版本快照",
+      "use_when": [
+        "手动保存文档版本快照"
+      ],
+      "avoid_when": [
+        "不需要手动保存文档版本快照时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws doc version save --help"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "drive.publish_get": {
+      "agent_summary": "查询文件当前是否处于互联网公开发布状态，以及公开发布的权限设置",
+      "use_when": [
+        "查看公开状态/是否公开/发布状态"
+      ],
+      "avoid_when": [
+        "不需要查询文件当前是否处于互联网公开发布状态，以及公开发布的权限设置时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws drive publish get --node <fileId>",
+        "dws drive publish get --node <dentryUuid>"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "drive.publish_set": {
+      "agent_summary": "[危险] 将文件设置为互联网公开发布",
+      "use_when": [
+        "公开文件/互联网公开/设置公开/让互联网所有人可访问"
+      ],
+      "avoid_when": [
+        "不需要[危险] 将文件设置为互联网公开发布时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws drive publish set --node <fileId> [--permission READER|DOWNLOADER|EDITOR]",
+        "dws drive publish set --node <dentryUuid>"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "drive.publish_unset": {
+      "agent_summary": "[危险] 关闭文件的互联网公开发布",
+      "use_when": [
+        "关闭公开/取消公开/取消互联网访问"
+      ],
+      "avoid_when": [
+        "不需要[危险] 关闭文件的互联网公开发布时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws drive publish unset --node <fileId>",
+        "dws drive publish unset --node <dentryUuid>"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "drive.recent": {
+      "agent_summary": "获取当前用户最近访问或编辑过的文档列表",
+      "use_when": [
+        "最近访问/最近打开/最近编辑/最近文档"
+      ],
+      "avoid_when": [
+        "不需要获取当前用户最近访问或编辑过的文档列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws drive recent",
+        "dws drive recent --operate-type 1"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "drive.recycle_list": {
+      "agent_summary": "查看回收站文件列表",
+      "use_when": [
+        "8. 查看回收站并还原文件",
+        "回收站/查看回收站/回收站列表/回收站里有什么"
+      ],
+      "avoid_when": [
+        "不需要查看回收站文件列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws drive recycle list",
+        "dws drive recycle list --space-id 12345 --limit 10"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "drive.recycle_restore": {
+      "agent_summary": "还原回收站中的文件",
+      "use_when": [
+        "8. 查看回收站并还原文件",
+        "恢复文件/还原删除的文件/从回收站恢复/还原回收站文件"
+      ],
+      "avoid_when": [
+        "不需要还原回收站中的文件时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws drive recycle restore --id <recycleItemId>",
+        "dws drive recycle restore --id <recycleItemId> --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "sheet.batch_update": {
+      "agent_summary": "将多个写操作打包为一次原子请求执行",
+      "use_when": [
+        "批量操作/一次执行多个写操作/原子批量/先清除再写入；多个写操作打包"
+      ],
+      "avoid_when": [
+        "不需要将多个写操作打包为一次原子请求执行时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet batch-update --node <NODE_ID> --operations '[",
+        "dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]'"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "sheet.chart_create": {
+      "agent_summary": "在钉钉电子表格的指定工作表中创建一个浮动图表",
+      "use_when": [
+        "3. 创建柱形图",
+        "创建折线图",
+        "创建柱形图"
+      ],
+      "avoid_when": [
+        "不需要在钉钉电子表格的指定工作表中创建一个浮动图表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet chart create --node NODE_ID --sheet-id SHEET_ID --properties '{",
+        "dws sheet chart create --node <NODE_ID> --sheet-id <SHEET_ID> --properties '{"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "sheet.chart_delete": {
+      "agent_summary": "删除钉钉电子表格中指定的浮动图表",
+      "use_when": [
+        "删除钉钉电子表格中指定的浮动图表"
+      ],
+      "avoid_when": [
+        "不需要删除钉钉电子表格中指定的浮动图表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet chart delete --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "sheet.chart_list": {
+      "agent_summary": "获取钉钉电子表格指定工作表中的浮动图表",
+      "use_when": [
+        "1. 获取现有配置",
+        "4. 验证创建结果",
+        "列出所有浮动图表",
+        "获取单个图表详情"
+      ],
+      "avoid_when": [
+        "不需要获取钉钉电子表格指定工作表中的浮动图表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet chart list --node NODE_ID --sheet-id SHEET_ID",
+        "dws sheet chart list --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "sheet.chart_update": {
+      "agent_summary": "更新钉钉电子表格中指定浮动图表的配置",
+      "use_when": [
+        "3. 整体回写"
+      ],
+      "avoid_when": [
+        "不需要更新钉钉电子表格中指定浮动图表的配置时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet chart update --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID --properties '{",
+        "dws sheet chart update --node <NODE_ID> --sheet-id <SHEET_ID> --chart-id <CHART_ID> --properties '<完整修改后的 JSON>'"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "sheet.group_dimension": {
+      "agent_summary": "对钉钉表格指定工作表中的连续整行或整列创建分组",
+      "use_when": [
+        "创建行分组/创建列分组/折叠几行/折叠几列/取消行列分组；创建分组",
+        "创建行分组/创建列分组/折叠几行/折叠几列/展开行列分组/取消行列分组；创建分组",
+        "创建行分组/创建列分组/折叠几行/折叠几列/展开行列分组/取消行列分组；创建并折叠"
+      ],
+      "avoid_when": [
+        "不需要对钉钉表格指定工作表中的连续整行或整列创建分组时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\"",
+        "dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"C:F\" --group-state fold"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "sheet.range_batch_clear": {
+      "agent_summary": "批量清除多个区域，一次原子请求",
+      "use_when": [
+        "批量清除/一次清除多个区域/清空多个 sheet 的数据；批量清除多个区域"
+      ],
+      "avoid_when": [
+        "不需要批量清除多个区域，一次原子请求时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet range batch-clear --node <NODE_ID> --ranges '[\"Sheet1!A1:B3\",\"Sheet2!C1:D5\"]'",
+        "dws sheet range batch-clear --node <NODE_ID> --ranges '[\"Sheet1!A1:Z1000\"]' --type all"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "sheet.template_apply": {
+      "agent_summary": "使用指定模板创建新表格文档",
+      "use_when": [
+        "使用指定模板创建新表格文档"
+      ],
+      "avoid_when": [
+        "不需要使用指定模板创建新表格文档时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet template apply --help"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": false
+    },
+    "sheet.template_list": {
+      "agent_summary": "获取当前用户可用的表格模板列表，支持按来源筛选",
+      "use_when": [
+        "获取当前用户可用的表格模板列表，支持按来源筛选"
+      ],
+      "avoid_when": [
+        "不需要获取当前用户可用的表格模板列表，支持按来源筛选时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet template list --help"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "sheet.template_search": {
+      "agent_summary": "根据关键词搜索表格模板",
+      "use_when": [
+        "根据关键词搜索表格模板"
+      ],
+      "avoid_when": [
+        "不需要根据关键词搜索表格模板时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet template search --help"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    },
+    "sheet.ungroup_dimension": {
+      "agent_summary": "取消钉钉表格指定工作表中的连续整行或整列分组",
+      "use_when": [
+        "创建行分组/创建列分组/折叠几行/折叠几列/取消行列分组；取消分组",
+        "创建行分组/创建列分组/折叠几行/折叠几列/展开行列分组/取消行列分组；取消分组"
+      ],
+      "avoid_when": [
+        "不需要取消钉钉表格指定工作表中的连续整行或整列分组时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+      ],
+      "examples": [
+        "dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\"",
+        "dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"C:F\""
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": false
+    }
+  }
+}

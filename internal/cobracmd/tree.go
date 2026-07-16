@@ -96,7 +96,7 @@ func MergeCommandTree(dst, src *cobra.Command) {
 	if dst.Long == "" {
 		dst.Long = src.Long
 	}
-	if dst.Hidden && !src.Hidden {
+	if dst.Hidden && !src.Hidden && OverridePriority(src) >= OverridePriority(dst) {
 		dst.Hidden = false
 	}
 

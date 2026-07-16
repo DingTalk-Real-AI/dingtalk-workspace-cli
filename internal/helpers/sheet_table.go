@@ -35,11 +35,12 @@ func newTableCmds() []*cobra.Command {
   dws sheet table-get --node NODE_ID --sheet-id SHEET_ID --range A1:D20
   dws sheet table-get --node NODE_ID --sheet-id Sheet1 --no-header`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "node"); err != nil {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "file-id", "node-id", "doc-id")
+			if err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
-				"nodeId": mustGetFlag(cmd, "node"),
+				"nodeId": nodeID,
 			}
 			if v, _ := cmd.Flags().GetString("sheet-id"); v != "" {
 				toolArgs["sheetId"] = v
@@ -79,7 +80,11 @@ func newTableCmds() []*cobra.Command {
   dws sheet table-put --node NODE_ID --sheets @table.json
   cat table.json | dws sheet table-put --node NODE_ID --sheets -`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "node", "sheets"); err != nil {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "file-id", "node-id", "doc-id")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlags(cmd, "sheets"); err != nil {
 				return err
 			}
 			raw, err := readTableJSONFlag(cmd, "sheets")
@@ -91,7 +96,7 @@ func newTableCmds() []*cobra.Command {
 				return err
 			}
 			return callMCPTool("table_put", map[string]any{
-				"nodeId": mustGetFlag(cmd, "node"),
+				"nodeId": nodeID,
 				"sheets": sheets,
 			})
 		},

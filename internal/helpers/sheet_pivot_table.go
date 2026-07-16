@@ -234,9 +234,6 @@ func newPivotTableCmd() *cobra.Command {
 				return err
 			}
 			pivotTableID := mustGetFlag(cmd, "pivot-table-id")
-			if !confirmDelete("透视表", pivotTableID) {
-				return nil
-			}
 			return callMCPTool("delete_pivot_table", map[string]any{
 				"nodeId":       mustGetFlag(cmd, "node"),
 				"sheetId":      mustGetFlag(cmd, "sheet-id"),

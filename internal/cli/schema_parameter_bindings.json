@@ -1,0 +1,1884 @@
+{
+  "version": 3,
+  "baseline": {
+    "manifest": "schema-parameter-bindings-v3",
+    "sha256": "sha256:9008afd72243232d4bcb37b46f1e8fc10e2bc283c8af26c59fbdb4901ebeef2f",
+    "reason": "Reviewed v3 baseline for the complete active canonical/flag/property manifest after splitting the fixed-scope minutes list commands into distinct registry identities.",
+    "reviewed": true
+  },
+  "removals": {
+    "calendar.list_acls --id": {
+      "reason": "The current helper and pinned interface have no calendarId input.",
+      "reviewed": true
+    },
+    "calendar.query_available_meeting_room --available": {
+      "reason": "The hidden compatibility flag is explicitly not an MCP parameter.",
+      "reviewed": true
+    },
+    "contact.get_dept_info_by_dept_id --id": {
+      "reason": "The public flag was renamed from --id to the unambiguous --dept spelling.",
+      "replaced_by": "contact.get_dept_info_by_dept_id --dept",
+      "reviewed": true
+    },
+    "contact.get_dept_members_by_deptId --ids": {
+      "reason": "The public flag was renamed from --ids to the unambiguous --depts spelling.",
+      "replaced_by": "contact.get_dept_members_by_deptId --depts",
+      "reviewed": true
+    },
+    "contact.get_sub_depts_by_dept_id --id": {
+      "reason": "The public flag was renamed from --id to the unambiguous --dept spelling.",
+      "replaced_by": "contact.get_sub_depts_by_dept_id --dept",
+      "reviewed": true
+    },
+    "minutes.query_user_tag_list --limit": {
+      "reason": "The current helper and pinned interface have no pagination input.",
+      "reviewed": true
+    },
+    "oa.list_pending_approvals --size": {
+      "reason": "The public pagination flag was normalized from --size to --limit.",
+      "replaced_by": "oa.list_pending_approvals --limit",
+      "reviewed": true
+    },
+    "oa.list_user_visible_process --size": {
+      "reason": "The public pagination flag was normalized from --size to --limit.",
+      "replaced_by": "oa.list_user_visible_process --limit",
+      "reviewed": true
+    }
+  },
+  "bindings": {
+    "aisearch.search_enterprise": {
+      "types": "searchTypes"
+    },
+    "aisearch.search_enterprise_behavior": {
+      "types": "searchTypes"
+    },
+    "aitable.base_copy": {
+      "only-struct": "onlyCopyMeta"
+    },
+    "aitable.base_create": {
+      "name": "baseName"
+    },
+    "aitable.base_update": {
+      "desc": "description",
+      "name": "newBaseName"
+    },
+    "aitable.create": {
+      "name": "baseName"
+    },
+    "aitable.dashboard_create": {
+      "name": "config.name"
+    },
+    "aitable.dashboard_update": {
+      "name": "config.name"
+    },
+    "aitable.export_data": {
+      "export-format": "format"
+    },
+    "aitable.field_update": {
+      "name": "newFieldName"
+    },
+    "aitable.query_records": {
+      "query": "keyword"
+    },
+    "aitable.table_create": {
+      "name": "tableName"
+    },
+    "aitable.table_update": {
+      "name": "newTableName"
+    },
+    "aitable.view_create": {
+      "desc": "viewDescription",
+      "name": "viewName"
+    },
+    "aitable.view_duplicate": {
+      "new-name": "newViewName",
+      "view-id": "sourceViewId"
+    },
+    "aitable.view_get_aggregate": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_card": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_field_widths": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_fill_color_rule": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_filter": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_group": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_sort": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_timebar": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_get_visible_fields": {
+      "view-id": "viewIds"
+    },
+    "aitable.view_update_fill_color_rule": {
+      "json": "conditionalFormats"
+    },
+    "aitable.view_update_filter": {
+      "json": "config.filter"
+    },
+    "aitable.view_update_group": {
+      "json": "config.group"
+    },
+    "aitable.view_update_name": {
+      "name": "newViewName"
+    },
+    "aitable.view_update_sort": {
+      "json": "config.sort"
+    },
+    "aitable.view_update_timebar": {
+      "color-configs": "config.ganttTimebar.colorConfigs",
+      "display-field-id": "config.ganttTimebar.displayFieldId",
+      "end-field": "config.ganttTimebar.endField",
+      "json": "config.ganttTimebar",
+      "official-holiday": "config.ganttTimebar.officialHoliday",
+      "start-field": "config.ganttTimebar.startField",
+      "timeline-scale": "config.ganttTimebar.timelineScale"
+    },
+    "aitable.view_update_visible_fields": {
+      "field-ids": "config.visibleFieldIds",
+      "json": "config.visibleFieldIds"
+    },
+    "attendance.batch_get_employee_shifts": {
+      "end": "toDateTime",
+      "start": "fromDateTime",
+      "users": "userIds"
+    },
+    "attendance.get_user_attendance_record": {
+      "date": "workDate",
+      "user": "userId"
+    },
+    "calendar.add_attachments": {
+      "event": "eventId",
+      "files": "attachments"
+    },
+    "calendar.add_calendar_participant": {
+      "attendees": "attendeesToAdd",
+      "calendar-id": "calendarId",
+      "event": "eventId"
+    },
+    "calendar.add_meeting_room": {
+      "event": "eventId",
+      "rooms": "roomIds"
+    },
+    "calendar.create_calendar_event": {
+      "desc": "description",
+      "end": "endDateTime",
+      "open-dingtalk-ids": "openDingTalkIds",
+      "recurrence-count": "recurrence.range.numberOfOccurrences",
+      "recurrence-day-of-month": "recurrence.pattern.dayOfMonth",
+      "recurrence-days-of-week": "recurrence.pattern.daysOfWeek",
+      "recurrence-end-date": "recurrence.range.endDate",
+      "recurrence-first-day-of-week": "recurrence.pattern.firstDayOfWeek",
+      "recurrence-index": "recurrence.pattern.index",
+      "recurrence-interval": "recurrence.pattern.interval",
+      "recurrence-range-type": "recurrence.range.type",
+      "recurrence-type": "recurrence.pattern.type",
+      "remind-minutes": "reminders",
+      "rich-text-desc": "richTextDescription",
+      "rooms": "roomIds",
+      "start": "startDateTime",
+      "timezone": "timeZone",
+      "title": "summary"
+    },
+    "calendar.delete_calendar_event": {
+      "id": "eventId"
+    },
+    "calendar.delete_meeting_room": {
+      "event": "eventId",
+      "rooms": "roomIds"
+    },
+    "calendar.get_calendar": {
+      "id": "calendarId"
+    },
+    "calendar.get_calendar_detail": {
+      "id": "eventId"
+    },
+    "calendar.get_calendar_participants": {
+      "calendar-id": "calendarId",
+      "event": "eventId"
+    },
+    "calendar.list_calendar_events": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "calendar.list_meeting_room_groups": {
+      "limit": "pageSize",
+      "page": "pageIndex"
+    },
+    "calendar.list_suggested_event_times": {
+      "duration": "durationMinutes",
+      "timezone": "timeZone",
+      "users": "attendeeUserIds"
+    },
+    "calendar.query_available_meeting_room": {
+      "end": "endTime",
+      "limit": "pageSize",
+      "page": "pageIndex",
+      "start": "startTime"
+    },
+    "calendar.query_busy_status": {
+      "end": "endTime",
+      "rooms": "roomIds",
+      "start": "startTime",
+      "users": "userIds"
+    },
+    "calendar.remove_calendar_participant": {
+      "attendees": "attendeesToRemove",
+      "calendar-id": "calendarId",
+      "event": "eventId"
+    },
+    "calendar.respond": {
+      "id": "eventId",
+      "status": "responseStatus"
+    },
+    "calendar.search_calendar": {
+      "query": "query"
+    },
+    "calendar.update_calendar_event": {
+      "desc": "description",
+      "end": "endDateTime",
+      "id": "eventId",
+      "recurrence-count": "recurrence.range.numberOfOccurrences",
+      "recurrence-day-of-month": "recurrence.pattern.dayOfMonth",
+      "recurrence-days-of-week": "recurrence.pattern.daysOfWeek",
+      "recurrence-end-date": "recurrence.range.endDate",
+      "recurrence-first-day-of-week": "recurrence.pattern.firstDayOfWeek",
+      "recurrence-index": "recurrence.pattern.index",
+      "recurrence-interval": "recurrence.pattern.interval",
+      "recurrence-range-type": "recurrence.range.type",
+      "recurrence-type": "recurrence.pattern.type",
+      "rich-text-desc": "richTextDescription",
+      "start": "startDateTime",
+      "timezone": "timeZone",
+      "title": "summary"
+    },
+    "chat.add_custom_group_role": {
+      "group": "openConversationId"
+    },
+    "chat.add_emoji_reaction": {
+      "emoji": "emojiName",
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.add_group_member": {
+      "id": "openconversation_id",
+      "users": "userId"
+    },
+    "chat.add_robot_to_group": {
+      "id": "openConversationId"
+    },
+    "chat.add_text_emotion": {
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.combine_forward_messages": {
+      "dest-conversation-id": "destOpenCid",
+      "msg-ids": "srcOpenMessageIds",
+      "src-conversation-id": "srcOpenCid"
+    },
+    "chat.create_and_send_card": {
+      "group": "openConversationId",
+      "receiver": "receiverOpenDingTalkId"
+    },
+    "chat.create_group_conversation": {
+      "name": "groupName",
+      "thread": "convThreadEnabled",
+      "type": "groupType",
+      "users": "groupMembers"
+    },
+    "chat.dismiss_group": {
+      "group": "openConversationId"
+    },
+    "chat.forward_message": {
+      "dest-conversation-id": "destOpenCid",
+      "msg-id": "srcOpenMessageId",
+      "src-conversation-id": "srcOpenCid"
+    },
+    "chat.forward_topic": {
+      "dest-conversation-id": "destOpenConversationId",
+      "src-conversation-id": "srcOpenConversationId",
+      "src-msg-id": "srcOpenMessageId",
+      "src-thread-id": "srcOpenConvThreadId"
+    },
+    "chat.get_conversation_info": {
+      "group": "openConversationId",
+      "open-dingtalk-id": "openDingTalkId",
+      "user": "openDingTalkId"
+    },
+    "chat.get_group_invite_url": {
+      "group": "openConversationId"
+    },
+    "chat.list_conversation_message_v2": {
+      "direction": "forward",
+      "group": "openconversation_id"
+    },
+    "chat.list_custom_group_roles": {
+      "group": "openConversationId"
+    },
+    "chat.list_group_bots": {
+      "group": "openConversationId"
+    },
+    "chat.list_individual_chat_message": {
+      "direction": "forward",
+      "open-dingtalk-id": "openDingTalkId",
+      "user": "userId"
+    },
+    "chat.list_messages_by_ids": {
+      "msg-ids": "openMsgIds"
+    },
+    "chat.list_owned_or_admin_groups": {
+      "role": "roleFilter"
+    },
+    "chat.list_pin_messages": {
+      "size": "count"
+    },
+    "chat.list_topic_replies": {
+      "direction": "forward",
+      "group": "openconversationId",
+      "limit": "pageSize",
+      "time": "startTime"
+    },
+    "chat.query_custom_user_roles": {
+      "group": "openConversationId",
+      "user": "openDingTalkId"
+    },
+    "chat.query_msg_read_status": {
+      "conversation-id": "openConversationId",
+      "message-id": "openMessageId",
+      "target-open-dingtalk-ids": "targetOpenDingTalkIds"
+    },
+    "chat.quit_group": {
+      "group": "openConversationId"
+    },
+    "chat.recall_message": {
+      "conversation-id": "openConversationId",
+      "msg-id": "openMessageId"
+    },
+    "chat.remove_custom_group_role": {
+      "group": "openConversationId",
+      "role-id": "openRoleId"
+    },
+    "chat.remove_custom_user_roles": {
+      "group": "openConversationId",
+      "role-ids": "openRoleIds",
+      "user": "openDingTalkId"
+    },
+    "chat.remove_emoji_reaction": {
+      "emoji": "emojiName",
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.remove_group_member": {
+      "id": "openConversationId",
+      "users": "userIdList"
+    },
+    "chat.remove_robot_in_group": {
+      "bot-id": "openBotId",
+      "id": "openConversationId"
+    },
+    "chat.remove_text_emotion": {
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.reply_personal_message": {
+      "ai-tag": "clawType",
+      "conversation-id": "openConversationId"
+    },
+    "chat.search_at_me_message": {
+      "end": "endTime",
+      "group": "openConversationId",
+      "start": "startTime"
+    },
+    "chat.search_bots": {
+      "query": "keyword"
+    },
+    "chat.search_groups": {
+      "query": "keyword"
+    },
+    "chat.search_messages": {
+      "at-ids": "atOpenDingTakIds",
+      "conversation-ids": "openConversationIds",
+      "end": "endTime",
+      "query": "keyword",
+      "sender-ids": "senderOpenDingTakIds",
+      "start": "startTime"
+    },
+    "chat.search_messages_by_keyword": {
+      "end": "endTime",
+      "group": "openConversationId",
+      "query": "keyword",
+      "start": "startTime"
+    },
+    "chat.search_messages_by_sender": {
+      "end": "endTime",
+      "sender-open-dingtalk-id": "senderOpenDingTalkId",
+      "start": "startTime"
+    },
+    "chat.search_messages_by_time_range": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "chat.search_my_robots": {
+      "name": "robotName",
+      "page": "currentPage",
+      "size": "pageSize"
+    },
+    "chat.send_message_by_custom_robot": {
+      "at-all": "isAtAll",
+      "at-users": "atUserIds",
+      "token": "robotToken"
+    },
+    "chat.send_personal_message": {
+      "ai-tag": "clawType",
+      "at-open-dingtalk-ids": "atOpenDingTalkIds",
+      "group": "openConversationId",
+      "open-dingtalk-id": "receiverOpenDingTalkId"
+    },
+    "chat.set_custom_user_roles": {
+      "group": "openConversationId",
+      "role-ids": "openRoleIds",
+      "user": "openDingTalkId"
+    },
+    "chat.set_group_member_mute_list": {
+      "group": "openConversationId",
+      "off": "mute",
+      "users": "openDingTalkIds"
+    },
+    "chat.set_group_mute": {
+      "group": "openConversationId",
+      "off": "mute"
+    },
+    "chat.set_pin_message": {
+      "msg-id": "openMessageId"
+    },
+    "chat.set_top_conversation": {
+      "conversation-id": "openConversationId",
+      "off": "top"
+    },
+    "chat.transfer_group_owner": {
+      "group": "openConversationId",
+      "new-owner": "newOwnerOpenDingTalkId"
+    },
+    "chat.unset_pin_message": {
+      "msg-id": "openMessageId"
+    },
+    "chat.update_conv_member_roles": {
+      "group": "openConversationId",
+      "off": "admin",
+      "users": "openDingTalkIds"
+    },
+    "chat.update_custom_group_role": {
+      "group": "openConversationId",
+      "role-id": "openRoleId"
+    },
+    "chat.update_group_icon": {
+      "group": "openConversationId"
+    },
+    "chat.update_group_name": {
+      "id": "openconversation_id",
+      "name": "group_name"
+    },
+    "chat.update_group_settings": {
+      "group": "openConversationId"
+    },
+    "chat.update_notification_off": {
+      "conversation-id": "openConversationId",
+      "off": "mute"
+    },
+    "chat.update_show_history_msg_option": {
+      "group": "openConversationId"
+    },
+    "chat.update_streaming_card": {
+      "content": "msgContent"
+    },
+    "contact.get_authorized_emp_rosterInfo": {
+      "fields": "fieldCodeList"
+    },
+    "contact.get_dept_info_by_dept_id": {
+      "dept": "deptId"
+    },
+    "contact.get_dept_members_by_deptId": {
+      "depts": "deptIds"
+    },
+    "contact.get_sub_depts_by_dept_id": {
+      "dept": "deptId"
+    },
+    "contact.get_user_info_by_user_ids": {
+      "ids": "user_id_list"
+    },
+    "contact.query_dismission_employee_list": {
+      "depts": "searchVO.depts",
+      "end": "searchVO.endDate",
+      "hide-partner": "searchVO.hidePartner",
+      "hide-retirement": "searchVO.hideRetirement",
+      "limit": "pageSize",
+      "name": "searchVO.empName",
+      "page": "pageNum",
+      "start": "searchVO.startDate"
+    },
+    "contact.search_contact_by_key_word": {
+      "query": "keyword"
+    },
+    "dev.search_open_platform_docs_rag": {
+      "query": "keyword"
+    },
+    "devdoc.search_open_platform_docs_rag": {
+      "query": "keyword"
+    },
+    "ding.recall_ding_message": {
+      "id": "openDingId"
+    },
+    "ding.send_ding_message": {
+      "type": "remindType",
+      "users": "receiverUserIdList"
+    },
+    "doc.add_permission": {
+      "node": "nodeId",
+      "role": "roleId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "doc.copy_document": {
+      "folder": "targetFolderId",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "doc.create_comment": {
+      "mention": "mentionedUserIds",
+      "node": "nodeId"
+    },
+    "doc.create_document": {
+      "folder": "folderId",
+      "workspace": "workspaceId"
+    },
+    "doc.create_file": {
+      "folder": "folderId",
+      "workspace": "workspaceId"
+    },
+    "doc.create_folder": {
+      "folder": "folderId",
+      "workspace": "workspaceId"
+    },
+    "doc.create_inline_comment": {
+      "mention": "mentionedUserIds",
+      "node": "nodeId"
+    },
+    "doc.delete_comment": {
+      "node": "nodeId"
+    },
+    "doc.delete_document": {
+      "node": "nodeId"
+    },
+    "doc.delete_document_block": {
+      "node": "nodeId"
+    },
+    "doc.download_doc_attachment": {
+      "node": "nodeId"
+    },
+    "doc.download_file": {
+      "node": "nodeId"
+    },
+    "doc.get_document_content": {
+      "content-format": "format",
+      "node": "nodeId"
+    },
+    "doc.get_document_info": {
+      "node": "nodeId"
+    },
+    "doc.insert_document_block": {
+      "content-format": "format",
+      "node": "nodeId",
+      "parent-block": "referenceBlockId",
+      "ref-block": "referenceBlockId"
+    },
+    "doc.list_comments": {
+      "cursor": "nextToken",
+      "limit": "pageSize",
+      "node": "nodeId",
+      "type": "commentType"
+    },
+    "doc.list_document_blocks": {
+      "content-format": "format",
+      "node": "nodeId"
+    },
+    "doc.list_nodes": {
+      "cursor": "pageToken",
+      "folder": "folderId",
+      "limit": "pageSize",
+      "workspace": "workspaceId"
+    },
+    "doc.list_permission": {
+      "filter-role": "filterRoleIds",
+      "limit": "maxResults",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "doc.move_document": {
+      "folder": "targetFolderId",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "doc.remove_permission": {
+      "node": "nodeId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "doc.rename_document": {
+      "name": "newName",
+      "node": "nodeId"
+    },
+    "doc.reply_comment": {
+      "comment-key": "replyCommentKey",
+      "mention": "mentionedUserIds",
+      "node": "nodeId"
+    },
+    "doc.search_documents": {
+      "created-from": "createdTimeFrom",
+      "created-to": "createdTimeTo",
+      "creator-uids": "creatorUserIds",
+      "cursor": "pageToken",
+      "editor-uids": "editorUserIds",
+      "limit": "pageSize",
+      "mentioned-uids": "mentionedUserIds",
+      "query": "keyword",
+      "visited-from": "visitedTimeFrom",
+      "visited-to": "visitedTimeTo"
+    },
+    "doc.update_comment": {
+      "mention": "mentionedUserIds",
+      "node": "nodeId"
+    },
+    "doc.update_document": {
+      "content-format": "format",
+      "node": "nodeId"
+    },
+    "doc.update_document_block": {
+      "content-format": "format",
+      "node": "nodeId"
+    },
+    "doc.update_permission": {
+      "node": "nodeId",
+      "role": "roleId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "drive.add_permission": {
+      "node": "nodeId",
+      "role": "roleId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "drive.commit_upload": {
+      "folder": "parentId"
+    },
+    "drive.copy_document": {
+      "folder": "targetFolderId",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "drive.create_folder": {
+      "folder": "parentId"
+    },
+    "drive.create_shortcut": {
+      "folder": "targetFolderId",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "drive.delete_document": {
+      "node": "nodeId"
+    },
+    "drive.download_file": {
+      "node": "fileId"
+    },
+    "drive.get_file_info": {
+      "node": "fileId"
+    },
+    "drive.get_node_stats": {
+      "node": "nodeId"
+    },
+    "drive.get_upload_info": {
+      "folder": "parentId"
+    },
+    "drive.list_permission": {
+      "filter-role": "filterRoleIds",
+      "limit": "maxResults",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "drive.list_spaces": {
+      "cursor": "nextToken",
+      "limit": "maxResults"
+    },
+    "drive.move_document": {
+      "folder": "targetFolderId",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "drive.permission_remove": {
+      "node": "nodeId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "drive.permission_update": {
+      "node": "nodeId",
+      "role": "roleId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "drive.rename_document": {
+      "name": "newName",
+      "node": "nodeId"
+    },
+    "drive.search_files": {
+      "created-from": "createdTimeFrom",
+      "created-to": "createdTimeTo",
+      "creator-uids": "creatorUserIds",
+      "cursor": "pageToken",
+      "limit": "pageSize",
+      "modified-from": "modifiedTimeFrom",
+      "modified-to": "modifiedTimeTo",
+      "query": "keyword",
+      "target": "searchTarget"
+    },
+    "mail.batch_move_message": {
+      "folder": "destinationFolderId"
+    },
+    "mail.create_draft": {
+      "cc": "ccRecipients",
+      "content": "body",
+      "to": "toRecipients"
+    },
+    "mail.create_forward_draft": {
+      "content": "body",
+      "id": "messageId",
+      "to": "toRecipients"
+    },
+    "mail.create_reply_draft": {
+      "content": "body",
+      "id": "messageId"
+    },
+    "mail.create_replyall_draft": {
+      "content": "body",
+      "id": "messageId",
+      "to": "toRecipients"
+    },
+    "mail.create_user_message_template": {
+      "cc": "ccRecipients",
+      "content": "body",
+      "to": "toRecipients"
+    },
+    "mail.get_email_by_message_id": {
+      "id": "messageId"
+    },
+    "mail.get_thread": {
+      "id": "conversationId"
+    },
+    "mail.list_folders": {
+      "folder": "folderId"
+    },
+    "mail.list_mail_attachments": {
+      "id": "messageId"
+    },
+    "mail.list_user_mail_contacts": {
+      "limit": "size"
+    },
+    "mail.list_user_message_templates": {
+      "limit": "size"
+    },
+    "mail.search_emails": {
+      "limit": "size"
+    },
+    "mail.search_mail_users": {
+      "limit": "size"
+    },
+    "mail.send_draft": {
+      "from": "email",
+      "id": "messageId"
+    },
+    "mail.send_email": {
+      "cc": "ccRecipients",
+      "content": "body",
+      "to": "toRecipients"
+    },
+    "mail.update_draft": {
+      "cc": "ccRecipients",
+      "content": "body",
+      "to": "toRecipients"
+    },
+    "mail.update_user_message_template": {
+      "cc": "ccRecipients",
+      "content": "body",
+      "to": "toRecipients"
+    },
+    "minutes.add_member_permission": {
+      "cover": "coverPermission",
+      "ids": "uuids",
+      "policy": "policyId",
+      "sub-resources": "roleSubResourceIds"
+    },
+    "minutes.add_personal_hot_word": {
+      "words": "hotWordList"
+    },
+    "minutes.batch_get_minutes_details": {
+      "ids": "requestBody.taskUuids"
+    },
+    "minutes.create_mind_graph": {
+      "id": "taskUuid"
+    },
+    "minutes.create_speaker_summary": {
+      "ids": "uuids"
+    },
+    "minutes.create_upload_session": {
+      "enable-message-card": "minutesOption.enableMessageCard",
+      "input-language": "minutesOption.inputLanguage",
+      "template-id": "minutesOption.templateId"
+    },
+    "minutes.get_minutes_ai_summary": {
+      "id": "taskUuid"
+    },
+    "minutes.get_minutes_basic_info": {
+      "id": "taskUuid"
+    },
+    "minutes.get_minutes_keywords": {
+      "id": "taskUuid"
+    },
+    "minutes.get_minutes_transcription": {
+      "cursor": "nextToken",
+      "id": "taskUuid"
+    },
+    "minutes.get_speaker_summary": {
+      "ids": "uuids"
+    },
+    "minutes.list_accessible_minutes": {
+      "cursor": "nextToken",
+      "end": "createTimeEnd",
+      "limit": "maxResults",
+      "query": "keyword",
+      "start": "createTimeStart"
+    },
+    "minutes.list_by_keyword_and_time_range": {
+      "cursor": "nextToken",
+      "end": "createTimeEnd",
+      "limit": "maxResults",
+      "query": "keyword",
+      "start": "createTimeStart"
+    },
+    "minutes.list_shared_minutes": {
+      "cursor": "nextToken",
+      "end": "createTimeEnd",
+      "limit": "maxResults",
+      "query": "keyword",
+      "start": "createTimeStart"
+    },
+    "minutes.list_minutes_todos": {
+      "id": "taskUuid"
+    },
+    "minutes.query_mind_graph_status": {
+      "id": "taskUuid"
+    },
+    "minutes.query_minutes_audio_url": {
+      "id": "taskUuid"
+    },
+    "minutes.query_minutes_by_tag_id": {
+      "cursor": "nextToken",
+      "limit": "maxResults"
+    },
+    "minutes.record_pause": {
+      "id": "uuid"
+    },
+    "minutes.record_resume": {
+      "id": "uuid"
+    },
+    "minutes.record_stop": {
+      "id": "uuid"
+    },
+    "minutes.remove_member_permission": {
+      "ids": "uuids"
+    },
+    "minutes.replace_minutes_text": {
+      "id": "taskUuid",
+      "replace": "replacedText",
+      "search": "originalText"
+    },
+    "minutes.replace_speaker": {
+      "from": "speakerNick",
+      "id": "taskUuid",
+      "to": "targetNickName"
+    },
+    "minutes.update_minutes_summary": {
+      "content": "summaryText",
+      "id": "taskUuid"
+    },
+    "minutes.update_minutes_title": {
+      "id": "taskUuid"
+    },
+    "oa.approve_processInstance": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.dingflow_comments": {
+      "content": "text",
+      "instance-id": "processInstanceId"
+    },
+    "oa.get_done_tasks": {
+      "limit": "pageSize",
+      "page": "pageNumber"
+    },
+    "oa.get_noticed_instances": {
+      "limit": "pageSize",
+      "page": "pageNumber"
+    },
+    "oa.get_processInstance_detail": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.get_processInstance_records": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.get_submitted_instances": {
+      "limit": "pageSize",
+      "page": "pageNumber"
+    },
+    "oa.list_initiated_instances": {
+      "cursor": "nextToken",
+      "end": "endTime",
+      "limit": "maxResults",
+      "start": "startTime"
+    },
+    "oa.list_pending_approvals": {
+      "end": "endTime",
+      "limit": "pageSize",
+      "page": "pageNum",
+      "start": "starTime"
+    },
+    "oa.list_pending_tasks": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.list_user_visible_process": {
+      "limit": "pageSize"
+    },
+    "oa.oa_cc_noticer": {
+      "instance-id": "processInstanceId",
+      "users": "userList"
+    },
+    "oa.reject_processInstance": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.revoke_processInstance": {
+      "instance-id": "processInstanceId"
+    },
+    "report.get_received_report_list": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "report.get_report_entry_details": {
+      "report-id": "report_id"
+    },
+    "report.get_report_statistics_by_id": {
+      "report-id": "report_id"
+    },
+    "report.get_send_report_list": {
+      "end": "endTime",
+      "modified-end": "modifiedEndTime",
+      "modified-start": "modifiedStartTime",
+      "start": "startTime",
+      "template-name": "report_template_name"
+    },
+    "report.get_template_details_by_name": {
+      "name": "report_template_name"
+    },
+    "sheet.add_dimension": {
+      "node": "nodeId"
+    },
+    "sheet.append_rows": {
+      "node": "nodeId"
+    },
+    "sheet.clear_range": {
+      "node": "nodeId"
+    },
+    "sheet.copy_sheet": {
+      "name": "title",
+      "node": "nodeId"
+    },
+    "sheet.create_cond_format": {
+      "node": "nodeId"
+    },
+    "sheet.create_filter": {
+      "node": "nodeId"
+    },
+    "sheet.create_filter_view": {
+      "node": "nodeId"
+    },
+    "sheet.create_float_image": {
+      "node": "nodeId"
+    },
+    "sheet.create_pivot_table": {
+      "node": "nodeId"
+    },
+    "sheet.create_sheet": {
+      "node": "nodeId"
+    },
+    "sheet.create_workspace_sheet": {
+      "folder": "folderId",
+      "workspace": "workspaceId"
+    },
+    "sheet.delete_cond_format": {
+      "node": "nodeId"
+    },
+    "sheet.delete_dimension": {
+      "node": "nodeId"
+    },
+    "sheet.delete_dropdown_lists": {
+      "node": "nodeId"
+    },
+    "sheet.delete_filter": {
+      "node": "nodeId"
+    },
+    "sheet.delete_filter_view": {
+      "node": "nodeId"
+    },
+    "sheet.delete_float_image": {
+      "node": "nodeId"
+    },
+    "sheet.delete_pivot_table": {
+      "node": "nodeId"
+    },
+    "sheet.delete_sheet": {
+      "node": "nodeId"
+    },
+    "sheet.fill_range": {
+      "node": "nodeId",
+      "target-range": "destinationRange"
+    },
+    "sheet.filter_clear_criteria": {
+      "node": "nodeId"
+    },
+    "sheet.filter_view_delete_criteria": {
+      "node": "nodeId"
+    },
+    "sheet.filter_view_get_criteria": {
+      "node": "nodeId"
+    },
+    "sheet.filter_view_info": {
+      "node": "nodeId"
+    },
+    "sheet.filter_view_list_criteria": {
+      "node": "nodeId"
+    },
+    "sheet.find_cells": {
+      "match-formula": "matchFormulaText",
+      "node": "nodeId",
+      "query": "text",
+      "use-regexp": "useRegExp"
+    },
+    "sheet.get_all_sheets": {
+      "node": "nodeId"
+    },
+    "sheet.get_cond_format": {
+      "node": "nodeId"
+    },
+    "sheet.get_dropdown_lists": {
+      "node": "nodeId"
+    },
+    "sheet.get_filter": {
+      "node": "nodeId"
+    },
+    "sheet.get_filter_views": {
+      "node": "nodeId"
+    },
+    "sheet.get_float_image": {
+      "node": "nodeId"
+    },
+    "sheet.get_range_as_csv": {
+      "node": "nodeId"
+    },
+    "sheet.hide_gridline": {
+      "node": "nodeId"
+    },
+    "sheet.info": {
+      "node": "nodeId"
+    },
+    "sheet.insert_dimension": {
+      "node": "nodeId"
+    },
+    "sheet.list_float_images": {
+      "node": "nodeId"
+    },
+    "sheet.list_pivot_tables": {
+      "node": "nodeId"
+    },
+    "sheet.merge_cells": {
+      "node": "nodeId",
+      "range": "rangeAddress"
+    },
+    "sheet.move_dimension": {
+      "node": "nodeId"
+    },
+    "sheet.range_batch_set_style": {
+      "node": "nodeId"
+    },
+    "sheet.range_copy_to": {
+      "node": "nodeId",
+      "target-range": "destinationRange"
+    },
+    "sheet.range_move_to": {
+      "node": "nodeId",
+      "target-range": "destinationRange"
+    },
+    "sheet.range_read": {
+      "node": "nodeId",
+      "value-render-option": "valueRenderOption"
+    },
+    "sheet.range_set_style": {
+      "bg-color": "backgroundColors",
+      "bg-colors-json": "backgroundColors",
+      "font-color": "fontColors",
+      "font-colors-json": "fontColors",
+      "font-size": "fontSizes",
+      "font-sizes-json": "fontSizes",
+      "font-weight": "fontWeights",
+      "font-weights-json": "fontWeights",
+      "h-align": "horizontalAlignments",
+      "h-aligns-json": "horizontalAlignments",
+      "node": "nodeId",
+      "range": "rangeAddress",
+      "v-align": "verticalAlignments",
+      "v-aligns-json": "verticalAlignments"
+    },
+    "sheet.range_update": {
+      "node": "nodeId",
+      "range": "rangeAddress"
+    },
+    "sheet.replace_all": {
+      "find": "text",
+      "node": "nodeId",
+      "replacement": "replaceText",
+      "use-regexp": "useRegExp"
+    },
+    "sheet.set_dropdown_lists": {
+      "multi-select": "enableMultiSelect",
+      "node": "nodeId"
+    },
+    "sheet.set_range_from_csv": {
+      "node": "nodeId"
+    },
+    "sheet.show_gridline": {
+      "node": "nodeId"
+    },
+    "sheet.sort_filter": {
+      "ascending": "field.ascending",
+      "column": "field.column",
+      "node": "nodeId"
+    },
+    "sheet.sort_range": {
+      "node": "nodeId"
+    },
+    "sheet.submit_export_job": {
+      "node": "nodeId"
+    },
+    "sheet.table_get": {
+      "node": "nodeId"
+    },
+    "sheet.table_put": {
+      "node": "nodeId"
+    },
+    "sheet.unmerge_range": {
+      "node": "nodeId",
+      "range": "rangeAddress"
+    },
+    "sheet.update_cond_format": {
+      "node": "nodeId"
+    },
+    "sheet.update_dimension": {
+      "node": "nodeId"
+    },
+    "sheet.update_filter": {
+      "node": "nodeId"
+    },
+    "sheet.update_filter_view": {
+      "node": "nodeId"
+    },
+    "sheet.update_float_image": {
+      "node": "nodeId"
+    },
+    "sheet.update_pivot_table": {
+      "node": "nodeId"
+    },
+    "sheet.update_sheet": {
+      "name": "title",
+      "node": "nodeId"
+    },
+    "sheet.write_image": {
+      "node": "nodeId",
+      "range": "rangeAddress"
+    },
+    "todo.add_task_executors": {
+      "executors": "todoExecutorsAddRequest.executorIds",
+      "task-id": "todoExecutorsAddRequest.taskId"
+    },
+    "todo.add_task_participants": {
+      "participants": "todoParticipantsAddRequest.participantIds",
+      "task-id": "todoParticipantsAddRequest.taskId"
+    },
+    "todo.add_todo_attachment": {
+      "task-id": "todoAttachmentAddRequest.taskId"
+    },
+    "todo.add_todo_reminder": {
+      "base-time": "todoReminderAddRequest.baseTime",
+      "due-date-offset": "todoReminderAddRequest.dueDateOffset",
+      "reminder-time-stamp": "todoReminderAddRequest.reminderTimeStamp",
+      "task-id": "todoReminderAddRequest.taskId"
+    },
+    "todo.create_personal_sub_todo": {
+      "due": "PersonalTodoCreateVO.dueTime",
+      "executors": "PersonalTodoCreateVO.executorIds",
+      "parent-id": "PersonalTodoCreateVO.parentId",
+      "priority": "PersonalTodoCreateVO.priority",
+      "recurrence": "PersonalTodoCreateVO.recurrence",
+      "title": "PersonalTodoCreateVO.subject"
+    },
+    "todo.create_personal_todo": {
+      "due": "PersonalTodoCreateVO.dueTime",
+      "executors": "PersonalTodoCreateVO.executorIds",
+      "priority": "PersonalTodoCreateVO.priority",
+      "recurrence": "PersonalTodoCreateVO.recurrence",
+      "title": "PersonalTodoCreateVO.subject"
+    },
+    "todo.get_user_todos_in_current_org": {
+      "page": "pageNum",
+      "priority": "priorityList",
+      "size": "pageSize",
+      "status": "todoStatus"
+    },
+    "todo.list_todo_comment": {
+      "size": "pageSize"
+    },
+    "todo.remove_task_executors": {
+      "executors": "todoExecutorsRemoveRequest.executorIds",
+      "task-id": "todoExecutorsRemoveRequest.taskId"
+    },
+    "todo.remove_task_participants": {
+      "participants": "todoParticipantsRemoveRequest.participantIds",
+      "task-id": "todoParticipantsRemoveRequest.taskId"
+    },
+    "todo.reset_todo_reminder": {
+      "reminder-rules": "todoReminderUpdateRequest.reminderRules",
+      "task-id": "todoReminderUpdateRequest.taskId"
+    },
+    "todo.update_todo_done_status": {
+      "status": "isDone"
+    },
+    "todo.update_todo_task": {
+      "done": "TodoUpdateRequest.isDone",
+      "due": "TodoUpdateRequest.dueTime",
+      "priority": "TodoUpdateRequest.priority",
+      "task-id": "TodoUpdateRequest.taskId",
+      "title": "TodoUpdateRequest.subject"
+    },
+    "wiki.add_member": {
+      "role": "roleId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "wiki.create_file": {
+      "folder": "folderId",
+      "workspace": "workspaceId"
+    },
+    "wiki.create_wikiSpace": {
+      "desc": "description"
+    },
+    "wiki.delete_document": {
+      "node": "nodeId"
+    },
+    "wiki.delete_wikiSpace": {
+      "workspace": "workspaceId"
+    },
+    "wiki.get_wikiSpace": {
+      "workspace": "workspaceId"
+    },
+    "wiki.list_member": {
+      "filter-role": "filterRoleIds",
+      "limit": "maxResults",
+      "workspace": "workspaceId"
+    },
+    "wiki.list_nodes": {
+      "cursor": "pageToken",
+      "folder": "folderId",
+      "limit": "pageSize",
+      "workspace": "workspaceId"
+    },
+    "wiki.node_copy": {
+      "folder": "targetFolderId",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "wiki.node_move": {
+      "folder": "targetFolderId",
+      "node": "nodeId",
+      "workspace": "workspaceId"
+    },
+    "wiki.node_search": {
+      "cursor": "pageToken",
+      "limit": "pageSize",
+      "query": "keyword",
+      "workspace": "workspaceIds"
+    },
+    "wiki.remove_member": {
+      "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "wiki.search_wikiSpaces": {
+      "limit": "pageSize",
+      "query": "keyword"
+    },
+    "wiki.update_member": {
+      "role": "roleId",
+      "users": "userIds",
+      "workspace": "workspaceId"
+    }
+  },
+  "corrections": {
+    "calendar.search_calendar --query": {
+      "old_property": "calendarName",
+      "new_property": "query",
+      "reason": "The runtime helper sends query and the pinned search_calendar metadata exposes query rather than calendarName.",
+      "reviewed": true
+    },
+    "minutes.query_minutes_by_tag_id --limit": {
+      "old_property": "size",
+      "new_property": "maxResults",
+      "reason": "The runtime helper sends maxResults and the pinned query_minutes_by_tag_id metadata exposes maxResults rather than size.",
+      "reviewed": true
+    }
+  },
+  "mapping_exclusions": {
+    "aitable.field_create --ai-config": "Conditional aggregate wrapper: --ai-config is only consumed when --fields is absent and --name/--type select the single-field shorthand; the CLI then builds fields[0].aiConfig, so this flag has no unconditional one-to-one RPC property.",
+    "aitable.field_create --config": "Conditional aggregate wrapper: --config is only consumed when --fields is absent and --name/--type select the single-field shorthand; the CLI then builds fields[0].config (and may merge --options), so this flag has no unconditional one-to-one RPC property.",
+    "aitable.field_create --name": "Conditional aggregate wrapper: --name is ignored when --fields is supplied and otherwise becomes fields[0].fieldName only together with --type; it is not an unconditional direct create_fields parameter.",
+    "aitable.field_create --type": "Conditional aggregate wrapper: --type is ignored when --fields is supplied and otherwise becomes fields[0].type only together with --name; it is not an unconditional direct create_fields parameter.",
+    "aitable.form_delete --base-id": "Reviewed unpinned adapter: aitable.form_delete has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_delete --table-id": "Reviewed unpinned adapter: aitable.form_delete has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_delete --view-id": "Reviewed unpinned adapter: aitable.form_delete has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_hide --base-id": "Reviewed unpinned adapter: aitable.form_field_hide has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_hide --field-id": "Reviewed unpinned adapter: aitable.form_field_hide has no singular pinned interface_ref; --field-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_hide --hidden": "Reviewed unpinned adapter: aitable.form_field_hide has no singular pinned interface_ref; --hidden is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_hide --table-id": "Reviewed unpinned adapter: aitable.form_field_hide has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_hide --view-id": "Reviewed unpinned adapter: aitable.form_field_hide has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_list --base-id": "Reviewed unpinned adapter: aitable.form_field_list has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_list --table-id": "Reviewed unpinned adapter: aitable.form_field_list has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_list --view-id": "Reviewed unpinned adapter: aitable.form_field_list has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_update --base-id": "Reviewed unpinned adapter: aitable.form_field_update has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_update --field-description": "Reviewed unpinned adapter: aitable.form_field_update has no singular pinned interface_ref; --field-description is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_update --field-id": "Reviewed unpinned adapter: aitable.form_field_update has no singular pinned interface_ref; --field-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_update --required": "Reviewed unpinned adapter: aitable.form_field_update has no singular pinned interface_ref; --required is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_update --table-id": "Reviewed unpinned adapter: aitable.form_field_update has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_field_update --view-id": "Reviewed unpinned adapter: aitable.form_field_update has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_get --base-id": "Reviewed unpinned adapter: aitable.form_get has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_get --table-id": "Reviewed unpinned adapter: aitable.form_get has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_get --view-id": "Reviewed unpinned adapter: aitable.form_get has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_list --base-id": "Reviewed unpinned adapter: aitable.form_list has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_list --table-id": "Reviewed unpinned adapter: aitable.form_list has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_share_get --base-id": "Reviewed unpinned adapter: aitable.form_share_get has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_share_get --table-id": "Reviewed unpinned adapter: aitable.form_share_get has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_share_get --view-id": "Reviewed unpinned adapter: aitable.form_share_get has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_share_update --base-id": "Reviewed unpinned adapter: aitable.form_share_update has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_share_update --enabled": "Reviewed unpinned adapter: aitable.form_share_update has no singular pinned interface_ref; --enabled is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_share_update --table-id": "Reviewed unpinned adapter: aitable.form_share_update has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_share_update --view-id": "Reviewed unpinned adapter: aitable.form_share_update has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_update --base-id": "Reviewed unpinned adapter: aitable.form_update has no singular pinned interface_ref; --base-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_update --description": "Reviewed unpinned adapter: aitable.form_update has no singular pinned interface_ref; --description is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_update --name": "Reviewed unpinned adapter: aitable.form_update has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_update --table-id": "Reviewed unpinned adapter: aitable.form_update has no singular pinned interface_ref; --table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_update --title": "Reviewed unpinned adapter: aitable.form_update has no singular pinned interface_ref; --title is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.form_update --view-id": "Reviewed unpinned adapter: aitable.form_update has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "aitable.query_records --all": "local auto-pagination control; never sent to query_records",
+    "aitable.query_records --page-limit": "local auto-pagination loop limit; never sent to query_records",
+    "aitable.record_create --records-file": "CLI-local file adapter: the flag value is a filesystem path, which the CLI reads and JSON-decodes before sending the resulting array as create_records.records; the path itself is not an RPC property.",
+    "aitable.record_update --records-file": "CLI-local file adapter: the flag value is a filesystem path, which the CLI reads and JSON-decodes before sending the resulting array as update_records.records; the path itself is not an RPC property.",
+    "aitable.record_upsert --records-file": "CLI-local file adapter: the flag value is a filesystem path, which the CLI reads and JSON-decodes before sending the resulting array as record_upsert.records; the path itself is not an RPC property.",
+    "aitable.view_lock --off": "Conditional CLI selector: absence maps to action=lock while --off=true maps to action=unlock; the boolean flag value is never passed to lock_or_unlock_view and therefore has no direct RPC property.",
+    "aitable.view_update_aggregate --action": "Composite wrapper pairs --action with a dynamic --field-id key inside config.aggregate, so it has no independent direct property.",
+    "aitable.view_update_aggregate --clear-field-id": "Composite wrapper expands each selected field ID into a dynamic null entry inside config.aggregate, so there is no single direct property.",
+    "aitable.view_update_aggregate --field-id": "Composite wrapper uses the supplied field ID as a dynamic key inside config.aggregate, so there is no static direct property.",
+    "aitable.view_update_aggregate --json": "Composite wrapper locally merges the aggregate JSON map with typed changes before update_view, so the flag is not one direct property.",
+    "aitable.view_update_card --cover-field-id": "Composite wrapper selects kanbanCard or galleryCard after a get_views preflight, so the destination property depends on runtime view type.",
+    "aitable.view_update_card --cover-mode": "Composite wrapper selects kanbanCard or galleryCard after a get_views preflight, so the destination property depends on runtime view type.",
+    "aitable.view_update_card --cover-resize-mode": "Composite wrapper selects kanbanCard or galleryCard after a get_views preflight, so the destination property depends on runtime view type.",
+    "aitable.view_update_card --display-field-name": "Composite wrapper selects kanbanCard or galleryCard after a get_views preflight, so the destination property depends on runtime view type.",
+    "aitable.view_update_card --hidden-field-title": "Composite wrapper selects kanbanCard or galleryCard after a get_views preflight, so the destination property depends on runtime view type.",
+    "aitable.view_update_card --json": "Composite wrapper selects kanbanCard or galleryCard and locally merges the JSON block before update_view, so it has no single direct property.",
+    "aitable.view_update_card --no-cover": "Composite wrapper converts the flag to coverFieldId=NONE in a runtime-selected card block, so the boolean itself is not a direct property.",
+    "aitable.view_update_field_widths --field-id": "Composite wrapper uses the field ID as a dynamic key inside config.fieldWidths after a get_views preflight, so there is no static property.",
+    "aitable.view_update_field_widths --json": "Composite wrapper locally merges a dynamic field-width map before update_view, so the JSON flag is not one direct property.",
+    "aitable.view_update_field_widths --width": "Composite wrapper pairs width with a dynamic field-id key inside config.fieldWidths, so width has no independent direct property.",
+    "attendance.adjustment_get --adjustment-id": "Reviewed unpinned adapter: attendance.adjustment_get has no singular pinned interface_ref; --adjustment-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.adjustment_search --limit": "Reviewed unpinned adapter: attendance.adjustment_search has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.adjustment_search --page": "Reviewed unpinned adapter: attendance.adjustment_search has no singular pinned interface_ref; --page is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.adjustment_search --query": "Reviewed unpinned adapter: attendance.adjustment_search has no singular pinned interface_ref; --query is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.approve_list --end": "Reviewed unpinned adapter: attendance.approve_list has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.approve_list --start": "Reviewed unpinned adapter: attendance.approve_list has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.approve_list --types": "Reviewed unpinned adapter: attendance.approve_list has no singular pinned interface_ref; --types is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.approve_list --users": "Reviewed unpinned adapter: attendance.approve_list has no singular pinned interface_ref; --users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.approve_templates --type": "Reviewed unpinned adapter: attendance.approve_templates has no singular pinned interface_ref; --type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.boss_check --absent-min": "Reviewed unpinned adapter: attendance.boss_check has no singular pinned interface_ref; --absent-min is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.boss_check --plan-id": "Reviewed unpinned adapter: attendance.boss_check has no singular pinned interface_ref; --plan-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.boss_check --remark": "Reviewed unpinned adapter: attendance.boss_check has no singular pinned interface_ref; --remark is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.boss_check --result": "Reviewed unpinned adapter: attendance.boss_check has no singular pinned interface_ref; --result is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.boss_check --result-id": "Reviewed unpinned adapter: attendance.boss_check has no singular pinned interface_ref; --result-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.boss_check --time": "Reviewed unpinned adapter: attendance.boss_check has no singular pinned interface_ref; --time is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.boss_check --user-say-yes": "Reviewed unpinned adapter: attendance.boss_check has no singular pinned interface_ref; --user-say-yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_record --end": "Reviewed unpinned adapter: attendance.check_record has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_record --start": "Reviewed unpinned adapter: attendance.check_record has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_record --users": "Reviewed unpinned adapter: attendance.check_record has no singular pinned interface_ref; --users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_result --end": "Reviewed unpinned adapter: attendance.check_result has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_result --limit": "Reviewed unpinned adapter: attendance.check_result has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_result --offset": "Reviewed unpinned adapter: attendance.check_result has no singular pinned interface_ref; --offset is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_result --start": "Reviewed unpinned adapter: attendance.check_result has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.check_result --users": "Reviewed unpinned adapter: attendance.check_result has no singular pinned interface_ref; --users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.checkin_records --end": "Reviewed unpinned adapter: attendance.checkin_records has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.checkin_records --operator-corp-id": "Reviewed unpinned adapter: attendance.checkin_records has no singular pinned interface_ref; --operator-corp-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.checkin_records --operator-staff-id": "Reviewed unpinned adapter: attendance.checkin_records has no singular pinned interface_ref; --operator-staff-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.checkin_records --staff-ids": "Reviewed unpinned adapter: attendance.checkin_records has no singular pinned interface_ref; --staff-ids is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.checkin_records --start": "Reviewed unpinned adapter: attendance.checkin_records has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_create --class-vo": "Reviewed unpinned adapter: attendance.class_create has no singular pinned interface_ref; --class-vo is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_create --name": "Reviewed unpinned adapter: attendance.class_create has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_create --owner": "Reviewed unpinned adapter: attendance.class_create has no singular pinned interface_ref; --owner is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_create --yes": "Reviewed unpinned adapter: attendance.class_create has no singular pinned interface_ref; --yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_get --class-id": "Reviewed unpinned adapter: attendance.class_get has no singular pinned interface_ref; --class-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_search --filter-type": "Reviewed unpinned adapter: attendance.class_search has no singular pinned interface_ref; --filter-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_search --limit": "Reviewed unpinned adapter: attendance.class_search has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_search --page": "Reviewed unpinned adapter: attendance.class_search has no singular pinned interface_ref; --page is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_search --query": "Reviewed unpinned adapter: attendance.class_search has no singular pinned interface_ref; --query is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_update --class-id": "Reviewed unpinned adapter: attendance.class_update has no singular pinned interface_ref; --class-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_update --class-vo": "Reviewed unpinned adapter: attendance.class_update has no singular pinned interface_ref; --class-vo is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_update --name": "Reviewed unpinned adapter: attendance.class_update has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_update --owner": "Reviewed unpinned adapter: attendance.class_update has no singular pinned interface_ref; --owner is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.class_update --yes": "Reviewed unpinned adapter: attendance.class_update has no singular pinned interface_ref; --yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.get_attendance_summary --date": "local CLI adapter converts the date into queryDate for an unpinned attendance-wukong RPC; no direct pinned interface property is advertised",
+    "attendance.get_attendance_summary --stats-type": "local CLI adapter invokes an unpinned attendance-wukong RPC; no direct pinned interface property is advertised",
+    "attendance.get_attendance_summary --user": "local CLI adapter invokes an unpinned attendance-wukong RPC; no direct pinned interface property is advertised",
+    "attendance.globalsetting_get --scope": "Reviewed unpinned adapter: attendance.globalsetting_get has no singular pinned interface_ref; --scope is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_get --setting-scene": "Reviewed unpinned adapter: attendance.globalsetting_get has no singular pinned interface_ref; --setting-scene is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --boss-daily-report-type": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --boss-daily-report-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --boss-monthly-report-type": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --boss-monthly-report-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --boss-weekly-report-type": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --boss-weekly-report-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --check-remind-corp": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --check-remind-corp is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --check-remind-pc-corp": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --check-remind-pc-corp is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --enable-check-cert-push": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --enable-check-cert-push is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --enable-personal-daily-report": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --enable-personal-daily-report is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --enable-personal-monthly-report": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --enable-personal-monthly-report is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --enable-personal-weekly-report": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --enable-personal-weekly-report is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --enable-personal-weekly-report-card": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --enable-personal-weekly-report-card is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --fast-check-corp": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --fast-check-corp is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --lack-remind-corp": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --lack-remind-corp is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --scope": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --scope is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --setting-scene": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --setting-scene is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.globalsetting_save --yes": "Reviewed unpinned adapter: attendance.globalsetting_save has no singular pinned interface_ref; --yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_create --corp-id": "Reviewed unpinned adapter: attendance.group_create has no singular pinned interface_ref; --corp-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_create --group-vo": "Reviewed unpinned adapter: attendance.group_create has no singular pinned interface_ref; --group-vo is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_create --name": "Reviewed unpinned adapter: attendance.group_create has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_create --owner": "Reviewed unpinned adapter: attendance.group_create has no singular pinned interface_ref; --owner is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_create --type": "Reviewed unpinned adapter: attendance.group_create has no singular pinned interface_ref; --type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_create --yes": "Reviewed unpinned adapter: attendance.group_create has no singular pinned interface_ref; --yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_filtered_get --bles": "Reviewed unpinned adapter: attendance.group_filtered_get has no singular pinned interface_ref; --bles is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_filtered_get --group-id": "Reviewed unpinned adapter: attendance.group_filtered_get has no singular pinned interface_ref; --group-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_filtered_get --member": "Reviewed unpinned adapter: attendance.group_filtered_get has no singular pinned interface_ref; --member is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_filtered_get --position": "Reviewed unpinned adapter: attendance.group_filtered_get has no singular pinned interface_ref; --position is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_filtered_get --wifi": "Reviewed unpinned adapter: attendance.group_filtered_get has no singular pinned interface_ref; --wifi is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_get --group-id": "Reviewed unpinned adapter: attendance.group_get has no singular pinned interface_ref; --group-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_search --limit": "Reviewed unpinned adapter: attendance.group_search has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_search --page": "Reviewed unpinned adapter: attendance.group_search has no singular pinned interface_ref; --page is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_search --query": "Reviewed unpinned adapter: attendance.group_search has no singular pinned interface_ref; --query is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_search --query-ble": "Reviewed unpinned adapter: attendance.group_search has no singular pinned interface_ref; --query-ble is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_search --query-position": "Reviewed unpinned adapter: attendance.group_search has no singular pinned interface_ref; --query-position is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_search --type": "Reviewed unpinned adapter: attendance.group_search has no singular pinned interface_ref; --type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --classIds": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --classIds is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --enable-outside-check": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --enable-outside-check is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --group-id": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --group-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --group-vo": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --group-vo is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --name": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --owner": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --owner is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --type": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update --yes": "Reviewed unpinned adapter: attendance.group_update has no singular pinned interface_ref; --yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --add-depts": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --add-depts is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --add-extra-users": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --add-extra-users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --add-users": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --add-users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --group-id": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --group-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --remove-depts": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --remove-depts is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --remove-extra-users": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --remove-extra-users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --remove-users": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --remove-users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.group_update_members --yes": "Reviewed unpinned adapter: attendance.group_update_members has no singular pinned interface_ref; --yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.overtime_get --overtime-id": "Reviewed unpinned adapter: attendance.overtime_get has no singular pinned interface_ref; --overtime-id is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.overtime_search --limit": "Reviewed unpinned adapter: attendance.overtime_search has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.overtime_search --page": "Reviewed unpinned adapter: attendance.overtime_search has no singular pinned interface_ref; --page is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.overtime_search --query": "Reviewed unpinned adapter: attendance.overtime_search has no singular pinned interface_ref; --query is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_data --columns": "Reviewed unpinned adapter: attendance.report_query_data has no singular pinned interface_ref; --columns is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_data --end": "Reviewed unpinned adapter: attendance.report_query_data has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_data --start": "Reviewed unpinned adapter: attendance.report_query_data has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_data --users": "Reviewed unpinned adapter: attendance.report_query_data has no singular pinned interface_ref; --users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_leave --end": "Reviewed unpinned adapter: attendance.report_query_leave has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_leave --leave-names": "Reviewed unpinned adapter: attendance.report_query_leave has no singular pinned interface_ref; --leave-names is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_leave --start": "Reviewed unpinned adapter: attendance.report_query_leave has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.report_query_leave --users": "Reviewed unpinned adapter: attendance.report_query_leave has no singular pinned interface_ref; --users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.schedule_get --end": "Reviewed unpinned adapter: attendance.schedule_get has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.schedule_get --start": "Reviewed unpinned adapter: attendance.schedule_get has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.schedule_get --users": "Reviewed unpinned adapter: attendance.schedule_get has no singular pinned interface_ref; --users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.schedule_import --groupId": "Reviewed unpinned adapter: attendance.schedule_import has no singular pinned interface_ref; --groupId is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.schedule_import --scheduleVOS": "Reviewed unpinned adapter: attendance.schedule_import has no singular pinned interface_ref; --scheduleVOS is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.schedule_import --user-say-yes": "Reviewed unpinned adapter: attendance.schedule_import has no singular pinned interface_ref; --user-say-yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_get --setting-scene": "Reviewed unpinned adapter: attendance.selfsetting_get has no singular pinned interface_ref; --setting-scene is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_get --user": "Reviewed unpinned adapter: attendance.selfsetting_get has no singular pinned interface_ref; --user is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --boss-month-report-type": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --boss-month-report-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --boss-push-start-min": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --boss-push-start-min is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --boss-week-report-type": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --boss-week-report-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --can-update-off-duty": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --can-update-off-duty is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --check-remind-setting": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --check-remind-setting is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --check-remind-user-off-duty": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --check-remind-user-off-duty is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --check-remind-user-on-duty": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --check-remind-user-on-duty is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --check-result-msg": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --check-result-msg is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --enable-offduty-check-remind-of-pc": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --enable-offduty-check-remind-of-pc is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --enable-onduty-check-remind-of-pc": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --enable-onduty-check-remind-of-pc is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --fast-check-late-need-confirm": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --fast-check-late-need-confirm is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --lack-remind-user": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --lack-remind-user is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --lack-send-todo-msg": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --lack-send-todo-msg is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --offduty-check-type": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --offduty-check-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --offduty-remind-end-min": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --offduty-remind-end-min is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --offduty-remind-start-min": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --offduty-remind-start-min is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --onduty-check-type": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --onduty-check-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --onduty-remind-end-min": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --onduty-remind-end-min is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --onduty-remind-start-min": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --onduty-remind-start-min is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --person-daily-report-switch": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --person-daily-report-switch is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --person-month-report-type": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --person-month-report-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --person-week-report-type": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --person-week-report-type is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --setting-scene": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --setting-scene is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --user": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --user is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --vibration-remind-switch": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --vibration-remind-switch is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --voice-remind-switch": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --voice-remind-switch is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.selfsetting_save --yes": "Reviewed unpinned adapter: attendance.selfsetting_save has no singular pinned interface_ref; --yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_balance --leave-code": "Reviewed unpinned adapter: attendance.vacation_balance has no singular pinned interface_ref; --leave-code is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_balance --users": "Reviewed unpinned adapter: attendance.vacation_balance has no singular pinned interface_ref; --users is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_records --end": "Reviewed unpinned adapter: attendance.vacation_records has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_records --leave-code": "Reviewed unpinned adapter: attendance.vacation_records has no singular pinned interface_ref; --leave-code is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_records --start": "Reviewed unpinned adapter: attendance.vacation_records has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_records --user": "Reviewed unpinned adapter: attendance.vacation_records has no singular pinned interface_ref; --user is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_save_balance --end": "Reviewed unpinned adapter: attendance.vacation_save_balance has no singular pinned interface_ref; --end is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_save_balance --leave-code": "Reviewed unpinned adapter: attendance.vacation_save_balance has no singular pinned interface_ref; --leave-code is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_save_balance --num": "Reviewed unpinned adapter: attendance.vacation_save_balance has no singular pinned interface_ref; --num is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_save_balance --reason": "Reviewed unpinned adapter: attendance.vacation_save_balance has no singular pinned interface_ref; --reason is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_save_balance --start": "Reviewed unpinned adapter: attendance.vacation_save_balance has no singular pinned interface_ref; --start is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_save_balance --target": "Reviewed unpinned adapter: attendance.vacation_save_balance has no singular pinned interface_ref; --target is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_save_balance --user-say-yes": "Reviewed unpinned adapter: attendance.vacation_save_balance has no singular pinned interface_ref; --user-say-yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --leave-code": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --leave-code is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --name": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --paid": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --paid is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --per-hours": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --per-hours is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --unit": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --unit is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --user-say-yes": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --user-say-yes is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --visibility-rules": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --visibility-rules is a CLI wrapper input and does not publish a direct interface property.",
+    "attendance.vacation_update_type --when-can-leave": "Reviewed unpinned adapter: attendance.vacation_update_type has no singular pinned interface_ref; --when-can-leave is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.add_message_favorite --open-conversation-id": "Reviewed unpinned adapter: chat.add_message_favorite has no singular pinned interface_ref; --open-conversation-id is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.add_message_favorite --open-message-id": "Reviewed unpinned adapter: chat.add_message_favorite has no singular pinned interface_ref; --open-message-id is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.create_text_emotion --background-id": "Runtime extension: the executable helper forwards backgroundId to im/create_text_emotion, but the pinned source-revision metadata does not declare that optional property; preserve the compatibility flag without advertising it as a pinned RPC field.",
+    "chat.list_conversation_message_v2 --open-dingtalk-id": "selects the alternate list_individual_chat_message branch",
+    "chat.list_conversation_message_v2 --user": "selects the alternate list_individual_chat_message branch",
+    "chat.list_message_favorites --cursor": "Reviewed unpinned adapter: chat.list_message_favorites has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.list_message_favorites --size": "Reviewed unpinned adapter: chat.list_message_favorites has no singular pinned interface_ref; --size is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.query_msg_read_status --user": "conditional wrapper: parseCSVValues + appendChatIDArgs routes each supplied identifier to targetUserIds or targetOpenDingTalkIds according to its runtime ID shape; there is no single RPC property for this flag",
+    "chat.query_msg_read_status --users": "conditional wrapper/alias of --user: parseCSVValues + appendChatIDArgs routes each supplied identifier to targetUserIds or targetOpenDingTalkIds according to its runtime ID shape; there is no single RPC property for this flag",
+    "chat.remove_message_favorite --open-conversation-id": "Reviewed unpinned adapter: chat.remove_message_favorite has no singular pinned interface_ref; --open-conversation-id is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.remove_message_favorite --open-message-id": "Reviewed unpinned adapter: chat.remove_message_favorite has no singular pinned interface_ref; --open-message-id is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.reply_personal_message --ref-msg-id": "serialized into the aggregate content JSON string",
+    "chat.reply_personal_message --ref-sender": "resolved then serialized into the aggregate content JSON string",
+    "chat.reply_personal_message --text": "serialized into the aggregate content JSON string",
+    "chat.search_groups --cursor": "Reviewed unpinned adapter: chat.search_groups has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.search_groups --exclude-muted": "Reviewed unpinned adapter: chat.search_groups has no singular pinned interface_ref; --exclude-muted is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.search_groups --limit": "Reviewed unpinned adapter: chat.search_groups has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "chat.search_messages --user": "conditional wrapper: parseCSVValues + appendChatIDArgs routes each supplied identifier to senderUserIds or senderOpenDingTakIds according to its runtime ID shape; there is no single RPC property for this flag",
+    "chat.search_messages --users": "conditional wrapper/alias of --user: parseCSVValues + appendChatIDArgs routes each supplied identifier to senderUserIds or senderOpenDingTakIds according to its runtime ID shape; there is no single RPC property for this flag",
+    "chat.send_personal_message --file-path": "local upload/preprocessing input",
+    "chat.send_personal_message --media-id": "serialized into the aggregate content payload",
+    "chat.send_personal_message --text": "serialized into the aggregate content payload",
+    "chat.send_personal_message --title": "serialized into the aggregate content payload",
+    "chat.send_personal_message --user": "resolves a userId to receiverOpenDingTalkId when possible and otherwise uses the unpinned receiverUserId compatibility property",
+    "chat.set_group_member_mute_list --user": "conditional wrapper/alias of --users: userIds are remotely resolved to openDingTalkIds outside dry-run and otherwise may be sent as uids; openDingTalkId inputs are sent as openDingTalkIds, so one exact property would misdescribe execution",
+    "chat.transfer_group_owner --user": "conditional compatibility input: a userId is sent as newOwnerUid, while an openDingTalkId is sent as newOwnerOpenDingTalkId; the runtime ID-shape branch has no single RPC property",
+    "chat.update_conv_member_roles --user": "conditional wrapper/alias of --users: splitChatIDValues sends userIds as uids and openDingTalkIds as openDingTalkIds; there is no single RPC property for this flag",
+    "dev.add_dev_app_members --member-type": "Reviewed unpinned adapter: dev.add_dev_app_members has no singular pinned interface_ref; --member-type is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.add_dev_app_members --unified-app-id": "Reviewed unpinned adapter: dev.add_dev_app_members has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.add_dev_app_members --user-ids": "Reviewed unpinned adapter: dev.add_dev_app_members has no singular pinned interface_ref; --user-ids is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.apply_dev_app_permissions --scope-values": "Reviewed unpinned adapter: dev.apply_dev_app_permissions has no singular pinned interface_ref; --scope-values is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.apply_dev_app_permissions --unified-app-id": "Reviewed unpinned adapter: dev.apply_dev_app_permissions has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.create_dev_app --desc": "Reviewed unpinned adapter: dev.create_dev_app has no singular pinned interface_ref; --desc is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.create_dev_app --icon-media-id": "Reviewed unpinned adapter: dev.create_dev_app has no singular pinned interface_ref; --icon-media-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.create_dev_app --name": "Reviewed unpinned adapter: dev.create_dev_app has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.create_dev_app_version --desc": "Reviewed unpinned adapter: dev.create_dev_app_version has no singular pinned interface_ref; --desc is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.create_dev_app_version --unified-app-id": "Reviewed unpinned adapter: dev.create_dev_app_version has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.create_dev_app_version --version": "Reviewed unpinned adapter: dev.create_dev_app_version has no singular pinned interface_ref; --version is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.delete_dev_app --confirm-name": "Reviewed unpinned adapter: dev.delete_dev_app has no singular pinned interface_ref; --confirm-name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.delete_dev_app --unified-app-id": "Reviewed unpinned adapter: dev.delete_dev_app has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.disable_dev_app --unified-app-id": "Reviewed unpinned adapter: dev.disable_dev_app has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.disable_dev_app_robot --unified-app-id": "Reviewed unpinned adapter: dev.disable_dev_app_robot has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.enable_dev_app --unified-app-id": "Reviewed unpinned adapter: dev.enable_dev_app has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.enable_dev_app_robot --unified-app-id": "Reviewed unpinned adapter: dev.enable_dev_app_robot has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_dev_app --unified-app-id": "Reviewed unpinned adapter: dev.get_dev_app has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_dev_app_credentials --unified-app-id": "Reviewed unpinned adapter: dev.get_dev_app_credentials has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_dev_app_version_detail --unified-app-id": "Reviewed unpinned adapter: dev.get_dev_app_version_detail has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_dev_app_version_detail --version-id": "Reviewed unpinned adapter: dev.get_dev_app_version_detail has no singular pinned interface_ref; --version-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_dev_app_version_status --unified-app-id": "Reviewed unpinned adapter: dev.get_dev_app_version_status has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_dev_app_version_status --version-id": "Reviewed unpinned adapter: dev.get_dev_app_version_status has no singular pinned interface_ref; --version-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_extension_robot_config --unified-app-id": "Reviewed unpinned adapter: dev.get_extension_robot_config has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.get_extension_webapp_config --unified-app-id": "Reviewed unpinned adapter: dev.get_extension_webapp_config has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --app-group-id": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --app-group-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --app-key": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --app-key is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --creator": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --creator is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --cursor": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --develop-type": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --develop-type is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --filter-cool-app": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --filter-cool-app is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --name": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --page-size": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --page-size is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --robot-name": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --robot-name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --sort-order": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --sort-order is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app --sort-type": "Reviewed unpinned adapter: dev.list_dev_app has no singular pinned interface_ref; --sort-type is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_events --cursor": "Reviewed unpinned adapter: dev.list_dev_app_events has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_events --keyword": "Reviewed unpinned adapter: dev.list_dev_app_events has no singular pinned interface_ref; --keyword is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_events --page-size": "Reviewed unpinned adapter: dev.list_dev_app_events has no singular pinned interface_ref; --page-size is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_events --unified-app-id": "Reviewed unpinned adapter: dev.list_dev_app_events has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_members --unified-app-id": "Reviewed unpinned adapter: dev.list_dev_app_members has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --api-status": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --api-status is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --auth-status": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --auth-status is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --cursor": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --keyword": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --keyword is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --page-size": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --page-size is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --scope-type": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --scope-type is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --scope-value": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --scope-value is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_permissions --unified-app-id": "Reviewed unpinned adapter: dev.list_dev_app_permissions has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_versions --cursor": "Reviewed unpinned adapter: dev.list_dev_app_versions has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_versions --page-size": "Reviewed unpinned adapter: dev.list_dev_app_versions has no singular pinned interface_ref; --page-size is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.list_dev_app_versions --unified-app-id": "Reviewed unpinned adapter: dev.list_dev_app_versions has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.publish_dev_app_version --approver-user-id": "Reviewed unpinned adapter: dev.publish_dev_app_version has no singular pinned interface_ref; --approver-user-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.publish_dev_app_version --confirmed-sensitive": "Reviewed unpinned adapter: dev.publish_dev_app_version has no singular pinned interface_ref; --confirmed-sensitive is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.publish_dev_app_version --unified-app-id": "Reviewed unpinned adapter: dev.publish_dev_app_version has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.publish_dev_app_version --version-id": "Reviewed unpinned adapter: dev.publish_dev_app_version has no singular pinned interface_ref; --version-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.query_robot_create_result --task-id": "Reviewed unpinned adapter: dev.query_robot_create_result has no singular pinned interface_ref; --task-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.remove_dev_app_members --member-type": "Reviewed unpinned adapter: dev.remove_dev_app_members has no singular pinned interface_ref; --member-type is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.remove_dev_app_members --unified-app-id": "Reviewed unpinned adapter: dev.remove_dev_app_members has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.remove_dev_app_members --user-ids": "Reviewed unpinned adapter: dev.remove_dev_app_members has no singular pinned interface_ref; --user-ids is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.remove_dev_app_permissions --scope-values": "Reviewed unpinned adapter: dev.remove_dev_app_permissions has no singular pinned interface_ref; --scope-values is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.remove_dev_app_permissions --unified-app-id": "Reviewed unpinned adapter: dev.remove_dev_app_permissions has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --add-scope": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --add-scope is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --brief": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --brief is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --desc": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --desc is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --disable-ssl-verify": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --disable-ssl-verify is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --event-callback-url": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --event-callback-url is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --i18n-brief": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --i18n-brief is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --i18n-description": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --i18n-description is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --i18n-name": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --i18n-name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --icon-media-id": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --icon-media-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --mode": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --mode is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --name": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --outgoing-url": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --outgoing-url is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --skills": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --skills is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_robot_config --unified-app-id": "Reviewed unpinned adapter: dev.set_extension_robot_config has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_webapp_config --h5-page-type": "Reviewed unpinned adapter: dev.set_extension_webapp_config has no singular pinned interface_ref; --h5-page-type is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_webapp_config --homepage-url": "Reviewed unpinned adapter: dev.set_extension_webapp_config has no singular pinned interface_ref; --homepage-url is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_webapp_config --omp-url": "Reviewed unpinned adapter: dev.set_extension_webapp_config has no singular pinned interface_ref; --omp-url is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_webapp_config --pc-homepage-url": "Reviewed unpinned adapter: dev.set_extension_webapp_config has no singular pinned interface_ref; --pc-homepage-url is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.set_extension_webapp_config --unified-app-id": "Reviewed unpinned adapter: dev.set_extension_webapp_config has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.submit_robot_create_task --desc": "Reviewed unpinned adapter: dev.submit_robot_create_task has no singular pinned interface_ref; --desc is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.submit_robot_create_task --icon-media-id": "Reviewed unpinned adapter: dev.submit_robot_create_task has no singular pinned interface_ref; --icon-media-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.submit_robot_create_task --name": "Reviewed unpinned adapter: dev.submit_robot_create_task has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.submit_robot_create_task --preview-media-id": "Reviewed unpinned adapter: dev.submit_robot_create_task has no singular pinned interface_ref; --preview-media-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.submit_robot_create_task --robot-name": "Reviewed unpinned adapter: dev.submit_robot_create_task has no singular pinned interface_ref; --robot-name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.submit_robot_create_task --task-id": "Reviewed unpinned adapter: dev.submit_robot_create_task has no singular pinned interface_ref; --task-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.subscribe_dev_app_events --event-codes": "Reviewed unpinned adapter: dev.subscribe_dev_app_events has no singular pinned interface_ref; --event-codes is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.subscribe_dev_app_events --unified-app-id": "Reviewed unpinned adapter: dev.subscribe_dev_app_events has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.unsubscribe_dev_app_events --event-codes": "Reviewed unpinned adapter: dev.unsubscribe_dev_app_events has no singular pinned interface_ref; --event-codes is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.unsubscribe_dev_app_events --unified-app-id": "Reviewed unpinned adapter: dev.unsubscribe_dev_app_events has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app --desc": "Reviewed unpinned adapter: dev.update_dev_app has no singular pinned interface_ref; --desc is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app --icon-media-id": "Reviewed unpinned adapter: dev.update_dev_app has no singular pinned interface_ref; --icon-media-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app --name": "Reviewed unpinned adapter: dev.update_dev_app has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app --unified-app-id": "Reviewed unpinned adapter: dev.update_dev_app has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app_security_config --ip-whitelist": "Reviewed unpinned adapter: dev.update_dev_app_security_config has no singular pinned interface_ref; --ip-whitelist is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app_security_config --redirect-urls": "Reviewed unpinned adapter: dev.update_dev_app_security_config has no singular pinned interface_ref; --redirect-urls is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app_security_config --sso-urls": "Reviewed unpinned adapter: dev.update_dev_app_security_config has no singular pinned interface_ref; --sso-urls is a CLI wrapper input and does not publish a direct interface property.",
+    "dev.update_dev_app_security_config --unified-app-id": "Reviewed unpinned adapter: dev.update_dev_app_security_config has no singular pinned interface_ref; --unified-app-id is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.create_document --content": "pipeline input; maps to markdown or a follow-up update_document jsonml call",
+    "doc.create_document --content-file": "local file input for the content pipeline",
+    "doc.create_document --content-format": "local branch selector across create_document/update_document",
+    "doc.create_document --fix-jsonml": "local JSONML normalization control",
+    "doc.delete_comment --comment-key": "Reviewed unpinned adapter: doc.delete_comment has no singular pinned interface_ref; --comment-key is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.download_file --output": "local output path",
+    "doc.get_document_content --output": "local output path",
+    "doc.import_get --task-id": "Reviewed unpinned adapter: doc.import_get has no singular pinned interface_ref; --task-id is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.insert_document_block --fix-jsonml": "local JSONML normalization control",
+    "doc.insert_document_block --heading": "aggregate convenience input used to build element",
+    "doc.insert_document_block --level": "aggregate convenience input used to build element",
+    "doc.insert_document_block --text": "aggregate convenience input used to build element",
+    "doc.list_document_blocks --block-id": "runtime extension sends blockId, which is absent from the pinned list_document_blocks metadata",
+    "doc.template_apply --folder": "Reviewed unpinned adapter: doc.template_apply has no singular pinned interface_ref; --folder is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_apply --name": "Reviewed unpinned adapter: doc.template_apply has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_apply --template-id": "Reviewed unpinned adapter: doc.template_apply has no singular pinned interface_ref; --template-id is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_apply --workspace": "Reviewed unpinned adapter: doc.template_apply has no singular pinned interface_ref; --workspace is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_list --cursor": "Reviewed unpinned adapter: doc.template_list has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_list --limit": "Reviewed unpinned adapter: doc.template_list has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_list --source": "Reviewed unpinned adapter: doc.template_list has no singular pinned interface_ref; --source is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_search --cursor": "Reviewed unpinned adapter: doc.template_search has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_search --limit": "Reviewed unpinned adapter: doc.template_search has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_search --query": "Reviewed unpinned adapter: doc.template_search has no singular pinned interface_ref; --query is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.template_search --source": "Reviewed unpinned adapter: doc.template_search has no singular pinned interface_ref; --source is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.update_comment --comment-key": "Reviewed unpinned adapter: doc.update_comment has no singular pinned interface_ref; --comment-key is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.update_comment --content": "Reviewed unpinned adapter: doc.update_comment has no singular pinned interface_ref; --content is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.update_document --content": "pipeline input mapped to markdown or jsonml according to content-format",
+    "doc.update_document --content-file": "local file input for the content pipeline",
+    "doc.update_document --dry-run": "local preview control",
+    "doc.update_document --fix-jsonml": "local JSONML normalization control",
+    "doc.update_document --yes": "local confirmation control",
+    "doc.update_document_block --fix-jsonml": "local JSONML normalization control",
+    "doc.update_document_block --heading": "aggregate convenience input used to build element",
+    "doc.update_document_block --level": "aggregate convenience input used to build element",
+    "doc.update_document_block --text": "aggregate convenience input used to build element",
+    "doc.version_list --cursor": "Reviewed unpinned adapter: doc.version_list has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.version_list --limit": "Reviewed unpinned adapter: doc.version_list has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.version_list --node": "Reviewed unpinned adapter: doc.version_list has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.version_revert --node": "Reviewed unpinned adapter: doc.version_revert has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.version_revert --version": "Reviewed unpinned adapter: doc.version_revert has no singular pinned interface_ref; --version is a CLI wrapper input and does not publish a direct interface property.",
+    "doc.version_save --node": "Reviewed unpinned adapter: doc.version_save has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.download_file --output": "local output path",
+    "drive.list_files --cursor": "composite route maps to nextToken for drive.list_files or pageToken for doc.list_nodes",
+    "drive.list_files --folder": "composite route maps to parentId for drive.list_files or folderId for doc.list_nodes",
+    "drive.list_files --limit": "composite route maps to maxResults for drive.list_files or pageSize for doc.list_nodes",
+    "drive.list_files --order": "drive-branch-only option on a composite drive/doc command; no singular interface property is advertised",
+    "drive.list_files --order-by": "drive-branch-only option on a composite drive/doc command; no singular interface property is advertised",
+    "drive.list_files --space-id": "drive-branch-only route input on a composite drive/doc command; no singular interface property is advertised",
+    "drive.list_files --thumbnail": "drive-branch-only option on a composite drive/doc command; no singular interface property is advertised",
+    "drive.list_files --workspace": "selects the doc.list_nodes branch of the composite drive/doc command",
+    "drive.publish_get --node": "Reviewed unpinned adapter: drive.publish_get has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.publish_set --node": "Reviewed unpinned adapter: drive.publish_set has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.publish_set --permission": "Reviewed unpinned adapter: drive.publish_set has no singular pinned interface_ref; --permission is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.publish_unset --node": "Reviewed unpinned adapter: drive.publish_unset has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recent --creator-type": "Reviewed unpinned adapter: drive.recent has no singular pinned interface_ref; --creator-type is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recent --cursor": "Reviewed unpinned adapter: drive.recent has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recent --file-types": "Reviewed unpinned adapter: drive.recent has no singular pinned interface_ref; --file-types is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recent --limit": "Reviewed unpinned adapter: drive.recent has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recent --operate-type": "Reviewed unpinned adapter: drive.recent has no singular pinned interface_ref; --operate-type is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recent --org-ids": "Reviewed unpinned adapter: drive.recent has no singular pinned interface_ref; --org-ids is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recycle_list --cursor": "Reviewed unpinned adapter: drive.recycle_list has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recycle_list --limit": "Reviewed unpinned adapter: drive.recycle_list has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recycle_list --space-id": "Reviewed unpinned adapter: drive.recycle_list has no singular pinned interface_ref; --space-id is a CLI wrapper input and does not publish a direct interface property.",
+    "drive.recycle_restore --id": "Reviewed unpinned adapter: drive.recycle_restore has no singular pinned interface_ref; --id is a CLI wrapper input and does not publish a direct interface property.",
+    "mail.create_download_session --name": "local download filename",
+    "mail.create_download_session --output": "local output path",
+    "mail.create_draft --attachment": "reviewed local attachment preprocessing input",
+    "mail.create_draft --inline-attachment": "reviewed local inline-attachment preprocessing input",
+    "mail.create_forward_draft --attachment": "reviewed local attachment preprocessing input",
+    "mail.create_forward_draft --inline-attachment": "reviewed local inline-attachment preprocessing input",
+    "mail.create_reply_draft --attachment": "reviewed local attachment preprocessing input",
+    "mail.create_reply_draft --inline-attachment": "reviewed local inline-attachment preprocessing input",
+    "mail.create_replyall_draft --attachment": "reviewed local attachment preprocessing input",
+    "mail.create_replyall_draft --inline-attachment": "reviewed local inline-attachment preprocessing input",
+    "mail.send_email --attachment": "reviewed local attachment preprocessing input",
+    "mail.send_email --inline-attachment": "reviewed local inline-attachment preprocessing input",
+    "mail.update_draft --attachment": "reviewed local attachment preprocessing input",
+    "mail.update_draft --inline-attachment": "reviewed local inline-attachment preprocessing input",
+    "minutes.record_pause --session-id": "Reviewed unpinned adapter: minutes.record_pause has no singular pinned interface_ref; --session-id is a CLI wrapper input and does not publish a direct interface property.",
+    "minutes.record_resume --session-id": "Reviewed unpinned adapter: minutes.record_resume has no singular pinned interface_ref; --session-id is a CLI wrapper input and does not publish a direct interface property.",
+    "minutes.record_start --session-id": "Reviewed unpinned adapter: minutes.record_start has no singular pinned interface_ref; --session-id is a CLI wrapper input and does not publish a direct interface property.",
+    "minutes.record_stop --session-id": "Reviewed unpinned adapter: minutes.record_stop has no singular pinned interface_ref; --session-id is a CLI wrapper input and does not publish a direct interface property.",
+    "pat.batch_grant --domain": "aggregate/two-stage wrapper: --domain is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+    "pat.batch_grant --domains": "aggregate/two-stage wrapper: --domains is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+    "pat.batch_grant --product": "aggregate/two-stage wrapper: --product is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+    "pat.batch_grant --products": "aggregate/two-stage wrapper: --products is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+    "pat.batch_grant --recommend": "two-stage conditional wrapper: --recommend is sent to pat.batch_plan, and pat.batch_grant receives only the plan-selected scopes; it is not a pat.batch_grant RPC property",
+    "report.create_report --contents-file": "local JSON file input used to populate contents",
+    "sheet.batch_update --continue-on-error": "Reviewed unpinned adapter: sheet.batch_update has no singular pinned interface_ref; --continue-on-error is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.batch_update --node": "Reviewed unpinned adapter: sheet.batch_update has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.batch_update --operations": "Reviewed unpinned adapter: sheet.batch_update has no singular pinned interface_ref; --operations is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_create --node": "Reviewed unpinned adapter: sheet.chart_create has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_create --properties": "Reviewed unpinned adapter: sheet.chart_create has no singular pinned interface_ref; --properties is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_create --sheet-id": "Reviewed unpinned adapter: sheet.chart_create has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_delete --chart-id": "Reviewed unpinned adapter: sheet.chart_delete has no singular pinned interface_ref; --chart-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_delete --node": "Reviewed unpinned adapter: sheet.chart_delete has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_delete --sheet-id": "Reviewed unpinned adapter: sheet.chart_delete has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_list --chart-id": "Reviewed unpinned adapter: sheet.chart_list has no singular pinned interface_ref; --chart-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_list --node": "Reviewed unpinned adapter: sheet.chart_list has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_list --sheet-id": "Reviewed unpinned adapter: sheet.chart_list has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_update --chart-id": "Reviewed unpinned adapter: sheet.chart_update has no singular pinned interface_ref; --chart-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_update --node": "Reviewed unpinned adapter: sheet.chart_update has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_update --properties": "Reviewed unpinned adapter: sheet.chart_update has no singular pinned interface_ref; --properties is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.chart_update --sheet-id": "Reviewed unpinned adapter: sheet.chart_update has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.create_cond_format --condition": "one aggregate JSON flag selects one of multiple mutually exclusive RPC condition properties",
+    "sheet.create_pivot_table --properties": "Reviewed unpinned adapter: sheet.create_pivot_table has no singular pinned interface_ref; --properties is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.create_pivot_table --source": "Reviewed unpinned adapter: sheet.create_pivot_table has no singular pinned interface_ref; --source is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.create_pivot_table --target-position": "Reviewed unpinned adapter: sheet.create_pivot_table has no singular pinned interface_ref; --target-position is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.create_pivot_table --target-sheet-id": "Reviewed unpinned adapter: sheet.create_pivot_table has no singular pinned interface_ref; --target-sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.delete_cond_format --yes": "local confirmation control",
+    "sheet.delete_pivot_table --pivot-table-id": "Reviewed unpinned adapter: sheet.delete_pivot_table has no singular pinned interface_ref; --pivot-table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.delete_pivot_table --sheet-id": "Reviewed unpinned adapter: sheet.delete_pivot_table has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.filter_view_get_criteria --column": "local post-filter over get_filter_views response",
+    "sheet.filter_view_get_criteria --filter-view-id": "local post-filter over get_filter_views response",
+    "sheet.filter_view_info --filter-view-id": "local post-filter over get_filter_views response",
+    "sheet.filter_view_list_criteria --filter-view-id": "local post-filter over get_filter_views response",
+    "sheet.filter_view_update_criteria --column": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --column is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.filter_view_update_criteria --filter-criteria": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --filter-criteria is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.filter_view_update_criteria --filter-view-id": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --filter-view-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.filter_view_update_criteria --node": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.filter_view_update_criteria --sheet-id": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.group_dimension --group-state": "Reviewed unpinned adapter: sheet.group_dimension has no singular pinned interface_ref; --group-state is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.group_dimension --node": "Reviewed unpinned adapter: sheet.group_dimension has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.group_dimension --range": "Reviewed unpinned adapter: sheet.group_dimension has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.group_dimension --sheet-id": "Reviewed unpinned adapter: sheet.group_dimension has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.hide_gridline --sheet-id": "Reviewed unpinned adapter: sheet.hide_gridline has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.list_pivot_tables --pivot-table-id": "Reviewed unpinned adapter: sheet.list_pivot_tables has no singular pinned interface_ref; --pivot-table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.list_pivot_tables --sheet-id": "Reviewed unpinned adapter: sheet.list_pivot_tables has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.range_batch_clear --node": "Reviewed unpinned adapter: sheet.range_batch_clear has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.range_batch_clear --ranges": "Reviewed unpinned adapter: sheet.range_batch_clear has no singular pinned interface_ref; --ranges is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.range_batch_clear --type": "Reviewed unpinned adapter: sheet.range_batch_clear has no singular pinned interface_ref; --type is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.range_batch_set_style --batch": "Composite wrapper reads this local JSON file and performs zero or more update_range calls; the filesystem path is not a direct RPC property.",
+    "sheet.range_batch_set_style --continue-on-error": "Composite wrapper consumes this flag in its local multi-call error loop and never sends it to update_range.",
+    "sheet.range_read --range": "Reviewed unpinned adapter: sheet.range_read has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.range_read --sheet-id": "Reviewed unpinned adapter: sheet.range_read has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.show_gridline --sheet-id": "Reviewed unpinned adapter: sheet.show_gridline has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.submit_export_job --output": "local destination consumed after export job completion",
+    "sheet.table_get --no-header": "Reviewed unpinned adapter: sheet.table_get has no singular pinned interface_ref; --no-header is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.table_get --range": "Reviewed unpinned adapter: sheet.table_get has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.table_get --sheet-id": "Reviewed unpinned adapter: sheet.table_get has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.table_put --sheets": "Reviewed unpinned adapter: sheet.table_put has no singular pinned interface_ref; --sheets is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_apply --folder": "Reviewed unpinned adapter: sheet.template_apply has no singular pinned interface_ref; --folder is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_apply --name": "Reviewed unpinned adapter: sheet.template_apply has no singular pinned interface_ref; --name is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_apply --template-id": "Reviewed unpinned adapter: sheet.template_apply has no singular pinned interface_ref; --template-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_apply --workspace": "Reviewed unpinned adapter: sheet.template_apply has no singular pinned interface_ref; --workspace is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_list --cursor": "Reviewed unpinned adapter: sheet.template_list has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_list --limit": "Reviewed unpinned adapter: sheet.template_list has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_list --source": "Reviewed unpinned adapter: sheet.template_list has no singular pinned interface_ref; --source is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_search --cursor": "Reviewed unpinned adapter: sheet.template_search has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_search --limit": "Reviewed unpinned adapter: sheet.template_search has no singular pinned interface_ref; --limit is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_search --query": "Reviewed unpinned adapter: sheet.template_search has no singular pinned interface_ref; --query is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.template_search --source": "Reviewed unpinned adapter: sheet.template_search has no singular pinned interface_ref; --source is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.ungroup_dimension --node": "Reviewed unpinned adapter: sheet.ungroup_dimension has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.ungroup_dimension --range": "Reviewed unpinned adapter: sheet.ungroup_dimension has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.ungroup_dimension --sheet-id": "Reviewed unpinned adapter: sheet.ungroup_dimension has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.update_cond_format --condition": "one aggregate JSON flag selects one of multiple mutually exclusive RPC condition properties",
+    "sheet.update_pivot_table --pivot-table-id": "Reviewed unpinned adapter: sheet.update_pivot_table has no singular pinned interface_ref; --pivot-table-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.update_pivot_table --properties": "Reviewed unpinned adapter: sheet.update_pivot_table has no singular pinned interface_ref; --properties is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.update_pivot_table --sheet-id": "Reviewed unpinned adapter: sheet.update_pivot_table has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.write_image --file": "local upload input used to obtain resourceId/resourceUrl",
+    "sheet.write_image --mime-type": "local upload metadata",
+    "sheet.write_image --name": "local upload metadata",
+    "todo.add_todo_attachment --file-path": "local upload input used to construct attachmentList",
+    "wiki.create_wikiSpace --icon": "runtime extension sends icon, which is absent from the pinned create_wikiSpace metadata",
+    "wiki.delete_document --workspace": "local validation/authorization context; not sent to delete_document",
+    "wiki.list_wikiSpaces --cursor": "composite route maps to pageToken for wiki.list_wikiSpaces or nextToken for drive.list_spaces",
+    "wiki.list_wikiSpaces --limit": "composite route maps to pageSize for wiki.list_wikiSpaces or maxResults for drive.list_spaces",
+    "wiki.list_wikiSpaces --type": "route selector maps to wikiSpaceType or spaceType on different composite branches",
+    "wiki.search_wikiSpaces --type": "local route selector; myWikiSpace invokes list_wikiSpaces instead"
+  }
+}

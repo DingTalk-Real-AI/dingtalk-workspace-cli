@@ -128,6 +128,42 @@ render_homebrew_formula() {
     "$ROOT/build/homebrew.rb.tmpl" > "$output_path"
 }
 
+render_homebrew_release_formula() {
+  class_name="$1"
+  version="$2"
+  release_url_base="$3"
+  darwin_amd64_sha="$4"
+  darwin_arm64_sha="$5"
+  linux_amd64_sha="$6"
+  linux_arm64_sha="$7"
+  skills_sha="$8"
+  keg_only_line="$9"
+  channel_caveat="${10}"
+  output_path="${11}"
+  description="Automate DingTalk workspace tasks from the terminal"
+  if [ "$class_name" = "DingtalkWorkspaceCliBeta" ]; then
+    description="$description (beta channel)"
+  fi
+
+  sed \
+    -e "s|__CLASS_NAME__|$class_name|g" \
+    -e "s|__DESCRIPTION__|$description|g" \
+    -e "s|__VERSION__|$version|g" \
+    -e "s|__DARWIN_AMD64_URL__|$release_url_base/dws-darwin-amd64.tar.gz|g" \
+    -e "s|__DARWIN_AMD64_SHA256__|$darwin_amd64_sha|g" \
+    -e "s|__DARWIN_ARM64_URL__|$release_url_base/dws-darwin-arm64.tar.gz|g" \
+    -e "s|__DARWIN_ARM64_SHA256__|$darwin_arm64_sha|g" \
+    -e "s|__LINUX_AMD64_URL__|$release_url_base/dws-linux-amd64.tar.gz|g" \
+    -e "s|__LINUX_AMD64_SHA256__|$linux_amd64_sha|g" \
+    -e "s|__LINUX_ARM64_URL__|$release_url_base/dws-linux-arm64.tar.gz|g" \
+    -e "s|__LINUX_ARM64_SHA256__|$linux_arm64_sha|g" \
+    -e "s|__SKILLS_URL__|$release_url_base/dws-skills.zip|g" \
+    -e "s|__SKILLS_SHA256__|$skills_sha|g" \
+    -e "s|__KEG_ONLY_LINE__|$keg_only_line|g" \
+    -e "s|__CHANNEL_CAVEAT__|$channel_caveat|g" \
+    "$ROOT/build/homebrew-release.rb.tmpl" > "$output_path"
+}
+
 stage_homebrew_formula() {
   version="$1"
   host_os="$(detect_os)"
@@ -136,16 +172,24 @@ stage_homebrew_formula() {
   formula_dir="$DIST_DIR/homebrew"
   archive_path="$DIST_DIR/dws-${host_os}-${host_arch}${archive_ext}"
   release_url_base="$(resolve_release_base_url "$version")"
-  archive_name="$(basename "$archive_path")"
-  skills_name="$(basename "$DIST_DIR/dws-skills.zip")"
   archive_sha="$(sha256_file "$archive_path")"
   skills_sha="$(sha256_file "$DIST_DIR/dws-skills.zip")"
+
+  darwin_amd64="$DIST_DIR/dws-darwin-amd64.tar.gz"
+  darwin_arm64="$DIST_DIR/dws-darwin-arm64.tar.gz"
+  linux_amd64="$DIST_DIR/dws-linux-amd64.tar.gz"
+  linux_arm64="$DIST_DIR/dws-linux-arm64.tar.gz"
 
   mkdir -p "$formula_dir"
 
   if [ ! -f "$archive_path" ]; then
     err "host archive missing for homebrew formula: $archive_path"
   fi
+  for release_archive in "$darwin_amd64" "$darwin_arm64" "$linux_amd64" "$linux_arm64"; do
+    if [ ! -f "$release_archive" ]; then
+      err "release archive missing for Homebrew formula: $release_archive"
+    fi
+  done
 
   render_homebrew_formula \
     "DingtalkWorkspaceCliLocal" \
@@ -156,14 +200,31 @@ stage_homebrew_formula() {
     '  keg_only "Local verification formula to avoid linking conflicts"' \
     "$formula_dir/dingtalk-workspace-cli-local.rb"
 
-  render_homebrew_formula \
-    "DingtalkWorkspaceCli" \
-    "$release_url_base/$archive_name" \
-    "$release_url_base/$skills_name" \
-    "$archive_sha" \
+  formula_class="DingtalkWorkspaceCli"
+  formula_path="$formula_dir/dingtalk-workspace-cli.rb"
+  keg_only_line=""
+  channel_caveat=""
+  case "$version" in
+    *-*)
+      formula_class="DingtalkWorkspaceCliBeta"
+      formula_path="$formula_dir/dingtalk-workspace-cli-beta.rb"
+      keg_only_line='  keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"'
+      channel_caveat='      This beta is keg-only. Add #{opt_bin} to PATH to use its `dws` binary.'
+      ;;
+  esac
+
+  render_homebrew_release_formula \
+    "$formula_class" \
+    "$version" \
+    "$release_url_base" \
+    "$(sha256_file "$darwin_amd64")" \
+    "$(sha256_file "$darwin_arm64")" \
+    "$(sha256_file "$linux_amd64")" \
+    "$(sha256_file "$linux_arm64")" \
     "$skills_sha" \
-    "" \
-    "$formula_dir/dingtalk-workspace-cli.rb"
+    "$keg_only_line" \
+    "$channel_caveat" \
+    "$formula_path"
 }
 
 # ---------- skills zip ----------

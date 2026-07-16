@@ -1,0 +1,2416 @@
+{
+  "$schema": "./schema_command_registry.schema.json",
+  "version": 1,
+  "products": [
+    {
+      "id": "aisearch",
+      "tools": [
+        {
+          "canonical_path": "aisearch.search_enterprise_behavior",
+          "cli_path": "aisearch behavior"
+        },
+        {
+          "canonical_path": "aisearch.search_enterprise",
+          "cli_path": "aisearch enterprise"
+        },
+        {
+          "canonical_path": "aisearch.enterprise_person_search",
+          "cli_path": "aisearch person"
+        }
+      ]
+    },
+    {
+      "id": "aitable",
+      "tools": [
+        {
+          "canonical_path": "aitable.advperm_disable",
+          "cli_path": "aitable advperm disable"
+        },
+        {
+          "canonical_path": "aitable.advperm_enable",
+          "cli_path": "aitable advperm enable"
+        },
+        {
+          "canonical_path": "aitable.advperm_role_create",
+          "cli_path": "aitable advperm role-create"
+        },
+        {
+          "canonical_path": "aitable.advperm_role_delete",
+          "cli_path": "aitable advperm role-delete"
+        },
+        {
+          "canonical_path": "aitable.advperm_role_get",
+          "cli_path": "aitable advperm role-get"
+        },
+        {
+          "canonical_path": "aitable.advperm_role_list",
+          "cli_path": "aitable advperm role-list"
+        },
+        {
+          "canonical_path": "aitable.advperm_role_update",
+          "cli_path": "aitable advperm role-update"
+        },
+        {
+          "canonical_path": "aitable.attachment_upload",
+          "cli_path": "aitable attachment upload"
+        },
+        {
+          "canonical_path": "aitable.base_copy",
+          "cli_path": "aitable base copy"
+        },
+        {
+          "canonical_path": "aitable.base_create",
+          "cli_path": "aitable base create"
+        },
+        {
+          "canonical_path": "aitable.base_delete",
+          "cli_path": "aitable base delete"
+        },
+        {
+          "canonical_path": "aitable.base_get",
+          "cli_path": "aitable base get"
+        },
+        {
+          "canonical_path": "aitable.base_get_primary_doc_id",
+          "cli_path": "aitable base get-primary-doc-id"
+        },
+        {
+          "canonical_path": "aitable.base_list",
+          "cli_path": "aitable base list"
+        },
+        {
+          "canonical_path": "aitable.base_search",
+          "cli_path": "aitable base search"
+        },
+        {
+          "canonical_path": "aitable.base_update",
+          "cli_path": "aitable base update"
+        },
+        {
+          "canonical_path": "aitable.chart_create",
+          "cli_path": "aitable chart create"
+        },
+        {
+          "canonical_path": "aitable.chart_delete",
+          "cli_path": "aitable chart delete"
+        },
+        {
+          "canonical_path": "aitable.chart_get",
+          "cli_path": "aitable chart get"
+        },
+        {
+          "canonical_path": "aitable.chart_share_get",
+          "cli_path": "aitable chart share get"
+        },
+        {
+          "canonical_path": "aitable.chart_share_update",
+          "cli_path": "aitable chart share update"
+        },
+        {
+          "canonical_path": "aitable.chart_update",
+          "cli_path": "aitable chart update"
+        },
+        {
+          "canonical_path": "aitable.chart_widgets_example",
+          "cli_path": "aitable chart widgets-example"
+        },
+        {
+          "canonical_path": "aitable.create",
+          "cli_path": "aitable create"
+        },
+        {
+          "canonical_path": "aitable.dashboard_arrange",
+          "cli_path": "aitable dashboard arrange"
+        },
+        {
+          "canonical_path": "aitable.dashboard_config_example",
+          "cli_path": "aitable dashboard config-example"
+        },
+        {
+          "canonical_path": "aitable.dashboard_create",
+          "cli_path": "aitable dashboard create"
+        },
+        {
+          "canonical_path": "aitable.dashboard_delete",
+          "cli_path": "aitable dashboard delete"
+        },
+        {
+          "canonical_path": "aitable.dashboard_get",
+          "cli_path": "aitable dashboard get"
+        },
+        {
+          "canonical_path": "aitable.dashboard_share_get",
+          "cli_path": "aitable dashboard share get"
+        },
+        {
+          "canonical_path": "aitable.dashboard_share_update",
+          "cli_path": "aitable dashboard share update"
+        },
+        {
+          "canonical_path": "aitable.dashboard_update",
+          "cli_path": "aitable dashboard update"
+        },
+        {
+          "canonical_path": "aitable.export_data",
+          "cli_path": "aitable export data"
+        },
+        {
+          "canonical_path": "aitable.field_create",
+          "cli_path": "aitable field create"
+        },
+        {
+          "canonical_path": "aitable.field_delete",
+          "cli_path": "aitable field delete"
+        },
+        {
+          "canonical_path": "aitable.field_get",
+          "cli_path": "aitable field get"
+        },
+        {
+          "canonical_path": "aitable.field_list",
+          "cli_path": "aitable field list"
+        },
+        {
+          "canonical_path": "aitable.field_search_options",
+          "cli_path": "aitable field search-options"
+        },
+        {
+          "canonical_path": "aitable.field_update",
+          "cli_path": "aitable field update"
+        },
+        {
+          "canonical_path": "aitable.form_create",
+          "cli_path": "aitable form create"
+        },
+        {
+          "canonical_path": "aitable.form_delete",
+          "cli_path": "aitable form delete"
+        },
+        {
+          "canonical_path": "aitable.form_field_hide",
+          "cli_path": "aitable form field hide"
+        },
+        {
+          "canonical_path": "aitable.form_field_list",
+          "cli_path": "aitable form field list"
+        },
+        {
+          "canonical_path": "aitable.form_field_update",
+          "cli_path": "aitable form field update"
+        },
+        {
+          "canonical_path": "aitable.form_get",
+          "cli_path": "aitable form get"
+        },
+        {
+          "canonical_path": "aitable.form_list",
+          "cli_path": "aitable form list"
+        },
+        {
+          "canonical_path": "aitable.form_questions_create",
+          "cli_path": "aitable form questions create"
+        },
+        {
+          "canonical_path": "aitable.form_questions_delete",
+          "cli_path": "aitable form questions delete"
+        },
+        {
+          "canonical_path": "aitable.form_share_get",
+          "cli_path": "aitable form share get"
+        },
+        {
+          "canonical_path": "aitable.form_share_update",
+          "cli_path": "aitable form share update"
+        },
+        {
+          "canonical_path": "aitable.form_update",
+          "cli_path": "aitable form update"
+        },
+        {
+          "canonical_path": "aitable.import_data",
+          "cli_path": "aitable import data"
+        },
+        {
+          "canonical_path": "aitable.import_upload",
+          "cli_path": "aitable import upload"
+        },
+        {
+          "canonical_path": "aitable.info",
+          "cli_path": "aitable info"
+        },
+        {
+          "canonical_path": "aitable.list",
+          "cli_path": "aitable list"
+        },
+        {
+          "canonical_path": "aitable.record_batch_update",
+          "cli_path": "aitable record batch-update"
+        },
+        {
+          "canonical_path": "aitable.record_create",
+          "cli_path": "aitable record create"
+        },
+        {
+          "canonical_path": "aitable.record_delete",
+          "cli_path": "aitable record delete"
+        },
+        {
+          "canonical_path": "aitable.record_get",
+          "cli_path": "aitable record get"
+        },
+        {
+          "canonical_path": "aitable.record_history_list",
+          "cli_path": "aitable record history-list"
+        },
+        {
+          "canonical_path": "aitable.record_primary_doc_create",
+          "cli_path": "aitable record primary-doc-create"
+        },
+        {
+          "canonical_path": "aitable.record_primary_doc_get",
+          "cli_path": "aitable record primary-doc-get"
+        },
+        {
+          "canonical_path": "aitable.query_records",
+          "cli_path": "aitable record query",
+          "aliases": [
+            "aitable record list"
+          ]
+        },
+        {
+          "canonical_path": "aitable.record_query_empty",
+          "cli_path": "aitable record query-empty"
+        },
+        {
+          "canonical_path": "aitable.record_share_url",
+          "cli_path": "aitable record share-url"
+        },
+        {
+          "canonical_path": "aitable.record_update",
+          "cli_path": "aitable record update"
+        },
+        {
+          "canonical_path": "aitable.record_upsert",
+          "cli_path": "aitable record upsert"
+        },
+        {
+          "canonical_path": "aitable.search",
+          "cli_path": "aitable search"
+        },
+        {
+          "canonical_path": "aitable.section_create",
+          "cli_path": "aitable section create"
+        },
+        {
+          "canonical_path": "aitable.section_delete",
+          "cli_path": "aitable section delete"
+        },
+        {
+          "canonical_path": "aitable.section_list_empty",
+          "cli_path": "aitable section list-empty"
+        },
+        {
+          "canonical_path": "aitable.section_list_nodes",
+          "cli_path": "aitable section list-nodes"
+        },
+        {
+          "canonical_path": "aitable.section_move_node",
+          "cli_path": "aitable section move-node"
+        },
+        {
+          "canonical_path": "aitable.section_rename",
+          "cli_path": "aitable section rename"
+        },
+        {
+          "canonical_path": "aitable.section_reorder",
+          "cli_path": "aitable section reorder"
+        },
+        {
+          "canonical_path": "aitable.table_create",
+          "cli_path": "aitable table create"
+        },
+        {
+          "canonical_path": "aitable.table_delete",
+          "cli_path": "aitable table delete"
+        },
+        {
+          "canonical_path": "aitable.table_get",
+          "cli_path": "aitable table get"
+        },
+        {
+          "canonical_path": "aitable.table_list",
+          "cli_path": "aitable table list"
+        },
+        {
+          "canonical_path": "aitable.table_update",
+          "cli_path": "aitable table update"
+        },
+        {
+          "canonical_path": "aitable.template_search",
+          "cli_path": "aitable template search"
+        },
+        {
+          "canonical_path": "aitable.view_create",
+          "cli_path": "aitable view create"
+        },
+        {
+          "canonical_path": "aitable.view_delete",
+          "cli_path": "aitable view delete"
+        },
+        {
+          "canonical_path": "aitable.view_duplicate",
+          "cli_path": "aitable view duplicate"
+        },
+        {
+          "canonical_path": "aitable.view_get_aggregate",
+          "cli_path": "aitable view get aggregate"
+        },
+        {
+          "canonical_path": "aitable.view_get_card",
+          "cli_path": "aitable view get card"
+        },
+        {
+          "canonical_path": "aitable.view_get_field_widths",
+          "cli_path": "aitable view get field-widths"
+        },
+        {
+          "canonical_path": "aitable.view_get_fill_color_rule",
+          "cli_path": "aitable view get fill-color-rule"
+        },
+        {
+          "canonical_path": "aitable.view_get_filter",
+          "cli_path": "aitable view get filter"
+        },
+        {
+          "canonical_path": "aitable.view_get_frozen_cols",
+          "cli_path": "aitable view get frozen-cols"
+        },
+        {
+          "canonical_path": "aitable.view_get_group",
+          "cli_path": "aitable view get group"
+        },
+        {
+          "canonical_path": "aitable.view_get_lock",
+          "cli_path": "aitable view get lock"
+        },
+        {
+          "canonical_path": "aitable.view_get_row_height",
+          "cli_path": "aitable view get row-height"
+        },
+        {
+          "canonical_path": "aitable.view_get_sort",
+          "cli_path": "aitable view get sort"
+        },
+        {
+          "canonical_path": "aitable.view_get_timebar",
+          "cli_path": "aitable view get timebar"
+        },
+        {
+          "canonical_path": "aitable.view_get_visible_fields",
+          "cli_path": "aitable view get visible-fields"
+        },
+        {
+          "canonical_path": "aitable.view_list",
+          "cli_path": "aitable view list"
+        },
+        {
+          "canonical_path": "aitable.view_lock",
+          "cli_path": "aitable view lock"
+        },
+        {
+          "canonical_path": "aitable.view_update_aggregate",
+          "cli_path": "aitable view update aggregate"
+        },
+        {
+          "canonical_path": "aitable.view_update_card",
+          "cli_path": "aitable view update card"
+        },
+        {
+          "canonical_path": "aitable.view_update_field_widths",
+          "cli_path": "aitable view update field-widths"
+        },
+        {
+          "canonical_path": "aitable.view_update_fill_color_rule",
+          "cli_path": "aitable view update fill-color-rule"
+        },
+        {
+          "canonical_path": "aitable.view_update_filter",
+          "cli_path": "aitable view update filter"
+        },
+        {
+          "canonical_path": "aitable.view_update_frozen_cols",
+          "cli_path": "aitable view update frozen-cols"
+        },
+        {
+          "canonical_path": "aitable.view_update_group",
+          "cli_path": "aitable view update group"
+        },
+        {
+          "canonical_path": "aitable.view_update_name",
+          "cli_path": "aitable view update name"
+        },
+        {
+          "canonical_path": "aitable.view_update_row_height",
+          "cli_path": "aitable view update row-height"
+        },
+        {
+          "canonical_path": "aitable.view_update_sort",
+          "cli_path": "aitable view update sort"
+        },
+        {
+          "canonical_path": "aitable.view_update_timebar",
+          "cli_path": "aitable view update timebar"
+        },
+        {
+          "canonical_path": "aitable.view_update_visible_fields",
+          "cli_path": "aitable view update visible-fields"
+        },
+        {
+          "canonical_path": "aitable.workflow_create",
+          "cli_path": "aitable workflow create"
+        },
+        {
+          "canonical_path": "aitable.workflow_disable",
+          "cli_path": "aitable workflow disable"
+        },
+        {
+          "canonical_path": "aitable.workflow_enable",
+          "cli_path": "aitable workflow enable"
+        },
+        {
+          "canonical_path": "aitable.workflow_get",
+          "cli_path": "aitable workflow get"
+        },
+        {
+          "canonical_path": "aitable.workflow_list",
+          "cli_path": "aitable workflow list"
+        },
+        {
+          "canonical_path": "aitable.workflow_update",
+          "cli_path": "aitable workflow update"
+        }
+      ]
+    },
+    {
+      "id": "attendance",
+      "tools": [
+        {
+          "canonical_path": "attendance.adjustment_get",
+          "cli_path": "attendance adjustment get"
+        },
+        {
+          "canonical_path": "attendance.adjustment_search",
+          "cli_path": "attendance adjustment search"
+        },
+        {
+          "canonical_path": "attendance.approve_list",
+          "cli_path": "attendance approve list"
+        },
+        {
+          "canonical_path": "attendance.approve_templates",
+          "cli_path": "attendance approve templates"
+        },
+        {
+          "canonical_path": "attendance.boss_check",
+          "cli_path": "attendance boss-check"
+        },
+        {
+          "canonical_path": "attendance.check_record",
+          "cli_path": "attendance check record"
+        },
+        {
+          "canonical_path": "attendance.check_result",
+          "cli_path": "attendance check result"
+        },
+        {
+          "canonical_path": "attendance.checkin_records",
+          "cli_path": "attendance checkin records"
+        },
+        {
+          "canonical_path": "attendance.class_create",
+          "cli_path": "attendance class create"
+        },
+        {
+          "canonical_path": "attendance.class_get",
+          "cli_path": "attendance class get"
+        },
+        {
+          "canonical_path": "attendance.class_search",
+          "cli_path": "attendance class search"
+        },
+        {
+          "canonical_path": "attendance.class_update",
+          "cli_path": "attendance class update"
+        },
+        {
+          "canonical_path": "attendance.globalsetting_get",
+          "cli_path": "attendance globalsetting get"
+        },
+        {
+          "canonical_path": "attendance.globalsetting_save",
+          "cli_path": "attendance globalsetting save"
+        },
+        {
+          "canonical_path": "attendance.group_create",
+          "cli_path": "attendance group create"
+        },
+        {
+          "canonical_path": "attendance.group_filtered_get",
+          "cli_path": "attendance group filtered-get"
+        },
+        {
+          "canonical_path": "attendance.group_get",
+          "cli_path": "attendance group get"
+        },
+        {
+          "canonical_path": "attendance.group_search",
+          "cli_path": "attendance group search"
+        },
+        {
+          "canonical_path": "attendance.group_update",
+          "cli_path": "attendance group update"
+        },
+        {
+          "canonical_path": "attendance.group_update_members",
+          "cli_path": "attendance group update-members"
+        },
+        {
+          "canonical_path": "attendance.overtime_get",
+          "cli_path": "attendance overtime get"
+        },
+        {
+          "canonical_path": "attendance.overtime_search",
+          "cli_path": "attendance overtime search"
+        },
+        {
+          "canonical_path": "attendance.get_user_attendance_record",
+          "cli_path": "attendance record get"
+        },
+        {
+          "canonical_path": "attendance.report_columns",
+          "cli_path": "attendance report columns"
+        },
+        {
+          "canonical_path": "attendance.report_query_data",
+          "cli_path": "attendance report query-data"
+        },
+        {
+          "canonical_path": "attendance.report_query_leave",
+          "cli_path": "attendance report query-leave"
+        },
+        {
+          "canonical_path": "attendance.query_attendance_group_or_rules",
+          "cli_path": "attendance rules"
+        },
+        {
+          "canonical_path": "attendance.schedule_get",
+          "cli_path": "attendance schedule get"
+        },
+        {
+          "canonical_path": "attendance.schedule_import",
+          "cli_path": "attendance schedule import"
+        },
+        {
+          "canonical_path": "attendance.selfsetting_get",
+          "cli_path": "attendance selfsetting get"
+        },
+        {
+          "canonical_path": "attendance.selfsetting_save",
+          "cli_path": "attendance selfsetting save"
+        },
+        {
+          "canonical_path": "attendance.batch_get_employee_shifts",
+          "cli_path": "attendance shift list"
+        },
+        {
+          "canonical_path": "attendance.get_attendance_summary",
+          "cli_path": "attendance summary"
+        },
+        {
+          "canonical_path": "attendance.vacation_balance",
+          "cli_path": "attendance vacation balance"
+        },
+        {
+          "canonical_path": "attendance.vacation_records",
+          "cli_path": "attendance vacation records"
+        },
+        {
+          "canonical_path": "attendance.vacation_save_balance",
+          "cli_path": "attendance vacation save-balance"
+        },
+        {
+          "canonical_path": "attendance.vacation_types",
+          "cli_path": "attendance vacation types"
+        },
+        {
+          "canonical_path": "attendance.vacation_update_type",
+          "cli_path": "attendance vacation update-type"
+        }
+      ]
+    },
+    {
+      "id": "audit",
+      "tools": [
+        {
+          "canonical_path": "audit.export",
+          "cli_path": "audit export"
+        },
+        {
+          "canonical_path": "audit.tail",
+          "cli_path": "audit tail"
+        },
+        {
+          "canonical_path": "audit.verify",
+          "cli_path": "audit verify"
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "tools": [
+        {
+          "canonical_path": "calendar.list_acls",
+          "cli_path": "calendar acl list"
+        },
+        {
+          "canonical_path": "calendar.add_attachments",
+          "cli_path": "calendar attachment add"
+        },
+        {
+          "canonical_path": "calendar.add_calendar_participant",
+          "cli_path": "calendar attendee add"
+        },
+        {
+          "canonical_path": "calendar.remove_calendar_participant",
+          "cli_path": "calendar attendee delete"
+        },
+        {
+          "canonical_path": "calendar.get_calendar_participants",
+          "cli_path": "calendar attendee list"
+        },
+        {
+          "canonical_path": "calendar.get_calendar",
+          "cli_path": "calendar book get"
+        },
+        {
+          "canonical_path": "calendar.list_calendars",
+          "cli_path": "calendar book list"
+        },
+        {
+          "canonical_path": "calendar.search_calendar",
+          "cli_path": "calendar book search"
+        },
+        {
+          "canonical_path": "calendar.query_busy_status",
+          "cli_path": "calendar busy search"
+        },
+        {
+          "canonical_path": "calendar.create_calendar_event",
+          "cli_path": "calendar event create"
+        },
+        {
+          "canonical_path": "calendar.delete_calendar_event",
+          "cli_path": "calendar event delete"
+        },
+        {
+          "canonical_path": "calendar.get_calendar_detail",
+          "cli_path": "calendar event get"
+        },
+        {
+          "canonical_path": "calendar.list_calendar_events",
+          "cli_path": "calendar event list"
+        },
+        {
+          "canonical_path": "calendar.respond",
+          "cli_path": "calendar event respond"
+        },
+        {
+          "canonical_path": "calendar.list_suggested_event_times",
+          "cli_path": "calendar event suggest"
+        },
+        {
+          "canonical_path": "calendar.update_calendar_event",
+          "cli_path": "calendar event update"
+        },
+        {
+          "canonical_path": "calendar.add_meeting_room",
+          "cli_path": "calendar room add"
+        },
+        {
+          "canonical_path": "calendar.delete_meeting_room",
+          "cli_path": "calendar room delete"
+        },
+        {
+          "canonical_path": "calendar.list_meeting_room_groups",
+          "cli_path": "calendar room list-groups"
+        },
+        {
+          "canonical_path": "calendar.query_available_meeting_room",
+          "cli_path": "calendar room search"
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "tools": [
+        {
+          "canonical_path": "chat.search_bots",
+          "cli_path": "chat bot find"
+        },
+        {
+          "canonical_path": "chat.search_my_robots",
+          "cli_path": "chat bot search"
+        },
+        {
+          "canonical_path": "chat.create_smart_conv_category",
+          "cli_path": "chat category create-smart"
+        },
+        {
+          "canonical_path": "chat.list_user_define_conv_categories",
+          "cli_path": "chat category list"
+        },
+        {
+          "canonical_path": "chat.list_conversations_by_category",
+          "cli_path": "chat category list-conversations"
+        },
+        {
+          "canonical_path": "chat.get_conversation_info",
+          "cli_path": "chat conversation-info"
+        },
+        {
+          "canonical_path": "chat.list_group_bots",
+          "cli_path": "chat group bots"
+        },
+        {
+          "canonical_path": "chat.create_group_conversation",
+          "cli_path": "chat group create"
+        },
+        {
+          "canonical_path": "chat.dismiss_group",
+          "cli_path": "chat group dismiss"
+        },
+        {
+          "canonical_path": "chat.get_conv_info_by_group_id",
+          "cli_path": "chat group get-by-group-id"
+        },
+        {
+          "canonical_path": "chat.get_group_invite_url",
+          "cli_path": "chat group invite-url"
+        },
+        {
+          "canonical_path": "chat.list_owned_or_admin_groups",
+          "cli_path": "chat group list-my-groups"
+        },
+        {
+          "canonical_path": "chat.add_group_member",
+          "cli_path": "chat group members add"
+        },
+        {
+          "canonical_path": "chat.add_robot_to_group",
+          "cli_path": "chat group members add-bot"
+        },
+        {
+          "canonical_path": "chat.remove_group_member",
+          "cli_path": "chat group members remove"
+        },
+        {
+          "canonical_path": "chat.remove_robot_in_group",
+          "cli_path": "chat group members remove-bot"
+        },
+        {
+          "canonical_path": "chat.quit_group",
+          "cli_path": "chat group quit"
+        },
+        {
+          "canonical_path": "chat.update_group_name",
+          "cli_path": "chat group rename"
+        },
+        {
+          "canonical_path": "chat.update_conv_member_roles",
+          "cli_path": "chat group set-admin"
+        },
+        {
+          "canonical_path": "chat.update_show_history_msg_option",
+          "cli_path": "chat group set-history"
+        },
+        {
+          "canonical_path": "chat.transfer_group_owner",
+          "cli_path": "chat group transfer-owner"
+        },
+        {
+          "canonical_path": "chat.update_group_icon",
+          "cli_path": "chat group update-icon"
+        },
+        {
+          "canonical_path": "chat.update_group_settings",
+          "cli_path": "chat group update-settings"
+        },
+        {
+          "canonical_path": "chat.set_group_mute",
+          "cli_path": "chat group-mute"
+        },
+        {
+          "canonical_path": "chat.set_group_member_mute_list",
+          "cli_path": "chat group-mute-member"
+        },
+        {
+          "canonical_path": "chat.add_custom_group_role",
+          "cli_path": "chat group-role add"
+        },
+        {
+          "canonical_path": "chat.list_custom_group_roles",
+          "cli_path": "chat group-role list"
+        },
+        {
+          "canonical_path": "chat.query_custom_user_roles",
+          "cli_path": "chat group-role query-user"
+        },
+        {
+          "canonical_path": "chat.remove_custom_group_role",
+          "cli_path": "chat group-role remove"
+        },
+        {
+          "canonical_path": "chat.remove_custom_user_roles",
+          "cli_path": "chat group-role remove-user"
+        },
+        {
+          "canonical_path": "chat.set_custom_user_roles",
+          "cli_path": "chat group-role set-user"
+        },
+        {
+          "canonical_path": "chat.update_custom_group_role",
+          "cli_path": "chat group-role update"
+        },
+        {
+          "canonical_path": "chat.list_top_conversations",
+          "cli_path": "chat list-top-conversations"
+        },
+        {
+          "canonical_path": "chat.add_emoji_reaction",
+          "cli_path": "chat message add-emoji"
+        },
+        {
+          "canonical_path": "chat.add_message_favorite",
+          "cli_path": "chat message add-favorite"
+        },
+        {
+          "canonical_path": "chat.add_text_emotion",
+          "cli_path": "chat message add-text-emotion"
+        },
+        {
+          "canonical_path": "chat.combine_forward_messages",
+          "cli_path": "chat message combine-forward"
+        },
+        {
+          "canonical_path": "chat.create_text_emotion",
+          "cli_path": "chat message create-text-emotion"
+        },
+        {
+          "canonical_path": "chat.download_media",
+          "cli_path": "chat message download-media"
+        },
+        {
+          "canonical_path": "chat.forward_message",
+          "cli_path": "chat message forward"
+        },
+        {
+          "canonical_path": "chat.forward_topic",
+          "cli_path": "chat message forward-topic"
+        },
+        {
+          "canonical_path": "chat.list_conversation_message_v2",
+          "cli_path": "chat message list"
+        },
+        {
+          "canonical_path": "chat.search_messages_by_time_range",
+          "cli_path": "chat message list-all"
+        },
+        {
+          "canonical_path": "chat.list_messages_by_ids",
+          "cli_path": "chat message list-by-ids"
+        },
+        {
+          "canonical_path": "chat.search_messages_by_sender",
+          "cli_path": "chat message list-by-sender"
+        },
+        {
+          "canonical_path": "chat.list_individual_chat_message",
+          "cli_path": "chat message list-direct"
+        },
+        {
+          "canonical_path": "chat.list_message_favorites",
+          "cli_path": "chat message list-favorites"
+        },
+        {
+          "canonical_path": "chat.list_special_focus_messages",
+          "cli_path": "chat message list-focused"
+        },
+        {
+          "canonical_path": "chat.search_at_me_message",
+          "cli_path": "chat message list-mentions"
+        },
+        {
+          "canonical_path": "chat.list_pin_messages",
+          "cli_path": "chat message list-pin-msg"
+        },
+        {
+          "canonical_path": "chat.list_topic_replies",
+          "cli_path": "chat message list-topic-replies"
+        },
+        {
+          "canonical_path": "chat.unread_message_conversation_list",
+          "cli_path": "chat message list-unread-conversations"
+        },
+        {
+          "canonical_path": "chat.query_message_send_status",
+          "cli_path": "chat message query-send-status"
+        },
+        {
+          "canonical_path": "chat.query_msg_read_status",
+          "cli_path": "chat message read-status"
+        },
+        {
+          "canonical_path": "chat.recall_message",
+          "cli_path": "chat message recall"
+        },
+        {
+          "canonical_path": "chat.recall_robot_message",
+          "cli_path": "chat message recall-by-bot"
+        },
+        {
+          "canonical_path": "chat.remove_emoji_reaction",
+          "cli_path": "chat message remove-emoji"
+        },
+        {
+          "canonical_path": "chat.remove_message_favorite",
+          "cli_path": "chat message remove-favorite"
+        },
+        {
+          "canonical_path": "chat.remove_text_emotion",
+          "cli_path": "chat message remove-text-emotion"
+        },
+        {
+          "canonical_path": "chat.reply_personal_message",
+          "cli_path": "chat message reply"
+        },
+        {
+          "canonical_path": "chat.search_messages_by_keyword",
+          "cli_path": "chat message search"
+        },
+        {
+          "canonical_path": "chat.search_messages",
+          "cli_path": "chat message search-advanced"
+        },
+        {
+          "canonical_path": "chat.send_personal_message",
+          "cli_path": "chat message send"
+        },
+        {
+          "canonical_path": "chat.send_robot_message",
+          "cli_path": "chat message send-by-bot"
+        },
+        {
+          "canonical_path": "chat.send_message_by_custom_robot",
+          "cli_path": "chat message send-by-webhook"
+        },
+        {
+          "canonical_path": "chat.create_and_send_card",
+          "cli_path": "chat message send-card"
+        },
+        {
+          "canonical_path": "chat.set_pin_message",
+          "cli_path": "chat message set-pin-msg"
+        },
+        {
+          "canonical_path": "chat.unset_pin_message",
+          "cli_path": "chat message unset-pin-msg"
+        },
+        {
+          "canonical_path": "chat.update_streaming_card",
+          "cli_path": "chat message update-card"
+        },
+        {
+          "canonical_path": "chat.update_notification_off",
+          "cli_path": "chat mute"
+        },
+        {
+          "canonical_path": "chat.search_groups",
+          "cli_path": "chat search"
+        },
+        {
+          "canonical_path": "chat.search_common_groups",
+          "cli_path": "chat search-common"
+        },
+        {
+          "canonical_path": "chat.set_top_conversation",
+          "cli_path": "chat set-top"
+        }
+      ]
+    },
+    {
+      "id": "contact",
+      "tools": [
+        {
+          "canonical_path": "contact.get_dept_info_by_dept_id",
+          "cli_path": "contact dept get-info"
+        },
+        {
+          "canonical_path": "contact.get_sub_depts_by_dept_id",
+          "cli_path": "contact dept list-children"
+        },
+        {
+          "canonical_path": "contact.get_dept_members_by_deptId",
+          "cli_path": "contact dept list-members"
+        },
+        {
+          "canonical_path": "contact.search_dept_by_keyword",
+          "cli_path": "contact dept search"
+        },
+        {
+          "canonical_path": "contact.list_my_followings",
+          "cli_path": "contact relation list-my-followings"
+        },
+        {
+          "canonical_path": "contact.query_dismission_employee_list",
+          "cli_path": "contact user dismission search"
+        },
+        {
+          "canonical_path": "contact.get_user_info_by_user_ids",
+          "cli_path": "contact user get"
+        },
+        {
+          "canonical_path": "contact.get_current_user_profile",
+          "cli_path": "contact user get-self"
+        },
+        {
+          "canonical_path": "contact.list_authorized_roster_fields",
+          "cli_path": "contact user profile fields"
+        },
+        {
+          "canonical_path": "contact.get_authorized_emp_rosterInfo",
+          "cli_path": "contact user profile get"
+        },
+        {
+          "canonical_path": "contact.search_contact_by_key_word",
+          "cli_path": "contact user search"
+        },
+        {
+          "canonical_path": "contact.search_user_by_mobile",
+          "cli_path": "contact user search-mobile"
+        }
+      ]
+    },
+    {
+      "id": "dev",
+      "tools": [
+        {
+          "canonical_path": "dev.create_dev_app",
+          "cli_path": "dev app create"
+        },
+        {
+          "canonical_path": "dev.get_dev_app_credentials",
+          "cli_path": "dev app credentials get"
+        },
+        {
+          "canonical_path": "dev.delete_dev_app",
+          "cli_path": "dev app delete"
+        },
+        {
+          "canonical_path": "dev.disable_dev_app",
+          "cli_path": "dev app disable"
+        },
+        {
+          "canonical_path": "dev.enable_dev_app",
+          "cli_path": "dev app enable"
+        },
+        {
+          "canonical_path": "dev.list_dev_app_events",
+          "cli_path": "dev app event list"
+        },
+        {
+          "canonical_path": "dev.subscribe_dev_app_events",
+          "cli_path": "dev app event subscribe"
+        },
+        {
+          "canonical_path": "dev.unsubscribe_dev_app_events",
+          "cli_path": "dev app event unsubscribe"
+        },
+        {
+          "canonical_path": "dev.get_dev_app",
+          "cli_path": "dev app get"
+        },
+        {
+          "canonical_path": "dev.list_dev_app",
+          "cli_path": "dev app list"
+        },
+        {
+          "canonical_path": "dev.add_dev_app_members",
+          "cli_path": "dev app member add"
+        },
+        {
+          "canonical_path": "dev.list_dev_app_members",
+          "cli_path": "dev app member list"
+        },
+        {
+          "canonical_path": "dev.remove_dev_app_members",
+          "cli_path": "dev app member remove"
+        },
+        {
+          "canonical_path": "dev.apply_dev_app_permissions",
+          "cli_path": "dev app permission add"
+        },
+        {
+          "canonical_path": "dev.list_dev_app_permissions",
+          "cli_path": "dev app permission list"
+        },
+        {
+          "canonical_path": "dev.remove_dev_app_permissions",
+          "cli_path": "dev app permission remove"
+        },
+        {
+          "canonical_path": "dev.set_extension_robot_config",
+          "cli_path": "dev app robot config"
+        },
+        {
+          "canonical_path": "dev.disable_dev_app_robot",
+          "cli_path": "dev app robot disable"
+        },
+        {
+          "canonical_path": "dev.enable_dev_app_robot",
+          "cli_path": "dev app robot enable"
+        },
+        {
+          "canonical_path": "dev.get_extension_robot_config",
+          "cli_path": "dev app robot get"
+        },
+        {
+          "canonical_path": "dev.query_robot_create_result",
+          "cli_path": "dev app robot result"
+        },
+        {
+          "canonical_path": "dev.submit_robot_create_task",
+          "cli_path": "dev app robot submit"
+        },
+        {
+          "canonical_path": "dev.update_dev_app_security_config",
+          "cli_path": "dev app security config"
+        },
+        {
+          "canonical_path": "dev.update_dev_app",
+          "cli_path": "dev app update"
+        },
+        {
+          "canonical_path": "dev.create_dev_app_version",
+          "cli_path": "dev app version create"
+        },
+        {
+          "canonical_path": "dev.get_dev_app_version_detail",
+          "cli_path": "dev app version get"
+        },
+        {
+          "canonical_path": "dev.list_dev_app_versions",
+          "cli_path": "dev app version list"
+        },
+        {
+          "canonical_path": "dev.publish_dev_app_version",
+          "cli_path": "dev app version publish"
+        },
+        {
+          "canonical_path": "dev.get_dev_app_version_status",
+          "cli_path": "dev app version status"
+        },
+        {
+          "canonical_path": "dev.set_extension_webapp_config",
+          "cli_path": "dev app webapp config"
+        },
+        {
+          "canonical_path": "dev.get_extension_webapp_config",
+          "cli_path": "dev app webapp get"
+        },
+        {
+          "canonical_path": "dev.connect_status",
+          "cli_path": "dev connect status"
+        },
+        {
+          "canonical_path": "dev.connect_stop",
+          "cli_path": "dev connect stop"
+        },
+        {
+          "canonical_path": "dev.search_open_platform_docs_rag",
+          "cli_path": "dev doc search"
+        }
+      ]
+    },
+    {
+      "id": "devdoc",
+      "tools": [
+        {
+          "canonical_path": "devdoc.search_open_platform_docs_rag",
+          "cli_path": "devdoc article search"
+        }
+      ]
+    },
+    {
+      "id": "ding",
+      "tools": [
+        {
+          "canonical_path": "ding.recall_ding_message",
+          "cli_path": "ding message recall"
+        },
+        {
+          "canonical_path": "ding.send_ding_message",
+          "cli_path": "ding message send"
+        }
+      ]
+    },
+    {
+      "id": "doc",
+      "tools": [
+        {
+          "canonical_path": "doc.delete_document_block",
+          "cli_path": "doc block delete"
+        },
+        {
+          "canonical_path": "doc.insert_document_block",
+          "cli_path": "doc block insert"
+        },
+        {
+          "canonical_path": "doc.list_document_blocks",
+          "cli_path": "doc block list"
+        },
+        {
+          "canonical_path": "doc.update_document_block",
+          "cli_path": "doc block update"
+        },
+        {
+          "canonical_path": "doc.create_comment",
+          "cli_path": "doc comment create"
+        },
+        {
+          "canonical_path": "doc.create_inline_comment",
+          "cli_path": "doc comment create-inline"
+        },
+        {
+          "canonical_path": "doc.delete_comment",
+          "cli_path": "doc comment delete"
+        },
+        {
+          "canonical_path": "doc.list_comments",
+          "cli_path": "doc comment list"
+        },
+        {
+          "canonical_path": "doc.reply_comment",
+          "cli_path": "doc comment reply"
+        },
+        {
+          "canonical_path": "doc.update_comment",
+          "cli_path": "doc comment update"
+        },
+        {
+          "canonical_path": "doc.copy_document",
+          "cli_path": "doc copy"
+        },
+        {
+          "canonical_path": "doc.create_document",
+          "cli_path": "doc create"
+        },
+        {
+          "canonical_path": "doc.delete_document",
+          "cli_path": "doc delete"
+        },
+        {
+          "canonical_path": "doc.download_file",
+          "cli_path": "doc download"
+        },
+        {
+          "canonical_path": "doc.query_export_job",
+          "cli_path": "doc export get"
+        },
+        {
+          "canonical_path": "doc.create_file",
+          "cli_path": "doc file create"
+        },
+        {
+          "canonical_path": "doc.create_folder",
+          "cli_path": "doc folder create"
+        },
+        {
+          "canonical_path": "doc.import_get",
+          "cli_path": "doc import get"
+        },
+        {
+          "canonical_path": "doc.get_document_info",
+          "cli_path": "doc info"
+        },
+        {
+          "canonical_path": "doc.list_nodes",
+          "cli_path": "doc list"
+        },
+        {
+          "canonical_path": "doc.download_doc_attachment",
+          "cli_path": "doc media download"
+        },
+        {
+          "canonical_path": "doc.media_insert",
+          "cli_path": "doc media insert"
+        },
+        {
+          "canonical_path": "doc.move_document",
+          "cli_path": "doc move"
+        },
+        {
+          "canonical_path": "doc.add_permission",
+          "cli_path": "doc permission add"
+        },
+        {
+          "canonical_path": "doc.list_permission",
+          "cli_path": "doc permission list"
+        },
+        {
+          "canonical_path": "doc.remove_permission",
+          "cli_path": "doc permission remove"
+        },
+        {
+          "canonical_path": "doc.update_permission",
+          "cli_path": "doc permission update"
+        },
+        {
+          "canonical_path": "doc.get_document_content",
+          "cli_path": "doc read"
+        },
+        {
+          "canonical_path": "doc.rename_document",
+          "cli_path": "doc rename"
+        },
+        {
+          "canonical_path": "doc.search_documents",
+          "cli_path": "doc search"
+        },
+        {
+          "canonical_path": "doc.template_apply",
+          "cli_path": "doc template apply"
+        },
+        {
+          "canonical_path": "doc.template_list",
+          "cli_path": "doc template list"
+        },
+        {
+          "canonical_path": "doc.template_search",
+          "cli_path": "doc template search"
+        },
+        {
+          "canonical_path": "doc.update_document",
+          "cli_path": "doc update"
+        },
+        {
+          "canonical_path": "doc.upload",
+          "cli_path": "doc upload"
+        },
+        {
+          "canonical_path": "doc.version_list",
+          "cli_path": "doc version list"
+        },
+        {
+          "canonical_path": "doc.version_revert",
+          "cli_path": "doc version revert"
+        },
+        {
+          "canonical_path": "doc.version_save",
+          "cli_path": "doc version save"
+        }
+      ]
+    },
+    {
+      "id": "drive",
+      "tools": [
+        {
+          "canonical_path": "drive.commit_upload",
+          "cli_path": "drive commit"
+        },
+        {
+          "canonical_path": "drive.copy_document",
+          "cli_path": "drive copy"
+        },
+        {
+          "canonical_path": "drive.delete_document",
+          "cli_path": "drive delete"
+        },
+        {
+          "canonical_path": "drive.download_file",
+          "cli_path": "drive download"
+        },
+        {
+          "canonical_path": "drive.get_file_info",
+          "cli_path": "drive info"
+        },
+        {
+          "canonical_path": "drive.list_files",
+          "cli_path": "drive list"
+        },
+        {
+          "canonical_path": "drive.list_spaces",
+          "cli_path": "drive list-spaces"
+        },
+        {
+          "canonical_path": "drive.create_folder",
+          "cli_path": "drive mkdir"
+        },
+        {
+          "canonical_path": "drive.move_document",
+          "cli_path": "drive move"
+        },
+        {
+          "canonical_path": "drive.add_permission",
+          "cli_path": "drive permission add"
+        },
+        {
+          "canonical_path": "drive.list_permission",
+          "cli_path": "drive permission list"
+        },
+        {
+          "canonical_path": "drive.permission_remove",
+          "cli_path": "drive permission remove"
+        },
+        {
+          "canonical_path": "drive.permission_update",
+          "cli_path": "drive permission update"
+        },
+        {
+          "canonical_path": "drive.publish_get",
+          "cli_path": "drive publish get"
+        },
+        {
+          "canonical_path": "drive.publish_set",
+          "cli_path": "drive publish set"
+        },
+        {
+          "canonical_path": "drive.publish_unset",
+          "cli_path": "drive publish unset"
+        },
+        {
+          "canonical_path": "drive.recent",
+          "cli_path": "drive recent"
+        },
+        {
+          "canonical_path": "drive.recycle_list",
+          "cli_path": "drive recycle list"
+        },
+        {
+          "canonical_path": "drive.recycle_restore",
+          "cli_path": "drive recycle restore"
+        },
+        {
+          "canonical_path": "drive.rename_document",
+          "cli_path": "drive rename"
+        },
+        {
+          "canonical_path": "drive.search_files",
+          "cli_path": "drive search"
+        },
+        {
+          "canonical_path": "drive.create_shortcut",
+          "cli_path": "drive shortcut"
+        },
+        {
+          "canonical_path": "drive.get_node_stats",
+          "cli_path": "drive stats"
+        },
+        {
+          "canonical_path": "drive.upload",
+          "cli_path": "drive upload"
+        },
+        {
+          "canonical_path": "drive.get_upload_info",
+          "cli_path": "drive upload-info"
+        }
+      ]
+    },
+    {
+      "id": "event",
+      "tools": [
+        {
+          "canonical_path": "event.consume",
+          "cli_path": "event consume"
+        },
+        {
+          "canonical_path": "event.list",
+          "cli_path": "event list"
+        },
+        {
+          "canonical_path": "event.schema",
+          "cli_path": "event schema"
+        },
+        {
+          "canonical_path": "event.status",
+          "cli_path": "event status"
+        },
+        {
+          "canonical_path": "event.stop",
+          "cli_path": "event stop"
+        }
+      ]
+    },
+    {
+      "id": "live",
+      "tools": [
+        {
+          "canonical_path": "live.get_my_lives",
+          "cli_path": "live stream list"
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "tools": [
+        {
+          "canonical_path": "mail.create_download_session",
+          "cli_path": "mail attachment download"
+        },
+        {
+          "canonical_path": "mail.list_mail_attachments",
+          "cli_path": "mail attachment list"
+        },
+        {
+          "canonical_path": "mail.batch_delete_user_mail_contacts",
+          "cli_path": "mail contact batch-delete"
+        },
+        {
+          "canonical_path": "mail.create_user_mail_contact",
+          "cli_path": "mail contact create"
+        },
+        {
+          "canonical_path": "mail.list_user_mail_contacts",
+          "cli_path": "mail contact list"
+        },
+        {
+          "canonical_path": "mail.update_user_mail_contact",
+          "cli_path": "mail contact update"
+        },
+        {
+          "canonical_path": "mail.create_draft",
+          "cli_path": "mail draft create"
+        },
+        {
+          "canonical_path": "mail.send_draft",
+          "cli_path": "mail draft send"
+        },
+        {
+          "canonical_path": "mail.update_draft",
+          "cli_path": "mail draft update"
+        },
+        {
+          "canonical_path": "mail.create_mail_folder",
+          "cli_path": "mail folder create"
+        },
+        {
+          "canonical_path": "mail.delete_mail_folder",
+          "cli_path": "mail folder delete"
+        },
+        {
+          "canonical_path": "mail.list_folders",
+          "cli_path": "mail folder list"
+        },
+        {
+          "canonical_path": "mail.update_mail_folder",
+          "cli_path": "mail folder update"
+        },
+        {
+          "canonical_path": "mail.list_user_mailboxes",
+          "cli_path": "mail mailbox list"
+        },
+        {
+          "canonical_path": "mail.batch_delete_message",
+          "cli_path": "mail message batch-delete"
+        },
+        {
+          "canonical_path": "mail.batch_move_message",
+          "cli_path": "mail message batch-move"
+        },
+        {
+          "canonical_path": "mail.create_forward_draft",
+          "cli_path": "mail message forward"
+        },
+        {
+          "canonical_path": "mail.get_email_by_message_id",
+          "cli_path": "mail message get"
+        },
+        {
+          "canonical_path": "mail.create_reply_draft",
+          "cli_path": "mail message reply"
+        },
+        {
+          "canonical_path": "mail.create_replyall_draft",
+          "cli_path": "mail message reply-all"
+        },
+        {
+          "canonical_path": "mail.search_emails",
+          "cli_path": "mail message search"
+        },
+        {
+          "canonical_path": "mail.list_emails",
+          "cli_path": "mail message list"
+        },
+        {
+          "canonical_path": "mail.send_email",
+          "cli_path": "mail message send"
+        },
+        {
+          "canonical_path": "mail.list_tags",
+          "cli_path": "mail tag list"
+        },
+        {
+          "canonical_path": "mail.create_user_message_template",
+          "cli_path": "mail template create"
+        },
+        {
+          "canonical_path": "mail.delete_user_message_template",
+          "cli_path": "mail template delete"
+        },
+        {
+          "canonical_path": "mail.get_user_message_template",
+          "cli_path": "mail template get"
+        },
+        {
+          "canonical_path": "mail.list_user_message_templates",
+          "cli_path": "mail template list"
+        },
+        {
+          "canonical_path": "mail.update_user_message_template",
+          "cli_path": "mail template update"
+        },
+        {
+          "canonical_path": "mail.get_thread",
+          "cli_path": "mail thread get"
+        },
+        {
+          "canonical_path": "mail.search_mail_users",
+          "cli_path": "mail user search"
+        }
+      ]
+    },
+    {
+      "id": "minutes",
+      "tools": [
+        {
+          "canonical_path": "minutes.query_minutes_audio_url",
+          "cli_path": "minutes get audio"
+        },
+        {
+          "canonical_path": "minutes.batch_get_minutes_details",
+          "cli_path": "minutes get batch"
+        },
+        {
+          "canonical_path": "minutes.get_minutes_basic_info",
+          "cli_path": "minutes get info"
+        },
+        {
+          "canonical_path": "minutes.get_minutes_keywords",
+          "cli_path": "minutes get keywords"
+        },
+        {
+          "canonical_path": "minutes.get_minutes_ai_summary",
+          "cli_path": "minutes get summary"
+        },
+        {
+          "canonical_path": "minutes.list_minutes_todos",
+          "cli_path": "minutes get todos"
+        },
+        {
+          "canonical_path": "minutes.get_minutes_transcription",
+          "cli_path": "minutes get transcription"
+        },
+        {
+          "canonical_path": "minutes.add_personal_hot_word",
+          "cli_path": "minutes hot-word add"
+        },
+        {
+          "canonical_path": "minutes.list_my_hotwords",
+          "cli_path": "minutes hot-word list"
+        },
+        {
+          "canonical_path": "minutes.list_accessible_minutes",
+          "cli_path": "minutes list all"
+        },
+        {
+          "canonical_path": "minutes.list_by_keyword_and_time_range",
+          "cli_path": "minutes list mine"
+        },
+        {
+          "canonical_path": "minutes.list_shared_minutes",
+          "cli_path": "minutes list shared"
+        },
+        {
+          "canonical_path": "minutes.create_mind_graph",
+          "cli_path": "minutes mind-graph create"
+        },
+        {
+          "canonical_path": "minutes.query_mind_graph_status",
+          "cli_path": "minutes mind-graph status"
+        },
+        {
+          "canonical_path": "minutes.add_member_permission",
+          "cli_path": "minutes permission add"
+        },
+        {
+          "canonical_path": "minutes.remove_member_permission",
+          "cli_path": "minutes permission remove"
+        },
+        {
+          "canonical_path": "minutes.record_pause",
+          "cli_path": "minutes record pause"
+        },
+        {
+          "canonical_path": "minutes.record_resume",
+          "cli_path": "minutes record resume"
+        },
+        {
+          "canonical_path": "minutes.record_start",
+          "cli_path": "minutes record start"
+        },
+        {
+          "canonical_path": "minutes.record_stop",
+          "cli_path": "minutes record stop"
+        },
+        {
+          "canonical_path": "minutes.replace_minutes_text",
+          "cli_path": "minutes replace-text"
+        },
+        {
+          "canonical_path": "minutes.replace_speaker",
+          "cli_path": "minutes speaker replace"
+        },
+        {
+          "canonical_path": "minutes.create_speaker_summary",
+          "cli_path": "minutes speaker summary create"
+        },
+        {
+          "canonical_path": "minutes.get_speaker_summary",
+          "cli_path": "minutes speaker summary get"
+        },
+        {
+          "canonical_path": "minutes.query_user_tag_list",
+          "cli_path": "minutes tag list"
+        },
+        {
+          "canonical_path": "minutes.query_minutes_by_tag_id",
+          "cli_path": "minutes tag query"
+        },
+        {
+          "canonical_path": "minutes.update_minutes_summary",
+          "cli_path": "minutes update summary"
+        },
+        {
+          "canonical_path": "minutes.update_minutes_title",
+          "cli_path": "minutes update title"
+        },
+        {
+          "canonical_path": "minutes.cancel_upload_session",
+          "cli_path": "minutes upload cancel"
+        },
+        {
+          "canonical_path": "minutes.complete_upload_session",
+          "cli_path": "minutes upload complete"
+        },
+        {
+          "canonical_path": "minutes.create_upload_session",
+          "cli_path": "minutes upload create"
+        }
+      ]
+    },
+    {
+      "id": "oa",
+      "tools": [
+        {
+          "canonical_path": "oa.approve_processInstance",
+          "cli_path": "oa approval approve"
+        },
+        {
+          "canonical_path": "oa.get_processInstance_detail",
+          "cli_path": "oa approval detail"
+        },
+        {
+          "canonical_path": "oa.get_noticed_instances",
+          "cli_path": "oa approval list-cc"
+        },
+        {
+          "canonical_path": "oa.get_done_tasks",
+          "cli_path": "oa approval list-executed"
+        },
+        {
+          "canonical_path": "oa.list_user_visible_process",
+          "cli_path": "oa approval list-forms"
+        },
+        {
+          "canonical_path": "oa.list_initiated_instances",
+          "cli_path": "oa approval list-initiated"
+        },
+        {
+          "canonical_path": "oa.list_pending_approvals",
+          "cli_path": "oa approval list-pending"
+        },
+        {
+          "canonical_path": "oa.get_submitted_instances",
+          "cli_path": "oa approval list-submitted"
+        },
+        {
+          "canonical_path": "oa.oa_cc_noticer",
+          "cli_path": "oa approval oa-cc-noticer"
+        },
+        {
+          "canonical_path": "oa.dingflow_comments",
+          "cli_path": "oa approval oa-comments"
+        },
+        {
+          "canonical_path": "oa.get_processInstance_records",
+          "cli_path": "oa approval records"
+        },
+        {
+          "canonical_path": "oa.redirect_task",
+          "cli_path": "oa approval redirect-task"
+        },
+        {
+          "canonical_path": "oa.reject_processInstance",
+          "cli_path": "oa approval reject"
+        },
+        {
+          "canonical_path": "oa.revoke_processInstance",
+          "cli_path": "oa approval revoke"
+        },
+        {
+          "canonical_path": "oa.list_pending_tasks",
+          "cli_path": "oa approval tasks"
+        }
+      ]
+    },
+    {
+      "id": "pat",
+      "tools": [
+        {
+          "canonical_path": "pat.browser_policy",
+          "cli_path": "pat browser-policy"
+        },
+        {
+          "canonical_path": "pat.batch_grant",
+          "cli_path": "pat chmod"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "tools": [
+        {
+          "canonical_path": "report.get_report_entry_details",
+          "cli_path": "report entry get",
+          "aliases": [
+            "report detail"
+          ]
+        },
+        {
+          "canonical_path": "report.get_report_statistics_by_id",
+          "cli_path": "report entry stats",
+          "aliases": [
+            "report stats"
+          ]
+        },
+        {
+          "canonical_path": "report.create_report",
+          "cli_path": "report entry submit",
+          "aliases": [
+            "report create"
+          ]
+        },
+        {
+          "canonical_path": "report.get_received_report_list",
+          "cli_path": "report inbox list",
+          "aliases": [
+            "report list"
+          ]
+        },
+        {
+          "canonical_path": "report.get_send_report_list",
+          "cli_path": "report outbox list",
+          "aliases": [
+            "report created",
+            "report sent"
+          ]
+        },
+        {
+          "canonical_path": "report.get_template_details_by_name",
+          "cli_path": "report template get",
+          "aliases": [
+            "report template detail"
+          ]
+        },
+        {
+          "canonical_path": "report.get_available_report_templates",
+          "cli_path": "report template list"
+        }
+      ]
+    },
+    {
+      "id": "sheet",
+      "tools": [
+        {
+          "canonical_path": "sheet.add_dimension",
+          "cli_path": "sheet add-dimension"
+        },
+        {
+          "canonical_path": "sheet.append_rows",
+          "cli_path": "sheet append"
+        },
+        {
+          "canonical_path": "sheet.batch_update",
+          "cli_path": "sheet batch-update"
+        },
+        {
+          "canonical_path": "sheet.chart_create",
+          "cli_path": "sheet chart create"
+        },
+        {
+          "canonical_path": "sheet.chart_delete",
+          "cli_path": "sheet chart delete"
+        },
+        {
+          "canonical_path": "sheet.chart_list",
+          "cli_path": "sheet chart list"
+        },
+        {
+          "canonical_path": "sheet.chart_update",
+          "cli_path": "sheet chart update"
+        },
+        {
+          "canonical_path": "sheet.create_cond_format",
+          "cli_path": "sheet cond-format create"
+        },
+        {
+          "canonical_path": "sheet.delete_cond_format",
+          "cli_path": "sheet cond-format delete"
+        },
+        {
+          "canonical_path": "sheet.get_cond_format",
+          "cli_path": "sheet cond-format list"
+        },
+        {
+          "canonical_path": "sheet.update_cond_format",
+          "cli_path": "sheet cond-format update"
+        },
+        {
+          "canonical_path": "sheet.copy_sheet",
+          "cli_path": "sheet copy"
+        },
+        {
+          "canonical_path": "sheet.create_workspace_sheet",
+          "cli_path": "sheet create"
+        },
+        {
+          "canonical_path": "sheet.create_float_image",
+          "cli_path": "sheet create-float-image"
+        },
+        {
+          "canonical_path": "sheet.get_range_as_csv",
+          "cli_path": "sheet csv-get"
+        },
+        {
+          "canonical_path": "sheet.set_range_from_csv",
+          "cli_path": "sheet csv-put"
+        },
+        {
+          "canonical_path": "sheet.delete_dimension",
+          "cli_path": "sheet delete-dimension"
+        },
+        {
+          "canonical_path": "sheet.delete_dropdown_lists",
+          "cli_path": "sheet delete-dropdown"
+        },
+        {
+          "canonical_path": "sheet.delete_float_image",
+          "cli_path": "sheet delete-float-image"
+        },
+        {
+          "canonical_path": "sheet.delete_sheet",
+          "cli_path": "sheet delete-sheet"
+        },
+        {
+          "canonical_path": "sheet.submit_export_job",
+          "cli_path": "sheet export"
+        },
+        {
+          "canonical_path": "sheet.filter_clear_criteria",
+          "cli_path": "sheet filter clear-criteria"
+        },
+        {
+          "canonical_path": "sheet.create_filter",
+          "cli_path": "sheet filter create"
+        },
+        {
+          "canonical_path": "sheet.delete_filter",
+          "cli_path": "sheet filter delete"
+        },
+        {
+          "canonical_path": "sheet.get_filter",
+          "cli_path": "sheet filter get"
+        },
+        {
+          "canonical_path": "sheet.sort_filter",
+          "cli_path": "sheet filter sort"
+        },
+        {
+          "canonical_path": "sheet.update_filter",
+          "cli_path": "sheet filter update"
+        },
+        {
+          "canonical_path": "sheet.create_filter_view",
+          "cli_path": "sheet filter-view create"
+        },
+        {
+          "canonical_path": "sheet.delete_filter_view",
+          "cli_path": "sheet filter-view delete"
+        },
+        {
+          "canonical_path": "sheet.filter_view_delete_criteria",
+          "cli_path": "sheet filter-view delete-criteria"
+        },
+        {
+          "canonical_path": "sheet.filter_view_get_criteria",
+          "cli_path": "sheet filter-view get-criteria"
+        },
+        {
+          "canonical_path": "sheet.filter_view_info",
+          "cli_path": "sheet filter-view info"
+        },
+        {
+          "canonical_path": "sheet.get_filter_views",
+          "cli_path": "sheet filter-view list"
+        },
+        {
+          "canonical_path": "sheet.filter_view_list_criteria",
+          "cli_path": "sheet filter-view list-criteria"
+        },
+        {
+          "canonical_path": "sheet.update_filter_view",
+          "cli_path": "sheet filter-view update"
+        },
+        {
+          "canonical_path": "sheet.filter_view_update_criteria",
+          "cli_path": "sheet filter-view update-criteria"
+        },
+        {
+          "canonical_path": "sheet.find_cells",
+          "cli_path": "sheet find"
+        },
+        {
+          "canonical_path": "sheet.get_dropdown_lists",
+          "cli_path": "sheet get-dropdown"
+        },
+        {
+          "canonical_path": "sheet.get_float_image",
+          "cli_path": "sheet get-float-image"
+        },
+        {
+          "canonical_path": "sheet.group_dimension",
+          "cli_path": "sheet group-dimension"
+        },
+        {
+          "canonical_path": "sheet.hide_gridline",
+          "cli_path": "sheet hide-gridline"
+        },
+        {
+          "canonical_path": "sheet.info",
+          "cli_path": "sheet info"
+        },
+        {
+          "canonical_path": "sheet.import",
+          "cli_path": "sheet import create"
+        },
+        {
+          "canonical_path": "sheet.import_get",
+          "cli_path": "sheet import get"
+        },
+        {
+          "canonical_path": "sheet.insert_dimension",
+          "cli_path": "sheet insert-dimension"
+        },
+        {
+          "canonical_path": "sheet.get_all_sheets",
+          "cli_path": "sheet list"
+        },
+        {
+          "canonical_path": "sheet.list_float_images",
+          "cli_path": "sheet list-float-images"
+        },
+        {
+          "canonical_path": "sheet.media_upload",
+          "cli_path": "sheet media-upload"
+        },
+        {
+          "canonical_path": "sheet.merge_cells",
+          "cli_path": "sheet merge-cells"
+        },
+        {
+          "canonical_path": "sheet.move_dimension",
+          "cli_path": "sheet move-dimension"
+        },
+        {
+          "canonical_path": "sheet.create_sheet",
+          "cli_path": "sheet new"
+        },
+        {
+          "canonical_path": "sheet.create_pivot_table",
+          "cli_path": "sheet pivot-table create"
+        },
+        {
+          "canonical_path": "sheet.delete_pivot_table",
+          "cli_path": "sheet pivot-table delete"
+        },
+        {
+          "canonical_path": "sheet.list_pivot_tables",
+          "cli_path": "sheet pivot-table list"
+        },
+        {
+          "canonical_path": "sheet.update_pivot_table",
+          "cli_path": "sheet pivot-table update"
+        },
+        {
+          "canonical_path": "sheet.range_batch_clear",
+          "cli_path": "sheet range batch-clear"
+        },
+        {
+          "canonical_path": "sheet.range_batch_set_style",
+          "cli_path": "sheet range batch-set-style"
+        },
+        {
+          "canonical_path": "sheet.clear_range",
+          "cli_path": "sheet range clear"
+        },
+        {
+          "canonical_path": "sheet.range_copy_to",
+          "cli_path": "sheet range copy-to"
+        },
+        {
+          "canonical_path": "sheet.fill_range",
+          "cli_path": "sheet range fill"
+        },
+        {
+          "canonical_path": "sheet.range_move_to",
+          "cli_path": "sheet range move-to"
+        },
+        {
+          "canonical_path": "sheet.range_read",
+          "cli_path": "sheet range read"
+        },
+        {
+          "canonical_path": "sheet.range_set_style",
+          "cli_path": "sheet range set-style"
+        },
+        {
+          "canonical_path": "sheet.sort_range",
+          "cli_path": "sheet range sort"
+        },
+        {
+          "canonical_path": "sheet.range_update",
+          "cli_path": "sheet range update"
+        },
+        {
+          "canonical_path": "sheet.replace_all",
+          "cli_path": "sheet replace"
+        },
+        {
+          "canonical_path": "sheet.set_dropdown_lists",
+          "cli_path": "sheet set-dropdown"
+        },
+        {
+          "canonical_path": "sheet.show_gridline",
+          "cli_path": "sheet show-gridline"
+        },
+        {
+          "canonical_path": "sheet.table_get",
+          "cli_path": "sheet table-get",
+          "aliases": [
+            "sheet table-read"
+          ]
+        },
+        {
+          "canonical_path": "sheet.table_put",
+          "cli_path": "sheet table-put",
+          "aliases": [
+            "sheet table-write"
+          ]
+        },
+        {
+          "canonical_path": "sheet.template_apply",
+          "cli_path": "sheet template apply"
+        },
+        {
+          "canonical_path": "sheet.template_list",
+          "cli_path": "sheet template list"
+        },
+        {
+          "canonical_path": "sheet.template_search",
+          "cli_path": "sheet template search"
+        },
+        {
+          "canonical_path": "sheet.ungroup_dimension",
+          "cli_path": "sheet ungroup-dimension"
+        },
+        {
+          "canonical_path": "sheet.unmerge_range",
+          "cli_path": "sheet unmerge-cells"
+        },
+        {
+          "canonical_path": "sheet.update_sheet",
+          "cli_path": "sheet update"
+        },
+        {
+          "canonical_path": "sheet.update_dimension",
+          "cli_path": "sheet update-dimension"
+        },
+        {
+          "canonical_path": "sheet.update_float_image",
+          "cli_path": "sheet update-float-image"
+        },
+        {
+          "canonical_path": "sheet.write_image",
+          "cli_path": "sheet write-image"
+        }
+      ]
+    },
+    {
+      "id": "todo",
+      "tools": [
+        {
+          "canonical_path": "todo.add_todo_comment",
+          "cli_path": "todo comment add"
+        },
+        {
+          "canonical_path": "todo.delete_todo_comment",
+          "cli_path": "todo comment delete"
+        },
+        {
+          "canonical_path": "todo.list_todo_comment",
+          "cli_path": "todo comment list"
+        },
+        {
+          "canonical_path": "todo.add_todo_attachment",
+          "cli_path": "todo task add-attachment"
+        },
+        {
+          "canonical_path": "todo.add_task_executors",
+          "cli_path": "todo task add-executor"
+        },
+        {
+          "canonical_path": "todo.add_task_participants",
+          "cli_path": "todo task add-participant"
+        },
+        {
+          "canonical_path": "todo.add_todo_reminder",
+          "cli_path": "todo task add-reminder"
+        },
+        {
+          "canonical_path": "todo.create_personal_todo",
+          "cli_path": "todo task create"
+        },
+        {
+          "canonical_path": "todo.create_personal_sub_todo",
+          "cli_path": "todo task create-sub"
+        },
+        {
+          "canonical_path": "todo.delete_todo",
+          "cli_path": "todo task delete"
+        },
+        {
+          "canonical_path": "todo.update_todo_done_status",
+          "cli_path": "todo task done"
+        },
+        {
+          "canonical_path": "todo.get_todo_detail",
+          "cli_path": "todo task get"
+        },
+        {
+          "canonical_path": "todo.get_user_todos_in_current_org",
+          "cli_path": "todo task list"
+        },
+        {
+          "canonical_path": "todo.remove_task_executors",
+          "cli_path": "todo task remove-executor"
+        },
+        {
+          "canonical_path": "todo.remove_task_participants",
+          "cli_path": "todo task remove-participant"
+        },
+        {
+          "canonical_path": "todo.reset_todo_reminder",
+          "cli_path": "todo task reset-reminder"
+        },
+        {
+          "canonical_path": "todo.update_todo_task",
+          "cli_path": "todo task update"
+        }
+      ]
+    },
+    {
+      "id": "wiki",
+      "tools": [
+        {
+          "canonical_path": "wiki.add_member",
+          "cli_path": "wiki member add"
+        },
+        {
+          "canonical_path": "wiki.list_member",
+          "cli_path": "wiki member list"
+        },
+        {
+          "canonical_path": "wiki.remove_member",
+          "cli_path": "wiki member remove"
+        },
+        {
+          "canonical_path": "wiki.update_member",
+          "cli_path": "wiki member update"
+        },
+        {
+          "canonical_path": "wiki.node_copy",
+          "cli_path": "wiki node copy"
+        },
+        {
+          "canonical_path": "wiki.create_file",
+          "cli_path": "wiki node create"
+        },
+        {
+          "canonical_path": "wiki.delete_document",
+          "cli_path": "wiki node delete"
+        },
+        {
+          "canonical_path": "wiki.list_nodes",
+          "cli_path": "wiki node list"
+        },
+        {
+          "canonical_path": "wiki.node_move",
+          "cli_path": "wiki node move"
+        },
+        {
+          "canonical_path": "wiki.node_search",
+          "cli_path": "wiki node search"
+        },
+        {
+          "canonical_path": "wiki.create_wikiSpace",
+          "cli_path": "wiki space create"
+        },
+        {
+          "canonical_path": "wiki.delete_wikiSpace",
+          "cli_path": "wiki space delete"
+        },
+        {
+          "canonical_path": "wiki.get_wikiSpace",
+          "cli_path": "wiki space get"
+        },
+        {
+          "canonical_path": "wiki.list_wikiSpaces",
+          "cli_path": "wiki space list"
+        },
+        {
+          "canonical_path": "wiki.search_wikiSpaces",
+          "cli_path": "wiki space search"
+        }
+      ]
+    }
+  ]
+}

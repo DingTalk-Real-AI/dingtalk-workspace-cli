@@ -1,0 +1,2351 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/aitable",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "aitable.advperm_disable": {
+      "agent_summary": "关闭高级权限总开关（高危，需确认；全员回退默认权限）。",
+      "use_when": [
+        "用户明确要求关闭高级权限使自定义角色失效时"
+      ],
+      "avoid_when": [
+        "开启用 enable；删单个角色用 role-delete"
+      ],
+      "examples": [
+        "dws aitable advperm disable --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable advperm disable --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.advperm_enable": {
+      "agent_summary": "开启 Base 高级权限总开关。",
+      "use_when": [
+        "需要让自定义角色规则生效时先开启总开关"
+      ],
+      "avoid_when": [
+        "关闭总开关用 advperm disable（高危）；角色 CRUD 用 role-*"
+      ],
+      "examples": [
+        "dws aitable advperm enable --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable advperm enable --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.advperm_role_create": {
+      "agent_summary": "创建自定义角色（可选同时指定 sub-roles）。",
+      "use_when": [
+        "需要新增自定义权限角色时"
+      ],
+      "avoid_when": [
+        "系统角色不可当自定义创建；删除用 role-delete；成员绑定需 Web"
+      ],
+      "examples": [
+        "dws aitable advperm role-create --base-id <BASE_ID> --name \"市场可读\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable advperm role-create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.advperm_role_delete": {
+      "agent_summary": "删除自定义角色（需确认；系统角色禁删；需管理员）。",
+      "use_when": [
+        "用户明确要求删除自定义角色时"
+      ],
+      "avoid_when": [
+        "关闭全部高级权限用 advperm disable；系统角色不可删"
+      ],
+      "examples": [
+        "dws aitable advperm role-delete --base-id <BASE_ID> --role-id <ROLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable advperm role-delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.advperm_role_get": {
+      "agent_summary": "获取单角色完整配置（含 subRoles）。",
+      "use_when": [
+        "已知 roleId，需要看字段/行级规则时"
+      ],
+      "avoid_when": [
+        "列表用 role-list；更新用 role-update"
+      ],
+      "examples": [
+        "dws aitable advperm role-get --base-id <BASE_ID> --role-id <ROLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable advperm role-get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.advperm_role_list": {
+      "agent_summary": "列出 Base 下全部角色（含系统角色与自定义）。",
+      "use_when": [
+        "需要枚举角色并区分 custom vs system_ 时"
+      ],
+      "avoid_when": [
+        "单角色详情用 role-get"
+      ],
+      "examples": [
+        "dws aitable advperm role-list --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable advperm role-list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.advperm_role_update": {
+      "agent_summary": "增量更新自定义角色（PATCH）。",
+      "use_when": [
+        "需要改角色名或合并 sub-roles 时"
+      ],
+      "avoid_when": [
+        "创建用 role-create；删除用 role-delete"
+      ],
+      "examples": [
+        "dws aitable advperm role-update --base-id <BASE_ID> --role-id <ROLE_ID> --name \"新角色名\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable advperm role-update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.attachment_upload": {
+      "agent_summary": "准备 AI 表格附件上传凭证（不要用钉盘 drive）。",
+      "use_when": [
+        "需要把文件作为记录附件字段上传时"
+      ],
+      "avoid_when": [
+        "禁止改用 drive upload；电子表格附件用 sheet media-upload"
+      ],
+      "examples": [
+        "dws aitable attachment upload --base-id BASE_ID --file-name report.xlsx --size 204800"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable attachment upload --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.prepare_attachment_upload"
+      ]
+    },
+    "aitable.base_copy": {
+      "agent_summary": "复制整个 Base 到目标文件夹（可仅结构）。",
+      "use_when": [
+        "需要复制 AI 表格到另一文件夹，可选 --only-struct 时"
+      ],
+      "avoid_when": [
+        "新建空白 Base 用 base create"
+      ],
+      "examples": [
+        "dws aitable base copy --base-id <BASE_ID> --target-folder-id <FOLDER_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base copy --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.copy_base"
+      ]
+    },
+    "aitable.base_create": {
+      "agent_summary": "创建 AI 表格 Base。",
+      "use_when": [
+        "需要新建一份 AI 多维表（able）时"
+      ],
+      "avoid_when": [
+        "创建在线电子表格用 sheet create；复制已有 Base 用 base copy"
+      ],
+      "examples": [
+        "dws aitable base create --name \"项目跟踪\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_base"
+      ]
+    },
+    "aitable.base_delete": {
+      "agent_summary": "删除 AI 表格 Base（不可逆，需确认）。",
+      "use_when": [
+        "用户明确要求永久删除整个 Base 时"
+      ],
+      "avoid_when": [
+        "只删其中一张数据表用 table delete；删记录用 record delete"
+      ],
+      "examples": [
+        "dws aitable base delete --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.delete_base"
+      ]
+    },
+    "aitable.base_get": {
+      "agent_summary": "获取 Base 信息及 tables 目录。",
+      "use_when": [
+        "已知 baseId，需要看 Base 元数据与下属 tableId 时"
+      ],
+      "avoid_when": [
+        "搜 Base 用 search；取字段详情用 field get / table get"
+      ],
+      "examples": [
+        "dws aitable base get --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_base"
+      ]
+    },
+    "aitable.base_get_primary_doc_id": {
+      "agent_summary": "获取某记录主键文档 ID。",
+      "use_when": [
+        "已知 base/table/record，需要取 primaryDoc 的文档 ID 时"
+      ],
+      "avoid_when": [
+        "等价视角也可用 record primary-doc-get；创建主键文档用 record primary-doc-create"
+      ],
+      "examples": [
+        "dws aitable base get-primary-doc-id --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base get-primary-doc-id --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_base_primary_doc_id"
+      ]
+    },
+    "aitable.base_list": {
+      "agent_summary": "列出最近访问的 AI 表格 Base。",
+      "use_when": [
+        "只需浏览最近打开过的 Base 时"
+      ],
+      "avoid_when": [
+        "按名称查找优先 base search；详情用 base get"
+      ],
+      "examples": [
+        "dws aitable base list"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.list_bases"
+      ]
+    },
+    "aitable.base_search": {
+      "agent_summary": "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
+      "use_when": [
+        "用户要找某个 AI 表格/多维表，按名称检索时优先使用"
+      ],
+      "avoid_when": [
+        "只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"
+      ],
+      "examples": [
+        "dws aitable base search --query \"项目\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base search --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.search_bases"
+      ]
+    },
+    "aitable.base_update": {
+      "agent_summary": "更新 Base 名称。",
+      "use_when": [
+        "需要重命名 AI 表格 Base 时"
+      ],
+      "avoid_when": [
+        "改数据表名用 table update；删 Base 用 base delete"
+      ],
+      "examples": [
+        "dws aitable base update --base-id <BASE_ID> --name \"新名称\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable base update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_base"
+      ]
+    },
+    "aitable.chart_create": {
+      "agent_summary": "创建图表。",
+      "use_when": [
+        "在仪表盘下新建图表时；先参考 widgets-example"
+      ],
+      "avoid_when": [
+        "电子表格浮动图用 sheet chart；更新用 chart update"
+      ],
+      "examples": [
+        "dws aitable chart create --base-id BASE_ID --dashboard-id DASHBOARD_ID --config '{\"chartName\":\"销售柱图\",\"chartType\":\"bar\",...}' --layout '{\"x\":0,\"y\":0,\"w\":6,\"h\":4}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable chart create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_chart"
+      ]
+    },
+    "aitable.chart_delete": {
+      "agent_summary": "删除图表（需确认）。",
+      "use_when": [
+        "用户明确要求删除仪表盘中的图表时"
+      ],
+      "avoid_when": [
+        "删整个仪表盘用 dashboard delete"
+      ],
+      "examples": [
+        "dws aitable chart delete --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable chart delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.delete_chart"
+      ]
+    },
+    "aitable.chart_get": {
+      "agent_summary": "获取图表详情。",
+      "use_when": [
+        "已知 dashboardId/chartId，需要看图表配置时"
+      ],
+      "avoid_when": [
+        "列表可从 dashboard get 的 charts[] 取；更新用 chart update"
+      ],
+      "examples": [
+        "dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable chart get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_chart"
+      ]
+    },
+    "aitable.chart_share_get": {
+      "agent_summary": "获取图表分享配置（稳定返回 enabled）。",
+      "use_when": [
+        "查看图表分享开关时"
+      ],
+      "avoid_when": [
+        "仪表盘分享用 dashboard share get"
+      ],
+      "examples": [
+        "dws aitable chart share get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable chart share get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_chart_share"
+      ]
+    },
+    "aitable.chart_share_update": {
+      "agent_summary": "更新图表分享配置。",
+      "use_when": [
+        "开启或关闭图表分享时"
+      ],
+      "avoid_when": [
+        "查询用 share get"
+      ],
+      "examples": [
+        "dws aitable chart share update --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID> --share-type ORG"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable chart share update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_chart_share"
+      ]
+    },
+    "aitable.chart_update": {
+      "agent_summary": "更新图表。",
+      "use_when": [
+        "调整已有图表 widgets/配置时"
+      ],
+      "avoid_when": [
+        "新建用 create；删除用 delete"
+      ],
+      "examples": [
+        "dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --config '{\"chartName\":\"新柱图名\",...}'",
+        "dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --layout '{\"x\":0,\"y\":4,\"w\":12,\"h\":4}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable chart update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_chart"
+      ]
+    },
+    "aitable.chart_widgets_example": {
+      "agent_summary": "查看图表 widgets 配置模板。",
+      "use_when": [
+        "创建/更新图表前需要 widgets JSON 样例时"
+      ],
+      "avoid_when": [
+        "仪表盘配置样例用 dashboard config-example"
+      ],
+      "examples": [
+        "dws aitable chart widgets-example"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable chart widgets-example --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_dashboard_widgets_example"
+      ]
+    },
+    "aitable.create": {
+      "agent_summary": "创建 AI 表格 Base（create 别名入口）。",
+      "use_when": [
+        "走 aitable create 别名新建 Base 时"
+      ],
+      "avoid_when": [
+        "推荐主路径 aitable base create；电子表格用 sheet create"
+      ],
+      "examples": [
+        "dws aitable create --name \"项目跟踪\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_base"
+      ]
+    },
+    "aitable.dashboard_arrange": {
+      "agent_summary": "调整仪表盘布局。",
+      "use_when": [
+        "需要重排仪表盘内组件位置时"
+      ],
+      "avoid_when": [
+        "改仪表盘元数据用 update"
+      ],
+      "examples": [
+        "dws aitable dashboard arrange --base-id <base-id> --dashboard-id <dashboard-id>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard arrange --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.dashboard_config_example": {
+      "agent_summary": "查看仪表盘配置模板。",
+      "use_when": [
+        "创建/更新仪表盘前需要参考配置 JSON 模板时"
+      ],
+      "avoid_when": [
+        "图表 widgets 模板用 chart widgets-example"
+      ],
+      "examples": [
+        "dws aitable dashboard config-example"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard config-example --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_dashboard_config_example"
+      ]
+    },
+    "aitable.dashboard_create": {
+      "agent_summary": "创建仪表盘。",
+      "use_when": [
+        "需要新建仪表盘时"
+      ],
+      "avoid_when": [
+        "配置模板先看 config-example；删仪表盘用 delete"
+      ],
+      "examples": [
+        "dws aitable dashboard create --base-id <BASE_ID> --name \"运营看板\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_dashboard"
+      ]
+    },
+    "aitable.dashboard_delete": {
+      "agent_summary": "删除仪表盘（需确认）。",
+      "use_when": [
+        "用户明确要求删除仪表盘时"
+      ],
+      "avoid_when": [
+        "删图表用 chart delete"
+      ],
+      "examples": [
+        "dws aitable dashboard delete --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.delete_dashboard"
+      ]
+    },
+    "aitable.dashboard_get": {
+      "agent_summary": "获取仪表盘及 charts 列表。",
+      "use_when": [
+        "查看仪表盘配置或拿到 chartId 时"
+      ],
+      "avoid_when": [
+        "先看模板用 dashboard config-example；改配置用 dashboard update"
+      ],
+      "examples": [
+        "dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_dashboard"
+      ]
+    },
+    "aitable.dashboard_share_get": {
+      "agent_summary": "查询仪表盘分享配置（可能 404，按可重试处理）。",
+      "use_when": [
+        "查看仪表盘分享状态时"
+      ],
+      "avoid_when": [
+        "更新用 share update；不要把偶发 404 当参数错误"
+      ],
+      "examples": [
+        "dws aitable dashboard share get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard share get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_dashboard_share"
+      ]
+    },
+    "aitable.dashboard_share_update": {
+      "agent_summary": "更新仪表盘分享配置。",
+      "use_when": [
+        "开启或调整仪表盘组织内分享时"
+      ],
+      "avoid_when": [
+        "查询用 share get"
+      ],
+      "examples": [
+        "dws aitable dashboard share update --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --share-type ORG"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard share update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_dashboard_share"
+      ]
+    },
+    "aitable.dashboard_update": {
+      "agent_summary": "更新仪表盘。",
+      "use_when": [
+        "需要改仪表盘名称或配置时"
+      ],
+      "avoid_when": [
+        "排版布局用 dashboard arrange；删用 delete"
+      ],
+      "examples": [
+        "dws aitable dashboard update --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --name \"新看板\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable dashboard update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_dashboard"
+      ]
+    },
+    "aitable.export_data": {
+      "agent_summary": "导出数据（异步：可能返回 taskId 需继续轮询）。",
+      "use_when": [
+        "需要导出 Base/表/视图数据为文件时；scope=table 需 table-id，scope=view 需 table+view"
+      ],
+      "avoid_when": [
+        "导入用 import；电子表格导出用 sheet export"
+      ],
+      "examples": [
+        "dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --export-format excel"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable export data --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.export_data"
+      ]
+    },
+    "aitable.field_create": {
+      "agent_summary": "创建字段（单字段或批量，单次最多 15 个）。",
+      "use_when": [
+        "需要在已有表中新增一列或多列字段时"
+      ],
+      "avoid_when": [
+        "改字段名/配置用 field update（不可改类型）；删字段用 field delete；调列顺序用 view update"
+      ],
+      "examples": [
+        "dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> --name \"状态\" --type singleSelect"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable field create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_fields"
+      ]
+    },
+    "aitable.field_delete": {
+      "agent_summary": "删除字段（不可逆，需确认）。",
+      "use_when": [
+        "用户明确要求删除某列字段时"
+      ],
+      "avoid_when": [
+        "隐藏表单题目用 form field hide；调视图可见列用 view update"
+      ],
+      "examples": [
+        "dws aitable field delete --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable field delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.delete_field"
+      ]
+    },
+    "aitable.field_get": {
+      "agent_summary": "获取字段完整配置。",
+      "use_when": [
+        "需要字段类型/config（选项、公式等）详情时"
+      ],
+      "avoid_when": [
+        "表级字段目录也可用 table get；创建字段用 field create；不可用本命令改类型"
+      ],
+      "examples": [
+        "dws aitable field get --base-id <BASE_ID> --table-id <TABLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable field get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_fields"
+      ]
+    },
+    "aitable.field_list": {
+      "agent_summary": "获取字段信息（field get 别名）。",
+      "use_when": [
+        "使用 field list 别名读取字段时"
+      ],
+      "avoid_when": [
+        "与 field get 等价"
+      ],
+      "examples": [
+        "dws aitable field list --base-id <BASE_ID> --table-id <TABLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable field list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.field_search_options": {
+      "agent_summary": "搜索单选/多选字段的选项。",
+      "use_when": [
+        "需要模糊查找 singleSelect/multipleSelect 选项值时"
+      ],
+      "avoid_when": [
+        "非选项字段不要用；改选项配置用 field update"
+      ],
+      "examples": [
+        "dws aitable field search-options --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID> --keyword \"进行中\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable field search-options --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.field_update": {
+      "agent_summary": "更新字段名或配置（不可变更字段类型）。",
+      "use_when": [
+        "需要重命名字段或改选项/公式等配置且类型不变时"
+      ],
+      "avoid_when": [
+        "换类型需删重建；删除用 field delete；新增用 field create"
+      ],
+      "examples": [
+        "dws aitable field update --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID> --name \"新字段名\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable field update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_field"
+      ]
+    },
+    "aitable.form_create": {
+      "agent_summary": "创建表单视图（推荐路径；也可用 view create FormDesigner）。",
+      "use_when": [
+        "需要为数据表创建收集表单时"
+      ],
+      "avoid_when": [
+        "改表单标题/描述用 form update；删表单用 form delete"
+      ],
+      "examples": [
+        "dws aitable form create --base-id BASE_ID --table-id TABLE_ID --name \"员工信息收集\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_delete": {
+      "agent_summary": "删除表单（不可逆，需确认）。",
+      "use_when": [
+        "用户明确要求删除表单视图时"
+      ],
+      "avoid_when": [
+        "删普通视图用 view delete；只隐藏题目用 form field hide"
+      ],
+      "examples": [
+        "dws aitable form delete --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_field_hide": {
+      "agent_summary": "切换表单中字段的隐藏/显示。",
+      "use_when": [
+        "需要在表单中隐藏或重新显示某题目时"
+      ],
+      "avoid_when": [
+        "删除真实字段用 field delete；删表单用 form delete"
+      ],
+      "examples": [
+        "dws aitable form field hide --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --field-id <FIELD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form field hide --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_field_list": {
+      "agent_summary": "列出表单字段/题目。",
+      "use_when": [
+        "管理表单题目显隐或属性前先列出字段时"
+      ],
+      "avoid_when": [
+        "更新属性用 form field update；隐藏用 hide"
+      ],
+      "examples": [
+        "dws aitable form field list --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form field list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_field_update": {
+      "agent_summary": "更新表单字段展示属性。",
+      "use_when": [
+        "需要改表单中某字段的展示/必填等属性时"
+      ],
+      "avoid_when": [
+        "隐藏字段用 form field hide；真正增删字段用 field create/delete 或 form questions"
+      ],
+      "examples": [
+        "dws aitable form field update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --field-id <FIELD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form field update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_get": {
+      "agent_summary": "按 viewId 获取表单详情。",
+      "use_when": [
+        "已知表单 viewId，需要看表单配置时"
+      ],
+      "avoid_when": [
+        "列表用 form list；更新用 form update"
+      ],
+      "examples": [
+        "dws aitable form get --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_list": {
+      "agent_summary": "列出表单视图。",
+      "use_when": [
+        "需要枚举某表下的表单时"
+      ],
+      "avoid_when": [
+        "普通视图列表用 view list；详情用 form get"
+      ],
+      "examples": [
+        "dws aitable form list --base-id <BASE_ID> --table-id <TABLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_questions_create": {
+      "agent_summary": "在表单侧创建题目（等价 field create）。",
+      "use_when": [
+        "在表单场景下新增题目/字段时"
+      ],
+      "avoid_when": [
+        "直接字段管理也可用 field create；删题目用 questions delete"
+      ],
+      "examples": [
+        "dws aitable form questions create --base-id BASE_ID --table-id TABLE_ID --fields '[{\"fieldName\":\"姓名\",\"type\":\"text\"},{\"fieldName\":\"邮箱\",\"type\":\"text\"}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form questions create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_questions_delete": {
+      "agent_summary": "删除表单题目（等价 field delete，需确认语义）。",
+      "use_when": [
+        "在表单场景下删除题目/字段时"
+      ],
+      "avoid_when": [
+        "仅隐藏用 form field hide；删整个表单用 form delete"
+      ],
+      "examples": [
+        "dws aitable form questions delete --base-id BASE_ID --table-id TABLE_ID --field-id fldXXX"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form questions delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_share_get": {
+      "agent_summary": "获取表单分享配置。",
+      "use_when": [
+        "查看表单是否已分享及分享类型时"
+      ],
+      "avoid_when": [
+        "更新分享用 form share update"
+      ],
+      "examples": [
+        "dws aitable form share get --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form share get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_share_update": {
+      "agent_summary": "更新表单分享配置。",
+      "use_when": [
+        "开启/调整表单分享时"
+      ],
+      "avoid_when": [
+        "只查询用 share get"
+      ],
+      "examples": [
+        "dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form share update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.form_update": {
+      "agent_summary": "更新表单 title/name/description。",
+      "use_when": [
+        "需要改表单显示名称或说明时"
+      ],
+      "avoid_when": [
+        "改表单字段显隐用 form field；删表单用 form delete"
+      ],
+      "examples": [
+        "dws aitable form update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --title \"新标题\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable form update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.import_data": {
+      "agent_summary": "触发数据导入。",
+      "use_when": [
+        "上传凭证就绪后触发导入任务时"
+      ],
+      "avoid_when": [
+        "导出用 export data"
+      ],
+      "examples": [
+        "dws aitable import data --import-id IMPORT_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable import data --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.import_data"
+      ]
+    },
+    "aitable.import_upload": {
+      "agent_summary": "申请导入文件上传凭证。",
+      "use_when": [
+        "导入前需要上传文件凭证时"
+      ],
+      "avoid_when": [
+        "触发导入用 import data；附件字段上传用 attachment upload"
+      ],
+      "examples": [
+        "dws aitable import upload --base-id BASE_ID --file-name data.xlsx --file-size 204800"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable import upload --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.prepare_import_upload"
+      ]
+    },
+    "aitable.info": {
+      "agent_summary": "获取 Base 信息（info 别名）。",
+      "use_when": [
+        "使用 aitable info 别名查看 Base 时"
+      ],
+      "avoid_when": [
+        "主路径推荐 base get"
+      ],
+      "examples": [
+        "dws aitable info --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable info --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_base"
+      ]
+    },
+    "aitable.list": {
+      "agent_summary": "列出最近 Base（list 别名）。",
+      "use_when": [
+        "使用 aitable list 别名浏览最近 Base 时"
+      ],
+      "avoid_when": [
+        "主路径推荐 base list；按名搜索用 base search"
+      ],
+      "examples": [
+        "dws aitable list"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.list_bases"
+      ]
+    },
+    "aitable.query_records": {
+      "agent_summary": "查询/搜索记录（filters/sort/分页/--all；cells 键为 fieldId）。",
+      "use_when": [
+        "查看、筛选、全文搜索或遍历记录时的主入口"
+      ],
+      "avoid_when": [
+        "已知 recordId 窄查可用 record get；空行用 query-empty；写入用 create/update；电子表格单元格用 sheet"
+      ],
+      "examples": [
+        "dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record query --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.query_records"
+      ]
+    },
+    "aitable.record_batch_update": {
+      "agent_summary": "把同一份 cells 批量应用到多条 recordIds。",
+      "use_when": [
+        "多条记录要写入相同字段补丁时"
+      ],
+      "avoid_when": [
+        "各记录 cells 不同用 record update；新建用 create"
+      ],
+      "examples": [
+        "dws aitable record batch-update --base-id BASE_ID --table-id TABLE_ID --record-ids rec1,rec2 --cells '{\"fldXXX\":\"值\"}'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record batch-update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.record_create": {
+      "agent_summary": "新增记录（cells 的 key 必须是 fieldId）。",
+      "use_when": [
+        "需要插入新行数据时"
+      ],
+      "avoid_when": [
+        "更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"
+      ],
+      "examples": [
+        "dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"cells\":{\"fldXXX\":\"值\"}}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_records"
+      ]
+    },
+    "aitable.record_delete": {
+      "agent_summary": "删除记录（不可逆，需确认）。",
+      "use_when": [
+        "用户明确要求删除一条或多条记录时"
+      ],
+      "avoid_when": [
+        "先 query 确认目标；删字段/表用 field/table delete"
+      ],
+      "examples": [
+        "dws aitable record delete --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids <ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.delete_records"
+      ]
+    },
+    "aitable.record_get": {
+      "agent_summary": "按 recordIds 批量取记录（最多 100）。",
+      "use_when": [
+        "已有 recordId 列表，只需按 ID 取字段值时"
+      ],
+      "avoid_when": [
+        "条件筛选/排序/全文搜索用 record query；不要对本命令传 filters"
+      ],
+      "examples": [
+        "dws aitable record get --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids <ID1,ID2>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.record_history_list": {
+      "agent_summary": "查询单条记录变更历史。",
+      "use_when": [
+        "需要审计某条记录的历史变更时"
+      ],
+      "avoid_when": [
+        "当前字段值用 record get/query"
+      ],
+      "examples": [
+        "dws aitable record history-list --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record history-list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.record_primary_doc_create": {
+      "agent_summary": "为记录创建主键文档（幂等；field 须 primaryDoc 类型）。",
+      "use_when": [
+        "记录尚无主键文档，需要创建时"
+      ],
+      "avoid_when": [
+        "仅查询用 primary-doc-get"
+      ],
+      "examples": [
+        "dws aitable record primary-doc-create --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID> --field-id <FIELD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record primary-doc-create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.record_primary_doc_get": {
+      "agent_summary": "查询记录主键文档 nodeId。",
+      "use_when": [
+        "需要打开记录关联的主键文档时"
+      ],
+      "avoid_when": [
+        "无文档时会报错；创建用 primary-doc-create"
+      ],
+      "examples": [
+        "dws aitable record primary-doc-get --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record primary-doc-get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.record_query_empty": {
+      "agent_summary": "查询完全未填用户字段的空行。",
+      "use_when": [
+        "需要找出空白记录以便清理时"
+      ],
+      "avoid_when": [
+        "普通条件查询用 record query"
+      ],
+      "examples": [
+        "dws aitable record query-empty --base-id <BASE_ID> --table-id <TABLE_ID> --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record query-empty --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.record_share_url": {
+      "agent_summary": "批量获取记录分享链接（最多 20）。",
+      "use_when": [
+        "需要生成记录分享 URL 时"
+      ],
+      "avoid_when": [
+        "查记录内容用 query/get"
+      ],
+      "examples": [
+        "dws aitable record share-url --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids id1,id2"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record share-url --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.record_update": {
+      "agent_summary": "更新已有记录字段（先 query 拿 recordId；只传需改字段）。",
+      "use_when": [
+        "需要修改已有记录若干字段时"
+      ],
+      "avoid_when": [
+        "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+      ],
+      "examples": [
+        "dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"recordId\":\"recXXX\",\"cells\":{\"fldYYY\":\"新值\"}}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_records"
+      ]
+    },
+    "aitable.record_upsert": {
+      "agent_summary": "批量创建或更新（有 recordId 更新，无则创建）。",
+      "use_when": [
+        "一批记录中部分新建部分更新时"
+      ],
+      "avoid_when": [
+        "纯新建用 create；纯更新用 update"
+      ],
+      "examples": [
+        "dws aitable record upsert --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"cells\":{\"fldXXX\":\"值\"}}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable record upsert --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.search": {
+      "agent_summary": "搜索 Base（search 别名）。",
+      "use_when": [
+        "使用 aitable search 别名按名称找 Base 时"
+      ],
+      "avoid_when": [
+        "主路径推荐 base search"
+      ],
+      "examples": [
+        "dws aitable search --query \"项目\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable search --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.search_bases"
+      ]
+    },
+    "aitable.section_create": {
+      "agent_summary": "在 Base 导航树创建文件夹。",
+      "use_when": [
+        "需要组织 table/dashboard/表单等节点到文件夹时"
+      ],
+      "avoid_when": [
+        "移动已有节点用 move-node；删文件夹用 section delete"
+      ],
+      "examples": [
+        "dws aitable section create --base-id <BASE_ID> --name \"我的文件夹\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable section create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.section_delete": {
+      "agent_summary": "删除文件夹（运行时无 confirmDelete；调用前自行确认）。",
+      "use_when": [
+        "需要删除导航文件夹时；可先 list-empty 确认是否为空"
+      ],
+      "avoid_when": [
+        "删数据表/仪表盘用 table/dashboard delete，不是 section delete"
+      ],
+      "examples": [
+        "dws aitable section delete --base-id <BASE_ID> --section-id <SECTION_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable section delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.section_list_empty": {
+      "agent_summary": "列出空文件夹。",
+      "use_when": [
+        "清理导航树前查找空文件夹时"
+      ],
+      "avoid_when": [
+        "列出全部节点用 list-nodes"
+      ],
+      "examples": [
+        "dws aitable section list-empty --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable section list-empty --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.section_list_nodes": {
+      "agent_summary": "列出 Base 导航全部节点。",
+      "use_when": [
+        "move-node/reorder 前需要 nodeId 与 parentSectionId 时"
+      ],
+      "avoid_when": [
+        "只找空文件夹用 list-empty"
+      ],
+      "examples": [
+        "dws aitable section list-nodes --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable section list-nodes --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.section_move_node": {
+      "agent_summary": "移动导航节点到新父文件夹。",
+      "use_when": [
+        "需要把 table/dashboard/文件夹等挪到另一目录时"
+      ],
+      "avoid_when": [
+        "仅同级改序对文件夹可用 reorder"
+      ],
+      "examples": [
+        "dws aitable section move-node --base-id <BASE_ID> --node-id <NODE_ID> --new-parent-section-id <SECTION_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable section move-node --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.section_rename": {
+      "agent_summary": "重命名文件夹。",
+      "use_when": [
+        "需要改导航文件夹名称时"
+      ],
+      "avoid_when": [
+        "调整顺序用 reorder；跨父级移动用 move-node"
+      ],
+      "examples": [
+        "dws aitable section rename --base-id <BASE_ID> --section-id <SECTION_ID> --new-name \"新名称\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable section rename --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.section_reorder": {
+      "agent_summary": "在当前父文件夹下调整文件夹顺序。",
+      "use_when": [
+        "需要改同级文件夹展示顺序时"
+      ],
+      "avoid_when": [
+        "跨父级移动用 move-node"
+      ],
+      "examples": [
+        "dws aitable section reorder --base-id <BASE_ID> --section-id <SECTION_ID> --target-index 0"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable section reorder --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.table_create": {
+      "agent_summary": "在 Base 下创建数据表（可带 fields，空数组会补标题列）。",
+      "use_when": [
+        "需要在已有 Base 中新建一张数据表时"
+      ],
+      "avoid_when": [
+        "新建整个 Base 用 base create；只加字段用 field create"
+      ],
+      "examples": [
+        "dws aitable table create --base-id <BASE_ID> --name \"任务\" --fields '[]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable table create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_table"
+      ]
+    },
+    "aitable.table_delete": {
+      "agent_summary": "删除数据表（不可逆，需确认）。",
+      "use_when": [
+        "用户明确要求删除整张数据表时"
+      ],
+      "avoid_when": [
+        "只删字段用 field delete；只删记录用 record delete"
+      ],
+      "examples": [
+        "dws aitable table delete --base-id <BASE_ID> --table-id <TABLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable table delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.delete_table"
+      ]
+    },
+    "aitable.table_get": {
+      "agent_summary": "获取数据表结构（字段+视图目录）。",
+      "use_when": [
+        "需要字段 fieldId 或视图目录以继续 record/field 操作时优先 table get"
+      ],
+      "avoid_when": [
+        "只关心 Base 级 tables 列表可先 base get；字段完整配置也可用 field get"
+      ],
+      "examples": [
+        "dws aitable table get --base-id BASE_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable table get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_tables"
+      ]
+    },
+    "aitable.table_list": {
+      "agent_summary": "获取数据表（table get 别名）。",
+      "use_when": [
+        "使用 table list 别名读取表结构时"
+      ],
+      "avoid_when": [
+        "与 table get 等价；写表用 table create/update/delete"
+      ],
+      "examples": [
+        "dws aitable table list --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable table list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_tables"
+      ]
+    },
+    "aitable.table_update": {
+      "agent_summary": "重命名数据表。",
+      "use_when": [
+        "需要修改数据表名称时"
+      ],
+      "avoid_when": [
+        "改字段用 field update；删表用 table delete；调字段顺序用 view update visibleFieldIds"
+      ],
+      "examples": [
+        "dws aitable table update --base-id <BASE_ID> --table-id <TABLE_ID> --name \"新表名\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable table update --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_table"
+      ]
+    },
+    "aitable.template_search": {
+      "agent_summary": "搜索 AI 表格模板。",
+      "use_when": [
+        "按关键词找 AI 表格模板时"
+      ],
+      "avoid_when": [
+        "电子表格模板用 sheet template search"
+      ],
+      "examples": [
+        "dws aitable template search --query \"项目管理\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable template search --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.search_templates"
+      ]
+    },
+    "aitable.view_create": {
+      "agent_summary": "创建视图（Grid/Kanban/Gantt/Calendar/Gallery/FormDesigner）。",
+      "use_when": [
+        "需要新建某种类型的视图时；创建表单也可用 form create"
+      ],
+      "avoid_when": [
+        "更新视图配置用对应 view update-*；删除用 view delete"
+      ],
+      "examples": [
+        "dws aitable view create --base-id <BASE_ID> --table-id <TABLE_ID> --view-type Grid --name \"默认表格\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view create --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.create_view"
+      ]
+    },
+    "aitable.view_delete": {
+      "agent_summary": "删除视图（不可删最后一个/锁定视图；需确认）。",
+      "use_when": [
+        "用户明确要求删除某个视图时"
+      ],
+      "avoid_when": [
+        "删表单视图也可用 form delete；锁定视图需先解锁"
+      ],
+      "examples": [
+        "dws aitable view delete --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view delete --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.delete_view"
+      ]
+    },
+    "aitable.view_duplicate": {
+      "agent_summary": "复制视图。",
+      "use_when": [
+        "需要基于现有视图复制一份时"
+      ],
+      "avoid_when": [
+        "新建空白视图用 view create"
+      ],
+      "examples": [
+        "dws aitable view duplicate --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view duplicate --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.view_get_aggregate": {
+      "agent_summary": "读取视图聚合配置",
+      "use_when": [
+        "查看视图聚合指标时"
+      ],
+      "avoid_when": [
+        "修改用 view update aggregate"
+      ],
+      "examples": [
+        "dws aitable view get aggregate --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get aggregate --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_card": {
+      "agent_summary": "读取卡片视图配置",
+      "use_when": [
+        "查看卡片视图展示配置时"
+      ],
+      "avoid_when": [
+        "修改用 update card"
+      ],
+      "examples": [
+        "dws aitable view get card --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get card --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_field_widths": {
+      "agent_summary": "读取 Grid 列宽",
+      "use_when": [
+        "查看字段列宽映射时"
+      ],
+      "avoid_when": [
+        "修改用 update field-widths"
+      ],
+      "examples": [
+        "dws aitable view get field-widths --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get field-widths --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_fill_color_rule": {
+      "agent_summary": "读取填充色规则",
+      "use_when": [
+        "查看条件填色规则时"
+      ],
+      "avoid_when": [
+        "修改用 update fill-color-rule"
+      ],
+      "examples": [
+        "dws aitable view get fill-color-rule --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get fill-color-rule --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_filter": {
+      "agent_summary": "读取视图筛选",
+      "use_when": [
+        "查看视图 filter 规则时"
+      ],
+      "avoid_when": [
+        "修改用 update filter；记录级临时筛选用 record query --filters"
+      ],
+      "examples": [
+        "dws aitable view get filter --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get filter --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_frozen_cols": {
+      "agent_summary": "读取冻结列",
+      "use_when": [
+        "查看冻结列数时"
+      ],
+      "avoid_when": [
+        "修改用 update frozen-cols"
+      ],
+      "examples": [
+        "dws aitable view get frozen-cols --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get frozen-cols --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.view_get_group": {
+      "agent_summary": "读取视图分组",
+      "use_when": [
+        "查看分组规则时"
+      ],
+      "avoid_when": [
+        "修改用 update group"
+      ],
+      "examples": [
+        "dws aitable view get group --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get group --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_lock": {
+      "agent_summary": "读取视图锁状态",
+      "use_when": [
+        "确认视图是否锁定时"
+      ],
+      "avoid_when": [
+        "加锁用 view lock"
+      ],
+      "examples": [
+        "dws aitable view get lock --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get lock --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.view_get_row_height": {
+      "agent_summary": "读取行高",
+      "use_when": [
+        "查看行高配置时"
+      ],
+      "avoid_when": [
+        "修改用 update row-height"
+      ],
+      "examples": [
+        "dws aitable view get row-height --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get row-height --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.view_get_sort": {
+      "agent_summary": "读取视图排序",
+      "use_when": [
+        "查看排序规则时"
+      ],
+      "avoid_when": [
+        "修改用 update sort；临时排序可用 record query --sort"
+      ],
+      "examples": [
+        "dws aitable view get sort --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get sort --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_timebar": {
+      "agent_summary": "读取时间条配置",
+      "use_when": [
+        "查看甘特/时间条配置时"
+      ],
+      "avoid_when": [
+        "修改用 update timebar"
+      ],
+      "examples": [
+        "dws aitable view get timebar --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get timebar --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_get_visible_fields": {
+      "agent_summary": "读取可见字段及顺序",
+      "use_when": [
+        "查看视图可见列顺序时"
+      ],
+      "avoid_when": [
+        "调整顺序/显隐用 update visible-fields（这是调字段顺序的入口）"
+      ],
+      "examples": [
+        "dws aitable view get visible-fields --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view get visible-fields --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_list": {
+      "agent_summary": "列出或获取视图配置。",
+      "use_when": [
+        "需要枚举视图或读取视图配置时"
+      ],
+      "avoid_when": [
+        "表单视图列表可用 form list；创建视图用 view create"
+      ],
+      "examples": [
+        "dws aitable view list --base-id <BASE_ID> --table-id <TABLE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.get_views"
+      ]
+    },
+    "aitable.view_lock": {
+      "agent_summary": "锁定或管理视图锁。",
+      "use_when": [
+        "需要锁定视图防止他人改配置时"
+      ],
+      "avoid_when": [
+        "查看锁状态用 view get lock"
+      ],
+      "examples": [
+        "dws aitable view lock --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view lock --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.view_update_aggregate": {
+      "agent_summary": "更新视图聚合配置",
+      "use_when": [
+        "需要改聚合指标时"
+      ],
+      "avoid_when": [
+        "只读用 get aggregate"
+      ],
+      "examples": [
+        "dws aitable view update aggregate --view-id GRID_ID --field-id fldX --action SUM"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update aggregate --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_card": {
+      "agent_summary": "更新卡片视图配置",
+      "use_when": [
+        "调整卡片封面/标题字段时"
+      ],
+      "avoid_when": [
+        "只读用 get card"
+      ],
+      "examples": [
+        "dws aitable view update card --view-id KANBAN_ID --cover-field-id fldAttachment --cover-resize-mode contain",
+        "dws aitable view update card --view-id KANBAN_ID --no-cover"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update card --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_field_widths": {
+      "agent_summary": "更新 Grid 列宽",
+      "use_when": [
+        "调整列宽时"
+      ],
+      "avoid_when": [
+        "只读用 get field-widths"
+      ],
+      "examples": [
+        "dws aitable view update field-widths --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --width 200"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update field-widths --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_fill_color_rule": {
+      "agent_summary": "更新填充色规则",
+      "use_when": [
+        "设置视图条件填色时"
+      ],
+      "avoid_when": [
+        "只读用 get fill-color-rule"
+      ],
+      "examples": [
+        "dws aitable view update fill-color-rule --view-id GRID_ID --json '[]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update fill-color-rule --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.set_view_fill_color_rule"
+      ]
+    },
+    "aitable.view_update_filter": {
+      "agent_summary": "更新视图筛选",
+      "use_when": [
+        "固化视图筛选条件时"
+      ],
+      "avoid_when": [
+        "一次性查询过滤用 record query --filters"
+      ],
+      "examples": [
+        "dws aitable view update filter --view-id VIEW_ID --json '[{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update filter --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_frozen_cols": {
+      "agent_summary": "更新冻结列",
+      "use_when": [
+        "设置冻结列数时"
+      ],
+      "avoid_when": [
+        "只读用 get frozen-cols"
+      ],
+      "examples": [
+        "dws aitable view update frozen-cols --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --count 1"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update frozen-cols --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.view_update_group": {
+      "agent_summary": "更新视图分组",
+      "use_when": [
+        "设置分组字段时"
+      ],
+      "avoid_when": [
+        "只读用 get group"
+      ],
+      "examples": [
+        "dws aitable view update group --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update group --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_name": {
+      "agent_summary": "重命名视图",
+      "use_when": [
+        "只需改视图名称时"
+      ],
+      "avoid_when": [
+        "改筛选/排序等用对应 update-*"
+      ],
+      "examples": [
+        "dws aitable view update name --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --name \"新视图名\""
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update name --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_row_height": {
+      "agent_summary": "更新行高",
+      "use_when": [
+        "调整视图行高时"
+      ],
+      "avoid_when": [
+        "只读用 get row-height"
+      ],
+      "examples": [
+        "dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height 32"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update row-height --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.view_update_sort": {
+      "agent_summary": "更新视图排序",
+      "use_when": [
+        "固化视图排序时"
+      ],
+      "avoid_when": [
+        "一次性查询排序用 record query --sort"
+      ],
+      "examples": [
+        "dws aitable view update sort --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update sort --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_timebar": {
+      "agent_summary": "更新时间条配置",
+      "use_when": [
+        "调整甘特时间条字段时"
+      ],
+      "avoid_when": [
+        "只读用 get timebar"
+      ],
+      "examples": [
+        "dws aitable view update timebar --view-id GANTT_ID --start-field fldStart --end-field fldEnd --timeline-scale month",
+        "dws aitable view update timebar --view-id GANTT_ID --official-holiday=true"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update timebar --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.view_update_visible_fields": {
+      "agent_summary": "更新可见字段列表与顺序",
+      "use_when": [
+        "用户要移动字段/调整列顺序时必须走本命令"
+      ],
+      "avoid_when": [
+        "没有独立 field reorder；只读用 get visible-fields；首列字段须保留第一位"
+      ],
+      "examples": [
+        "dws aitable view update visible-fields --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-ids fld1,fld2,fld3"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable view update visible-fields --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:aitable.update_view"
+      ]
+    },
+    "aitable.workflow_create": {
+      "agent_summary": "创建并发布 AI 表格自动化工作流。",
+      "use_when": [
+        "用户明确要求在已知 Base 中创建自动化，且已准备完整 workflow-dsl/v1 定义时"
+      ],
+      "avoid_when": [
+        "已有工作流要修改时用 workflow update；仅启停已有工作流用 enable/disable；请求结果不确定时先 list 核对，避免非幂等重复创建"
+      ],
+      "examples": [
+        "dws aitable workflow create --base-id <BASE_ID> --dsl @workflow.json --locale zh-CN"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#aitable.workflow_create",
+        "cobra-help:dws aitable workflow create --help",
+        "skills/mono/references/products/aitable/aitable-workflow.md"
+      ]
+    },
+    "aitable.workflow_disable": {
+      "agent_summary": "禁用工作流（高危，需确认；status 变 STOP）。",
+      "use_when": [
+        "用户明确要求停止某自动化工作流时"
+      ],
+      "avoid_when": [
+        "启用用 enable；不能通过 CLI 删除工作流"
+      ],
+      "examples": [
+        "dws aitable workflow disable --base-id <BASE_ID> --workflow-id <FLOW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable workflow disable --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.workflow_enable": {
+      "agent_summary": "启用工作流。",
+      "use_when": [
+        "需要重新打开已停止的自动化工作流时"
+      ],
+      "avoid_when": [
+        "禁用用 workflow disable（高危，需确认）"
+      ],
+      "examples": [
+        "dws aitable workflow enable --base-id <BASE_ID> --workflow-id <FLOW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable workflow enable --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.workflow_get": {
+      "agent_summary": "获取工作流详情（含 flowSchema）。",
+      "use_when": [
+        "已知 workflow-id，需要看工作流定义时"
+      ],
+      "avoid_when": [
+        "列表用 list；启停用 enable/disable"
+      ],
+      "examples": [
+        "dws aitable workflow get --base-id <BASE_ID> --workflow-id <FLOW_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable workflow get --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.workflow_list": {
+      "agent_summary": "列出 Base 下自动化工作流。",
+      "use_when": [
+        "查看有哪些工作流及 status/flowId 时"
+      ],
+      "avoid_when": [
+        "CLI 不能新建/修改/删除工作流；启用/禁用用 enable/disable"
+      ],
+      "examples": [
+        "dws aitable workflow list --base-id <BASE_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws aitable workflow list --help",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.workflow_update": {
+      "agent_summary": "用完整 DSL 更新并发布已有 AI 表格自动化工作流。",
+      "use_when": [
+        "用户明确要求修改已知工作流，且已先留底当前详情并准备完整 workflow-dsl/v1 目标定义时"
+      ],
+      "avoid_when": [
+        "新建工作流用 create；只改变运行状态用 enable/disable；不要把局部 patch 或 workflow get 返回的 flowSchema 直接当作 DSL"
+      ],
+      "examples": [
+        "dws aitable workflow update --base-id <BASE_ID> --workflow-id <FLOW_ID> --dsl @workflow.json --locale zh-CN"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#aitable.workflow_update",
+        "cobra-help:dws aitable workflow update --help",
+        "skills/mono/references/products/aitable/aitable-workflow.md"
+      ]
+    }
+  },
+  "products": {
+    "aitable": {
+      "agent_summary": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+      "use_when": [
+        "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+      ],
+      "avoid_when": [
+        "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+      ],
+      "reviewed": true,
+      "review_reason": "人工结合实时 MCP/Skill/Cobra 审阅产品级选择边界。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "skills/mono/references/products/aitable.md",
+        "dws-schema-live:product-index"
+      ]
+    }
+  }
+}

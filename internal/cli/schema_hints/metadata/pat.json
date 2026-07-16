@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/pat",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "pat.batch_grant": {
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "interface_ref": {
+        "product_id": "pat",
+        "rpc_name": "pat.batch_grant"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "runtime_gate": "typed_yes"
+    },
+    "pat.browser_policy": {
+      "effect": "write",
+      "risk": "medium",
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+      "reviewed": true
+    }
+  }
+}

@@ -65,7 +65,10 @@ func TestValidate_ForceRequiresForeground(t *testing.T) {
 	if !errors.Is(err, ErrForceRequiresForeground) {
 		t.Fatalf("err = %v, want ErrForceRequiresForeground", err)
 	}
-	if !strings.Contains(err.Error(), "event stop && dws event consume") {
+	for _, recoveryStep := range []string{"event stop --all --dry-run", "event stop --all --yes", "event consume"} {
+		if strings.Contains(err.Error(), recoveryStep) {
+			continue
+		}
 		t.Errorf("error message must include the recovery hint, got: %s", err.Error())
 	}
 

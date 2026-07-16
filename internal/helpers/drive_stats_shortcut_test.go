@@ -96,7 +96,7 @@ func TestDriveStatsMapsOpenToolArguments(t *testing.T) {
 func TestDriveShortcutMapsOptionalTargetArguments(t *testing.T) {
 	caller := &driveStatsShortcutCaller{}
 	if err := executeDriveStatsShortcutCommand(t, caller,
-		"shortcut", "--file-id", "source-1", "--folder", "folder-1", "--workspace", "workspace-1"); err != nil {
+		"shortcut", "--file-id", "source-1", "--parent-node-id", "folder-1", "--workspace", "workspace-1"); err != nil {
 		t.Fatalf("drive shortcut returned error: %v", err)
 	}
 	want := driveStatsShortcutCall{

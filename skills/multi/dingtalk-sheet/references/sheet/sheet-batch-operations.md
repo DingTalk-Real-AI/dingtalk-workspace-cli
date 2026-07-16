@@ -7,6 +7,7 @@
 1. **目标 range 必须落在用户授权范围内**：除用户明示要修改的区域外，子操作禁止扩张到无关单元格 / 列 / 工作表。规划 range 时先确认每个子操作的边界。
 2. **批次完成后必须回读校验**：整个 `batch-update` 执行成功后，用 `range read` 或 `csv-get` 抽样回读受影响区域，至少校验 3-5 个代表性单元格（首 / 中 / 末），与本地预先计算的预期值对照。
 3. **预期条数前置断言**：涉及"批量填充 N 行"或"对 M 个区域分别写入"时，先把 N、M 硬编码进代码，回读后断言实际等于预期；不一致就再发一轮 `batch-update` 补齐，禁止交付半成品。
+4. **统一确认语义**：`range batch-clear` 和 `batch-update` 都可删除内容或结构；先用 `--dry-run` 预览，真实执行必须获得用户确认后追加 `--yes`。
 
 ## 使用场景
 
@@ -49,9 +50,9 @@
 Usage:
   dws sheet range batch-clear [flags]
 Example:
-  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A1:B3","Sheet2!C1:D5"]'
-  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A1:Z1000"]' --type all
-  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A2:A100","Sheet1!C2:C100"]' --type format
+  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A1:B3","Sheet2!C1:D5"]' --yes
+  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A1:Z1000"]' --type all --yes
+  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A2:A100","Sheet1!C2:C100"]' --type format --yes
 Flags:
       --node string            表格文档 ID 或 URL (必填)
       --ranges string          目标区域 JSON 数组，每项带 sheet 前缀 (必填)
@@ -72,8 +73,8 @@ Example:
     {"toolName":"range update","input":{"sheet-id":"Sheet1","range":"A1","values":[[{"type":"text","text":"hello"}]]}},
     {"toolName":"merge-cells","input":{"sheet-id":"Sheet1","range":"A1:B1","merge-type":"mergeAll"}},
     {"toolName":"update-dimension","input":{"sheet-id":"Sheet1","dimension":"ROWS","start-index":"1","length":1,"pixel-size":40}}
-  ]'
-  dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]'
+  ]' --yes
+  dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]' --yes
 Flags:
       --node string            表格文档 ID 或 URL (必填)
       --operations string      操作数组 JSON (必填，每项 {toolName, input})
@@ -89,6 +90,7 @@ Notes:
   - operations 最多 20 条
   - 当需要对多个区域执行相同清除时，优先使用 `range batch-clear`（更简洁）
   - 典型场景：先插入行列再写入数据、先清除再写入、批量合并+调整行高列宽
+  - 真实执行必须获得用户确认后加 --yes；--dry-run 不需要 --yes
 ```
 
 ### 子操作定位规则

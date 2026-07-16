@@ -1,0 +1,641 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/drive",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "drive.add_permission": {
+      "agent_summary": "为文档空间节点添加协作成员并授予指定角色",
+      "use_when": [
+        "给单篇文档/文件夹/文件做节点级授权（USER + 角色 MANAGER/EDITOR/DOWNLOADER/READER）时",
+        "用户说把某篇文档分享给某人看/可编辑时（含「我的文档」下的节点）"
+      ],
+      "avoid_when": [
+        "给整个知识库加成员改用 dws wiki member add（「我的文档」不支持容器成员）",
+        "只查已有权限改用 dws drive permission list",
+        "改角色/移除分别用 permission update / remove"
+      ],
+      "examples": [
+        "dws drive permission add --node <ID> --users uid1,uid2 --role READER --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.add_permission",
+        "cobra-help:dws drive permission add",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.add_permission",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.add_permission"
+      ]
+    },
+    "drive.commit_upload": {
+      "agent_summary": "提交文件上传",
+      "use_when": [
+        "手动三步上传的最后一步：已 PUT 到 OSS，用 upload-info 返回的 uploadId 提交入库时"
+      ],
+      "avoid_when": [
+        "普通上传请用 dws drive upload",
+        "尚未 PUT 成功或 uploadId 过期时不要 commit；需重新 upload-info"
+      ],
+      "examples": [
+        "dws drive commit --file-name \"report.pdf\" --file-size 102400 --upload-id <UPLOAD_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.commit_upload",
+        "cobra-help:dws drive commit",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.commit_upload",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#drive.commit_upload",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.commit_upload"
+      ]
+    },
+    "drive.copy_document": {
+      "agent_summary": "将文件或文档复制到目标文件夹或知识库（保留原位置；默认「我的文档」）",
+      "use_when": [
+        "用户要复制/拷贝一份文件或文档到新位置，且原位置仍需保留副本时（copy≠move）",
+        "目标是指定文件夹：传 --folder <目标文件夹 dentryUuid/fileId>",
+        "目标是知识库根目录：只传 --workspace <workspaceId 或知识库 URL>，不传 --folder",
+        "用户未指定目标时：默认落到当前组织「我的文档」；若需钉盘「我的文件」根目录，先 wiki space list --type mySpace 取 rootFolderId 再 --folder",
+        "跨钉盘 space 复制到子文件夹：先 list 取目标文件夹 fileId，再 --folder 传入"
+      ],
+      "avoid_when": [
+        "用户意图是搬走/迁移且原位置不再保留时改用 dws drive move（move 需更高源权限）",
+        "只要快捷方式入口、不要独立副本时改用 dws drive shortcut",
+        "已在明确知识库上下文内复制节点且需带 --workspace/--node 的 wiki 入口时可用 dws wiki node copy；跨产品默认用本命令",
+        "目标文件夹或知识库尚未确认时不要复制"
+      ],
+      "examples": [
+        "dws drive copy --node <源dentryUuid> --folder <目标文件夹fileId> --format json",
+        "dws drive copy --node <源dentryUuid> --workspace <TARGET_WS_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.copy_document",
+        "cobra-help:dws drive copy",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.copy_document",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.copy_document"
+      ]
+    },
+    "drive.create_folder": {
+      "agent_summary": "创建文件夹",
+      "use_when": [
+        "用户要在钉盘/「我的文件」下新建普通文件夹时",
+        "已知父目录 dentryUuid，要在其下建子目录时"
+      ],
+      "avoid_when": [
+        "要在知识库内建文件夹改用 dws wiki node create --type folder --workspace <id>",
+        "要创建在线文档(adoc)改用 dws doc create 或 wiki node create --type adoc"
+      ],
+      "examples": [
+        "dws drive mkdir --name \"项目资料\" --format json",
+        "dws drive mkdir --name \"子目录\" --folder <dentryUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.create_folder",
+        "cobra-help:dws drive mkdir",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.create_folder",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#drive.create_folder",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.create_folder"
+      ]
+    },
+    "drive.create_shortcut": {
+      "agent_summary": "为钉盘或文档空间中的现有节点创建快捷方式。",
+      "use_when": [
+        "用户要给已有节点建快捷方式/软链接到目标文件夹或知识库时"
+      ],
+      "avoid_when": [
+        "要复制一份独立副本改用 dws drive copy（copy≠shortcut）",
+        "要移动原文件改用 dws drive move"
+      ],
+      "examples": [
+        "dws drive shortcut --node <SOURCE_NODE> --format json",
+        "dws drive shortcut --node <SOURCE_NODE> --folder <TARGET_FOLDER> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.create_shortcut",
+        "cobra-help:dws drive shortcut --help",
+        "skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "drive.delete_document": {
+      "agent_summary": "将钉盘中的文件或文件夹移入回收站",
+      "use_when": [
+        "用户明确要求把钉盘/文档空间中的文件或文件夹移入回收站，且已确认目标节点时"
+      ],
+      "avoid_when": [
+        "用户未确认删除目标或只是想移走位置时不要删；搬迁用 dws drive move",
+        "要删整个知识库改用 dws wiki space delete",
+        "要永久删评论改用 dws doc comment delete"
+      ],
+      "examples": [
+        "dws drive delete --node <dentryUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.delete_document",
+        "cobra-help:dws drive delete",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.delete_document",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.delete_document"
+      ]
+    },
+    "drive.download_file": {
+      "agent_summary": "下载钉盘或文档空间文件到本地",
+      "use_when": [
+        "用户要把钉盘普通文件（PDF/图片/Office 等非在线文档）下载到本地路径时",
+        "已确认 contentType 非 ALIDOC，需要落盘本地查看时"
+      ],
+      "avoid_when": [
+        "在线文档(adoc)要导出为 Word/docx 改用 dws doc export，不要用 download 代替导出",
+        "只要临时下载链接语义且走文档附件块时用 dws doc media download",
+        "未指定 --output 不要调用（CLI 必填）"
+      ],
+      "examples": [
+        "dws drive download --node <dentryUuid> --output ./report.pdf --format json",
+        "dws drive download --node <dentryUuid> --output ~/downloads/ --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.download_file",
+        "cobra-help:dws drive download",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.download_file",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#drive.download_file",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.download_file"
+      ]
+    },
+    "drive.get_file_info": {
+      "agent_summary": "获取文件元数据信息",
+      "use_when": [
+        "用户要查看钉盘文件/文件夹元信息（名称、类型、大小、路径、时间）时",
+        "准备读内容前需先判断 extension/是否在线文档，再路由到 doc read / sheet / download 时"
+      ],
+      "avoid_when": [
+        "要读在线文档正文改用 dws doc read（先本命令或 doc info 确认类型）",
+        "要下载普通文件改用 dws drive download",
+        "只要目录列表改用 dws drive list"
+      ],
+      "examples": [
+        "dws drive info --node <dentryUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.get_file_info",
+        "cobra-help:dws drive info",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.get_file_info",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#drive.get_file_info",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.get_file_info"
+      ]
+    },
+    "drive.get_node_stats": {
+      "agent_summary": "读取指定钉盘或文档空间节点的阅读、编辑、评论、点赞、预览与下载等统计。",
+      "use_when": [
+        "用户要查看节点阅读/编辑/评论/点赞/预览/下载等统计维度时"
+      ],
+      "avoid_when": [
+        "要改文件内容或权限不要用本命令；本命令只读",
+        "只要元信息（名称/类型）改用 dws drive info 或 dws doc info"
+      ],
+      "examples": [
+        "dws drive stats --node <NODE_ID_OR_URL> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.get_node_stats",
+        "cobra-help:dws drive stats --help",
+        "skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "drive.get_upload_info": {
+      "agent_summary": "获取文件上传信息",
+      "use_when": [
+        "仅当无法使用 drive upload 一条命令、需要自定义流式上传时，获取 OSS 预签名上传凭证"
+      ],
+      "avoid_when": [
+        "普通上传请直接用 dws drive upload，不要手动走三步",
+        "拿到凭证后须 HTTP PUT 再 dws drive commit；本命令本身不完成入库"
+      ],
+      "examples": [
+        "dws drive upload-info --file-name \"report.pdf\" --file-size 102400 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.get_upload_info",
+        "cobra-help:dws drive upload-info",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.get_upload_info",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#drive.get_upload_info",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.get_upload_info"
+      ]
+    },
+    "drive.list_files": {
+      "agent_summary": "获取文件/文件夹列表",
+      "use_when": [
+        "用户要浏览「我的文件」/钉盘/网盘某目录下有哪些文件或文件夹时",
+        "已知父文件夹 dentryUuid，要列出其子项以便继续 download/copy/move 时",
+        "传 --workspace 时要列出文档空间/知识库根或子目录（与 wiki node list 场景重叠时，用户说钉盘/我的文件优先本命令）"
+      ],
+      "avoid_when": [
+        "只记得关键词、不知道所在目录时改用 dws drive search",
+        "明确要在某个知识库内按目录浏览且已有 workspaceId 时可用 dws wiki node list",
+        "要找最近打开/编辑过的文档改用 dws drive recent"
+      ],
+      "examples": [
+        "dws drive list --limit 20 --format json",
+        "dws drive list --folder <dentryUuid> --limit 20 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.list_files",
+        "cobra-help:dws drive list",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.list_files",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#drive.list_files",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.list_files"
+      ]
+    },
+    "drive.list_permission": {
+      "agent_summary": "查询文档空间节点的协作者列表",
+      "use_when": [
+        "查看某文档/文件夹节点当前有哪些成员及角色时"
+      ],
+      "avoid_when": [
+        "要新增/修改/移除权限分别用 permission add/update/remove",
+        "查知识库容器成员改用 dws wiki member list"
+      ],
+      "examples": [
+        "dws drive permission list --node <ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.list_permission",
+        "cobra-help:dws drive permission list",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.list_permission",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.list_permission"
+      ]
+    },
+    "drive.list_spaces": {
+      "agent_summary": "兼容查询钉盘空间列表",
+      "use_when": [
+        "兼容入口：枚举钉盘企业空间或「我的文件」空间以拿 spaceId/rootFolderId 时"
+      ],
+      "avoid_when": [
+        "推荐改用 dws wiki space list --type orgSpace 或 --type mySpace（本命令已 deprecated）",
+        "要列知识库列表改用 dws wiki space list（默认 orgWikiSpace）"
+      ],
+      "examples": [
+        "dws drive list-spaces --space-type orgSpace --limit 20 --format json",
+        "dws drive list-spaces --space-type mySpace --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.list_spaces",
+        "cobra-help:dws drive list-spaces",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.list_spaces",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.list_spaces"
+      ]
+    },
+    "drive.move_document": {
+      "agent_summary": "将文件或文档移动到目标文件夹或知识库（原位置不再保留）",
+      "use_when": [
+        "用户要移动/搬走文件或文档到新位置，且原位置不再保留时（move≠copy）",
+        "目标文件夹用 --folder；目标知识库根用 --workspace；都不传则默认「我的文档」",
+        "移动到其他钉盘 space 根目录时传目标 space 的 rootFolderId 到 --folder（通常不传 --workspace）"
+      ],
+      "avoid_when": [
+        "需要保留原位置副本时改用 dws drive copy",
+        "目标未确认或用户只是想复制时不要 move",
+        "知识库内节点移动且走 wiki 入口时可用 dws wiki node move"
+      ],
+      "examples": [
+        "dws drive move --node <源dentryUuid> --folder <目标文件夹fileId> --format json",
+        "dws drive move --node <源dentryUuid> --workspace <TARGET_WS_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.move_document",
+        "cobra-help:dws drive move",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.move_document",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.move_document"
+      ]
+    },
+    "drive.permission_remove": {
+      "agent_summary": "从文档空间节点移除协作成员的权限",
+      "use_when": [
+        "从节点移除指定用户的直接授权时"
+      ],
+      "avoid_when": [
+        "要改角色用 permission update；要加权限用 add",
+        "移除知识库容器成员用 dws wiki member remove"
+      ],
+      "examples": [
+        "dws drive permission remove --node <ID> --users uid1 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.permission_remove",
+        "cobra-help:dws drive permission remove",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.permission_remove",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.remove_permission"
+      ]
+    },
+    "drive.permission_update": {
+      "agent_summary": "更新文档空间节点已有协作者的权限角色",
+      "use_when": [
+        "调整已有节点成员角色（如 READER→EDITOR）时"
+      ],
+      "avoid_when": [
+        "成员尚无权限时改用 permission add",
+        "要移除访问改用 permission remove"
+      ],
+      "examples": [
+        "dws drive permission update --node <ID> --users uid1 --role EDITOR --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.permission_update",
+        "cobra-help:dws drive permission update",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.permission_update",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.update_permission"
+      ]
+    },
+    "drive.publish_get": {
+      "agent_summary": "查询文件当前是否处于互联网公开发布状态",
+      "use_when": [
+        "查询文件是否已互联网公开发布及公开权限（READER/DOWNLOADER/EDITOR）时"
+      ],
+      "avoid_when": [
+        "要开启公开改用 dws drive publish set（需确认）",
+        "要关闭公开改用 dws drive publish unset（需确认）"
+      ],
+      "examples": [
+        "dws drive publish get --node <fileId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.publish_get",
+        "cobra-help:dws drive publish get",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "drive.publish_set": {
+      "agent_summary": "开启文件的互联网公开发布",
+      "use_when": [
+        "用户明确要求将文件设为互联网公开（任何人凭链接可访问，无需登录）时"
+      ],
+      "avoid_when": [
+        "只查公开状态用 publish get；要关闭公开用 publish unset",
+        "目标文件或公开权限范围未确认时不要开启",
+        "只要企业内部同事权限用 permission add，不要用互联网公开"
+      ],
+      "examples": [
+        "dws drive publish set --node <fileId> --format json",
+        "dws drive publish set --node <fileId> --permission READER --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.publish_set",
+        "cobra-help:dws drive publish set",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "drive.publish_unset": {
+      "agent_summary": "关闭文件的互联网公开发布",
+      "use_when": [
+        "用户明确要求关闭文件的互联网公开发布，使外部链接失效时"
+      ],
+      "avoid_when": [
+        "只查状态用 publish get；要开启用 publish set",
+        "目标文件未确认时不要关闭"
+      ],
+      "examples": [
+        "dws drive publish unset --node <fileId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.publish_unset",
+        "cobra-help:dws drive publish unset",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "drive.recent": {
+      "agent_summary": "获取当前用户最近访问或编辑过的文档列表",
+      "use_when": [
+        "用户要看最近访问或最近编辑的文档列表时（默认最近访问 operate-type=0）",
+        "需要按我创建/他人创建或文档类型过滤最近项时"
+      ],
+      "avoid_when": [
+        "按关键词全局搜文件改用 dws drive search",
+        "浏览某目录内容改用 dws drive list"
+      ],
+      "examples": [
+        "dws drive recent --format json",
+        "dws drive recent --operate-type 1 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.recent",
+        "cobra-help:dws drive recent",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.get_recent_list"
+      ]
+    },
+    "drive.recycle_list": {
+      "agent_summary": "查看回收站文件列表",
+      "use_when": [
+        "用户要查看钉盘回收站里有哪些已删文件时"
+      ],
+      "avoid_when": [
+        "要从回收站还原改用 dws drive recycle restore",
+        "要删除进回收站改用 dws drive delete"
+      ],
+      "examples": [
+        "dws drive recycle list --format json",
+        "dws drive recycle list --space-id 12345 --limit 10 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.recycle_list",
+        "cobra-help:dws drive recycle list",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "drive.recycle_restore": {
+      "agent_summary": "还原回收站中的文件",
+      "use_when": [
+        "用户要从回收站还原指定回收项（已从 recycle list 拿到 id）时"
+      ],
+      "avoid_when": [
+        "尚未确认还原哪一项时先 dws drive recycle list",
+        "要删除文件改用 dws drive delete，不要用 restore"
+      ],
+      "examples": [
+        "dws drive recycle restore --id <recycleItemId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.recycle_restore",
+        "cobra-help:dws drive recycle restore",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    },
+    "drive.rename_document": {
+      "agent_summary": "修改文档空间中文档或文件的名称",
+      "use_when": [
+        "用户要重命名钉盘/文档空间中的文件或文档显示名称时"
+      ],
+      "avoid_when": [
+        "要改正文里的标题/章节 H1 改用 dws doc block update，不要用 rename",
+        "只要复制或移动改用 copy/move"
+      ],
+      "examples": [
+        "dws drive rename --node <ID> --name \"新名称\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.rename_document",
+        "cobra-help:dws drive rename",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.rename_document",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema doc.rename_document"
+      ]
+    },
+    "drive.search_files": {
+      "agent_summary": "全局搜索文件，默认同时搜索钉盘和文档空间，合并返回结果",
+      "use_when": [
+        "用户要在钉盘/我的文件里按关键词找文件、文件夹或团队空间，且不知道具体路径时",
+        "需要按扩展名/文件类型/创建者/时间缩小范围的全局搜索（默认 target=all 聚合钉盘+文档空间）",
+        "明确搜团队空间名以拿 spaceId/rootFolderId 时用 --target space"
+      ],
+      "avoid_when": [
+        "已明确知识库 workspaceId、只在该库内搜时改用 dws wiki node search --workspace <id>",
+        "已知目录、只需浏览子项时改用 dws drive list，不要用搜索代替目录遍历",
+        "首页未命中时优先改关键词/过滤条件，而不是反复翻页"
+      ],
+      "examples": [
+        "dws drive search --query \"季度汇报\" --format json",
+        "dws drive search --query \"合同\" --target file --extensions pdf,docx --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.search_files",
+        "cobra-help:dws drive search",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.search_files",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:dws schema drive.search_files"
+      ]
+    },
+    "drive.upload": {
+      "agent_summary": "上传本地文件到钉盘或文档空间",
+      "use_when": [
+        "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
+        "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert"
+      ],
+      "avoid_when": [
+        "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
+        "要把文件作为文档正文附件插入改用 dws doc media insert",
+        "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令"
+      ],
+      "examples": [
+        "dws drive upload --file ./report.pdf --format json",
+        "dws drive upload --file ./slides.pptx --folder <dentryUuid> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=drive.upload",
+        "cobra-help:dws drive upload",
+        "Skill:skills/mono/references/products/drive.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#drive.upload",
+        "structured-hint:internal/cli/schema_hints/products/drive.json",
+        "live-mcp:none (Cobra+Skill; composite/unpinned)"
+      ]
+    }
+  },
+  "products": {
+    "drive": {
+      "agent_summary": "管理钉盘及文档空间中的文件、目录、上传下载、回收站与公开发布",
+      "use_when": [
+        "浏览、搜索、上传、下载或整理钉盘和文档空间文件时"
+      ],
+      "avoid_when": [
+        "需要读取或编辑在线文档正文时使用 doc；需要管理知识库空间或成员时使用 wiki"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 CommandRegistry 命令分区与对应产品 Skill 审阅产品级选择边界。",
+      "source_refs": [
+        "CommandRegistry:product=drive",
+        "Skill:skills/mono/references/products/drive.md"
+      ]
+    }
+  }
+}

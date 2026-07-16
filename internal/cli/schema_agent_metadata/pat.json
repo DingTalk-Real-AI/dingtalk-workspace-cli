@@ -1,0 +1,582 @@
+{
+  "product_id": "pat",
+  "tools": {
+    "pat browser-policy": {
+      "agent_summary": "配置 PAT 授权流程是否允许打开本地浏览器",
+      "agent_summary_source": "dws-agent-selection/pat",
+      "availability": "available",
+      "avoid_when": [
+        "需要授予产品 scope 时用 pat chmod，而不是改浏览器策略"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws pat browser-policy --enabled --format json",
+        "dws pat browser-policy --enabled=false --agentCode \u003cAGENT_CODE\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "配置 PAT 授权流程是否允许打开本地浏览器",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": "配置 PAT 授权流程是否允许打开本地浏览器",
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要授予产品 scope 时用 pat chmod，而不是改浏览器策略"
+          ],
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "需要授予产品 scope 时用 pat chmod，而不是改浏览器策略"
+              ],
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws pat browser-policy --enabled --format json",
+            "dws pat browser-policy --enabled=false --agentCode \u003cAGENT_CODE\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "dws pat browser-policy --enabled --format json",
+                "dws pat browser-policy --enabled=false --agentCode \u003cAGENT_CODE\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "local",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "local",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要允许或禁止某 Agent 在 PAT 授权时打开浏览器"
+          ],
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "需要允许或禁止某 Agent 在 PAT 授权时打开浏览器"
+              ],
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "local",
+      "interface_reason": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=pat.browser_policy",
+        "Skill:skills/mono/references/products/pat.md",
+        "cobra-help:dws pat browser-policy",
+        "internal/cli/schema_command_registry.json#pat.browser_policy",
+        "internal/cli/schema_hints/metadata/pat.json",
+        "internal/cli/schema_hints/selection/pat.json",
+        "live-dws-schema:pat.browser_policy#FAILED",
+        "skills/mono/references/products/pat.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#pat.browser_policy"
+      ],
+      "use_when": [
+        "需要允许或禁止某 Agent 在 PAT 授权时打开浏览器"
+      ]
+    },
+    "pat chmod": {
+      "agent_summary": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+      "agent_summary_source": "dws-agent-selection/pat",
+      "availability": "available",
+      "avoid_when": [
+        "普通 OAuth 登录用 auth，不要用 pat",
+        "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+        "只要改本地浏览器打开策略时用 pat browser-policy"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "available",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "普通 OAuth 登录用 auth，不要用 pat",
+            "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+            "只要改本地浏览器打开策略时用 pat browser-policy"
+          ],
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "普通 OAuth 登录用 auth，不要用 pat",
+                "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+                "只要改本地浏览器打开策略时用 pat browser-policy"
+              ],
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "user_required",
+              "source": "skills/mono/references/products/pat.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill command comment explicitly marks the operation as risky"
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "skills/mono/references/products/pat.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill command comment explicitly marks the operation as risky"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "pat.pat.batch_grant",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "pat.pat.batch_grant",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "pat.pat.batch_grant",
+              "source": "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant.interface_ref",
+              "precedence": "mcp_fallback",
+              "selected": false
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "high",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed"
+            },
+            {
+              "value": "high",
+              "source": "skills/mono/references/products/pat.md",
+              "precedence": "skill",
+              "selected": false,
+              "review_reason": "Skill command comment explicitly marks the operation as risky"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "命令提示缺少行为授权，需要按产品或 scope 批量授权",
+            "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+          ],
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "candidates": [
+            {
+              "value": [
+                "命令提示缺少行为授权，需要按产品或 scope 批量授权",
+                "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+              ],
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "pat",
+        "rpc_name": "pat.batch_grant"
+      },
+      "reviewed": true,
+      "risk": "high",
+      "source_refs": [
+        "CommandRegistry:canonical_path=pat.batch_grant",
+        "Skill:skills/mono/references/products/pat.md",
+        "cobra-help:dws pat chmod",
+        "helper:internal/pat/chmod.go#typed_yes",
+        "internal/cli/schema_command_registry.json#pat.batch_grant",
+        "internal/cli/schema_hints/metadata/pat.json",
+        "internal/cli/schema_hints/selection/pat.json",
+        "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant",
+        "live-dws-schema:pat.batch_grant#FAILED",
+        "pinned-mcp:pat.batch_grant",
+        "skills/mono/references/products/pat.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#pat.batch_grant"
+      ],
+      "use_when": [
+        "命令提示缺少行为授权，需要按产品或 scope 批量授权",
+        "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+      ]
+    }
+  }
+}
