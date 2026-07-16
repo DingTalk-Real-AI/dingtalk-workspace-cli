@@ -54,6 +54,38 @@ func TestRun(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRunUnionsRepeatedOverallProfiles(t *testing.T) {
+	dir := t.TempDir()
+	uncovered := filepath.Join(dir, "uncovered.out")
+	covered := filepath.Join(dir, "covered.out")
+	if err := os.WriteFile(uncovered, []byte("mode: atomic\nexample.com/project/internal/a.go:10.1,12.2 5 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(covered, []byte("mode: atomic\nexample.com/project/internal/a.go:10.1,12.2 5 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{
+		"--overall-profile", uncovered,
+		"--overall-profile", covered,
+		"--diff-profile", uncovered,
+		"--diff-profile", covered,
+		"--base-ref", "base",
+		"--module", "example.com/project",
+		"--baseline-overall", "100",
+		"--target", "80",
+	}
+	loader := func(string) (map[string][]lineRange, error) {
+		return map[string][]lineRange{"internal/a.go": {{Start: 10, End: 12}}}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(args, &stdout, &stderr, loader, nil); code != 0 {
+		t.Fatalf("run code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "overall coverage: 100.0%") || !strings.Contains(stdout.String(), "changed code coverage: 100.0%") {
+		t.Fatalf("repeated profiles were not unioned: %q", stdout.String())
+	}
+}
+
 func TestRunChangedOnlyWithBuildableScope(t *testing.T) {
 	profile := filepath.Join(t.TempDir(), "coverage.out")
 	body := "mode: atomic\nexample.com/project/internal/a.go:10.1,12.2 5 1\n"
@@ -153,6 +185,9 @@ func TestGitChangedLines(t *testing.T) {
 	}
 	runGit("add", "a.go")
 	runGit("commit", "-m", "change")
+	if err := os.WriteFile(path, []byte("package sample\n\nfunc added() int { return 1 }\nfunc workingTree() int { return 2 }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	previous, err := os.Getwd()
 	if err != nil {
@@ -168,6 +203,10 @@ func TestGitChangedLines(t *testing.T) {
 	}
 	if len(changed["a.go"]) == 0 {
 		t.Fatalf("changed lines=%v", changed)
+	}
+	last := changed["a.go"][len(changed["a.go"])-1]
+	if last.End < 4 {
+		t.Fatalf("working-tree line was not included: %v", changed["a.go"])
 	}
 }
 
@@ -218,6 +257,24 @@ func TestEvaluateAllowsNonRegressionAndCoveredChanges(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageUnionsDuplicateCrossPackageCoverageBlocks(t *testing.T) {
+	duplicate := coverageBlock{File: "internal/a.go", StartLine: 10, EndLine: 12, Statements: 4}
+	covered := duplicate
+	covered.Count = 3
+	result := evaluate(gateInput{
+		Overall: []coverageBlock{duplicate, covered},
+		Diff:    []coverageBlock{duplicate, covered},
+		Changed: map[string][]lineRange{"internal/a.go": {{Start: 10, End: 12}}},
+		Target:  80,
+	})
+	if len(result.Failures) != 0 {
+		t.Fatalf("duplicate blocks should be unioned: %v", result.Failures)
+	}
+	if result.Overall != 100 || result.ChangedCoverage != 100 || result.ChangedStatements != 4 {
+		t.Fatalf("result = %#v, want one fully covered four-statement block", result)
+	}
+}
+
 func TestEvaluateAllowsMeasurementTolerance(t *testing.T) {
 	result := evaluate(gateInput{
 		Overall:          []coverageBlock{{Statements: 403, Count: 1}, {Statements: 597, Count: 0}},
@@ -233,7 +290,10 @@ func TestEvaluateAllowsMeasurementTolerance(t *testing.T) {
 
 func TestEvaluateFailsClosed(t *testing.T) {
 	result := evaluate(gateInput{
-		Overall:         []coverageBlock{{Statements: 10, Count: 1}, {Statements: 10, Count: 0}},
+		Overall: []coverageBlock{
+			{File: "internal/base.go", StartLine: 1, EndLine: 2, Statements: 10, Count: 1},
+			{File: "internal/base.go", StartLine: 3, EndLine: 4, Statements: 10, Count: 0},
+		},
 		Diff:            []coverageBlock{{File: "internal/a.go", StartLine: 1, EndLine: 2, Statements: 2, Count: 0}},
 		Changed:         map[string][]lineRange{"internal/a.go": {{Start: 1, End: 2}}, "internal/missing.go": {{Start: 1, End: 1}}},
 		BaselineOverall: 54.2,

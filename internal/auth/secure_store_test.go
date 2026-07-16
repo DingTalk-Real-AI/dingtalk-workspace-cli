@@ -105,9 +105,12 @@ func TestSaveSecureTokenData_TmpFileCleanedOnSuccess(t *testing.T) {
 		t.Fatalf("SaveSecureTokenData() error = %v", err)
 	}
 
-	tmpPattern := filepath.Join(configDir, secureDataFile+".*.tmp")
-	if matches, err := filepath.Glob(tmpPattern); err != nil || len(matches) != 0 {
-		t.Fatalf("secure temp files should not remain after successful save, matches = %v, err = %v", matches, err)
+	tmpPaths, err := filepath.Glob(filepath.Join(configDir, secureDataFile+".tmp-*"))
+	if err != nil {
+		t.Fatalf("Glob() error = %v", err)
+	}
+	if len(tmpPaths) != 0 {
+		t.Fatalf("temporary files should not remain after successful save: %v", tmpPaths)
 	}
 
 	// The final file must exist.
@@ -140,8 +143,9 @@ func TestSaveSecureTokenData_ConcurrentSaves(t *testing.T) {
 	}
 	wg.Wait()
 
-	// A platform may reject simultaneous final replacements, but every writer
-	// owns its temporary file. At least one complete save must be published.
+	// Each writer owns its temporary file, so concurrent saves must not corrupt
+	// the final file. A platform may still reject simultaneous replacements, but
+	// at least one complete save must succeed.
 	successes := 0
 	for _, err := range errs {
 		if err == nil {
@@ -161,7 +165,7 @@ func TestSaveSecureTokenData_ConcurrentSaves(t *testing.T) {
 		t.Fatalf("AccessToken = %q, want at_concurrent", loaded.AccessToken)
 	}
 
-	tmpPattern := filepath.Join(configDir, secureDataFile+".*.tmp")
+	tmpPattern := filepath.Join(configDir, secureDataFile+".tmp-*")
 	if matches, err := filepath.Glob(tmpPattern); err != nil || len(matches) != 0 {
 		t.Fatalf("secure temp files should not remain after concurrent saves, matches = %v, err = %v", matches, err)
 	}
@@ -175,11 +179,11 @@ func TestDeleteSecureData_Idempotent(t *testing.T) {
 	if err := os.WriteFile(legacyTmpPath, []byte("legacy temp"), 0o600); err != nil {
 		t.Fatalf("WriteFile() legacy temp error = %v", err)
 	}
-	uniqueTmpPath := filepath.Join(configDir, secureDataFile+".00000000-0000-4000-8000-000000000000.tmp")
+	uniqueTmpPath := filepath.Join(configDir, secureDataFile+".tmp-interrupted")
 	if err := os.WriteFile(uniqueTmpPath, []byte("unique temp"), 0o600); err != nil {
 		t.Fatalf("WriteFile() unique temp error = %v", err)
 	}
-	unrelatedTmpPath := filepath.Join(configDir, secureDataFile+".not-a-uuid.tmp")
+	unrelatedTmpPath := filepath.Join(configDir, secureDataFile+".unrelated.tmp")
 	if err := os.WriteFile(unrelatedTmpPath, []byte("unrelated temp"), 0o600); err != nil {
 		t.Fatalf("WriteFile() unrelated temp error = %v", err)
 	}

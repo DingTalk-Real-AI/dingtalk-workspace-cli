@@ -19,10 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
-
-	"github.com/google/uuid"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/security"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -30,6 +27,7 @@ import (
 
 type secureTempFile interface {
 	Write([]byte) (int, error)
+	Name() string
 	Sync() error
 	Close() error
 }
@@ -41,8 +39,8 @@ var (
 	secureChmod         = os.Chmod
 	secureMarshalIndent = json.MarshalIndent
 	secureEncrypt       = security.Encrypt
-	secureOpenFile      = func(name string, flag int, perm os.FileMode) (secureTempFile, error) {
-		return os.OpenFile(name, flag, perm)
+	secureCreateTemp    = func(dir, pattern string) (secureTempFile, error) {
+		return os.CreateTemp(dir, pattern)
 	}
 	secureRemove    = os.Remove
 	secureRename    = os.Rename
@@ -125,16 +123,14 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 	}
 
 	finalPath := filepath.Join(configDir, secureDataFile)
-	// Give each writer its own temp file. A fixed ".data.tmp" path lets a
-	// failed concurrent writer remove another writer's in-flight temp file,
-	// which can leave the final file missing on Windows.
-	tmpPath := finalPath + "." + uuid.New().String() + ".tmp"
-
-	// Atomic write with fsync to ensure data durability
-	tmpFile, err := secureOpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, config.FilePerm)
+	// Give every writer its own temporary file. Reusing one fixed .tmp path lets
+	// concurrent saves truncate or rename another writer's ciphertext before it
+	// is complete, which can publish a corrupt final file.
+	tmpFile, err := secureCreateTemp(configDir, secureDataFile+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("creating tmp file: %w", err)
 	}
+	tmpPath := tmpFile.Name()
 
 	writeSuccess := false
 	defer func() {
@@ -201,17 +197,12 @@ func DeleteSecureData(configDir string) error {
 	if err := secureRemove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("deleting secure data file: %w", err)
 	}
+	// Remove the legacy fixed temporary path and any per-writer temporary files
+	// left behind by an interrupted save.
 	_ = secureRemove(path + ".tmp")
-	entries, _ := os.ReadDir(configDir)
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasPrefix(name, secureDataFile+".") || !strings.HasSuffix(name, ".tmp") {
-			continue
-		}
-		id := strings.TrimSuffix(strings.TrimPrefix(name, secureDataFile+"."), ".tmp")
-		if _, err := uuid.Parse(id); err == nil {
-			_ = secureRemove(filepath.Join(configDir, name))
-		}
+	tmpPaths, _ := filepath.Glob(path + ".tmp-*")
+	for _, tmpPath := range tmpPaths {
+		_ = secureRemove(tmpPath)
 	}
 	return nil
 }

@@ -4,6 +4,7 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BASE_REF=""
 OVERALL_PROFILE="coverage.txt"
+ADDITIONAL_PROFILE="${COVERAGE_ADDITIONAL_PROFILE:-}"
 BASELINE_PROFILE="coverage-base.txt"
 DIFF_PROFILE="coverage-policy.txt"
 TARGET="${COVERAGE_TARGET:-80}"
@@ -13,7 +14,7 @@ CHANGED_ONLY="false"
 SCOPE_BUILDABLE="false"
 
 usage() {
-  printf '%s\n' "usage: $0 --base-ref <ref> [--changed-only] [--scope-buildable] [--overall-profile <file>] [--baseline-profile <file>] [--diff-profile <file>]" >&2
+  printf '%s\n' "usage: $0 --base-ref <ref> [--changed-only] [--scope-buildable] [--overall-profile <file>] [--additional-profile <file>] [--baseline-profile <file>] [--diff-profile <file>]" >&2
 }
 
 while [ "$#" -gt 0 ]; do
@@ -26,6 +27,11 @@ while [ "$#" -gt 0 ]; do
     --overall-profile)
       [ "$#" -ge 2 ] || { usage; exit 2; }
       OVERALL_PROFILE="$2"
+      shift 2
+      ;;
+    --additional-profile)
+      [ "$#" -ge 2 ] || { usage; exit 2; }
+      ADDITIONAL_PROFILE="$2"
       shift 2
       ;;
     --baseline-profile)
@@ -90,6 +96,11 @@ else
     --overall-profile "$OVERALL_PROFILE" \
     --diff-profile "$OVERALL_PROFILE" \
     --baseline-overall "$baseline"
+  if [ -n "$ADDITIONAL_PROFILE" ]; then
+    set -- "$@" \
+      --overall-profile "$ADDITIONAL_PROFILE" \
+      --diff-profile "$ADDITIONAL_PROFILE"
+  fi
 fi
 if [ "$SCOPE_BUILDABLE" = "true" ]; then
   set -- "$@" --scope-buildable

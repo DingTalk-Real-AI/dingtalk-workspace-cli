@@ -67,6 +67,7 @@ func (f *duplicateFakePortableTemp) Sync() error             { return f.syncErr 
 func (f *duplicateFakePortableTemp) Close() error            { f.closeCall++; return f.closeErr }
 
 type fakeSecureTemp struct {
+	name     string
 	writeErr error
 	syncErr  error
 	closeErr error
@@ -78,6 +79,7 @@ func (f *fakeSecureTemp) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+func (f *fakeSecureTemp) Name() string { return f.name }
 func (f *fakeSecureTemp) Sync() error  { return f.syncErr }
 func (f *fakeSecureTemp) Close() error { return f.closeErr }
 
@@ -2276,7 +2278,7 @@ func TestSecureIdentityKeychainAndLockEdges(t *testing.T) {
 		oldChmod := secureChmod
 		oldMarshal := secureMarshalIndent
 		oldEncrypt := secureEncrypt
-		oldOpen := secureOpenFile
+		oldCreateTemp := secureCreateTemp
 		oldRemove := secureRemove
 		oldRename := secureRename
 		oldRead := secureReadFile
@@ -2289,7 +2291,7 @@ func TestSecureIdentityKeychainAndLockEdges(t *testing.T) {
 			secureChmod = oldChmod
 			secureMarshalIndent = oldMarshal
 			secureEncrypt = oldEncrypt
-			secureOpenFile = oldOpen
+			secureCreateTemp = oldCreateTemp
 			secureRemove = oldRemove
 			secureRename = oldRename
 			secureReadFile = oldRead
@@ -2344,7 +2346,7 @@ func TestSecureIdentityKeychainAndLockEdges(t *testing.T) {
 			t.Fatalf("secure encrypt error = %v", err)
 		}
 		secureEncrypt = oldEncrypt
-		secureOpenFile = func(string, int, os.FileMode) (secureTempFile, error) { return nil, fail }
+		secureCreateTemp = func(string, string) (secureTempFile, error) { return nil, fail }
 		if err := SaveSecureTokenData(dir, &TokenData{}); !errors.Is(err, fail) {
 			t.Fatalf("secure temp open error = %v", err)
 		}
@@ -2354,22 +2356,24 @@ func TestSecureIdentityKeychainAndLockEdges(t *testing.T) {
 			"close": func(f *fakeSecureTemp) { f.closeErr = fail },
 		} {
 			t.Run(name, func(t *testing.T) {
-				f := &fakeSecureTemp{}
+				f := &fakeSecureTemp{name: filepath.Join(dir, secureDataFile+".tmp-fake")}
 				configure(f)
-				secureOpenFile = func(string, int, os.FileMode) (secureTempFile, error) { return f, nil }
+				secureCreateTemp = func(string, string) (secureTempFile, error) { return f, nil }
 				if err := SaveSecureTokenData(dir, &TokenData{}); !errors.Is(err, fail) {
 					t.Fatalf("secure %s error = %v", name, err)
 				}
 			})
 		}
-		secureOpenFile = func(string, int, os.FileMode) (secureTempFile, error) { return &fakeSecureTemp{}, nil }
+		secureCreateTemp = func(string, string) (secureTempFile, error) {
+			return &fakeSecureTemp{name: filepath.Join(dir, secureDataFile+".tmp-fake")}, nil
+		}
 		secureRename = func(string, string) error { return fail }
 		secureRemove = func(string) error { return fail }
 		if err := SaveSecureTokenData(dir, &TokenData{}); !errors.Is(err, fail) {
 			t.Fatalf("secure rename error = %v", err)
 		}
 		secureRename = oldRename
-		secureOpenFile = oldOpen
+		secureCreateTemp = oldCreateTemp
 		secureRemove = oldRemove
 
 		secureReadFile = func(string) ([]byte, error) { return nil, fail }

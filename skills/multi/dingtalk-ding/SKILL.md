@@ -23,6 +23,19 @@ metadata:
 
 > 命令参考：[ding.md](references/ding.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service ding --format json` 读取参数、约束、风险和示例，并以 `dws ding <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws ding +list` | read | 查询 DING 消息列表 |
+| `dws ding +recall-personal` | high-risk-write | 撤回本人发起的 DING |
+| `dws ding +receiver-status` | read | 查询 DING 消息接收人已读状态 |
+| `dws ding +send-personal` | write | 以本人身份发送 DING 给指定人 |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 意图表
 
 | 用户说 | 命令 |

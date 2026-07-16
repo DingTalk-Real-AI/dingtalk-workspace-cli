@@ -115,6 +115,10 @@ func TestMCPReturnTextClassification(t *testing.T) {
 	if got, err := callMCPToolReturnTextOnServer(context.Background(), "server", "tool", nil); err != nil || got != "" {
 		t.Fatalf("empty text result = %q, %v", got, err)
 	}
+	caller.result = textToolResult("shortcut result")
+	if got, err := CallMCPToolTextOnServer("server", "tool", nil); err != nil || got != "shortcut result" {
+		t.Fatalf("exported text result = %q, %v", got, err)
+	}
 	caller.err = errors.New("request failed with PAT_HIGH_RISK_NO_PERMISSION")
 	if _, err := callMCPToolReturnTextOnServer(context.Background(), "server", "tool", nil); err == nil {
 		t.Fatal("PAT transport error should be classified")

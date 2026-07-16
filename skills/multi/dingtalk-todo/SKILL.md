@@ -23,6 +23,26 @@ metadata:
 
 > 命令参考：[todo.md](references/todo.md)；剧本：[02-task.md](references/02-task.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service todo --format json` 读取参数、约束、风险和示例，并以 `dws todo <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws todo +assign` | write | 按姓名给某人创建并指派一条待办（自动解析 userId） |
+| `dws todo +assign-multi` | write | 把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId） |
+| `dws todo +created-todos` | read | 列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的） |
+| `dws todo +get` | read | 查询待办详情 |
+| `dws todo +get-my-tasks` | read | 查询当前组织下我的待办列表 |
+| `dws todo +list-attachment` | read | 查询待办任务的附件列表 |
+| `dws todo +list-comment` | read | 查询待办评论列表 |
+| `dws todo +list-sub` | read | 查询子待办列表 |
+| `dws todo +overdue` | read | 列出我已过期未完成的待办 |
+| `dws todo +remind` | write | 给自己创建一条带截止/提醒时间的待办 |
+| `dws todo +todo-done` | write | 按标题关键词把我的某条待办标记完成（自动定位 taskId） |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 意图表
 
 | 用户说 | 命令 |
