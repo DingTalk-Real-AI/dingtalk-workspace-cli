@@ -1051,6 +1051,14 @@
       "id": "contact",
       "tools": [
         {
+          "canonical_path": "contact.add_employee",
+          "cli_path": "contact user invite"
+        },
+        {
+          "canonical_path": "contact.exclusive_account_create",
+          "cli_path": "contact account create"
+        },
+        {
           "canonical_path": "contact.get_dept_info_by_dept_id",
           "cli_path": "contact dept get-info"
         },
@@ -1069,6 +1077,10 @@
         {
           "canonical_path": "contact.list_my_followings",
           "cli_path": "contact relation list-my-followings"
+        },
+        {
+          "canonical_path": "contact.org_create",
+          "cli_path": "contact org create"
         },
         {
           "canonical_path": "contact.query_dismission_employee_list",

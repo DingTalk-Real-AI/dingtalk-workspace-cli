@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:31e5a857f3fc193943c2648bd14ae3c2b7e5168b53d72577d50b57ffa734e4cc",
-  "surface_hash": "sha256:631b73b174f48cb0cca7c8449e80920739010d0db223dac2855101f4dbd0eda6",
+  "source_hash": "sha256:13836c65abf8ff72941830fbef2bd55bd6874f65e4aa064aa04ba816d458b2ea",
+  "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
   "source_files": 150,
   "hint_files": 46,
   "hint_products": 39,
-  "hint_tools": 1290,
+  "hint_tools": 1296,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -29,13 +29,13 @@
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 569,
-    "tools_with_metadata": 569,
-    "tools_with_agent_summary": 569,
-    "tools_with_use_when": 569,
-    "tools_with_avoid_when": 569,
-    "tools_with_examples": 569,
-    "tools_with_interface_mode": 569,
+    "surface_tools": 572,
+    "tools_with_metadata": 572,
+    "tools_with_agent_summary": 572,
+    "tools_with_use_when": 572,
+    "tools_with_avoid_when": 572,
+    "tools_with_examples": 572,
+    "tools_with_interface_mode": 572,
     "unmatched_skill_tools": 124,
     "unreviewed_skill_tools": 7
   },
@@ -2389,65 +2389,9 @@
     {
       "tool_path": "contact label list",
       "source": "skills/mono/references/products/contact.md",
-      "line": 210,
+      "line": 230,
       "candidates": [
-        "contact dept get-info",
-        "contact dept list-children",
-        "contact dept list-members"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "contact label list",
-      "source": "skills/mono/references/products/contact.md",
-      "line": 212,
-      "candidates": [
-        "contact dept get-info",
-        "contact dept list-children",
-        "contact dept list-members"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "contact label get",
-      "source": "skills/mono/references/products/contact.md",
-      "line": 226,
-      "candidates": [
-        "contact user get",
-        "contact user profile get",
-        "contact dept get-info"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "contact label get",
-      "source": "skills/mono/references/products/contact.md",
-      "line": 227,
-      "candidates": [
-        "contact user get",
-        "contact user profile get",
-        "contact dept get-info"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "contact label list-members",
-      "source": "skills/mono/references/products/contact.md",
-      "line": 241,
-      "candidates": [
-        "contact dept list-members",
+        "contact account create",
         "contact dept get-info",
         "contact dept list-children"
       ],
@@ -2459,11 +2403,11 @@
     {
       "tool_path": "contact label list",
       "source": "skills/mono/references/products/contact.md",
-      "line": 329,
+      "line": 232,
       "candidates": [
+        "contact account create",
         "contact dept get-info",
-        "contact dept list-children",
-        "contact dept list-members"
+        "contact dept list-children"
       ],
       "review": {
         "status": "stale",
@@ -2473,11 +2417,25 @@
     {
       "tool_path": "contact label get",
       "source": "skills/mono/references/products/contact.md",
-      "line": 332,
+      "line": 246,
       "candidates": [
         "contact user get",
         "contact user profile get",
-        "contact dept get-info"
+        "contact account create"
+      ],
+      "review": {
+        "status": "stale",
+        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+      }
+    },
+    {
+      "tool_path": "contact label get",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 247,
+      "candidates": [
+        "contact user get",
+        "contact user profile get",
+        "contact account create"
       ],
       "review": {
         "status": "stale",
@@ -2487,11 +2445,53 @@
     {
       "tool_path": "contact label list-members",
       "source": "skills/mono/references/products/contact.md",
-      "line": 335,
+      "line": 261,
       "candidates": [
         "contact dept list-members",
+        "contact account create",
+        "contact dept get-info"
+      ],
+      "review": {
+        "status": "stale",
+        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+      }
+    },
+    {
+      "tool_path": "contact label list",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 389,
+      "candidates": [
+        "contact account create",
         "contact dept get-info",
         "contact dept list-children"
+      ],
+      "review": {
+        "status": "stale",
+        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+      }
+    },
+    {
+      "tool_path": "contact label get",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 392,
+      "candidates": [
+        "contact user get",
+        "contact user profile get",
+        "contact account create"
+      ],
+      "review": {
+        "status": "stale",
+        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+      }
+    },
+    {
+      "tool_path": "contact label list-members",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 395,
+      "candidates": [
+        "contact dept list-members",
+        "contact account create",
+        "contact dept get-info"
       ],
       "review": {
         "status": "stale",
