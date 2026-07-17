@@ -456,6 +456,9 @@ func TestCrossPlatformCoverageChmod_allDryRunUsesExplicitServerPlan(t *testing.T
 	if got := call.args["allScopes"]; got != true {
 		t.Fatalf("allScopes = %#v, want true", got)
 	}
+	if got := call.args["all"]; got != true {
+		t.Fatalf("all = %#v, want true", got)
+	}
 	if got := call.args["operation"]; got != patBatchOperationGrant {
 		t.Fatalf("operation = %#v, want %q", got, patBatchOperationGrant)
 	}
@@ -506,6 +509,9 @@ func TestCrossPlatformCoverageChmod_allPlansThenGrantsSelectedScopesWithYes(t *t
 	}
 	if got := fake.calls[0].args["allScopes"]; got != true {
 		t.Fatalf("plan allScopes = %#v, want true", got)
+	}
+	if got := fake.calls[0].args["all"]; got != true {
+		t.Fatalf("plan all = %#v, want true", got)
 	}
 	if got := fake.calls[0].args["operation"]; got != patBatchOperationGrant {
 		t.Fatalf("plan operation = %#v, want grant", got)

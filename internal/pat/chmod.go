@@ -771,6 +771,7 @@ func buildChmodBatchPlanArgs(scopes, productCodes []string, recommend, allScopes
 		return args
 	}
 	args["allScopes"] = true
+	args["all"] = true
 	args["operation"] = patBatchOperationGrant
 	return args
 }
