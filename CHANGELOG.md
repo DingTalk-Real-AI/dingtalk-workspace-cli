@@ -6,6 +6,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+- Verify the CHANGELOG-only pull request fast path without publishing this note.
+
 ## [1.0.53-beta.3] - 2026-07-17
 
 This beta validates multi-account profile support and the post-v1.0.53-beta.2 compatibility fixes for Windows portable authentication, IM shortcuts, and Aitable import uploads.
