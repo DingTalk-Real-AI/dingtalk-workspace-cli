@@ -641,6 +641,7 @@ func TestCrossPlatformCoverageOAuthRefreshAndParsingEdges(t *testing.T) {
 
 func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
 	oldLoad := oauthLoadToken
+	oldLoadLocked := oauthLoadTokenLocked
 	oldAcquire := oauthAcquireLock
 	oldMark := oauthMarkProfile
 	oldFetch := oauthFetchClientID
@@ -651,6 +652,7 @@ func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
 	oldSaveLocked := oauthSaveTokenLocked
 	t.Cleanup(func() {
 		oauthLoadToken = oldLoad
+		oauthLoadTokenLocked = oldLoadLocked
 		oauthAcquireLock = oldAcquire
 		oauthMarkProfile = oldMark
 		oauthFetchClientID = oldFetch
@@ -665,6 +667,9 @@ func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
 	})
 	fail := errors.New("fail")
 	p := &OAuthProvider{configDir: t.TempDir(), logger: slog.Default(), Output: io.Discard}
+	oauthLoadTokenLocked = func(configDir, _ string) (*TokenData, error) {
+		return oauthLoadToken(configDir)
+	}
 
 	valid := &TokenData{AccessToken: "valid", ExpiresAt: time.Now().Add(time.Hour)}
 	oauthLoadToken = func(string) (*TokenData, error) { return valid, nil }

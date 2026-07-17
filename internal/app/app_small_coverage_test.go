@@ -217,6 +217,12 @@ func TestCrossPlatformCoverageConfigAndTokenSeamsCoverage(t *testing.T) {
 	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); err != nil || got != "legacy" {
 		t.Fatalf("legacy token = %q, %v", got, err)
 	}
+	authpkg.SetRuntimeProfile("corp:user")
+	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
+	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); got != "" || err == nil || err.Error() != "missing" {
+		t.Fatalf("explicit profile fallback = token %q error %v, want profile error", got, err)
+	}
+	authpkg.SetRuntimeProfile("")
 	newAccessTokenProvider = func(string) accessTokenGetter { return fakeAccessTokenGetter{err: errors.New("load")} }
 	newLegacyTokenManager = func(string) legacyTokenGetter { return fakeLegacyTokenGetter{err: errors.New("missing")} }
 	edition.Override(&edition.Hooks{})

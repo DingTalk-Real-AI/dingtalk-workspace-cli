@@ -74,6 +74,19 @@ func TestCrossPlatformCoverageToolCallerAdapterCoverage(t *testing.T) {
 		t.Fatal("adapter flags were not forwarded")
 	}
 	adapter.flags.DryRun = false
+	if _, err := (*toolCallerAdapter)(nil).CallToolWithToken(context.Background(), "token", "doc", "get", nil); err == nil {
+		t.Fatal("nil adapter token override succeeded")
+	}
+	authpkg.SetRuntimeProfile("saved-profile")
+	adapter.flags.Token = "saved-token"
+	runner.result = executor.Result{Response: map[string]any{"content": []any{map[string]any{"type": "text", "text": "ok"}}}}
+	if _, err := adapter.CallToolWithToken(context.Background(), "temporary-token", "doc", "get", nil); err != nil {
+		t.Fatal(err)
+	}
+	if adapter.flags.Token != "saved-token" || authpkg.RuntimeProfile() != "saved-profile" {
+		t.Fatal("token override state was not restored")
+	}
+	authpkg.SetRuntimeProfile("")
 
 	runner.err = errors.New("runner failure")
 	if _, err := adapter.CallTool(context.Background(), "doc", "get", map[string]any{"x": 1}); !errors.Is(err, runner.err) {
@@ -2000,6 +2013,31 @@ func TestCrossPlatformCoverageProfileCommandAndModelCoverage(t *testing.T) {
 	if err := authpkg.SaveProfiles(configDir, cfg); err != nil {
 		t.Fatal(err)
 	}
+	for _, profile := range cfg.Profiles {
+		data := &authpkg.TokenData{
+			AccessToken: "token-" + profile.CorpID,
+			CorpID:      profile.CorpID,
+			UserID:      profile.UserID,
+		}
+		var err error
+		if profile.UserID == "" {
+			err = authpkg.SaveTokenDataKeychainForCorpID(profile.CorpID, data)
+		} else {
+			err = authpkg.SaveTokenDataKeychainForIdentity(profile.CorpID, profile.UserID, data)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, profile := range cfg.Profiles {
+			if profile.UserID == "" {
+				_ = authpkg.DeleteTokenDataKeychainForCorpID(profile.CorpID)
+			} else {
+				_ = authpkg.DeleteTokenDataKeychainForIdentity(profile.CorpID, profile.UserID)
+			}
+		}
+	})
 	oldInteractive := profileSwitchInteractiveTerminal
 	oldSelector := profileSwitchSelector
 	t.Cleanup(func() {
@@ -2094,15 +2132,11 @@ func TestCrossPlatformCoverageProfileCommandAndModelCoverage(t *testing.T) {
 	}
 
 	_ = profileSwitchSortedProfiles(cfg.Profiles)
-	for _, raw := range []string{"", "bad", now.Format(time.RFC3339)} {
-		_, _ = parseProfileSwitchTime(raw)
-	}
 	for _, p := range cfg.Profiles {
-		_, _ = profileSwitchSortTime(p)
 		_ = profileSwitchOptionLabel(p, cfg)
 		_, _ = profileSwitchProfileCells(p, cfg)
 	}
-	_ = profileSwitchProfileIndex(cfg.Profiles, "missing")
+	_ = profileSwitchProfileIndex(cfg.Profiles, "missing", cfg)
 	_ = profileSwitchBorder("a", "b", "c")
 	_ = profileSwitchTableLine("org", "status")
 	_ = profileSwitchStyledTableLine("org", "status", profileSwitchNormalRowStyle())
@@ -2116,9 +2150,9 @@ func TestCrossPlatformCoverageProfileCommandAndModelCoverage(t *testing.T) {
 	_ = profileSwitchTitleStyle()
 	_ = profileSwitchMutedStyle()
 
-	writeProfileListTable(io.Discard, nil)
-	writeProfileListTable(io.Discard, cfg)
-	if err := writeProfileListJSON(io.Discard, cfg); err != nil || writeProfileUseJSON(io.Discard, nil, nil) != nil || writeProfileUseJSON(io.Discard, &cfg.Profiles[0], cfg) != nil {
+	writeProfileListTable(io.Discard, "", nil)
+	writeProfileListTable(io.Discard, "", cfg)
+	if err := writeProfileListJSON(io.Discard, "", cfg); err != nil || writeProfileUseJSON(io.Discard, nil, nil) != nil || writeProfileUseJSON(io.Discard, &cfg.Profiles[0], cfg) != nil {
 		t.Fatal("profile JSON write failed")
 	}
 	_ = profileUseMessage(nil)
@@ -2126,8 +2160,8 @@ func TestCrossPlatformCoverageProfileCommandAndModelCoverage(t *testing.T) {
 		_ = profileUseMessage(&p)
 		_ = profileOrgName(p)
 	}
-	_ = profileViews(nil)
-	_ = profileViews(cfg)
+	_ = profileViews("", nil)
+	_ = profileViews("", cfg)
 	for _, limit := range []int{0, 2, 5, 40} {
 		_ = clipProfileCell("abcdefgh", limit)
 		_ = clipProfileDisplayCell("中文abcdefgh", limit)

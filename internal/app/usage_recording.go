@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -34,6 +35,21 @@ func newRecordingToolCaller(inner edition.ToolCaller) edition.ToolCaller {
 func (r recordingToolCaller) CallTool(ctx context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
 	recordedArgs := cloneToolArgs(args)
 	res, err := r.inner.CallTool(ctx, product, tool, args)
+	usage.Append(product, tool, recordedArgs, err == nil, r.inner.DryRun())
+	return res, err
+}
+
+func (r recordingToolCaller) CallToolWithToken(
+	ctx context.Context,
+	token, product, tool string,
+	args map[string]any,
+) (*edition.ToolResult, error) {
+	inner, ok := r.inner.(tokenOverrideToolCaller)
+	if !ok {
+		return nil, fmt.Errorf("ToolCaller token override is not configured")
+	}
+	recordedArgs := cloneToolArgs(args)
+	res, err := inner.CallToolWithToken(ctx, token, product, tool, args)
 	usage.Append(product, tool, recordedArgs, err == nil, r.inner.DryRun())
 	return res, err
 }

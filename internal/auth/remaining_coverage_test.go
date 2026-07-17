@@ -46,7 +46,7 @@ func TestCrossPlatformCoverageTokenPersistencePreflightRemainingEdges(t *testing
 	if err := preflightTokenPersistence(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	if err := preflightTokenRefreshPersistence(&TokenData{CorpID: "corp"}); err != nil {
+	if err := preflightTokenRefreshPersistence(t.TempDir(), &TokenData{CorpID: "corp"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,7 +79,7 @@ func TestCrossPlatformCoverageTokenPersistencePreflightRemainingEdges(t *testing
 	if err := preflightTokenPersistence(dir); !errors.Is(err, fail) {
 		t.Fatalf("profile slot error = %v", err)
 	}
-	if err := preflightTokenRefreshPersistence(&TokenData{CorpID: "corp"}); !errors.Is(err, fail) {
+	if err := preflightTokenRefreshPersistence(t.TempDir(), &TokenData{CorpID: "corp"}); !errors.Is(err, fail) {
 		t.Fatalf("refresh profile slot error = %v", err)
 	}
 

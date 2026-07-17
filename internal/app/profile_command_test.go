@@ -16,9 +16,11 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	tea "github.com/charmbracelet/bubbletea"
@@ -80,8 +82,10 @@ func TestProfileListRootCommandJSONIncludesCorpName(t *testing.T) {
 	if !resp.Success {
 		t.Fatal("success = false, want true")
 	}
-	if resp.PrimaryProfile != "corp_primary" || resp.CurrentProfile != "corp_secondary" || resp.PreviousProfile != "corp_primary" {
-		t.Fatalf("profile pointers = primary %q current %q previous %q, want corp_primary/corp_secondary/corp_primary", resp.PrimaryProfile, resp.CurrentProfile, resp.PreviousProfile)
+	if resp.PrimaryProfile != "" ||
+		resp.CurrentProfile != "corp_secondary:user-corp_secondary" ||
+		resp.PreviousProfile != "corp_primary:user-corp_primary" {
+		t.Fatalf("profile pointers = primary %q current %q previous %q", resp.PrimaryProfile, resp.CurrentProfile, resp.PreviousProfile)
 	}
 	if len(resp.Profiles) != 2 {
 		t.Fatalf("profiles len = %d, want 2", len(resp.Profiles))
@@ -93,6 +97,181 @@ func TestProfileListRootCommandJSONIncludesCorpName(t *testing.T) {
 		if p.CorpName == "" {
 			t.Fatalf("profile %s missing corpName in JSON response: %#v", p.CorpID, p)
 		}
+	}
+}
+
+func TestProfileListRootCommandJSONIncludesAllAccountsInSameCorp(t *testing.T) {
+	first := authLogoutTestToken("corp_same")
+	first.UserID = "user_1"
+	first.UserName = "账号一"
+	second := authLogoutTestToken("corp_same")
+	second.AccessToken = "access-second"
+	second.RefreshToken = "refresh-second"
+	second.UserID = "user_2"
+	second.UserName = "账号二"
+	setupAuthLogoutProfiles(t, first, second)
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "json", "profile", "list"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("profile list --format json error = %v\noutput:\n%s", err, out.String())
+	}
+	var resp profileListResponse
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("Unmarshal() error = %v\noutput:\n%s", err, out.String())
+	}
+	if len(resp.Profiles) != 2 {
+		t.Fatalf("profiles len = %d, want 2: %#v", len(resp.Profiles), resp.Profiles)
+	}
+	got := make(map[string]profileView, len(resp.Profiles))
+	for _, profile := range resp.Profiles {
+		got[profile.Profile] = profile
+	}
+	if _, ok := got["corp_same:user_1"]; !ok {
+		t.Fatalf("profiles missing corp_same:user_1: %#v", resp.Profiles)
+	}
+	current, ok := got["corp_same:user_2"]
+	if !ok {
+		t.Fatalf("profiles missing corp_same:user_2: %#v", resp.Profiles)
+	}
+	if !current.IsOrgCurrent || !current.IsCurrent || current.IsPrimary {
+		t.Fatalf("last login account markers = %#v, want org-current/current and deprecated primary=false", current)
+	}
+	if got["corp_same:user_1"].IsOrgCurrent {
+		t.Fatalf("older account unexpectedly marked org current: %#v", got["corp_same:user_1"])
+	}
+}
+
+func TestProfileListUsesRealIdentityTokenState(t *testing.T) {
+	token := authLogoutTestToken("corp_real")
+	token.ExpiresAt = time.Date(2026, 7, 16, 17, 38, 0, 0, time.Local)
+	token.RefreshExpAt = time.Date(2026, 8, 16, 17, 38, 0, 0, time.Local)
+	configDir := setupAuthLogoutProfiles(t, token)
+
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	cfg.Profiles[0].Status = authpkg.ProfileStatusActive
+	cfg.Profiles[0].ExpiresAt = "2026-07-16T22:29:00+08:00"
+	cfg.Profiles[0].RefreshExpAt = "2026-09-16T22:29:00+08:00"
+	if err := authpkg.SaveProfiles(configDir, cfg); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "json", "profile", "list"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("profile list error = %v\noutput:\n%s", err, out.String())
+	}
+	var resp profileListResponse
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("Unmarshal() error = %v\noutput:\n%s", err, out.String())
+	}
+	if len(resp.Profiles) != 1 {
+		t.Fatalf("profiles len = %d, want 1", len(resp.Profiles))
+	}
+	got := resp.Profiles[0]
+	if got.ExpiresAt != token.ExpiresAt.Format(time.RFC3339) {
+		t.Fatalf("expiresAt = %q, want real token %q", got.ExpiresAt, token.ExpiresAt.Format(time.RFC3339))
+	}
+	if got.RefreshExpAt != token.RefreshExpAt.Format(time.RFC3339) {
+		t.Fatalf("refreshExpAt = %q, want real token %q", got.RefreshExpAt, token.RefreshExpAt.Format(time.RFC3339))
+	}
+	if got.Status != authpkg.ProfileStatusExpired {
+		t.Fatalf("status = %q, want expired", got.Status)
+	}
+}
+
+func TestProfileListDistinguishesMissingAndUnavailableTokenState(t *testing.T) {
+	originalLoad := profileLoadTokenData
+	t.Cleanup(func() { profileLoadTokenData = originalLoad })
+	profile := authpkg.Profile{CorpID: "corp", UserID: "user"}
+
+	profileLoadTokenData = func(string, string) (*authpkg.TokenData, error) {
+		return nil, authpkg.ErrTokenDataNotFound
+	}
+	if state := loadProfileTokenState("cfg", profile); state.Status != authpkg.ProfileStatusRevoked {
+		t.Fatalf("missing token status = %q, want revoked", state.Status)
+	}
+
+	profileLoadTokenData = func(string, string) (*authpkg.TokenData, error) {
+		return nil, errors.New("keychain unavailable")
+	}
+	if state := loadProfileTokenState("cfg", profile); state.Status != authpkg.ProfileStatusUnavailable {
+		t.Fatalf("unavailable token status = %q, want unavailable", state.Status)
+	}
+}
+
+func TestProfileListCurrentFlagsUseStoredExactSelectors(t *testing.T) {
+	first := authLogoutTestToken("corp_same")
+	first.UserID = "user_1"
+	first.UserName = "账号一"
+	second := authLogoutTestToken("corp_same")
+	second.AccessToken = "access-second"
+	second.RefreshToken = "refresh-second"
+	second.UserID = "user_2"
+	second.UserName = "账号二"
+	configDir := setupAuthLogoutProfiles(t, first, second)
+
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	cfg.PrimaryProfile = ""
+	cfg.CurrentProfile = "corp_same:user_1"
+	cfg.OrgCurrentProfiles["corp_same"] = "corp_same:user_1"
+	if err := authpkg.SaveProfiles(configDir, cfg); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "json", "profile", "list"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("profile list error = %v\noutput:\n%s", err, out.String())
+	}
+	var resp profileListResponse
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("Unmarshal() error = %v\noutput:\n%s", err, out.String())
+	}
+	got := make(map[string]profileView, len(resp.Profiles))
+	for _, profile := range resp.Profiles {
+		got[profile.Profile] = profile
+	}
+	if !got["corp_same:user_1"].IsCurrent || !got["corp_same:user_1"].IsOrgCurrent {
+		t.Fatalf("first account flags = %#v, want current and org current", got["corp_same:user_1"])
+	}
+	if got["corp_same:user_2"].IsCurrent || got["corp_same:user_2"].IsOrgCurrent {
+		t.Fatalf("second account flags = %#v, want neither current nor org current", got["corp_same:user_2"])
+	}
+	if got["corp_same:user_1"].IsPrimary || got["corp_same:user_2"].IsPrimary {
+		t.Fatalf("deprecated isPrimary should be false without primaryProfile: %#v", got)
+	}
+}
+
+func TestProfileListTableOmitsDeprecatedPrimaryColumn(t *testing.T) {
+	setupAuthLogoutProfiles(t, authLogoutTestToken("corp_table"))
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"profile", "list"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("profile list error = %v\noutput:\n%s", err, out.String())
+	}
+	header := strings.SplitN(out.String(), "\n", 2)[0]
+	if strings.Contains(header, "PRI") {
+		t.Fatalf("profile list header still contains deprecated PRI column: %q", header)
 	}
 }
 
@@ -118,8 +297,9 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" || cfg.PreviousProfile != "corp_secondary" {
-		t.Fatalf("profile pointers = current %q previous %q, want corp_primary/corp_secondary", cfg.CurrentProfile, cfg.PreviousProfile)
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" ||
+		cfg.PreviousProfile != "corp_secondary:user-corp_secondary" {
+		t.Fatalf("profile pointers = current %q previous %q", cfg.CurrentProfile, cfg.PreviousProfile)
 	}
 	legacyToken, err := authpkg.LoadTokenData(configDir)
 	if err != nil {
@@ -145,8 +325,9 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_secondary" || cfg.PreviousProfile != "corp_primary" {
-		t.Fatalf("profile pointers = current %q previous %q, want corp_secondary/corp_primary", cfg.CurrentProfile, cfg.PreviousProfile)
+	if cfg.CurrentProfile != "corp_secondary:user-corp_secondary" ||
+		cfg.PreviousProfile != "corp_primary:user-corp_primary" {
+		t.Fatalf("profile pointers = current %q previous %q", cfg.CurrentProfile, cfg.PreviousProfile)
 	}
 	legacyToken, err = authpkg.LoadTokenData(configDir)
 	if err != nil {
@@ -178,8 +359,9 @@ func TestProfileSwitchRootCommandSwitchesPrimaryOrganizationAndLegacyMirror(t *t
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" || cfg.PreviousProfile != "corp_secondary" {
-		t.Fatalf("profile pointers = current %q previous %q, want corp_primary/corp_secondary", cfg.CurrentProfile, cfg.PreviousProfile)
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" ||
+		cfg.PreviousProfile != "corp_secondary:user-corp_secondary" {
+		t.Fatalf("profile pointers = current %q previous %q", cfg.CurrentProfile, cfg.PreviousProfile)
 	}
 	legacyToken, err := authpkg.LoadTokenData(configDir)
 	if err != nil {
@@ -209,8 +391,8 @@ func TestProfileSwitchRootCommandSupportsCorpIDFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" {
-		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" {
+		t.Fatalf("currentProfile = %q, want corp_primary:user-corp_primary", cfg.CurrentProfile)
 	}
 
 	cmd = NewRootCommand()
@@ -226,8 +408,8 @@ func TestProfileSwitchRootCommandSupportsCorpIDFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_secondary" {
-		t.Fatalf("currentProfile = %q, want corp_secondary", cfg.CurrentProfile)
+	if cfg.CurrentProfile != "corp_secondary:user-corp_secondary" {
+		t.Fatalf("currentProfile = %q, want corp_secondary:user-corp_secondary", cfg.CurrentProfile)
 	}
 }
 
@@ -287,8 +469,8 @@ func TestProfileSwitchNoArgsUsesTUISelector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" {
-		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" {
+		t.Fatalf("currentProfile = %q, want corp_primary:user-corp_primary", cfg.CurrentProfile)
 	}
 }
 
@@ -358,7 +540,7 @@ func TestProfileSwitchTUIViewUsesFixedOuterTable(t *testing.T) {
 	}
 }
 
-func TestProfileSwitchTUISortsLatestLoggedInProfilesFirst(t *testing.T) {
+func TestProfileSwitchTUIPreservesStoredOrderInsteadOfSortingByTime(t *testing.T) {
 	cfg := &authpkg.ProfilesConfig{
 		PrimaryProfile: "old",
 		CurrentProfile: "old",
@@ -370,7 +552,7 @@ func TestProfileSwitchTUISortsLatestLoggedInProfilesFirst(t *testing.T) {
 	}
 	model := newProfileSwitchTUIModel(cfg, "old")
 	gotOrder := []string{model.profiles[0].CorpID, model.profiles[1].CorpID, model.profiles[2].CorpID}
-	wantOrder := []string{"new", "fallback", "old"}
+	wantOrder := []string{"old", "new", "fallback"}
 	if strings.Join(gotOrder, ",") != strings.Join(wantOrder, ",") {
 		t.Fatalf("profile order = %v, want %v", gotOrder, wantOrder)
 	}
@@ -507,8 +689,8 @@ func TestProfileUseNoArgsUsesTUISelector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" {
-		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" {
+		t.Fatalf("currentProfile = %q, want corp_primary:user-corp_primary", cfg.CurrentProfile)
 	}
 }
 
@@ -549,7 +731,7 @@ func TestWriteProfileListTableIncludesCorpName(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	writeProfileListTable(&buf, cfg)
+	writeProfileListTable(&buf, "", cfg)
 	out := buf.String()
 	for _, want := range []string{
 		"ORG_NAME",

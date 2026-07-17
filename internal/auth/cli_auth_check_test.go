@@ -495,6 +495,10 @@ func TestDeviceFlow_LoginOnce_CLIAuthEnabled_Success(t *testing.T) {
 		logger:          newDeviceFlowTestLogger(),
 		Output:          io.Discard,
 		httpClient:      srv.Client(),
+		IdentityEnricher: func(_ context.Context, data *TokenData) error {
+			data.UserID = "user123"
+			return nil
+		},
 	}
 
 	token, err := provider.loginOnce(context.Background(), 1)

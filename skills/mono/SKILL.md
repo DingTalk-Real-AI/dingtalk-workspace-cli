@@ -61,6 +61,14 @@ cli_version: ">=1.0.15"
 | `wiki` | 1 | `dingtalk-wiki` | `dws shortcut list --service wiki --format json` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
+## 多组织 / 多账号
+
+- `dws profile list --format json` 默认返回全部账号。自动化只使用每项稳定的 `profile=corpId:userId`；`status/expiresAt/refreshExpAt` 来自真实身份 Token，列表不触发刷新。
+- 输入支持 `corpId:userId`、`corpId:userName`、`corpName:userId`、`corpName:userName`，也兼容单独的 corpId、唯一 corpName 和本地 profile 名。名称只用于输入；重名时必须按报错候选改用 `corpId:userId`。
+- 只传组织时使用该组织明确记录的 `isOrgCurrent=true` 账号。多账号组织没有默认账号时必须让用户指定账号；禁止选择第一项、最近登录或最近使用账号。
+- 不传 `--profile` 使用全局 `isCurrent=true` 账号。`primaryProfile/isPrimary` 仅兼容输出，不参与选择；`previousProfile` 只用于 `profile switch -`。
+- 跨组织读 / 搜：按 `corpId` 去重；每个组织使用唯一 `isOrgCurrent=true` 的 `profile`。组织存在多个账号且没有默认账号时先询问用户。写 / 发 / 删 / 撤回及持久切换前先确认目标组织和账号。
+
 ## 产品总览
 
 | 产品                | 用途                                                   | 参考文件                                                           |

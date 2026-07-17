@@ -396,7 +396,8 @@ func TestCrossPlatformCoverageDeviceFlowLoginRetry(t *testing.T) {
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"accessToken": "device-access", "refreshToken": "refresh", "expiresIn": 7200, "corpId": "corp-device",
+				"accessToken": "device-access", "refreshToken": "refresh", "expiresIn": 7200,
+				"corpId": "corp-device", "userId": "user-device",
 			})
 		case strings.HasSuffix(r.URL.Path, CLIAuthEnabledPath):
 			_ = json.NewEncoder(w).Encode(CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}})
@@ -493,7 +494,7 @@ func TestCrossPlatformCoverageProfilesLifecycleEdges(t *testing.T) {
 	}
 	normalizeProfilesConfig(cfg)
 	if len(cfg.Profiles) != 1 || cfg.Profiles[0].Name != "Acme" ||
-		cfg.PrimaryProfile != "corp-a" || cfg.CurrentProfile != "corp-a" || cfg.PreviousProfile != "" {
+		cfg.PrimaryProfile != "" || cfg.CurrentProfile != "" || cfg.PreviousProfile != "" {
 		t.Fatalf("normalized profiles = %#v", cfg)
 	}
 
@@ -515,6 +516,16 @@ func TestCrossPlatformCoverageProfilesLifecycleEdges(t *testing.T) {
 	if err := UpsertProfileFromTokenWithCurrent(dir, second, true); err != nil {
 		t.Fatal(err)
 	}
+	if err := SaveTokenDataKeychainForIdentity(first.CorpID, first.UserID, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveTokenDataKeychainForCorpID(second.CorpID, second); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = DeleteTokenDataKeychainForIdentity(first.CorpID, first.UserID)
+		_ = DeleteTokenDataKeychainForCorpID(second.CorpID)
+	})
 	profilesForAmbiguity, err := LoadProfiles(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -575,7 +586,7 @@ func TestCrossPlatformCoverageProfilesLifecycleEdges(t *testing.T) {
 		{CorpID: "two", Name: "Acme-12345678"},
 		{CorpID: "three", Name: "Acme-12345678-2"},
 	}}
-	if got := chooseProfileName(nameCfg, &TokenData{CorpID: "corp-12345678", CorpName: "Acme"}); got != "Acme-12345678-3" {
+	if got := chooseProfileName(nameCfg, &TokenData{CorpID: "corp-12345678", CorpName: "Acme"}); got != "Acme-2" {
 		t.Fatalf("collision profile name = %q", got)
 	}
 	if chooseProfileName(&ProfilesConfig{}, &TokenData{}) != "profile" {
@@ -585,12 +596,7 @@ func TestCrossPlatformCoverageProfilesLifecycleEdges(t *testing.T) {
 		!shouldRefreshProfileName(&Profile{}, first) {
 		t.Fatal("profile refresh-name decisions failed")
 	}
-	if findProfile(nil, "x") != nil || findProfile(cfg, "") != nil ||
-		profileIndexByCorpID(nil, "x") != -1 || firstProfileCorpID(nil) != "" {
-		t.Fatal("nil profile helper failed")
-	}
-	if shortCorpID("short") != "short" || shortCorpID("corp-12345678") != "12345678" ||
-		timeOrRFC3339(time.Time{}) != "" {
+	if shortCorpID("short") != "short" || shortCorpID("corp-12345678") != "12345678" {
 		t.Fatal("profile formatting helpers failed")
 	}
 }
@@ -1449,31 +1455,43 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 	oldMarshalIndent := tokenJSONMarshalIndent
 	oldMarshal := tokenJSONMarshal
 	oldMkdir := tokenMkdirAll
+	oldRead := tokenReadFile
 	oldWrite := tokenWriteFile
 	oldRename := tokenRename
 	oldRemove := tokenRemove
 	oldGlob := tokenGlob
 	oldSaveCorp := tokenSaveKeychainForCorpID
+	oldSaveIdentity := tokenSaveKeychainForIdentity
 	oldSaveLegacy := tokenSaveKeychain
 	oldLoadCorp := tokenLoadKeychainForCorpID
+	oldLoadIdentity := tokenLoadKeychainIdentity
 	oldLoadLegacy := tokenLoadKeychain
 	oldExists := tokenKeychainExists
 	oldDeleteCorp := tokenDeleteKeychainForCorpID
+	oldDeleteIdentity := tokenDeleteKeychainIdentity
 	oldDeleteLegacy := tokenDeleteKeychain
+	oldRemoveAuthEntries := tokenRemoveAuthTokenEntries
 	oldLoadSecure := tokenLoadSecure
 	oldDeleteSecure := tokenDeleteSecure
+	oldEnsureProfiles := profilesEnsureMigration
 	oldResolve := tokenResolveProfile
+	oldResolveDeletion := tokenResolveDeletion
+	oldResolveSelection := tokenResolveSelection
 	oldUpsert := tokenUpsertProfile
 	oldRemoveProfile := tokenRemoveProfile
 	oldSync := tokenSyncLegacyMirror
+	oldSyncOrganization := tokenSyncOrganizationMirror
 	oldLoadProfiles := tokenLoadProfiles
+	oldSaveProfiles := tokenSaveProfiles
 	oldWriteMarker := tokenWriteMarker
+	oldWriteManualMarker := tokenWriteManualMarker
 	oldDeleteMarker := tokenDeleteMarker
 	oldParseURL := tokenParseURL
 	oldNewRequest := tokenNewRequest
 	oldDefaultDir := tokenDefaultConfigDir
 	oldLoadData := tokenLoadData
 	oldRevokeURL := tokenRevokeURL
+	oldMCPBaseURL := tokenMCPBaseURL
 	oldLogoutURL := tokenLogoutURL
 	oldLogoutContinue := tokenLogoutContinueURL
 	oldLogoutClient := tokenLogoutHTTPClient
@@ -1483,31 +1501,43 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 		tokenJSONMarshalIndent = oldMarshalIndent
 		tokenJSONMarshal = oldMarshal
 		tokenMkdirAll = oldMkdir
+		tokenReadFile = oldRead
 		tokenWriteFile = oldWrite
 		tokenRename = oldRename
 		tokenRemove = oldRemove
 		tokenGlob = oldGlob
 		tokenSaveKeychainForCorpID = oldSaveCorp
+		tokenSaveKeychainForIdentity = oldSaveIdentity
 		tokenSaveKeychain = oldSaveLegacy
 		tokenLoadKeychainForCorpID = oldLoadCorp
+		tokenLoadKeychainIdentity = oldLoadIdentity
 		tokenLoadKeychain = oldLoadLegacy
 		tokenKeychainExists = oldExists
 		tokenDeleteKeychainForCorpID = oldDeleteCorp
+		tokenDeleteKeychainIdentity = oldDeleteIdentity
 		tokenDeleteKeychain = oldDeleteLegacy
+		tokenRemoveAuthTokenEntries = oldRemoveAuthEntries
 		tokenLoadSecure = oldLoadSecure
 		tokenDeleteSecure = oldDeleteSecure
+		profilesEnsureMigration = oldEnsureProfiles
 		tokenResolveProfile = oldResolve
+		tokenResolveDeletion = oldResolveDeletion
+		tokenResolveSelection = oldResolveSelection
 		tokenUpsertProfile = oldUpsert
 		tokenRemoveProfile = oldRemoveProfile
 		tokenSyncLegacyMirror = oldSync
+		tokenSyncOrganizationMirror = oldSyncOrganization
 		tokenLoadProfiles = oldLoadProfiles
+		tokenSaveProfiles = oldSaveProfiles
 		tokenWriteMarker = oldWriteMarker
+		tokenWriteManualMarker = oldWriteManualMarker
 		tokenDeleteMarker = oldDeleteMarker
 		tokenParseURL = oldParseURL
 		tokenNewRequest = oldNewRequest
 		tokenDefaultConfigDir = oldDefaultDir
 		tokenLoadData = oldLoadData
 		tokenRevokeURL = oldRevokeURL
+		tokenMCPBaseURL = oldMCPBaseURL
 		tokenLogoutURL = oldLogoutURL
 		tokenLogoutContinueURL = oldLogoutContinue
 		tokenLogoutHTTPClient = oldLogoutClient
@@ -1572,10 +1602,12 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 			t.Fatalf("corp marker error = %v", err)
 		}
 		SetRuntimeProfile("")
+		tokenWriteManualMarker = func(string) error { return fail }
 		if err := saveTokenDataLocked(dir, &TokenData{}); !errors.Is(err, fail) {
 			t.Fatalf("legacy marker error = %v", err)
 		}
 		tokenWriteMarker = oldWriteMarker
+		tokenWriteManualMarker = oldWriteManualMarker
 
 		edition.Override(&edition.Hooks{Name: "coverage", SaveToken: func(string, []byte) error { return nil }})
 		if err := saveTokenDataLocked(dir, data); err != nil {
@@ -1630,6 +1662,9 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 			t.Fatalf("failed migration load = %#v %v", got, err)
 		}
 		tokenSaveKeychain = func(*TokenData) error { return nil }
+		tokenLoadKeychain = func() (*TokenData, error) { return nil, ErrTokenDataNotFound }
+		tokenReadFile = func(string) ([]byte, error) { return nil, os.ErrNotExist }
+		tokenWriteManualMarker = func(string) error { return nil }
 		deleted := false
 		tokenDeleteSecure = func(string) error { deleted = true; return nil }
 		if _, err := LoadTokenDataForProfile(dir, ""); err != nil || !deleted {
@@ -1653,25 +1688,70 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 	t.Run("delete branches", func(t *testing.T) {
 		dir := t.TempDir()
 		fail := errors.New("fail")
-		selected := &Profile{CorpID: "corp"}
-		tokenResolveProfile = func(string, string) (*Profile, error) { return nil, fail }
+		selected := &Profile{CorpID: "corp", UserID: "user"}
+		profilesEnsureMigration = func(string) error { return fail }
+		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
+			t.Fatalf("delete migration error = %v", err)
+		}
+		profilesEnsureMigration = func(string) error { return nil }
+		tokenLoadProfiles = func(string) (*ProfilesConfig, error) { return nil, fail }
+		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
+			t.Fatalf("delete profiles load error = %v", err)
+		}
+		cfg := &ProfilesConfig{
+			CurrentProfile:     ProfileSelector(*selected),
+			OrgCurrentProfiles: map[string]string{"corp": ProfileSelector(*selected)},
+			Profiles:           []Profile{*selected},
+		}
+		tokenLoadProfiles = func(string) (*ProfilesConfig, error) { return cfg, nil }
+		tokenResolveDeletion = func(*ProfilesConfig, string) (*Profile, bool, error) { return nil, false, fail }
 		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
 			t.Fatalf("delete resolution error = %v", err)
 		}
-		tokenResolveProfile = func(string, string) (*Profile, error) { return selected, nil }
-		tokenDeleteKeychainForCorpID = func(string) error { return fail }
+		tokenResolveDeletion = func(*ProfilesConfig, string) (*Profile, bool, error) { return selected, true, nil }
+		tokenLoadKeychainIdentity = func(string, string) (*TokenData, error) {
+			return &TokenData{CorpID: "corp", UserID: "user"}, nil
+		}
+		tokenLoadKeychainForCorpID = func(string) (*TokenData, error) {
+			return &TokenData{CorpID: "corp", UserID: "user"}, nil
+		}
+		tokenLoadKeychain = func() (*TokenData, error) {
+			return &TokenData{CorpID: "corp", UserID: "user"}, nil
+		}
+		tokenReadFile = func(string) ([]byte, error) { return nil, os.ErrNotExist }
+		tokenSaveProfiles = func(string, *ProfilesConfig) error { return nil }
+		tokenSaveKeychainForIdentity = func(string, string, *TokenData) error { return nil }
+		tokenSaveKeychainForCorpID = func(string, *TokenData) error { return nil }
+		tokenSaveKeychain = func(*TokenData) error { return nil }
+		tokenWriteMarker = func(string) error { return nil }
+		tokenDeleteMarker = func(string) error { return nil }
 		tokenRemoveProfile = func(string, string) (*Profile, error) { return selected, nil }
 		tokenSyncLegacyMirror = func(string) error { return nil }
+		tokenSyncOrganizationMirror = func(Profile) error { return nil }
 		tokenDeleteSecure = func(string) error { return nil }
+		tokenDeleteKeychainForCorpID = func(string) error { return nil }
+		tokenDeleteKeychainIdentity = func(string, string) error { return fail }
+		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
+			t.Fatalf("delete identity keychain error = %v", err)
+		}
+		tokenDeleteKeychainIdentity = func(string, string) error { return nil }
+		cfg.OrgCurrentProfiles = map[string]string{"corp": ProfileSelector(*selected)}
+		tokenRemoveProfile = func(string, string) (*Profile, error) {
+			cfg.OrgCurrentProfiles = nil
+			return selected, nil
+		}
+		tokenDeleteKeychainForCorpID = func(string) error { return fail }
 		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
 			t.Fatalf("delete corp keychain error = %v", err)
 		}
 		tokenDeleteKeychainForCorpID = func(string) error { return nil }
+		cfg.OrgCurrentProfiles = map[string]string{"corp": ProfileSelector(*selected)}
 		tokenRemoveProfile = func(string, string) (*Profile, error) { return nil, fail }
 		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
 			t.Fatalf("remove profile error = %v", err)
 		}
 		tokenRemoveProfile = func(string, string) (*Profile, error) { return selected, nil }
+		cfg.OrgCurrentProfiles = nil
 		tokenSyncLegacyMirror = func(string) error { return fail }
 		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
 			t.Fatalf("sync mirror error = %v", err)
@@ -1682,7 +1762,8 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 			t.Fatalf("secure cleanup error = %v", err)
 		}
 
-		tokenResolveProfile = func(string, string) (*Profile, error) { return nil, nil }
+		cfg.CurrentProfile = ""
+		cfg.Profiles = nil
 		tokenDeleteKeychain = func() error { return fail }
 		tokenDeleteMarker = func(string) error { return nil }
 		if err := deleteTokenDataForProfileLocked(dir, ""); !errors.Is(err, fail) {
@@ -1710,22 +1791,17 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 	t.Run("delete all", func(t *testing.T) {
 		fail := errors.New("fail")
 		base := func() string {
-			tokenLoadProfiles = func(string) (*ProfilesConfig, error) { return &ProfilesConfig{}, nil }
-			tokenDeleteKeychainForCorpID = func(string) error { return nil }
+			tokenRemoveAuthTokenEntries = func(string) error { return nil }
 			tokenRemove = func(string) error { return os.ErrNotExist }
 			tokenGlob = func(string) ([]string, error) { return nil, nil }
-			tokenDeleteKeychain = func() error { return nil }
 			tokenDeleteSecure = func(string) error { return nil }
 			tokenDeleteMarker = func(string) error { return nil }
 			return t.TempDir()
 		}
 		dir := base()
-		tokenLoadProfiles = func(string) (*ProfilesConfig, error) {
-			return &ProfilesConfig{Profiles: []Profile{{CorpID: "corp"}}}, nil
-		}
-		tokenDeleteKeychainForCorpID = func(string) error { return fail }
+		tokenRemoveAuthTokenEntries = func(string) error { return fail }
 		if err := DeleteAllTokenData(dir); !errors.Is(err, fail) {
-			t.Fatalf("delete-all corp error = %v", err)
+			t.Fatalf("delete-all auth namespace error = %v", err)
 		}
 		dir = base()
 		tokenRemove = func(string) error { return fail }
@@ -1745,11 +1821,6 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 			t.Fatalf("delete-all quarantine error = %v", err)
 		}
 		dir = base()
-		tokenDeleteKeychain = func() error { return fail }
-		if err := DeleteAllTokenData(dir); !errors.Is(err, fail) {
-			t.Fatalf("delete-all legacy keychain error = %v", err)
-		}
-		dir = base()
 		tokenDeleteSecure = func(string) error { return fail }
 		if err := DeleteAllTokenData(dir); !errors.Is(err, fail) {
 			t.Fatalf("delete-all secure error = %v", err)
@@ -1765,6 +1836,9 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 		resetClientIDFromMCP()
 		SetClientID("client")
 		fail := errors.New("fail")
+		tokenLoadData = func(string) (*TokenData, error) {
+			return &TokenData{AccessToken: "access", ClientID: "client", Source: "direct"}, nil
+		}
 		tokenParseURL = func(string) (*url.URL, error) { return nil, fail }
 		if err := RevokeTokenRemote(context.Background()); !errors.Is(err, fail) {
 			t.Fatalf("logout parse error = %v", err)
@@ -1797,16 +1871,14 @@ func TestCrossPlatformCoverageTokenStorageAndRevocationCoverageEdges(t *testing.
 		}
 
 		SetClientIDFromMCP("mcp-client")
-		tokenRevokeURL = func() string { return "" }
-		if err := RevokeTokenRemote(context.Background()); err != nil {
-			t.Fatal(err)
-		}
-		tokenRevokeURL = func() string { return "https://revoke.test" }
 		tokenLoadData = func(string) (*TokenData, error) { return nil, fail }
 		if err := RevokeTokenRemote(context.Background()); err != nil {
 			t.Fatal("missing token revoke should be a no-op")
 		}
-		tokenLoadData = func(string) (*TokenData, error) { return &TokenData{AccessToken: "access"}, nil }
+		tokenMCPBaseURL = func() string { return "https://revoke.test" }
+		tokenLoadData = func(string) (*TokenData, error) {
+			return &TokenData{AccessToken: "access", ClientID: "mcp-client", Source: "mcp"}, nil
+		}
 		tokenJSONMarshal = func(any) ([]byte, error) { return nil, fail }
 		if err := RevokeTokenRemote(context.Background()); !errors.Is(err, fail) {
 			t.Fatalf("revoke marshal error = %v", err)
@@ -2207,8 +2279,8 @@ func TestCrossPlatformCoverageProfilesCoverageEdges(t *testing.T) {
 	}
 	primaryOnly := &ProfilesConfig{PrimaryProfile: "primary", Profiles: []Profile{{Name: "primary", CorpID: "primary"}}}
 	profilesLoad = func(string) (*ProfilesConfig, error) { return primaryOnly, nil }
-	if got, err := ResolveProfile(dir, ""); err != nil || got == nil || got.CorpID != "primary" {
-		t.Fatalf("primary profile resolution = %#v %v", got, err)
+	if got, err := ResolveProfile(dir, ""); err != nil || got != nil {
+		t.Fatalf("primary-only profile resolution = %#v %v", got, err)
 	}
 	profilesLoad = func(string) (*ProfilesConfig, error) { return &ProfilesConfig{}, nil }
 	if got, err := ResolveProfile(dir, ""); err != nil || got != nil {
@@ -2222,8 +2294,8 @@ func TestCrossPlatformCoverageProfilesCoverageEdges(t *testing.T) {
 	}
 	cfgNoCurrent := &ProfilesConfig{PrimaryProfile: "primary", Profiles: []Profile{{CorpID: "primary"}}}
 	profilesLoad = func(string) (*ProfilesConfig, error) { return cfgNoCurrent, nil }
-	if got, err := resolveProfileForLoad(dir, ""); err != nil || got == nil || got.CorpID != "primary" {
-		t.Fatalf("profile-for-load primary fallback = %#v %v", got, err)
+	if got, err := resolveProfileForLoad(dir, ""); err != nil || got != nil {
+		t.Fatalf("profile-for-load primary-only result = %#v %v", got, err)
 	}
 
 	profilesLoad = func(string) (*ProfilesConfig, error) { return cfg, nil }
@@ -2242,6 +2314,10 @@ func TestCrossPlatformCoverageProfilesCoverageEdges(t *testing.T) {
 		Profiles: []Profile{{Name: "primary", CorpID: "primary"}, {Name: "current", CorpID: "current"}, {Name: "previous", CorpID: "previous"}},
 	}
 	profilesSave = func(string, *ProfilesConfig) error { return nil }
+	profilesLoadCorp = func(corpID string) (*TokenData, error) {
+		return &TokenData{CorpID: corpID, AccessToken: "x"}, nil
+	}
+	profilesSaveCorp = func(string, *TokenData) error { return nil }
 	profilesSyncLegacyMirror = func(string) error { return fail }
 	if _, err := setCurrentProfileLocked(dir, "current"); !errors.Is(err, fail) {
 		t.Fatalf("set-current mirror error = %v", err)
@@ -2269,8 +2345,12 @@ func TestCrossPlatformCoverageProfilesCoverageEdges(t *testing.T) {
 	deletedLegacy, deletedMarker := false, false
 	profilesDeleteLegacy = func() error { deletedLegacy = true; return fail }
 	profilesDeleteMarker = func(string) error { deletedMarker = true; return fail }
-	if err := syncLegacyTokenMirrorLocked(dir); err != nil || !deletedLegacy || !deletedMarker {
+	if err := syncLegacyTokenMirrorLocked(dir); !errors.Is(err, fail) || !deletedLegacy || deletedMarker {
 		t.Fatalf("empty mirror cleanup = %v %v %v", err, deletedLegacy, deletedMarker)
+	}
+	profilesDeleteLegacy = func() error { return nil }
+	if err := syncLegacyTokenMirrorLocked(dir); !errors.Is(err, fail) || !deletedMarker {
+		t.Fatalf("empty mirror marker cleanup = %v %v", err, deletedMarker)
 	}
 
 	normalizeProfilesConfig(nil)
@@ -2910,4 +2990,176 @@ func TestCrossPlatformCoverageDeviceFlowHighLevelCoverageEdges(t *testing.T) {
 		t.Fatal("GET HTTP status error succeeded")
 	}
 	dfPrintBox(io.Discard, []string{"short"})
+}
+
+func TestCrossPlatformCoverageMultiAccountSelectorAndIdentityLoadEdges(t *testing.T) {
+	cfg := &ProfilesConfig{
+		Profiles: []Profile{
+			{Name: "local-a", CorpID: "corp-a", CorpName: "Shared", UserID: "u1", UserName: "Alice"},
+			{Name: "duplicate", CorpID: "corp-a", CorpName: "Shared", UserID: "u2", UserName: "Alice"},
+			{Name: "duplicate", CorpID: "corp-b", CorpName: "Shared", UserID: "u3", UserName: "Bob"},
+			{Name: "solo", CorpID: "corp-c", CorpName: "Solo", UserID: "u4", UserName: "Carol"},
+		},
+	}
+
+	for _, tc := range []struct {
+		selector string
+		wantErr  bool
+	}{
+		{"", true},
+		{"missing:u1", true},
+		{"Shared:u1", true},
+		{"corp-a:u1", false},
+		{"corp-a:Alice", true},
+		{"corp-a:missing", true},
+		{"corp-a", true},
+		{"corp-c", false},
+		{"Solo", false},
+		{"local-a", false},
+		{"duplicate", true},
+		{"missing", true},
+	} {
+		_, _, err := resolveProfileSelection("", cfg, tc.selector)
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("resolveProfileSelection(%q) error = %v", tc.selector, err)
+		}
+	}
+	if _, _, err := resolveProfileSelection("", nil, "x"); err == nil {
+		t.Fatal("nil profile config selection succeeded")
+	}
+	cfg.OrgCurrentProfiles = map[string]string{"corp-a": "corp-a:u2"}
+	if got, _, err := resolveProfileSelection("", cfg, "corp-a"); err != nil || got.UserID != "u2" {
+		t.Fatalf("organization current selection = %#v %v", got, err)
+	}
+
+	for _, tc := range []struct {
+		selector string
+		wantErr  bool
+		exact    bool
+	}{
+		{"", true, false},
+		{"corp-a:u1", false, true},
+		{"corp-a", false, false},
+		{"Solo", false, false},
+		{"local-a", false, true},
+		{"duplicate", true, true},
+		{"missing", true, false},
+	} {
+		_, exact, err := resolveProfileDeletionSelection(cfg, tc.selector)
+		if (err != nil) != tc.wantErr || (!tc.wantErr && exact != tc.exact) {
+			t.Fatalf("resolveProfileDeletionSelection(%q) = exact %v, %v", tc.selector, exact, err)
+		}
+	}
+	if _, _, err := resolveProfileDeletionSelection(nil, "x"); err == nil {
+		t.Fatal("nil deletion config succeeded")
+	}
+
+	for _, selector := range []string{"", "corp-a", "missing", "Solo", "Shared"} {
+		_, _ = resolveOrganizationCorpID(cfg, selector)
+	}
+	if got, err := resolveOrganizationCorpID(nil, "x"); err != nil || got != "" {
+		t.Fatalf("nil organization resolution = %q %v", got, err)
+	}
+	if _, _, err := resolveOrganizationDefault(cfg, "missing", "missing", nil); err == nil {
+		t.Fatal("empty organization default succeeded")
+	}
+	if got, _, err := resolveOrganizationDefault(cfg, "corp-c", "Solo", profilesForCorpID(cfg, "corp-c")); err != nil || got.UserID != "u4" {
+		t.Fatalf("single account organization default = %#v %v", got, err)
+	}
+	if _, _, err := resolveOrganizationDefault(&ProfilesConfig{}, "corp-a", "corp-a", profilesForCorpID(cfg, "corp-a")); err == nil {
+		t.Fatal("ambiguous organization default succeeded")
+	}
+	if got := profileSelectorCandidates([]*Profile{nil, &cfg.Profiles[1], &cfg.Profiles[0]}); len(got) != 2 || got[0] != "corp-a:u1" {
+		t.Fatalf("selector candidates = %#v", got)
+	}
+	for selector, want := range map[string]bool{
+		"":                   false,
+		"corp-a:u1":          true,
+		"Shared:Bob":         true,
+		"corp-c":             true,
+		"local-a":            true,
+		"definitely-missing": false,
+	} {
+		if got := profileSelectorReferenceExists(cfg, selector); got != want {
+			t.Fatalf("profileSelectorReferenceExists(%q) = %v", selector, got)
+		}
+	}
+	if profileSelectorReferenceExists(nil, "corp-a") {
+		t.Fatal("nil profile selector reference exists")
+	}
+
+	oldAcquire := profilesAcquireDualLock
+	oldEnsure := profilesEnsureMigration
+	oldLoad := profilesLoad
+	t.Cleanup(func() {
+		profilesAcquireDualLock = oldAcquire
+		profilesEnsureMigration = oldEnsure
+		profilesLoad = oldLoad
+	})
+	profilesAcquireDualLock = func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil }
+	profilesEnsureMigration = func(string) error { return nil }
+	profilesLoad = func(string) (*ProfilesConfig, error) { return cfg, nil }
+	if got, exact, err := ResolveProfileDeletionScope("cfg", "corp-a:u1"); err != nil || !exact || got.UserID != "u1" {
+		t.Fatalf("deletion scope = %#v %v %v", got, exact, err)
+	}
+	profilesEnsureMigration = func(string) error { return errors.New("migration") }
+	if _, _, err := ResolveProfileDeletionScope("cfg", "corp-a"); err == nil {
+		t.Fatal("deletion scope migration failure succeeded")
+	}
+	profilesEnsureMigration = func(string) error { return nil }
+	profilesLoad = func(string) (*ProfilesConfig, error) { return nil, errors.New("load") }
+	if _, _, err := ResolveProfileDeletionScope("cfg", "corp-a"); err == nil {
+		t.Fatal("deletion scope load failure succeeded")
+	}
+
+	oldLoadIdentity := profilesLoadIdentity
+	oldLoadCorp := profilesLoadCorp
+	oldSaveIdentity := profilesSaveIdentity
+	t.Cleanup(func() {
+		profilesLoadIdentity = oldLoadIdentity
+		profilesLoadCorp = oldLoadCorp
+		profilesSaveIdentity = oldSaveIdentity
+	})
+	profile := Profile{CorpID: "corp-a", UserID: "u1"}
+	profilesLoadIdentity = func(string, string) (*TokenData, error) { return &TokenData{AccessToken: "identity"}, nil }
+	if got, err := loadTokenForProfileIdentity(profile); err != nil || got.AccessToken != "identity" {
+		t.Fatalf("identity token load = %#v %v", got, err)
+	}
+	fail := errors.New("fail")
+	profilesLoadIdentity = func(string, string) (*TokenData, error) { return nil, fail }
+	if _, err := loadTokenForProfileIdentity(profile); !errors.Is(err, fail) {
+		t.Fatalf("identity load failure = %v", err)
+	}
+	profilesLoadIdentity = func(string, string) (*TokenData, error) { return nil, ErrTokenDataNotFound }
+	profilesLoadCorp = func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound }
+	if _, err := loadTokenForProfileIdentity(profile); !errors.Is(err, ErrTokenDataNotFound) {
+		t.Fatalf("missing organization mirror = %v", err)
+	}
+	profilesLoadCorp = func(string) (*TokenData, error) { return nil, fail }
+	if _, err := loadTokenForProfileIdentity(profile); !errors.Is(err, fail) {
+		t.Fatalf("organization mirror failure = %v", err)
+	}
+	for _, data := range []*TokenData{
+		{CorpID: "corp-a"},
+		{CorpID: "corp-a", UserID: "other"},
+	} {
+		profilesLoadCorp = func(string) (*TokenData, error) { return data, nil }
+		if _, err := loadTokenForProfileIdentity(profile); err == nil {
+			t.Fatalf("invalid organization mirror %#v succeeded", data)
+		}
+	}
+	profilesLoadCorp = func(string) (*TokenData, error) {
+		return &TokenData{CorpID: "corp-a", UserID: "u1", AccessToken: "mirror"}, nil
+	}
+	profilesSaveIdentity = func(string, string, *TokenData) error { return fail }
+	if _, err := loadTokenForProfileIdentity(profile); !errors.Is(err, fail) {
+		t.Fatalf("identity repair save failure = %v", err)
+	}
+	profilesSaveIdentity = func(string, string, *TokenData) error { return nil }
+	if got, err := loadTokenForProfileIdentity(profile); err != nil || got.AccessToken != "mirror" {
+		t.Fatalf("identity repair = %#v %v", got, err)
+	}
+	if _, err := loadTokenForProfileIdentity(Profile{CorpID: "corp-a"}); err != nil {
+		t.Fatalf("organization-only token load = %v", err)
+	}
 }

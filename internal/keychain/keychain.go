@@ -166,6 +166,13 @@ func ValidateAuthTokenEntries(service string) error {
 	return platformValidateAuthTokenEntries(service)
 }
 
+// RemoveAuthTokenEntries deletes the legacy token plus every organization and
+// identity scoped auth-token entry for service. Other keychain accounts are
+// preserved.
+func RemoveAuthTokenEntries(service string) error {
+	return platformRemoveAuthTokenEntries(service)
+}
+
 // Exists checks if an entry exists in the keychain.
 func Exists(service, account string) bool {
 	val, err := Get(service, account)

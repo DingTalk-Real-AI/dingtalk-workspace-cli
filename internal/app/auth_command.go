@@ -30,6 +30,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -85,7 +86,7 @@ func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 		newAuthMigrateKeychainCommand(),
 		newAuthExportCommand(),
 		newAuthImportCommand(),
-		newAuthExchangeCommand(),
+		newAuthExchangeCommand(patCaller),
 		newAuthResetCommand(),
 	)
 	return cmd
@@ -146,6 +147,9 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider := authpkg.NewDeviceFlowProvider(configDir, nil)
 				provider.Output = cmd.ErrOrStderr()
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
+				provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
+					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data)
+				}
 				tokenData, err = authDeviceLogin(provider, loginCtx)
 				if err != nil {
 					return apperrors.NewAuth(fmt.Sprintf("device authorization failed: %v", err))
@@ -158,6 +162,9 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider.Output = cmd.ErrOrStderr()
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				provider.TargetCorpID = cfg.TargetCorpID
+				provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
+					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data)
+				}
 				configureOAuthProviderCompatibility(provider, configDir)
 				tokenData, err = authOAuthLogin(provider, loginCtx, authLoginForcesAuthorization(cfg))
 				if err != nil {
@@ -167,17 +174,13 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 			ResetRuntimeTokenCache()
 			clearCompatCache()
-			if tokenData != nil && strings.TrimSpace(tokenData.CorpID) != "" {
-				_ = enrichAuthLoginProfileFromContact(cmd.Context(), configDir, patCaller, tokenData)
-				ResetRuntimeTokenCache()
-				clearCompatCache()
-			}
-
 			w := cmd.OutOrStdout()
 			runPostLoginAuthorization := func() error {
 				if !recommendAuthMode {
 					return nil
 				}
+				restoreProfile := replaceRuntimeProfile(authpkg.TokenProfileSelector(tokenData))
+				defer restoreProfile()
 				recommendScopeMode := pat.LoginRecommendScopeRecommended
 				var initialPlan *pat.LoginRecommendPlan
 				if postLoginTUIMode {
@@ -303,7 +306,10 @@ var (
 	authRunLoginRecommend       = pat.RunLoginRecommendAuthorizationWithOptions
 	authRunDirectPATWait        = runDirectPATAuthCheckWaitOnly
 	authResolveProfile          = authpkg.ResolveProfile
+	authResolveProfileDeletion  = authpkg.ResolveProfileDeletionScope
 	authRevokeToken             = authpkg.RevokeTokenRemote
+	authRevokeTokenForData      = authpkg.RevokeTokenRemoteForData
+	authLoadTokenForProfile     = authpkg.LoadTokenDataForProfile
 	authDeleteProfileToken      = authpkg.DeleteTokenDataForProfile
 	authEnsureProfilesMigration = authpkg.EnsureProfilesMigration
 	authLoadProfiles            = authpkg.LoadProfiles
@@ -423,9 +429,10 @@ func newAuthLogoutCommand() *cobra.Command {
 		Short: "清除认证信息（默认退出所有组织）",
 		Long: `清除本机钉钉登录态。
 
-默认退出所有已登录组织 profile；指定 --profile 时只退出该组织，不影响其他组织。`,
+默认退出全部账号。--profile 传组织时退出该组织全部账号；传精确账号或本地 profile 名时只退出一个账号。`,
 		Example: `  dws auth logout
   dws auth logout --profile <corpId>
+  dws auth logout --profile <corpId>:<userId>
   dws auth logout --profile "钉钉"`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -455,7 +462,7 @@ func newAuthLogoutCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("profile", "", "指定要退出的 profile 名或 corpId")
+	cmd.Flags().String("profile", "", "指定组织或账号：corpId、corpName、corpId:userId、corpId:userName、corpName:userId、corpName:userName 或本地 profile 名")
 	return cmd
 }
 
@@ -468,7 +475,8 @@ func newAuthStatusCommand() *cobra.Command {
 指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。`,
 		Example: `  dws auth status
   dws auth status --profile <corpId>
-  dws auth status --profile "钉钉"
+  dws auth status --profile <corpId>:<userId>
+  dws auth status --profile "钉钉:孙博文"
   dws auth status --profile <corpId> --format json`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -477,6 +485,17 @@ func newAuthStatusCommand() *cobra.Command {
 			if err != nil {
 				return apperrors.NewInternal("failed to read --profile")
 			}
+			profileSelector = strings.TrimSpace(profileSelector)
+			if profileSelector != "" {
+				selected, resolveErr := authpkg.ResolveProfile(configDir, profileSelector)
+				if resolveErr != nil {
+					return apperrors.NewValidation(resolveErr.Error())
+				}
+				if selected == nil {
+					return apperrors.NewValidation(fmt.Sprintf("profile %q not found", profileSelector))
+				}
+				profileSelector = authpkg.ProfileSelector(*selected)
+			}
 			restoreProfile := pushRuntimeProfile(profileSelector)
 			defer restoreProfile()
 
@@ -484,6 +503,7 @@ func newAuthStatusCommand() *cobra.Command {
 			refreshed := false
 			var tokenData *authpkg.TokenData
 			var statusErr error
+			var refreshFailure error
 			provider := authpkg.NewOAuthProvider(configDir, nil)
 			configureOAuthProviderCompatibility(provider, configDir)
 			if data, err := authOAuthStatus(provider); err == nil {
@@ -498,18 +518,23 @@ func newAuthStatusCommand() *cobra.Command {
 							refreshed = true
 						}
 					} else if edition.Get().AutoPurgeToken {
+						refreshFailure = refreshErr
 						_ = authDeleteTokenData(configDir)
 					} else if tokenData != nil {
-						_ = authMarkProfileStatus(configDir, tokenData.CorpID, authpkg.ProfileStatusExpired)
+						refreshFailure = refreshErr
+						_ = authMarkProfileStatus(configDir, authpkg.TokenProfileSelector(tokenData), authpkg.ProfileStatusExpired)
 					}
 				}
-				if authStatusAuthenticated(tokenData) {
+				if refreshFailure == nil && authStatusAuthenticated(tokenData) {
 					authenticated = true
 				}
 			} else {
 				statusErr = err
 			}
 			diagnostic := authStatusDiagnosticFromError(statusErr)
+			if refreshFailure != nil {
+				diagnostic = authStatusRefreshDiagnostic(refreshFailure)
+			}
 
 			// Check if JSON output is requested
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -554,7 +579,7 @@ func newAuthStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("profile", "", "指定要查看的 profile 名或 corpId")
+	cmd.Flags().String("profile", "", "指定组织或账号：corpId、corpName、corpId:userId、corpId:userName、corpName:userId、corpName:userName 或本地 profile 名")
 	return cmd
 }
 
@@ -618,13 +643,33 @@ func newAuthMigrateKeychainCommand() *cobra.Command {
 }
 
 func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector string) error {
-	if _, err := authResolveProfile(configDir, selector); err != nil {
+	selected, exact, err := authResolveProfileDeletion(configDir, selector)
+	if err != nil {
 		return apperrors.NewValidation(err.Error())
 	}
-	restoreProfile := pushRuntimeProfile(selector)
-	defer restoreProfile()
-	_ = authRevokeToken(ctx)
-	if err := authDeleteProfileToken(configDir, selector); err != nil {
+	if selected == nil {
+		return apperrors.NewValidation(fmt.Sprintf("profile %q not found", selector))
+	}
+	stableSelector := selected.CorpID
+	if exact {
+		stableSelector = authpkg.ProfileSelector(*selected)
+		if data, loadErr := authLoadTokenForProfile(configDir, stableSelector); loadErr == nil {
+			_ = authRevokeTokenForData(ctx, data)
+		}
+	} else if cfg, loadErr := authLoadProfiles(configDir); loadErr == nil {
+		for _, profile := range cfg.Profiles {
+			if profile.CorpID != selected.CorpID {
+				continue
+			}
+			if data, tokenErr := authLoadTokenForProfile(configDir, authpkg.ProfileSelector(profile)); tokenErr == nil {
+				_ = authRevokeTokenForData(ctx, data)
+			}
+		}
+	}
+	if err := authDeleteProfileToken(configDir, stableSelector); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return apperrors.NewValidation(err.Error())
+		}
 		return apperrors.NewInternal(fmt.Sprintf("failed to clear token data: %v", err))
 	}
 	return nil
@@ -642,9 +687,9 @@ func logoutAllProfiles(_ *cobra.Command, ctx context.Context, configDir string) 
 		_ = authRevokeToken(ctx)
 	} else {
 		for _, profile := range cfg.Profiles {
-			restoreProfile := pushRuntimeProfile(profile.CorpID)
-			_ = authRevokeToken(ctx)
-			restoreProfile()
+			if data, tokenErr := authLoadTokenForProfile(configDir, authpkg.ProfileSelector(profile)); tokenErr == nil {
+				_ = authRevokeTokenForData(ctx, data)
+			}
 		}
 	}
 	if err := authDeleteAllTokenData(configDir); err != nil {
@@ -660,6 +705,14 @@ func pushRuntimeProfile(selector string) func() {
 	}
 	previous := authpkg.RuntimeProfile()
 	authpkg.SetRuntimeProfile(selector)
+	return func() {
+		authpkg.SetRuntimeProfile(previous)
+	}
+}
+
+func replaceRuntimeProfile(selector string) func() {
+	previous := authpkg.RuntimeProfile()
+	authpkg.SetRuntimeProfile(strings.TrimSpace(selector))
 	return func() {
 		authpkg.SetRuntimeProfile(previous)
 	}
@@ -810,7 +863,7 @@ func newAuthImportCommandWithSupport(supportError func() error) *cobra.Command {
 	return cmd
 }
 
-func newAuthExchangeCommand() *cobra.Command {
+func newAuthExchangeCommand(caller edition.ToolCaller) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "exchange",
 		Short:             "Exchange an authorization code for credentials",
@@ -832,6 +885,9 @@ func newAuthExchangeCommand() *cobra.Command {
 
 			configDir := defaultConfigDir()
 			provider := authpkg.NewOAuthProvider(configDir, nil)
+			provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
+				return enrichAuthLoginProfileFromContact(ctx, configDir, caller, data)
+			}
 			configureOAuthProviderCompatibility(provider, configDir)
 			exchangeCtx, cancel := context.WithTimeout(cmd.Context(), time.Minute)
 			defer cancel()
@@ -1154,6 +1210,19 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 	if err != nil {
 		return authLoginConfig{}, err
 	}
+	flow := "oauth"
+	if strings.TrimSpace(token) != "" {
+		flow = "token"
+	} else if device {
+		flow = "device"
+	}
+	logging.AuthDebug(
+		"auth.login.request",
+		"flow", flow,
+		"profile_selector", strings.TrimSpace(profileSelector),
+		"target_corp_id", targetCorpID,
+		"recommend", recommend,
+	)
 	return authLoginConfig{
 		Token:        strings.TrimSpace(token),
 		Force:        force,
@@ -1189,7 +1258,11 @@ type contactProfileIdentity struct {
 	UserName string
 }
 
-func enrichAuthLoginProfileFromContact(ctx context.Context, configDir string, caller edition.ToolCaller, data *authpkg.TokenData) error {
+type tokenOverrideToolCaller interface {
+	CallToolWithToken(ctx context.Context, token, productID, toolName string, args map[string]any) (*edition.ToolResult, error)
+}
+
+func enrichAuthLoginProfileFromContact(ctx context.Context, _ string, caller edition.ToolCaller, data *authpkg.TokenData) error {
 	if caller == nil || data == nil {
 		return nil
 	}
@@ -1197,24 +1270,62 @@ func enrichAuthLoginProfileFromContact(ctx context.Context, configDir string, ca
 	if corpID == "" {
 		return nil
 	}
+	logging.AuthDebug(
+		"auth.login.identity.lookup.start",
+		"corp_id", corpID,
+		"user_id", strings.TrimSpace(data.UserID),
+		"user_name", strings.TrimSpace(data.UserName),
+		"corp_name", strings.TrimSpace(data.CorpName),
+	)
 	if strings.TrimSpace(data.CorpName) != "" && strings.TrimSpace(data.UserID) != "" && strings.TrimSpace(data.UserName) != "" {
+		logging.AuthDebug(
+			"auth.login.identity.lookup.result",
+			"source", "token_exchange",
+			"corp_id", corpID,
+			"user_id", strings.TrimSpace(data.UserID),
+			"user_name", strings.TrimSpace(data.UserName),
+			"corp_name", strings.TrimSpace(data.CorpName),
+		)
 		return nil
 	}
 
-	restoreProfile := pushRuntimeProfile(corpID)
-	defer restoreProfile()
-	ResetRuntimeTokenCache()
-
-	result, err := caller.CallTool(ctx, "contact", "get_current_user_profile", map[string]any{
-		"profile": corpID,
-	})
+	var (
+		result *edition.ToolResult
+		err    error
+	)
+	if tokenCaller, ok := caller.(tokenOverrideToolCaller); ok && strings.TrimSpace(data.AccessToken) != "" {
+		result, err = tokenCaller.CallToolWithToken(ctx, data.AccessToken, "contact", "get_current_user_profile", nil)
+	} else {
+		if strings.TrimSpace(data.UserID) == "" {
+			return fmt.Errorf("login identity lookup requires an in-memory token override")
+		}
+		return nil
+	}
 	if err != nil {
+		logging.AuthDebug(
+			"auth.login.identity.lookup.error",
+			"corp_id", corpID,
+			"existing_user_id", strings.TrimSpace(data.UserID),
+			"error", err,
+		)
+		if strings.TrimSpace(data.UserID) != "" {
+			return nil
+		}
 		return err
 	}
 	identity, ok := contactProfileIdentityFromToolResult(result)
 	if !ok {
+		logging.AuthDebug("auth.login.identity.lookup.empty", "corp_id", corpID)
 		return nil
 	}
+	logging.AuthDebug(
+		"auth.login.identity.lookup.result",
+		"source", "contact.get_current_user_profile",
+		"corp_id", strings.TrimSpace(identity.CorpID),
+		"user_id", strings.TrimSpace(identity.UserID),
+		"user_name", strings.TrimSpace(identity.UserName),
+		"corp_name", strings.TrimSpace(identity.CorpName),
+	)
 	if identity.CorpID != "" && identity.CorpID != corpID {
 		return fmt.Errorf("contact profile corpId %q does not match login corpId %q", identity.CorpID, corpID)
 	}
@@ -1230,12 +1341,23 @@ func enrichAuthLoginProfileFromContact(ctx context.Context, configDir string, ca
 		updated.UserName = identity.UserName
 	}
 	if updated.CorpName == data.CorpName && updated.UserID == data.UserID && updated.UserName == data.UserName {
+		logging.AuthDebug(
+			"auth.login.identity.resolved",
+			"corp_id", corpID,
+			"user_id", strings.TrimSpace(data.UserID),
+			"user_name", strings.TrimSpace(data.UserName),
+			"changed", false,
+		)
 		return nil
 	}
-	if err := authSaveTokenData(configDir, &updated); err != nil {
-		return err
-	}
 	*data = updated
+	logging.AuthDebug(
+		"auth.login.identity.resolved",
+		"corp_id", strings.TrimSpace(data.CorpID),
+		"user_id", strings.TrimSpace(data.UserID),
+		"user_name", strings.TrimSpace(data.UserName),
+		"changed", true,
+	)
 	return nil
 }
 
@@ -1262,6 +1384,7 @@ func contactProfileIdentityFromJSON(data []byte) (contactProfileIdentity, bool) 
 				OrgName     string `json:"orgName"`
 				UserID      string `json:"userId"`
 				UserIDLower string `json:"userid"`
+				OrgUserID   string `json:"orgUserId"`
 				OrgUserName string `json:"orgUserName"`
 				Name        string `json:"name"`
 			} `json:"orgEmployeeModel"`
@@ -1277,7 +1400,7 @@ func contactProfileIdentityFromJSON(data []byte) (contactProfileIdentity, bool) 
 	identity := contactProfileIdentity{
 		CorpID:   strings.TrimSpace(org.CorpID),
 		CorpName: strings.TrimSpace(org.OrgName),
-		UserID:   firstNonEmptyString(org.UserID, org.UserIDLower),
+		UserID:   firstNonEmptyString(org.UserID, org.UserIDLower, org.OrgUserID),
 		UserName: firstNonEmptyString(org.OrgUserName, org.Name),
 	}
 	return identity, identity.CorpID != "" || identity.CorpName != "" || identity.UserID != "" || identity.UserName != ""
@@ -1361,6 +1484,17 @@ func authStatusDiagnosticFromError(err error) *authStatusDiagnostic {
 		Reason:  "keychain_unavailable",
 		Message: "无法读取 macOS Keychain 中的登录密钥，无法判断登录状态",
 		Hint:    "检查 macOS 默认钥匙串是否存在且已解锁；修复后重试，或在测试环境设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+	}
+}
+
+func authStatusRefreshDiagnostic(err error) *authStatusDiagnostic {
+	if err == nil {
+		return nil
+	}
+	return &authStatusDiagnostic{
+		Reason:  "token_refresh_failed",
+		Message: fmt.Sprintf("Token 刷新失败: %v", err),
+		Hint:    "请重新运行 dws auth login 完成授权。",
 	}
 }
 

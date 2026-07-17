@@ -293,6 +293,8 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 		CorpName       string `json:"corpName"`
 		CorpNameSnake  string `json:"corp_name"`
 		OrgName        string `json:"orgName"`
+		UserID         string `json:"userId"`
+		UserName       string `json:"userName"`
 		// Error fields (when request fails)
 		ErrorCode string `json:"errorCode,omitempty"`
 		ErrorMsg  string `json:"errorMsg,omitempty"`
@@ -320,6 +322,8 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 		RefreshExpAt: now.Add(config.DefaultRefreshTokenLifetime),
 		CorpID:       resp.CorpID,
 		CorpName:     firstNonEmpty(resp.CorpName, resp.CorpNameSnake, resp.OrgName),
+		UserID:       resp.UserID,
+		UserName:     resp.UserName,
 	}
 	if resp.PersistentCode != "" {
 		data.PersistentCode = resp.PersistentCode
