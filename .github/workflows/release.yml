@@ -1,4 +1,5 @@
 name: Release
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.workflow }}
 
 on:
   push:
@@ -10,84 +11,221 @@ on:
         description: "Recover npm for a public immutable release without moving latest/beta"
         required: false
         type: string
+      governance_preflight_commit:
+        description: "Verify release governance for this exact default-branch commit without publishing"
+        required: false
+        type: string
+      governance_preflight_nonce:
+        description: "Unique identifier for one release governance preflight"
+        required: false
+        type: string
+      recover_release_version:
+        description: "Recover one existing failed release tag (vX.Y.Z or vX.Y.Z-beta.N)"
+        required: false
+        type: string
+      recover_release_tag_object:
+        description: "Expected 40-character annotated tag object SHA"
+        required: false
+        type: string
+      recover_release_commit:
+        description: "Expected 40-character peeled release commit SHA"
+        required: false
+        type: string
+      recover_failed_run_id:
+        description: "Failed exact-tag Release workflow run ID"
+        required: false
+        type: string
+      recover_release_nonce:
+        description: "Unique identifier for this protected recovery request"
+        required: false
+        type: string
+      recover_release_confirmation:
+        description: "Type the exact release version again to authorize recovery"
+        required: false
+        type: string
 
 permissions:
   contents: read
 
-# Queue tag releases and npm repairs behind one publication lock. The local
-# entrypoint also refuses to tag while a Release run is active.
+# Queue governance checks, tag releases, protected recoveries, and npm repairs
+# behind one publication lock. The local entrypoint also refuses to tag while
+# a Release run is active.
 concurrency:
   group: dws-release-publication
   queue: max
 
 jobs:
-  release-contract:
-    if: ${{ github.event_name == 'push' }}
+  dispatch-contract:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      actions: read
-      checks: read
-      contents: read
+    timeout-minutes: 2
     outputs:
-      channel: ${{ steps.contract.outputs.channel }}
-      previous_stable: ${{ steps.contract.outputs.previous_stable }}
-      previous_stable_commit: ${{ steps.contract.outputs.previous_stable_commit }}
-      from_beta: ${{ steps.contract.outputs.from_beta }}
-      from_beta_commit: ${{ steps.contract.outputs.from_beta_commit }}
+      mode: ${{ steps.mode.outputs.mode }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Fetch release branch and official tags
-        run: |
-          git fetch --force origin \
-            '+refs/heads/main:refs/remotes/origin/main'
-          git fetch --force --no-tags \
-            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
-
-      - name: Check Homebrew PR automation token
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+      - name: Select exactly one dispatch mode
+        id: mode
         env:
-          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
-        run: |
-          if [ -z "${HOMEBREW_PR_TOKEN:-}" ]; then
-            echo "HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases" >&2
-            exit 1
-          fi
-
-      - name: Validate release contract
-        id: contract
+          REPAIR_NPM_VERSION: ${{ inputs.repair_npm_version }}
+          GOVERNANCE_COMMIT: ${{ inputs.governance_preflight_commit }}
+          GOVERNANCE_NONCE: ${{ inputs.governance_preflight_nonce }}
+          RECOVER_VERSION: ${{ inputs.recover_release_version }}
+          RECOVER_TAG_OBJECT: ${{ inputs.recover_release_tag_object }}
+          RECOVER_COMMIT: ${{ inputs.recover_release_commit }}
+          RECOVER_FAILED_RUN_ID: ${{ inputs.recover_failed_run_id }}
+          RECOVER_NONCE: ${{ inputs.recover_release_nonce }}
+          RECOVER_CONFIRMATION: ${{ inputs.recover_release_confirmation }}
         run: |
           set -eu
-          . ./scripts/release/release-lib.sh
-          channel="$(release_channel_for_version "$GITHUB_REF_NAME")"
-          ./scripts/release/release-contract.sh \
-            --channel "$channel" \
-            --version "$GITHUB_REF_NAME" \
-            --context ci \
-            --remote origin \
-            --branch main \
-            --notes-output "$RUNNER_TEMP/release-notes.md" \
-            --metadata-output "$GITHUB_OUTPUT"
+          repair=0
+          governance=0
+          recovery=0
+          test -z "$REPAIR_NPM_VERSION" || repair=1
+          if test -n "$GOVERNANCE_COMMIT" || test -n "$GOVERNANCE_NONCE"; then governance=1; fi
+          if test -n "$RECOVER_VERSION" || test -n "$RECOVER_TAG_OBJECT" || \
+             test -n "$RECOVER_COMMIT" || test -n "$RECOVER_FAILED_RUN_ID" || \
+             test -n "$RECOVER_NONCE" || \
+             test -n "$RECOVER_CONFIRMATION"; then recovery=1; fi
+          test $((repair + governance + recovery)) -eq 1 || {
+            echo "workflow_dispatch must select exactly one release mode" >&2
+            exit 1
+          }
+          if test "$repair" -eq 1; then
+            echo "mode=repair_npm" >> "$GITHUB_OUTPUT"
+          elif test "$governance" -eq 1; then
+            if test -z "$GOVERNANCE_COMMIT" || test -z "$GOVERNANCE_NONCE"; then
+              echo "governance preflight requires both commit and nonce" >&2
+              exit 1
+            fi
+            echo "mode=governance_preflight" >> "$GITHUB_OUTPUT"
+          else
+            if test -z "$RECOVER_VERSION" || test -z "$RECOVER_TAG_OBJECT" || \
+              test -z "$RECOVER_COMMIT" || test -z "$RECOVER_FAILED_RUN_ID" || \
+              test -z "$RECOVER_NONCE" || test -z "$RECOVER_CONFIRMATION"; then
+                echo "release recovery requires every recovery input" >&2
+                exit 1
+            fi
+            test "$RECOVER_CONFIRMATION" = "$RECOVER_VERSION" || {
+              echo "release recovery confirmation must equal the exact version" >&2
+              exit 1
+            }
+            printf '%s\n' "$RECOVER_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || {
+              echo "recover_release_commit must be a full lowercase commit SHA" >&2
+              exit 1
+            }
+            printf '%s\n' "$RECOVER_TAG_OBJECT" | grep -Eq '^[0-9a-f]{40}$' || {
+              echo "recover_release_tag_object must be a full lowercase tag object SHA" >&2
+              exit 1
+            }
+            printf '%s\n' "$RECOVER_FAILED_RUN_ID" | grep -Eq '^[1-9][0-9]*$' || {
+              echo "recover_failed_run_id must be a positive run ID" >&2
+              exit 1
+            }
+            printf '%s\n' "$RECOVER_NONCE" | grep -Eq "^${RECOVER_COMMIT}-[0-9]+-[0-9]+$" || {
+              echo "recover_release_nonce must be bound to the release commit" >&2
+              exit 1
+            }
+            echo "mode=recover_release" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Verify remote annotated tag authority
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
-
-      - name: Require successful CI Gate on the sealed commit
+  authorize-recovery:
+    name: Approve existing tag recovery
+    needs: dispatch-contract
+    if: ${{ needs.dispatch-contract.outputs.mode == 'recover_release' }}
+    environment: release-recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: read
+    steps:
+      - name: Verify break-glass environment protection
         uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.request(
+              "GET /repos/{owner}/{repo}/environments/{environment_name}",
+              { owner, repo, environment_name: "release-recovery" },
+            );
+            const reviewerRule = response.data.protection_rules.find(
+              (rule) => rule.type === "required_reviewers",
+            );
+            if (
+              !reviewerRule ||
+              reviewerRule.prevent_self_review !== true ||
+              !Array.isArray(reviewerRule.reviewers) ||
+              reviewerRule.reviewers.length === 0
+            ) {
+              core.setFailed("release-recovery must require a reviewer and prevent self-review");
+              return;
+            }
+            if (response.data.deployment_branch_policy?.protected_branches !== true) {
+              core.setFailed("release-recovery must allow only protected branches");
+            }
+            if (response.data.can_admins_bypass !== false) {
+              core.setFailed("release-recovery must not allow administrator bypass");
+            }
+
+  governance-preflight:
+    name: Release governance preflight
+    needs: dispatch-contract
+    if: ${{ needs.dispatch-contract.outputs.mode == 'governance_preflight' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: read
+      contents: read
+    steps:
+      - name: Validate trusted governance preflight context
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_REPOSITORY: DingTalk-Real-AI/dingtalk-workspace-cli
+          PREFLIGHT_COMMIT: ${{ inputs.governance_preflight_commit }}
+          PREFLIGHT_NONCE: ${{ inputs.governance_preflight_nonce }}
+          REPAIR_NPM_VERSION: ${{ inputs.repair_npm_version }}
+        run: |
+          set -eu
+          test "$GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY" || {
+            echo "governance preflight is restricted to $EXPECTED_REPOSITORY" >&2
+            exit 1
+          }
+          test "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" || {
+            echo "governance preflight must run from the default branch $DEFAULT_BRANCH" >&2
+            exit 1
+          }
+          test -z "$REPAIR_NPM_VERSION" || {
+            echo "governance preflight cannot be combined with npm repair" >&2
+            exit 1
+          }
+          if test -z "$PREFLIGHT_COMMIT" || test -z "$PREFLIGHT_NONCE"; then
+            echo "governance_preflight_commit and governance_preflight_nonce are both required" >&2
+            exit 1
+          fi
+          case "$PREFLIGHT_COMMIT" in
+            *[!0-9a-f]*)
+              echo "governance_preflight_commit must be a lowercase commit SHA" >&2
+              exit 1
+              ;;
+          esac
+          test "${#PREFLIGHT_COMMIT}" -eq 40 || {
+            echo "governance_preflight_commit must be a full 40-character commit SHA" >&2
+            exit 1
+          }
+          test "$PREFLIGHT_COMMIT" = "$GITHUB_SHA" || {
+            echo "governance preflight commit must equal the dispatched default-branch commit" >&2
+            exit 1
+          }
+
+      - name: Require successful CI Gate on the preflight commit
+        uses: actions/github-script@v7
+        env:
+          PREFLIGHT_COMMIT: ${{ inputs.governance_preflight_commit }}
         with:
           script: |
             const { owner, repo } = context.repo;
             const { data } = await github.rest.checks.listForRef({
               owner,
               repo,
-              ref: context.sha,
+              ref: process.env.PREFLIGHT_COMMIT,
               check_name: "CI Gate",
               filter: "latest",
               per_page: 100,
@@ -96,19 +234,31 @@ jobs:
               (run) => run.name === "CI Gate" && run.conclusion === "success",
             );
             if (!passed) {
-              core.setFailed(`CI Gate has not succeeded for ${context.sha}`);
+              core.setFailed(`CI Gate has not succeeded for ${process.env.PREFLIGHT_COMMIT}`);
             }
 
-      - name: Require delivered previous stable baseline
+      - name: Check out trusted preflight tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.governance_preflight_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require release governance token
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
-          PREVIOUS_STABLE_COMMIT: ${{ steps.contract.outputs.previous_stable_commit }}
-        run: ./scripts/release/verify-delivered-stable.sh "$PREVIOUS_STABLE" "$PREVIOUS_STABLE_COMMIT"
+          RELEASE_GOVERNANCE_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
+        run: |
+          test -n "$RELEASE_GOVERNANCE_TOKEN" || {
+            echo "RELEASE_GOVERNANCE_TOKEN with repository Administration read permission is required" >&2
+            exit 1
+          }
 
       - name: Require immutable releases governance
         uses: actions/github-script@v7
         with:
+          # GITHUB_TOKEN cannot read repository administration settings. This
+          # dedicated credential needs only repository Administration: read.
+          github-token: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const response = await github.request(
@@ -122,6 +272,277 @@ jobs:
             if (response.data.enabled !== true) {
               core.setFailed("Immutable releases must be enabled before publishing");
             }
+
+      - name: Verify Homebrew PR automation permission
+        env:
+          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+          RELEASE_GOVERNANCE_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
+        run: |
+          test -n "$HOMEBREW_PR_TOKEN" || {
+            echo "HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases" >&2
+            exit 1
+          }
+          test "$HOMEBREW_PR_TOKEN" != "$RELEASE_GOVERNANCE_TOKEN" || {
+            echo "HOMEBREW_PR_TOKEN and RELEASE_GOVERNANCE_TOKEN must use separate least-privilege identities" >&2
+            exit 1
+          }
+          ./scripts/release/verify-homebrew-pr-token.sh "$GITHUB_REPOSITORY" --canary
+
+  release-contract:
+    needs: [dispatch-contract, authorize-recovery]
+    if: ${{ always() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    outputs:
+      release_version: ${{ steps.target.outputs.release_version }}
+      release_commit: ${{ steps.target.outputs.release_commit }}
+      release_tag_object: ${{ steps.target.outputs.release_tag_object }}
+      is_recovery: ${{ steps.target.outputs.is_recovery }}
+      failed_run_id: ${{ steps.target.outputs.failed_run_id }}
+      channel: ${{ steps.contract.outputs.channel }}
+      previous_stable: ${{ steps.contract.outputs.previous_stable }}
+      previous_stable_commit: ${{ steps.contract.outputs.previous_stable_commit }}
+      from_beta: ${{ steps.contract.outputs.from_beta }}
+      from_beta_commit: ${{ steps.contract.outputs.from_beta_commit }}
+    steps:
+      - name: Resolve and verify exact release target
+        id: target
+        uses: actions/github-script@v7
+        env:
+          RECOVER_VERSION: ${{ inputs.recover_release_version }}
+          RECOVER_TAG_OBJECT: ${{ inputs.recover_release_tag_object }}
+          RECOVER_COMMIT: ${{ inputs.recover_release_commit }}
+          RECOVER_FAILED_RUN_ID: ${{ inputs.recover_failed_run_id }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const isRecovery = context.eventName === "workflow_dispatch";
+            let version = context.ref.replace("refs/tags/", "");
+            let commit = context.sha;
+            let expectedTagObject = "";
+            let failedRunId = "";
+            if (isRecovery) {
+              if (
+                context.payload.repository.full_name !== "DingTalk-Real-AI/dingtalk-workspace-cli" ||
+                context.ref !== `refs/heads/${context.payload.repository.default_branch}`
+              ) {
+                core.setFailed("release recovery must be dispatched from the official default branch");
+                return;
+              }
+              version = process.env.RECOVER_VERSION;
+              commit = process.env.RECOVER_COMMIT;
+              expectedTagObject = process.env.RECOVER_TAG_OBJECT;
+              failedRunId = process.env.RECOVER_FAILED_RUN_ID;
+              if (!/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-beta\.[1-9]\d*)?$/.test(version)) {
+                core.setFailed(`invalid recovery release version: ${version}`);
+                return;
+              }
+              if (!/^[0-9a-f]{40}$/.test(commit) || !/^[0-9a-f]{40}$/.test(expectedTagObject)) {
+                core.setFailed("recovery tag object and commit must be full lowercase SHA-1 values");
+                return;
+              }
+              if (!/^[1-9]\d*$/.test(failedRunId)) {
+                core.setFailed("recover_failed_run_id must be a positive workflow run ID");
+                return;
+              }
+            }
+
+            const ref = await github.rest.git.getRef({ owner, repo, ref: `tags/${version}` });
+            if (ref.data.object.type !== "tag") {
+              core.setFailed(`${version} is not an annotated tag`);
+              return;
+            }
+            const tagObject = ref.data.object.sha;
+            const tag = await github.rest.git.getTag({ owner, repo, tag_sha: tagObject });
+            if (tag.data.tag !== version || tag.data.object.type !== "commit") {
+              core.setFailed(`${version} does not resolve to one annotated commit tag`);
+              return;
+            }
+            if (tag.data.object.sha !== commit) {
+              core.setFailed(`${version} resolves to ${tag.data.object.sha}, expected ${commit}`);
+              return;
+            }
+            if (isRecovery && tagObject !== expectedTagObject) {
+              core.setFailed(`${version} tag object is ${tagObject}, expected ${expectedTagObject}`);
+              return;
+            }
+
+            if (isRecovery) {
+              const defaultBranch = context.payload.repository.default_branch;
+              const branch = await github.rest.repos.getBranch({ owner, repo, branch: defaultBranch });
+              const comparison = await github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: `${commit}...${branch.data.commit.sha}`,
+              });
+              if (!["ahead", "identical"].includes(comparison.data.status)) {
+                core.setFailed(`${version} commit is not contained in ${defaultBranch}`);
+                return;
+              }
+              const failedRun = await github.rest.actions.getWorkflowRun({
+                owner,
+                repo,
+                run_id: Number(failedRunId),
+              });
+              const run = failedRun.data;
+              if (
+                run.repository.full_name !== `${owner}/${repo}` ||
+                run.path !== ".github/workflows/release.yml" ||
+                run.event !== "push" ||
+                run.status !== "completed" ||
+                !["failure", "cancelled", "timed_out", "startup_failure", "stale"].includes(run.conclusion) ||
+                run.head_branch !== version ||
+                run.head_sha !== commit
+              ) {
+                core.setFailed(`run ${failedRunId} is not the failed exact-tag Release run for ${version}`);
+                return;
+              }
+              try {
+                const release = await github.rest.repos.getReleaseByTag({ owner, repo, tag: version });
+                if (!release.data.draft) {
+                  core.setFailed(`${version} already has a public release; use a channel repair instead`);
+                  return;
+                }
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            core.setOutput("release_version", version);
+            core.setOutput("release_commit", commit);
+            core.setOutput("release_tag_object", tagObject);
+            core.setOutput("is_recovery", isRecovery ? "true" : "false");
+            core.setOutput("failed_run_id", failedRunId);
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.release_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
+
+      - name: Fetch release branch and official tags
+        run: |
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+
+      - name: Validate release contract
+        id: contract
+        env:
+          RELEASE_VERSION: ${{ steps.target.outputs.release_version }}
+        run: |
+          set -eu
+          . ./scripts/release/release-lib.sh
+          channel="$(release_channel_for_version "$RELEASE_VERSION")"
+          ./scripts/release/release-contract.sh \
+            --channel "$channel" \
+            --version "$RELEASE_VERSION" \
+            --context ci \
+            --remote origin \
+            --branch main \
+            --notes-output "$RUNNER_TEMP/release-notes.md" \
+            --metadata-output "$GITHUB_OUTPUT"
+
+      - name: Verify remote annotated tag authority
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.target.outputs.release_version }}
+          RELEASE_COMMIT: ${{ steps.target.outputs.release_commit }}
+          RELEASE_TAG_OBJECT: ${{ steps.target.outputs.release_tag_object }}
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
+      - name: Require successful CI Gate on the sealed commit
+        uses: actions/github-script@v7
+        env:
+          RELEASE_COMMIT: ${{ steps.target.outputs.release_commit }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data } = await github.rest.checks.listForRef({
+              owner,
+              repo,
+              ref: process.env.RELEASE_COMMIT,
+              check_name: "CI Gate",
+              filter: "latest",
+              per_page: 100,
+            });
+            const passed = data.check_runs.some(
+              (run) => run.name === "CI Gate" && run.conclusion === "success",
+            );
+            if (!passed) {
+              core.setFailed(`CI Gate has not succeeded for ${process.env.RELEASE_COMMIT}`);
+            }
+
+      - name: Require delivered previous stable baseline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
+          PREVIOUS_STABLE_COMMIT: ${{ steps.contract.outputs.previous_stable_commit }}
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-delivered-stable.sh" \
+            "$PREVIOUS_STABLE" "$PREVIOUS_STABLE_COMMIT"
+
+      - name: Require release governance token
+        env:
+          RELEASE_GOVERNANCE_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
+        run: |
+          test -n "$RELEASE_GOVERNANCE_TOKEN" || {
+            echo "RELEASE_GOVERNANCE_TOKEN with repository Administration read permission is required" >&2
+            exit 1
+          }
+
+      - name: Require immutable releases governance
+        uses: actions/github-script@v7
+        with:
+          # GITHUB_TOKEN cannot read repository administration settings. This
+          # dedicated credential needs only repository Administration: read.
+          github-token: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.request(
+              "GET /repos/{owner}/{repo}/immutable-releases",
+              {
+                owner,
+                repo,
+                headers: { "X-GitHub-Api-Version": "2026-03-10" },
+              },
+            );
+            if (response.data.enabled !== true) {
+              core.setFailed("Immutable releases must be enabled before publishing");
+            }
+
+      - name: Verify Homebrew PR automation permission
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        env:
+          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+          RELEASE_GOVERNANCE_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_PR_TOKEN" ]; then
+            echo "HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases" >&2
+            exit 1
+          fi
+          if [ "$HOMEBREW_PR_TOKEN" = "$RELEASE_GOVERNANCE_TOKEN" ]; then
+            echo "HOMEBREW_PR_TOKEN and RELEASE_GOVERNANCE_TOKEN must use separate least-privilege identities" >&2
+            exit 1
+          fi
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-homebrew-pr-token.sh" \
+            "$GITHUB_REPOSITORY" --canary
 
       - name: Require successful beta delivery before stable promotion
         if: ${{ steps.contract.outputs.channel == 'stable' }}
@@ -165,24 +586,16 @@ jobs:
               );
               return;
             }
-            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
-              owner,
-              repo,
-              workflow_id: "release.yml",
-              branch: process.env.FROM_BETA,
-              event: "push",
-              status: "completed",
-              per_page: 100,
-            });
-            const passed = runs.some(
-              (run) =>
-                run.head_sha === process.env.FROM_BETA_COMMIT &&
-                run.head_branch === process.env.FROM_BETA &&
-                run.conclusion === "success",
-            );
-            if (!passed) {
-              core.setFailed(`Release workflow did not succeed for ${process.env.FROM_BETA}`);
-            }
+
+      - name: Verify beta Release workflow delivery
+        if: ${{ steps.contract.outputs.channel == 'stable' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FROM_BETA: ${{ steps.contract.outputs.from_beta }}
+          FROM_BETA_COMMIT: ${{ steps.contract.outputs.from_beta_commit }}
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-workflow-delivery.sh" \
+            "$FROM_BETA" "$FROM_BETA_COMMIT"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -209,17 +622,30 @@ jobs:
 
   release:
     name: Build signed release artifacts
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ needs.release-contract.result == 'success' }}
     needs: [release-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
+    env:
+      RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+      RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+      RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+          persist-credentials: false
           fetch-depth: 0
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
 
       - name: Fetch release branch and official tags
         run: |
@@ -229,11 +655,18 @@ jobs:
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
             '+refs/tags/v*:refs/tags/v*'
 
+      - name: Verify sealed tag before executing release source
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
       - name: Revalidate contract and render release notes
         run: |
           ./scripts/release/release-contract.sh \
             --channel "${{ needs.release-contract.outputs.channel }}" \
-            --version "$GITHUB_REF_NAME" \
+            --version "$RELEASE_VERSION" \
             --context ci \
             --remote origin \
             --branch main \
@@ -300,6 +733,15 @@ jobs:
           echo "DWS_APPLE_CERTIFICATE_P12=$certificate_path" >> "$GITHUB_ENV"
           echo "DWS_APPLE_CERTIFICATE_PASSWORD_FILE=$password_path" >> "$GITHUB_ENV"
 
+      - name: Require a clean sealed source before GoReleaser
+        run: |
+          dirty="$(git status --porcelain --untracked-files=all)"
+          test -z "$dirty" || {
+            echo "sealed release source became dirty before GoReleaser:" >&2
+            printf '%s\n' "$dirty" >&2
+            exit 1
+          }
+
       - name: Build release artifacts without publishing
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -307,13 +749,14 @@ jobs:
           args: release --clean --skip=publish --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          GORELEASER_CURRENT_TAG: ${{ needs.release-contract.outputs.release_version }}
+          GORELEASER_PREVIOUS_TAG: ${{ needs.release-contract.outputs.previous_stable }}
 
       - name: Post-release packaging
         run: ./scripts/release/post-goreleaser.sh
         env:
-          DWS_PACKAGE_VERSION: ${{ github.ref_name }}
-          DWS_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+          DWS_PACKAGE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+          DWS_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.release-contract.outputs.release_version }}
           DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
 
       - name: Remove Apple Developer ID certificate
@@ -323,15 +766,17 @@ jobs:
           rm -f "$RUNNER_TEMP/dws-developer-id-password"
 
       - name: Verify final release artifacts
-        run: ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+        run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
 
       - name: Verify npm package before sealing GitHub Release
-        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
+        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
 
       - name: Reverify remote tag before sealing GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
       - name: Preserve finalized distribution files
         uses: actions/upload-artifact@v4
@@ -343,8 +788,8 @@ jobs:
 
   verify-darwin-signatures:
     name: Verify Apple Developer ID signatures
-    if: ${{ github.event_name == 'push' }}
-    needs: release
+    if: ${{ needs.release.result == 'success' }}
+    needs: [release-contract, release]
     runs-on: macos-latest
     timeout-minutes: 10
     permissions:
@@ -371,17 +816,31 @@ jobs:
 
   publish-release:
     name: Publish immutable GitHub Release
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
     needs: [release-contract, release, verify-darwin-signatures]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+      RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+      RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
+      IS_RECOVERY: ${{ needs.release-contract.outputs.is_recovery }}
     steps:
       - name: Check out sealed release source
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+          persist-credentials: false
           fetch-depth: 0
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
 
       - name: Fetch release branch and official tags
         run: |
@@ -391,15 +850,29 @@ jobs:
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
             '+refs/tags/v*:refs/tags/v*'
 
+      - name: Verify sealed tag before executing publication source
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
       - name: Revalidate contract and render release notes
         run: |
           ./scripts/release/release-contract.sh \
             --channel "${{ needs.release-contract.outputs.channel }}" \
-            --version "$GITHUB_REF_NAME" \
+            --version "$RELEASE_VERSION" \
             --context ci \
             --remote origin \
             --branch main \
             --notes-output "$RUNNER_TEMP/release-notes.md"
+
+      - name: Bind recovery publication to this workflow run
+        if: ${{ needs.release-contract.outputs.is_recovery == 'true' }}
+        run: |
+          printf '\n<!-- dws-release-recovery run=%s tag-object=%s commit=%s -->\n' \
+            "$GITHUB_RUN_ID" "$RELEASE_TAG_OBJECT" "$RELEASE_COMMIT" \
+            >> "$RUNNER_TEMP/release-notes.md"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -417,15 +890,17 @@ jobs:
           path: dist
 
       - name: Verify finalized release artifacts before publication
-        run: ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+        run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
 
       - name: Verify npm package before sealing GitHub Release
-        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
+        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
 
       - name: Reverify remote tag before sealing GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
       - name: Publish or reuse immutable GitHub Release
         env:
@@ -440,9 +915,9 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)"
-            is_prerelease="$(gh release view "$GITHUB_REF_NAME" --json isPrerelease --jq .isPrerelease)"
+          if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
+            is_draft="$(gh release view "$RELEASE_VERSION" --json isDraft --jq .isDraft)"
+            is_prerelease="$(gh release view "$RELEASE_VERSION" --json isPrerelease --jq .isPrerelease)"
             if [ "$is_prerelease" != "$expected_prerelease" ]; then
               echo "Existing release channel does not match $RELEASE_CHANNEL." >&2
               exit 1
@@ -450,66 +925,80 @@ jobs:
             if [ "$is_draft" = "false" ]; then
               is_immutable="$(
                 gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
-                  "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+                  "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
                   --jq .immutable
               )"
               if [ "$is_immutable" != "true" ]; then
                 echo "Published release is mutable; refusing to reuse its assets." >&2
                 exit 1
               fi
-              remote_body="$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)"
+              remote_body="$(gh release view "$RELEASE_VERSION" --json body --jq .body)"
               local_body="$(cat "$RUNNER_TEMP/release-notes.md")"
               if [ "$remote_body" != "$local_body" ]; then
                 echo "Published release notes differ from the sealed CHANGELOG." >&2
                 exit 1
               fi
+              if [ "$IS_RECOVERY" = "true" ]; then
+                recovery_marker="<!-- dws-release-recovery run=$GITHUB_RUN_ID tag-object=$RELEASE_TAG_OBJECT commit=$RELEASE_COMMIT -->"
+                case "$remote_body" in
+                  *"$recovery_marker"*) ;;
+                  *)
+                    echo "Public release is not bound to this exact recovery run." >&2
+                    exit 1
+                    ;;
+                esac
+              fi
               published_dir="$RUNNER_TEMP/published-release"
               mkdir -p "$published_dir"
-              gh release download "$GITHUB_REF_NAME" \
+              gh release download "$RELEASE_VERSION" \
                 --dir "$published_dir" \
                 --pattern 'dws-*' \
                 --pattern 'checksums.txt' \
                 --clobber
               DWS_PACKAGE_DIST_DIR="$published_dir" \
-                ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+                ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
               for asset in "$published_dir"/dws-* "$published_dir"/checksums.txt; do
+                if [ "$IS_RECOVERY" = "true" ] && ! cmp -s "$asset" "dist/$(basename "$asset")"; then
+                  echo "Public recovery asset differs from this run's sealed artifact: $(basename "$asset")" >&2
+                  exit 1
+                fi
                 cp "$asset" dist/
               done
               DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
                 DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
-                ./scripts/release/stage-npm-package.sh "$GITHUB_REF_NAME"
+                ./scripts/release/stage-npm-package.sh "$RELEASE_VERSION"
               echo "Published GitHub Release is immutable and verified; reusing its exact assets."
               exit 0
             fi
-            gh release edit "$GITHUB_REF_NAME" \
-              --title "$GITHUB_REF_NAME" \
+            gh release edit "$RELEASE_VERSION" \
+              --title "$RELEASE_VERSION" \
               --notes-file "$RUNNER_TEMP/release-notes.md"
           else
             # shellcheck disable=SC2086
-            gh release create "$GITHUB_REF_NAME" \
+            gh release create "$RELEASE_VERSION" \
               --verify-tag \
               --draft \
-              --title "$GITHUB_REF_NAME" \
+              --title "$RELEASE_VERSION" \
               --notes-file "$RUNNER_TEMP/release-notes.md" \
               $prerelease_flag
           fi
-          gh release upload "$GITHUB_REF_NAME" \
+          gh release upload "$RELEASE_VERSION" \
             dist/dws-*.tar.gz \
             dist/dws-windows-*.zip \
             dist/dws-skills.zip \
             dist/checksums.txt \
             --clobber
-          ./scripts/release/verify-github-release-assets.sh "$GITHUB_REF_NAME"
+          ./scripts/release/verify-github-release-assets.sh "$RELEASE_VERSION"
           sealed_upload="$RUNNER_TEMP/sealed-upload"
           rm -rf "$sealed_upload"
           mkdir -p "$sealed_upload"
-          gh release download "$GITHUB_REF_NAME" \
+          gh release download "$RELEASE_VERSION" \
             --dir "$sealed_upload" \
             --pattern 'dws-*' \
             --pattern 'checksums.txt' \
             --clobber
           DWS_PACKAGE_DIST_DIR="$sealed_upload" \
-            ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+            ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
           for remote_asset in "$sealed_upload"/dws-* "$sealed_upload"/checksums.txt; do
             local_asset="dist/$(basename "$remote_asset")"
             cmp -s "$local_asset" "$remote_asset" || {
@@ -517,7 +1006,7 @@ jobs:
               exit 1
             }
           done
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+          gh release edit "$RELEASE_VERSION" --draft=false
 
       - name: Require immutable published GitHub Release
         env:
@@ -526,15 +1015,16 @@ jobs:
           set -eu
           immutable="$(
             gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
-              "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
               --jq .immutable
           )"
           test "$immutable" = true || {
             echo "GitHub Release is not immutable; refusing downstream publication." >&2
             exit 1
           }
-          ./scripts/release/verify-github-release-assets.sh "$GITHUB_REF_NAME"
-          ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          ./scripts/release/verify-github-release-assets.sh "$RELEASE_VERSION"
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
       - name: Open stable Homebrew formula PR
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'stable' }}
@@ -543,9 +1033,9 @@ jobs:
           DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
           DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
           DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
-          DWS_TAP_PR_BRANCH: "automation/homebrew-${{ github.ref_name }}"
-          DWS_TAP_PR_TITLE: "chore: update Homebrew formula for ${{ github.ref_name }}"
-          DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ github.ref_name }}"
+          DWS_TAP_PR_BRANCH: "automation/homebrew-${{ needs.release-contract.outputs.release_version }}"
+          DWS_TAP_PR_TITLE: "chore: update Homebrew formula for ${{ needs.release-contract.outputs.release_version }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ needs.release-contract.outputs.release_version }}"
 
       - name: Open beta Homebrew formula PR
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'prerelease' }}
@@ -556,26 +1046,39 @@ jobs:
           DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
           DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
           DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
-          DWS_TAP_PR_BRANCH: "automation/homebrew-beta-${{ github.ref_name }}"
-          DWS_TAP_PR_TITLE: "chore: update Homebrew beta formula for ${{ github.ref_name }}"
-          DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ github.ref_name }}"
+          DWS_TAP_PR_BRANCH: "automation/homebrew-beta-${{ needs.release-contract.outputs.release_version }}"
+          DWS_TAP_PR_TITLE: "chore: update Homebrew beta formula for ${{ needs.release-contract.outputs.release_version }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ needs.release-contract.outputs.release_version }}"
 
       - name: Reverify exact immutable npm package
-        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
+        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
 
   publish-channels:
     name: Publish npm and mirrors
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}
     needs: [release-contract, publish-release]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+      RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+      RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
     steps:
       - name: Check out sealed release source
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+          persist-credentials: false
           fetch-depth: 0
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
 
       - name: Fetch release branch and official tags
         run: |
@@ -585,11 +1088,18 @@ jobs:
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
             '+refs/tags/v*:refs/tags/v*'
 
+      - name: Verify sealed tag before executing channel source
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
       - name: Revalidate sealed contract
         run: |
           ./scripts/release/release-contract.sh \
             --channel "${{ needs.release-contract.outputs.channel }}" \
-            --version "$GITHUB_REF_NAME" \
+            --version "$RELEASE_VERSION" \
             --context ci \
             --remote origin \
             --branch main
@@ -610,31 +1120,32 @@ jobs:
           set -eu
           release_state="$(
             gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
-              "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
               --jq '[.draft, .immutable] | @tsv'
           )"
           test "$release_state" = "$(printf 'false\ttrue')" || {
             echo "GitHub Release must be public and immutable before channel publication." >&2
             exit 1
           }
-          ./scripts/release/verify-github-release-assets.sh "$GITHUB_REF_NAME"
-          ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          ./scripts/release/verify-github-release-assets.sh "$RELEASE_VERSION"
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
           mkdir -p dist
-          gh release download "$GITHUB_REF_NAME" \
+          gh release download "$RELEASE_VERSION" \
             --dir dist \
             --pattern 'dws-*' \
             --pattern 'checksums.txt' \
             --clobber
-          ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+          ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
           DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
             DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            ./scripts/release/stage-npm-package.sh "$GITHUB_REF_NAME"
+            ./scripts/release/stage-npm-package.sh "$RELEASE_VERSION"
 
       - name: Verify immutable npm package without publication credentials
         run: |
           ./scripts/release/verify-package-managers.sh \
             --npm-only \
-            --expected-version "$GITHUB_REF_NAME"
+            --expected-version "$RELEASE_VERSION"
 
       - name: Inspect npm channel state
         id: npm-state
@@ -644,7 +1155,7 @@ jobs:
         run: |
           set -eu
           . ./scripts/release/release-lib.sh
-          semver="${GITHUB_REF_NAME#v}"
+          semver="${RELEASE_VERSION#v}"
           npm_tag=latest
           if [ "$RELEASE_CHANNEL" = "prerelease" ]; then npm_tag=beta; fi
           current="$(npm view dingtalk-workspace-cli "dist-tags.$npm_tag")"
@@ -676,12 +1187,12 @@ jobs:
             advance_channel=false
             if [ "$current" = "$semver" ]; then
               :
-            elif [ -n "$current" ] && release_version_is_greater "v$current" "$GITHUB_REF_NAME"; then
+            elif [ -n "$current" ] && release_version_is_greater "v$current" "$RELEASE_VERSION"; then
               echo "npm $npm_tag already points to newer v$current; leaving it unchanged."
-            elif [ -z "$current" ] || release_version_is_greater "$GITHUB_REF_NAME" "v$current"; then
+            elif [ -z "$current" ] || release_version_is_greater "$RELEASE_VERSION" "v$current"; then
               advance_channel=true
             else
-              echo "Cannot reconcile npm $npm_tag=$current with $GITHUB_REF_NAME" >&2
+              echo "Cannot reconcile npm $npm_tag=$current with $RELEASE_VERSION" >&2
               exit 1
             fi
             {
@@ -692,8 +1203,8 @@ jobs:
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ -n "$current" ] && ! release_version_is_greater "$GITHUB_REF_NAME" "v$current"; then
-            echo "$GITHUB_REF_NAME would move npm $npm_tag backwards from v$current" >&2
+          if [ -n "$current" ] && ! release_version_is_greater "$RELEASE_VERSION" "v$current"; then
+            echo "$RELEASE_VERSION would move npm $npm_tag backwards from v$current" >&2
             exit 1
           fi
           {
@@ -764,7 +1275,7 @@ jobs:
       - name: Sync release artifacts to China OSS mirror
         run: ./scripts/release/sync-to-oss.sh
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ needs.release-contract.outputs.release_version }}
           DWS_RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
@@ -775,16 +1286,40 @@ jobs:
 
   mirror-gitee-release:
     name: Mirror immutable release to Gitee
-    if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
-    needs: [release, publish-channels]
+    if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
+    needs: [release-contract, release, publish-channels]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
       contents: read
+    env:
+      RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+      RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+      RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
     steps:
       - name: Check out sealed release source
         uses: actions/checkout@v4
         timeout-minutes: 5
+        with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+          persist-credentials: false
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
+
+      - name: Fetch and verify sealed release tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
       - name: Restore finalized distribution files
         uses: actions/download-artifact@v4
@@ -797,14 +1332,15 @@ jobs:
         timeout-minutes: 100
         run: ./scripts/release/sync-to-gitee.sh
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ needs.release-contract.outputs.release_version }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_USER: ${{ secrets.GITEE_USER }}
           GITEE_REPO: ${{ secrets.GITEE_REPO }}
           DWS_REQUIRE_GITEE: "1"
 
   repair-npm:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && github.ref_name == github.event.repository.default_branch && github.repository_owner == 'DingTalk-Real-AI' }}
+    needs: dispatch-contract
+    if: ${{ needs.dispatch-contract.outputs.mode == 'repair_npm' && github.ref_name == github.event.repository.default_branch && github.repository_owner == 'DingTalk-Real-AI' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -814,8 +1350,9 @@ jobs:
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.sha }}
           path: tooling
+          persist-credentials: false
 
       - name: Validate repair version
         id: version
@@ -929,11 +1466,69 @@ jobs:
                 jobs.some(
                   (job) =>
                     job.name === "Publish immutable GitHub Release" &&
-                    job.conclusion === "success",
+                    job.head_sha === commitSha &&
+                    job.steps?.some(
+                      (step) =>
+                        step.name === "Require immutable published GitHub Release" &&
+                        step.conclusion === "success",
+                    ),
                 )
               ) {
                 passed = true;
                 break;
+              }
+            }
+            if (!passed) {
+              const recoveryTitle = `Release recovery ${version} at ${commitSha}`;
+              const recoveries = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                owner,
+                repo,
+                workflow_id: "release.yml",
+                branch: defaultBranch,
+                event: "workflow_dispatch",
+                status: "completed",
+                per_page: 100,
+              });
+              for (const run of recoveries) {
+                const nonce = run.display_title.startsWith(`${recoveryTitle} `)
+                  ? run.display_title.slice(recoveryTitle.length + 1)
+                  : "";
+                if (
+                  !new RegExp(`^${commitSha}-[0-9]+-[0-9]+$`).test(nonce) ||
+                  run.head_branch !== defaultBranch ||
+                  run.path !== ".github/workflows/release.yml" ||
+                  run.repository.full_name !== `${owner}/${repo}`
+                ) {
+                  continue;
+                }
+                const workflowComparison = await github.rest.repos.compareCommitsWithBasehead({
+                  owner,
+                  repo,
+                  basehead: `${run.head_sha}...${branch.data.commit.sha}`,
+                });
+                if (!["ahead", "identical"].includes(workflowComparison.data.status)) continue;
+                const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                  owner,
+                  repo,
+                  run_id: run.id,
+                  filter: "all",
+                  per_page: 100,
+                });
+                if (
+                  jobs.some(
+                    (job) =>
+                      job.name === "Publish immutable GitHub Release" &&
+                      job.head_sha === run.head_sha &&
+                      job.steps?.some(
+                        (step) =>
+                          step.name === "Require immutable published GitHub Release" &&
+                          step.conclusion === "success",
+                      ),
+                  )
+                ) {
+                  passed = true;
+                  break;
+                }
               }
             }
             if (!passed) {
@@ -947,6 +1542,7 @@ jobs:
         with:
           ref: ${{ steps.authority.outputs.commit_sha }}
           path: release-source
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

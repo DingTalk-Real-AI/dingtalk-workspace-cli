@@ -45,13 +45,13 @@ dws-release v1.2.3-beta.1
 dws-release v1.2.3-beta.1
 ```
 
-预检包含测试、策略检查、旧正式版命令树兼容检查、全平台打包、npm 安装验证，以及 macOS 环境下的 Homebrew 安装验证。通过后发布：
+预检包含测试、策略检查、旧正式版命令树兼容检查、全平台打包、npm 安装验证，以及 macOS 环境下的 Homebrew 安装验证。它还会从默认分支触发一次无发布权限的 `Release governance preflight`，用正式流水线相同的身份检查 `CI Gate` 和 immutable releases。通过后会在当前 Git worktree 的私有 Git 状态目录写入一个有效期六小时的证明，绑定版本、精确 commit、发布仓库、beta/stable 基线和远端 `main`：
 
 ```bash
 dws-release v1.2.3-beta.1 --publish
 ```
 
-命令会在所有预检完成后要求再次输入完整版本号。统一入口不提供跳过确认的参数。
+若源码、版本、远端身份和 stable 基线均未变化，`--publish` 会复用该证明，只执行远端契约、发布身份和最终治理复核，不再重复测试与打包。也可以直接运行 `--publish`；没有可复用证明时只会完整执行一次预检。命令在封 tag 前仍要求再次输入完整版本号，统一入口不提供跳过确认的参数。
 
 ## 正式发布
 
@@ -99,15 +99,36 @@ npm 补发只允许从默认分支触发 Release workflow 的 `repair_npm_versio
 
 OSS/Gitee 分发失败时直接重跑该 tag 的 `Publish npm and mirrors` failed job；各步会复用 immutable GitHub 资产并保持 channel 单调。独立 Gitee release workflow 和本地直发脚本已停用，避免绕开 publication queue 或用重新构建的不同字节覆盖镜像。
 
+## 既有 tag 的紧急恢复
+
+tag push 已成功、但 Release workflow 失败且 GitHub Release 尚未公开时，不要新建临时 workflow、移动 tag 或跳过门禁。在最新且干净的 `main` worktree 运行：
+
+```bash
+dws-release recover v1.2.3-beta.1
+```
+
+命令会自动解析 annotated tag object、peeled commit 和最近一次匹配的失败 tag-push run；也可以用 `--failed-run <run-id>` 精确指定。确认完整版本号后，它从默认分支触发受保护的恢复模式并等待完成。恢复模式必须满足：
+
+- 输入精确绑定原 annotated tag object、commit 和失败的 exact-tag `Release` run；commit 必须仍在 `main` 历史中。
+- 目标只允许不存在 GitHub Release 或仍为 Draft；已经公开的版本只能走对应的 channel repair，不能全量重建。
+- `release-recovery` environment 必须限制为受保护分支、配置至少一名 required reviewer，并禁止自审；workflow 会通过 API 复核这些设置，未配置时 fail closed。
+- 恢复复用正常的 contract、构建、Developer ID 签名、资产校验、immutable 发布、Homebrew、npm 和 OSS jobs，不存在 recovery 专用 publisher 或门禁跳过。
+- 如果 GitHub Release 已在 recovery 中封存、后续 Homebrew/npm 校验发生瞬时失败，只重跑该 run 的 failed jobs；流水线仅在隐藏 run marker、tag object、commit 和 finalized artifact 字节全部精确一致时复用公开 Release。
+
+成功的默认分支恢复 run 会成为后续 beta → stable 和 stable baseline 验证的可审计交付证据；历史临时分支恢复仍只接受 reviewed manifest 中的固定证据。
+
 OSS 的 `latest.txt` / `beta.txt` 当前是镜像频道元数据；仓库内安装器仍从 GitHub/Gitee 解析版本，不能把 OSS pointer 当成已接入的安装通道。
 
 Homebrew 当前只属于本机预检/手工公式通道：预检会在当前 macOS 架构真实安装，但 Release workflow 不发布 tap，CI 生成的单主机公式也不应当作 Darwin 双架构正式交付。正式自动交付范围是 GitHub Release、npm、OSS，以及显式开启时的 Gitee fallback；Homebrew 双架构 tap 发布需另立需求。
 
 ## 平台治理前置
 
-仓库管理员还需要在 GitHub 平台配置两项不可由脚本替代的规则：
+仓库管理员还需要在 GitHub 平台配置以下不可由脚本替代的规则：
 
 - `main` 必须要求精确的 `CI Gate`；tag workflow 也会通过 Checks API 再确认该封板 SHA 已通过。
 - 必须启用 immutable releases；它只保护启用后发布的 release，因此应在第一次使用新流水线前配置。为 `v*` 增加 tag ruleset，限制创建权限，并在 release 发布前保护 tag 的短暂窗口。
+- 配置 `RELEASE_GOVERNANCE_TOKEN` Actions secret，只授予目标仓库 `Administration: read`；内置 `GITHUB_TOKEN` 不具备 immutable-releases API 所需的仓库治理权限。每次本地预检和 tag workflow 都使用这一个身份进行 fail-closed 验证。
+- 单独配置 `HOMEBREW_PR_TOKEN`，优先使用仅授权本仓库且具备 `Contents: write`、`Pull requests: write` 的 fine-grained PAT；若组织策略不允许该账号使用 fine-grained PAT，则回退到仅带 `public_repo` scope 的专用 classic PAT。治理预检和 tag contract 会验证 token 身份、classic scope，并用 `[skip ci]` 临时分支和 draft PR 完成真实写权限 canary，随后立即关闭 PR、删除分支；任何清理失败都会 fail closed。门禁也会拒绝与治理 token 复用。
+- 创建 `release-recovery` environment，只允许受保护分支，设置 required reviewer、禁止自审并关闭管理员绕过。workflow 会读取 environment 的 required-reviewer、prevent-self-review 和 protected-branch 规则；规则缺失时紧急恢复会失败，正常 beta/stable tag 发布不受影响。
 
 immutable releases 或 `CI Gate` 缺失时，发布脚本会自动拒绝封 tag。tag ruleset 可能来自组织层，脚本不自动推断其最终作用范围；管理员确认不能省略，脚本约定也不能替代平台强制。
