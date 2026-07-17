@@ -36,6 +36,7 @@ import (
 var (
 	manualAgentExamplePlaceholderPattern = regexp.MustCompile(`<([^>]+)>`)
 	manualAgentExampleDryRunJSONPattern  = regexp.MustCompile(`(?i)"dry_run"\s*:\s*true`)
+	manualAgentExampleDryRunPlanPattern  = regexp.MustCompile(`(?i)"preview_kind"\s*:\s*"plan"`)
 )
 
 // TestManualAgentExamplesContract is the always-on gate. It validates every
@@ -68,7 +69,7 @@ func TestManualAgentExamplesDryRun(t *testing.T) {
 			t.Fatalf("create isolated test directory %s: %v", dir, err)
 		}
 	}
-	t.Setenv("HOME", homeDir)
+	setTestHome(t, homeDir)
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
@@ -409,6 +410,9 @@ func manualAgentExampleDryRunEvidence(capture manualAgentExampleCapture) (string
 		structuredPlan.DryRun && structuredPlan.PreviewKind == cli.DryRunPreviewPlan && strings.TrimSpace(structuredPlan.Operation) != "" {
 		return cli.DryRunPreviewPlan, true
 	}
+	if manualAgentExampleDryRunJSONPattern.MatchString(capture.Output) && manualAgentExampleDryRunPlanPattern.MatchString(capture.Output) {
+		return cli.DryRunPreviewPlan, true
+	}
 	if manualAgentExampleDryRunJSONPattern.MatchString(capture.Output) {
 		return cli.DryRunPreviewRequest, true
 	}
@@ -447,6 +451,22 @@ func TestManualAgentExampleDryRunEvidenceAcceptsSharedAndCommandPlans(t *testing
 	structuredPlan := `{"dryRun":true,"previewKind":"plan","operation":"doc_export_get","taskType":"export","taskId":"job-1"}`
 	if kind, ok := manualAgentExampleDryRunEvidence(manualAgentExampleCapture{Output: structuredPlan, DryRunChecks: 1}); !ok || kind != cli.DryRunPreviewPlan {
 		t.Fatalf("structured command plan evidence = (%q, %v), want (%q, true)", kind, ok, cli.DryRunPreviewPlan)
+	}
+}
+
+func TestCrossPlatformCoverageManualAgentExampleDryRunEvidenceClassifiesStructuredPlan(t *testing.T) {
+	kind, observed := manualAgentExampleDryRunEvidence(manualAgentExampleCapture{
+		Output:       `{"dry_run":true,"executed":false,"preview_kind":"plan"}`,
+		DryRunChecks: 1,
+	})
+	if !observed || kind != cli.DryRunPreviewPlan {
+		t.Fatalf("structured plan classified as kind=%q observed=%v", kind, observed)
+	}
+	if manualAgentExampleDryRunObserved(manualAgentExampleCapture{
+		Output:       `{"dry_run":false,"executed":false,"preview_kind":"plan"}`,
+		DryRunChecks: 1,
+	}) {
+		t.Fatal("non-dry-run structured plan was accepted as evidence")
 	}
 }
 
@@ -492,7 +512,7 @@ func TestManualAgentExamplePromptObservedRejectsInteractiveConfirmation(t *testi
 }
 
 func TestAitableAdvpermDisableDryRunSkipsConfirmationAndToolCall(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
 	args := []string{
@@ -540,7 +560,7 @@ func TestManualAgentExampleChatGroupMuteMemberUsesCommandDryRunPreview(t *testin
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("create isolated config directory: %v", err)
 	}
-	t.Setenv("HOME", sandboxRoot)
+	setTestHome(t, sandboxRoot)
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 
 	capture, err := executeManualAgentExampleCapture(t, []string{

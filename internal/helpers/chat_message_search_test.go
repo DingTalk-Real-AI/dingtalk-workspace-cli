@@ -161,7 +161,7 @@ func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller,
 	return cmd.Execute()
 }
 
-func TestCrossPlatformCoverageChatMessageListUsesObservedGroupKeys(t *testing.T) {
+func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.T) {
 	caller := &chatChangedContractCaller{}
 	err := executeChatChangedContract(t, caller,
 		"message", "list", "--group", "cid-1", "--time", "2026-07-15 09:00:00", "--limit", "50")
@@ -171,7 +171,7 @@ func TestCrossPlatformCoverageChatMessageListUsesObservedGroupKeys(t *testing.T)
 	if len(caller.calls) != 1 || caller.calls[0].toolName != "list_conversation_message_v2" {
 		t.Fatalf("calls = %#v", caller.calls)
 	}
-	want := map[string]any{"openCid": "cid-1", "cid": "cid-1", "time": "2026-07-15 09:00:00", "forward": true, "limit": 50}
+	want := map[string]any{"openconversation_id": "cid-1", "time": "2026-07-15 09:00:00", "forward": true, "limit": 50}
 	if !reflect.DeepEqual(caller.calls[0].args, want) {
 		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
 	}

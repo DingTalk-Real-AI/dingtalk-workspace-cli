@@ -3,6 +3,7 @@ set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "$SCRIPT_DIR/release-lib.sh"
+RECOVERY_MANIFEST="$SCRIPT_DIR/delivered-stable-recoveries.json"
 
 TAG="${1:-}"
 EXPECTED_COMMIT="${2:-}"
@@ -75,10 +76,114 @@ for run in json.load(sys.stdin).get("workflow_runs", []):
 printf '%s\n' "$stable_runs" | awk -F '\t' -v sha="$EXPECTED_COMMIT" -v tag="$TAG" '
   $1 == sha && $2 == tag && $3 == "success" { found = 1 }
   END { exit(found ? 0 : 1) }
-' || {
-  printf 'Release workflow did not complete successfully for stable baseline %s at %s\n' \
-    "$TAG" "$EXPECTED_COMMIT" >&2
-  exit 1
+' && delivered_by_push=1 || delivered_by_push=0
+
+if [ "$delivered_by_push" -ne 1 ]; then
+  recovery_proof="$(
+    python3 - "$RECOVERY_MANIFEST" "$TAG" "$EXPECTED_COMMIT" <<'PY'
+import json
+import sys
+
+path, tag, commit = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    payload = json.load(handle)
+if set(payload) != {"recoveries"} or not isinstance(payload["recoveries"], list):
+    raise SystemExit("invalid delivered stable recovery manifest")
+
+required = {
+    "tag", "commit", "run_id", "workflow_sha", "head_branch",
+    "run_attempt", "reviewed", "review_reason",
 }
+matches = []
+identities = set()
+for entry in payload["recoveries"]:
+    if not isinstance(entry, dict) or set(entry) != required:
+        raise SystemExit("invalid delivered stable recovery entry")
+    identity = (entry["tag"], entry["commit"])
+    if identity in identities:
+        raise SystemExit("duplicate delivered stable recovery entry")
+    identities.add(identity)
+    if (
+        not isinstance(entry["tag"], str)
+        or not isinstance(entry["commit"], str)
+        or not isinstance(entry["run_id"], int)
+        or entry["run_id"] <= 0
+        or not isinstance(entry["workflow_sha"], str)
+        or not isinstance(entry["head_branch"], str)
+        or not isinstance(entry["run_attempt"], int)
+        or entry["run_attempt"] <= 0
+        or entry["reviewed"] is not True
+        or not isinstance(entry["review_reason"], str)
+        or not entry["review_reason"].strip()
+    ):
+        raise SystemExit("invalid delivered stable recovery evidence")
+    if identity == (tag, commit):
+        matches.append(entry)
+
+if len(matches) > 1:
+    raise SystemExit("ambiguous delivered stable recovery evidence")
+if matches:
+    entry = matches[0]
+    print(entry["run_id"])
+    print(entry["workflow_sha"])
+    print(entry["head_branch"])
+    print(entry["run_attempt"])
+PY
+  )" || exit 1
+  [ -n "$recovery_proof" ] || {
+    printf 'Release workflow did not complete successfully for stable baseline %s at %s\n' \
+      "$TAG" "$EXPECTED_COMMIT" >&2
+    exit 1
+  }
+
+  recovery_run_id="$(printf '%s\n' "$recovery_proof" | sed -n '1p')"
+  recovery_workflow_sha="$(printf '%s\n' "$recovery_proof" | sed -n '2p')"
+  recovery_head_branch="$(printf '%s\n' "$recovery_proof" | sed -n '3p')"
+  recovery_run_attempt="$(printf '%s\n' "$recovery_proof" | sed -n '4p')"
+  recovery_run_state="$(
+    github_get "repos/$REPOSITORY/actions/runs/$recovery_run_id" \
+      | python3 -c 'import json,sys
+r=json.load(sys.stdin)
+print("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (
+    r.get("event", ""), r.get("status", ""), r.get("conclusion", ""),
+    r.get("head_sha", ""), r.get("head_branch", ""), r.get("run_attempt", ""),
+    r.get("path", ""), r.get("repository", {}).get("full_name", "")))'
+  )" || {
+    printf 'could not query reviewed recovery run %s for %s\n' "$recovery_run_id" "$TAG" >&2
+    exit 1
+  }
+  expected_recovery_state="$(printf 'workflow_dispatch\tcompleted\tsuccess\t%s\t%s\t%s\t.github/workflows/release.yml\t%s' \
+    "$recovery_workflow_sha" "$recovery_head_branch" "$recovery_run_attempt" "$REPOSITORY")"
+  [ "$recovery_run_state" = "$expected_recovery_state" ] || {
+    printf 'reviewed recovery run %s does not match the pinned delivery proof for %s\n' \
+      "$recovery_run_id" "$TAG" >&2
+    exit 1
+  }
+
+  recovery_jobs="$(
+    github_get "repos/$REPOSITORY/actions/runs/$recovery_run_id/jobs?per_page=100" \
+      | python3 -c 'import json,sys
+for job in json.load(sys.stdin).get("jobs", []):
+    print("%s\t%s\t%s\t%s" % (
+        job.get("name", ""), job.get("status", ""),
+        job.get("conclusion", ""), job.get("head_sha", "")))'
+  )" || {
+    printf 'could not query reviewed recovery jobs for %s\n' "$TAG" >&2
+    exit 1
+  }
+  for recovery_job in release verify-darwin-signatures publish-release; do
+    printf '%s\n' "$recovery_jobs" | awk -F '\t' -v name="$recovery_job" -v sha="$recovery_workflow_sha" '
+      $1 == name && $2 == "completed" && $3 == "success" && $4 == sha { found++ }
+      END { exit(found == 1 ? 0 : 1) }
+    ' || {
+      printf 'reviewed recovery run %s is missing successful job %s for %s\n' \
+        "$recovery_run_id" "$recovery_job" "$TAG" >&2
+      exit 1
+    }
+  done
+  printf 'Delivered stable baseline verified through reviewed recovery run %s: %s -> %s\n' \
+    "$recovery_run_id" "$TAG" "$EXPECTED_COMMIT"
+  exit 0
+fi
 
 printf 'Delivered stable baseline verified: %s -> %s\n' "$TAG" "$EXPECTED_COMMIT"

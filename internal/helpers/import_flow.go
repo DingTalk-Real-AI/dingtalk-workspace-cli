@@ -244,6 +244,7 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if cfg.allowAsync && cmd.Flags().Lookup("async") != nil {
 		asyncMode, _ = cmd.Flags().GetBool("async")
 	}
+	jsonMode := strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 
 	if deps.Caller.DryRun() {
 		if cfg.allowAsync {
@@ -259,6 +260,18 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 				Workspace:  file.workspace,
 			})
 		}
+		if jsonMode {
+			return deps.Out.PrintJSON(map[string]any{
+				"dry_run":      true,
+				"executed":     false,
+				"preview_kind": "plan",
+				"operation":    cfg.operation,
+				"file":         file.path,
+				"name":         file.name,
+				"format":       file.extension,
+				"size":         file.size,
+			})
+		}
 		deps.Out.PrintKeyValue("操作", cfg.operation)
 		deps.Out.PrintKeyValue("文件", file.path)
 		deps.Out.PrintKeyValue("名称", file.name)
@@ -271,9 +284,7 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	quietJSON := cfg.allowAsync && strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
-
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo("[1/4] 创建导入会话...")
 	}
 	sessionArgs := map[string]any{
@@ -302,16 +313,16 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		// The unified Doc import flow must never echo a malformed session
 		// response because uploadUrl may carry temporary signing credentials.
 		// Keep the historical Sheet import rendering outside this new flow.
-		if !cfg.allowAsync {
+		if !cfg.allowAsync && !jsonMode {
 			deps.Out.PrintRaw(sessionText)
 		}
 		return fmt.Errorf("创建导入会话成功但缺少 sessionId 或 uploadUrl")
 	}
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo(fmt.Sprintf("    会话已创建，sessionId: %s", sessionID))
 	}
 
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo("[2/4] 上传文件...")
 	}
 	if err := httpPutFile(ctx, uploadURL, nil, file.path, file.size); err != nil {
@@ -320,11 +331,11 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		}
 		return fmt.Errorf("文件上传失败 (sessionId=%s): %w", sessionID, err)
 	}
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo("    文件上传完成")
 	}
 
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo("[3/4] 确认导入，启动格式转换...")
 	}
 	confirmText, err := cfg.callTool(ctx, "confirm_import", map[string]any{"sessionId": sessionID})
@@ -339,12 +350,12 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if taskID == "" {
 		// Apply the same fail-closed output rule to confirmation responses:
 		// service payloads are not safe diagnostic output for Doc import.
-		if !cfg.allowAsync {
+		if !cfg.allowAsync && !jsonMode {
 			deps.Out.PrintRaw(confirmText)
 		}
 		return fmt.Errorf("确认导入成功但未返回 taskId")
 	}
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo(fmt.Sprintf("    转换任务已提交，taskId: %s", taskID))
 	}
 
@@ -357,7 +368,7 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		})
 	}
 
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo("[4/4] 等待格式转换完成...")
 	}
 	result, err := pollImportTask(ctx, taskID, cfg)
@@ -367,17 +378,16 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 			return err
 		}
 		if cfg.timeoutAsResult {
-			if !quietJSON {
+			if !jsonMode {
 				deps.Out.PrintInfo(timeoutErr.Error())
 			}
-			_ = deps.Out.PrintJSON(map[string]any{
+			return deps.Out.PrintJSON(map[string]any{
 				"success":      false,
 				"timed_out":    true,
 				"taskId":       taskID,
 				"status":       "processing",
 				"next_command": fmt.Sprintf(cfg.nextCommand, taskID),
 			})
-			return nil
 		}
 		return fmt.Errorf("%s，请稍后使用 %s 手动查询", timeoutErr.Error(), fmt.Sprintf(cfg.nextCommand, taskID))
 	}
@@ -395,11 +405,10 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if cfg.includeNodeID {
 		finalResult["nodeId"] = extractNodeIDFromDocURL(documentURL)
 	}
-	if !quietJSON {
+	if !jsonMode {
 		deps.Out.PrintInfo(fmt.Sprintf("导入完成: %s", documentURL))
 	}
-	_ = deps.Out.PrintJSON(finalResult)
-	return nil
+	return deps.Out.PrintJSON(finalResult)
 }
 
 func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
@@ -413,6 +422,15 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 				Operation: "doc_import_get",
 				TaskType:  "import",
 				TaskID:    taskID,
+			})
+		}
+		if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+			return deps.Out.PrintJSON(map[string]any{
+				"dry_run":      true,
+				"executed":     false,
+				"preview_kind": "plan",
+				"operation":    cfg.queryOperation,
+				"taskId":       taskID,
 			})
 		}
 		deps.Out.PrintKeyValue("操作", cfg.queryOperation)
@@ -463,15 +481,15 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 			documentURL, _ := result["documentUrl"].(string)
 			result["nodeId"] = extractNodeIDFromDocURL(documentURL)
 		}
-		_ = deps.Out.PrintJSON(result)
-		return nil
+		return deps.Out.PrintJSON(result)
 	}
 	if strings.EqualFold(status, "processing") {
-		_ = deps.Out.PrintJSON(result)
-		return nil
+		return deps.Out.PrintJSON(result)
 	}
 
-	_ = deps.Out.PrintJSON(result)
+	if err := deps.Out.PrintJSON(result); err != nil {
+		return err
+	}
 	if message != "" {
 		return fmt.Errorf("导入任务失败 (status=%s): %s", status, message)
 	}
@@ -483,7 +501,7 @@ func pollImportTask(ctx context.Context, taskID string, cfg importFlowConfig) (m
 	if poll.maxPolls <= 0 || poll.interval == nil || poll.wait == nil {
 		poll = defaultImportPollPolicy()
 	}
-	quietJSON := cfg.allowAsync && strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
+	quietJSON := strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 	for attempt := 1; attempt <= poll.maxPolls; attempt++ {
 		interval := poll.interval(attempt)
 		if !quietJSON {

@@ -105,7 +105,7 @@ func TestCrossPlatformCoverageProfileRemainingCoverage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(choices) != 3 || choices[0] != "current" || choices[1] != "primary" || choices[2] != "first" {
+	if len(choices) != 3 || choices[0] != "current" || choices[1] != "first" || choices[2] != "first" {
 		t.Fatalf("profile choices = %#v", choices)
 	}
 

@@ -76,6 +76,51 @@ func TestSkillDocsDoNotRecommendRetiredCommands(t *testing.T) {
 	}
 }
 
+func TestEventSkillUsesFlatOutputContract(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"[event] ready",
+			"conversation_id",
+			"sender_open_dingtalk_id",
+			"reader_open_dingtalk_id",
+			"recaller_open_dingtalk_id",
+			"reaction_name",
+			"operation_type",
+			"dws chat message download-media",
+			"--open-dingtalk-id",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing event contract %q", path, required)
+			}
+		}
+		for _, retired := range []string{
+			".data | fromjson",
+			"payload.body.",
+			"尚无稳定业务样本",
+			"暂无稳定 payload schema",
+		} {
+			if strings.Contains(text, retired) {
+				t.Errorf("%s still documents retired event path %q", path, retired)
+			}
+		}
+	}
+}
+
 func hasAny(s string, needles []string) bool {
 	for _, needle := range needles {
 		if strings.Contains(s, needle) {

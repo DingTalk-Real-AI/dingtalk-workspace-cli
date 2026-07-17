@@ -43,6 +43,7 @@ var Broadcast = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "to", Type: shortcut.FlagStringSlice, Desc: "收件人姓名/花名，逗号分隔的多个人", Required: true},
 		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown），所有人收到同一条", Required: true},
+		shortcut.AIMessageTagFlag(),
 	},
 	Tips: []string{`dws chat +broadcast --to "张三,李四,王五" --text "今晚 8 点上线，请留意"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -83,11 +84,11 @@ var Broadcast = shortcut.Shortcut{
 				sent = append(sent, user.name)
 				continue
 			}
-			if _, err := rt.CallMCPWriteData("chat", "send_personal_message", map[string]any{
+			if _, err := rt.CallMCPWriteData("chat", "send_personal_message", rt.AddAIMessageTag(map[string]any{
 				"receiverOpenDingTalkId": user.openDingTalkID,
 				"msgType":                "markdown",
 				"content":                string(content),
-			}); err != nil {
+			})); err != nil {
 				failed = append(failed, fmt.Sprintf("%s（发送失败：%s）", name, err.Error()))
 				continue
 			}

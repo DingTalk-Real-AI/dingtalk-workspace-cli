@@ -28,16 +28,25 @@ var ChatSearch = shortcut.Shortcut{
 	Intent:      "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "群名称关键词", Required: true},
+		{Name: "query", Type: shortcut.FlagString, Desc: "群名称关键词"},
+		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页返回数量"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "分页游标，翻页传 nextCursor"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已设置免打扰的群聊"},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"query", "keyword"}},
+	},
 	Tips: []string{`dws chat +chat-search --query "项目冲刺"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		query := rt.Str("query")
+		if query == "" {
+			query = rt.Str("keyword")
+		}
 		params := map[string]any{
-			"keyword": rt.Str("query"),
-			"limit":   rt.Int("limit"),
+			"keyword": query,
+			"limit":   rt.IntFirst("limit", "size"),
 			"cursor":  rt.Str("cursor"),
 		}
 		if rt.Bool("exclude-muted") {

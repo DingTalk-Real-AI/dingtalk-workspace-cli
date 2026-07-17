@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Lint
@@ -54,10 +58,18 @@ jobs:
       - name: Check GitHub Actions workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
-  test:
-    name: Test
+  test-race:
+    name: "Test (race: ${{ matrix.shard }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - app
+          - generators
+          - helpers
+          - remaining
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -71,18 +83,84 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Build
+        if: ${{ matrix.shard == 'remaining' }}
         run: make build
 
-      - name: Test with Race Detection
-        # The registry-first final-delivery gate validates all public commands
-        # and the complete generated Catalog under the race detector. Keep the
-        # package timeout aligned with the macOS race job so the Linux runner's
-        # five-minute default does not expire while that gate is still making
-        # progress.
-        run: go test -v -race -count=1 -timeout=10m ./cmd/... ./internal/...
+      - name: Test shard with Race Detection
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          case "$TEST_SHARD" in
+            app)
+              packages=(./internal/app/...)
+              ;;
+            generators)
+              packages=(./internal/generator/...)
+              ;;
+            helpers)
+              packages=(./internal/helpers/...)
+              ;;
+            remaining)
+              mapfile -t packages < <(
+                go list ./cmd/... ./internal/... |
+                  grep -Ev '/internal/(app|generator|helpers)(/|$)'
+              )
+              ;;
+            *)
+              printf 'unknown test shard: %s\n' "$TEST_SHARD" >&2
+              exit 1
+              ;;
+          esac
+          test "${#packages[@]}" -gt 0
+          go test -v -race -count=1 -timeout=10m "${packages[@]}"
+
+  test-release-scripts:
+    name: Test (release scripts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Test release scripts
         run: go test -v -count=1 -timeout=5m ./test/scripts
+
+  test:
+    name: Test
+    needs:
+      - test-race
+      - test-release-scripts
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Verify test shards
+        env:
+          RACE_RESULT: ${{ needs.test-race.result }}
+          RELEASE_SCRIPTS_RESULT: ${{ needs.test-release-scripts.result }}
+        run: |
+          failed=0
+          for shard in \
+            "race shards:$RACE_RESULT" \
+            "release scripts:$RELEASE_SCRIPTS_RESULT"
+          do
+            name="${shard%%:*}"
+            result="${shard#*:}"
+            printf '%s: %s\n' "$name" "$result"
+            if [ "$result" != "success" ]; then
+              failed=1
+            fi
+          done
+          test "$failed" -eq 0
 
   test-darwin:
     name: Test (macOS auth/keychain)
@@ -119,8 +197,8 @@ jobs:
       - name: Test Windows auth and DPAPI packages
         run: go test -v -count=1 -timeout=10m ./internal/keychain ./internal/auth
 
-      - name: Test Windows auth migration diagnostics
-        run: go test -v -count=1 -timeout=5m ./internal/app -run '^TestAuth(MigrateKeychain|StatusDiagnosticReportsCiphertextKeyMismatch)'
+      - name: Test Windows auth migration and portable auth diagnostics
+        run: go test -v -count=1 -timeout=5m ./internal/app -run '^Test(CrossPlatformCoverage)?Auth(MigrateKeychain|StatusDiagnosticReportsCiphertextKeyMismatch|ExportRejectsWindowsDPAPIBackend|ImportRejectsWindowsDPAPIBackend)'
 
   coverage-darwin:
     name: Coverage (macOS)
@@ -208,10 +286,80 @@ jobs:
           name: coverage-windows
           path: coverage-windows.txt
 
-  coverage:
-    name: Coverage
+  coverage-current:
+    name: Coverage (current)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Build
+        run: make build
+
+      - name: Run current unit tests with coverage
+        run: |
+          go test -count=1 -p 1 -coverprofile=coverage.txt -covermode=atomic ./ ./cmd/... ./internal/... ./skills/...
+          go tool cover -func=coverage.txt
+
+      - name: Upload current coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-current-profile
+          path: coverage.txt
+          retention-days: 1
+
+  coverage-supporting:
+    name: Coverage (supporting)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Run policy and shortcut coverage
+        run: |
+          go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic ./pkg/... ./scripts/policy/...
+          go test -count=1 \
+            -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
+            -coverpkg=./internal/app,./internal/helpers,./internal/shortcut/... \
+            -coverprofile=coverage-shortcut.txt \
+            -covermode=atomic \
+            ./internal/app ./internal/helpers ./internal/shortcut/...
+
+      - name: Upload supporting coverage profiles
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-supporting-profiles
+          path: |
+            coverage-policy.txt
+            coverage-shortcut.txt
+          retention-days: 1
+
+  coverage-baseline:
+    name: Coverage (baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -226,9 +374,6 @@ jobs:
 
       - name: Install archive tooling
         run: sudo apt-get update && sudo apt-get install -y zip unzip
-
-      - name: Build
-        run: make build
 
       - name: Resolve authoritative coverage base
         env:
@@ -247,18 +392,9 @@ jobs:
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
-      - name: Run current and baseline unit tests with coverage
+      - name: Run baseline unit tests with coverage
         run: |
           set -eu
-          go test -count=1 -p 1 -coverprofile=coverage.txt -covermode=atomic ./ ./cmd/... ./internal/... ./skills/...
-          go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic ./pkg/... ./scripts/policy/...
-          go test -count=1 \
-            -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
-            -coverpkg=./internal/app,./internal/helpers,./internal/shortcut/... \
-            -coverprofile=coverage-shortcut.txt \
-            -covermode=atomic \
-            ./internal/app ./internal/helpers ./internal/shortcut/...
-
           base_worktree="$(mktemp -d "${RUNNER_TEMP}/dws-coverage-base.XXXXXX")"
           rmdir "$base_worktree"
           cleanup() {
@@ -274,7 +410,90 @@ jobs:
               -covermode=atomic \
               ./ ./cmd/... ./internal/... ./skills/...
           )
-          go tool cover -func=coverage.txt
+
+      - name: Upload baseline coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-baseline-profile
+          path: coverage-base.txt
+          retention-days: 1
+
+  coverage:
+    name: Coverage
+    needs:
+      - coverage-current
+      - coverage-supporting
+      - coverage-baseline
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify coverage profile jobs
+        env:
+          CURRENT_RESULT: ${{ needs.coverage-current.result }}
+          SUPPORTING_RESULT: ${{ needs.coverage-supporting.result }}
+          BASELINE_RESULT: ${{ needs.coverage-baseline.result }}
+        run: |
+          failed=0
+          for profile in \
+            "current:$CURRENT_RESULT" \
+            "supporting:$SUPPORTING_RESULT" \
+            "baseline:$BASELINE_RESULT"
+          do
+            name="${profile%%:*}"
+            result="${profile#*:}"
+            printf '%s: %s\n' "$name" "$result"
+            if [ "$result" != "success" ]; then
+              failed=1
+            fi
+          done
+          test "$failed" -eq 0
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve authoritative coverage base
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          base_ref="$PUSH_BEFORE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
+          fi
+          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            base_ref="$(git rev-parse HEAD^)"
+          fi
+          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+
+      - name: Download current coverage profile
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-current-profile
+          path: .
+
+      - name: Download supporting coverage profiles
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-supporting-profiles
+          path: .
+
+      - name: Download baseline coverage profile
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-baseline-profile
+          path: .
 
       - name: Enforce coverage gate
         env:

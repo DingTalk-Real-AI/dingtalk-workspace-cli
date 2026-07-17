@@ -631,36 +631,104 @@
       "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
     },
     "event consume user_im_message_receive_at -f ndjson": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 和输出参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
     "event consume user_im_message_receive_group": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
     "event consume user_im_message_receive_o2o": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_receive_user": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_read_o2o": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_read_group": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_recall_o2o": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_recall_group": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_reaction_o2o": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_reaction_group": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
     "event schema user_im_message_receive_at": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
     "event schema user_im_message_receive_group": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
     "event schema user_im_message_receive_o2o": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
-    "event status": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+    "event schema user_im_message_receive_user": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
-    "event stop": {
-      "status": "out_of_surface",
-      "reason": "该产品不在当前 21 产品公开命令面中"
+    "event schema user_im_message_read_o2o": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_read_group": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_recall_o2o": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_recall_group": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_reaction_o2o": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_reaction_group": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
     "mail aisearch person": {
       "status": "alias",

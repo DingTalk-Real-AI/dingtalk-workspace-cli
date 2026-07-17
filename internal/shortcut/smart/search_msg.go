@@ -55,17 +55,24 @@ var SearchMsg = shortcut.Shortcut{
 		"这是纯只读操作，只做搜索与本地投影，不会发送、撤回或标记任何消息。",
 	Risk: shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群会话的 openConversationId（必填）", Required: true},
-		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词（必填）", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群会话的 openConversationId（必填）"},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
+		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词（必填）"},
+		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "days", Type: shortcut.FlagInt, Desc: "回溯天数（可选，默认 7）", Default: "7", Required: false},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id"}},
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"query", "keyword"}},
 	},
 	Tips: []string{
 		`dws chat +search-msg --group <openConversationId> --query "changefree"`,
 		`dws chat +search-msg --group <openConversationId> --query "周报" --days 3`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		group := strings.TrimSpace(rt.Str("group"))
-		query := strings.TrimSpace(rt.Str("query"))
+		group := rt.StrFirst("group", "conversation-id", "id")
+		query := rt.StrFirst("query", "keyword")
 
 		// Step 1 — look-back window [now-Nd, now] in epoch millis. days defaults
 		// to 7; guard against non-positive overrides so the window stays sane.

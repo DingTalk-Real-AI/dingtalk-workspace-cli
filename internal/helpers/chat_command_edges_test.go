@@ -43,6 +43,48 @@ func runChatCoverageDirect(t *testing.T, path []string, flags map[string]string)
 	return command.RunE(command, nil)
 }
 
+func TestCrossPlatformCoverageChatGroupUpdateIconAcceptsUploadedMediaIDPrefixes(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	for _, tc := range []struct {
+		name    string
+		mediaID string
+	}{
+		{name: "at prefix", mediaID: "@lADPvalidMediaID"},
+		{name: "dollar prefix", mediaID: "$iAEvalidMediaID"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &productExampleCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"group", "update-icon", "--group=cid", "--icon-media-id="+tc.mediaID)
+			if err != nil {
+				t.Fatalf("update group icon with uploaded media ID %q: %v", tc.mediaID, err)
+			}
+			if caller.calls != 1 {
+				t.Fatalf("tool calls = %d, want 1", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupUpdateIconRejectsBlankMediaID(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	caller := &productExampleCaller{}
+	err := runChatCoverageCommand(t, caller,
+		"group", "update-icon", "--group=cid", "--icon-media-id=   ")
+	if err == nil {
+		t.Fatal("update group icon with a blank media ID succeeded, want validation error")
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageChatCommandValidationAndSuccessEdges(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
 	os.Args = []string{"dws", "chat"}

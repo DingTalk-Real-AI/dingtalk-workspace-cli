@@ -10,6 +10,29 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 - **Wukong Drive and Sheet command parity** — adds Drive permission application and owner transfer, Drive document favorites, Sheet formula verification, and Sheet version save/list/revert commands. The new commands ship with reviewed Agent Schema, mono/multi Skill guidance, local validation and dangerous-operation guards; Aitable field/view/record writes also gain clearer runtime validation and recovery guidance.
 - **Unified asynchronous task flows** — adds `drive task get`, async submission modes for Doc export/import and Sheet export, and normalized task-result queries including `sheet export get`, while keeping existing synchronous behavior as the default.
+- **Expanded personal IM event subscriptions** — adds one-to-one and group events for message read receipts, recalls, and reactions; publishes the specified-sender receive event; and lets one-to-one/sender subscriptions target either a staff `--user` or an `--open-dingtalk-id`. Event Schema now exposes these alternatives through machine-readable parameter constraints.
+
+### Changed
+
+- **Personal event structured output is now flat** — `event consume` projects NDJSON/JSON/pretty/compact output into event-specific top-level DTOs, so consumers read fields such as `content`, `sender`, and `conversation_id` directly instead of parsing `.data | fromjson`. This is a breaking change for scripts using the former transport envelope; the original server payload remains available through `-f raw`, while `--debug-raw-events` preserves the full diagnostic envelope.
+
+## [1.0.53-beta.3] - 2026-07-17
+
+This beta validates multi-account profile support and the post-v1.0.53-beta.2 compatibility fixes for Windows portable authentication, IM shortcuts, and Aitable import uploads.
+
+### Added
+
+- **Multiple accounts in one DingTalk organization** — profiles are keyed by `corpId:userId`, `--profile` accepts organization IDs/names plus user IDs/names, and organization-only selection uses its explicitly remembered current account or asks for an exact account when ambiguous.
+
+### Changed
+
+- **Profile-scoped logout and consistent token storage** — `dws auth logout --profile` can remove one account or every account in an organization, while identity token slots remain the source of truth and legacy organization/global mirrors stay compatible without overwriting newer account credentials.
+
+### Fixed
+
+- **Windows portable-auth contract** — `dws auth export` and `dws auth import` now fail early without reading credentials, bundles, or writing files instead of claiming portable-bundle support for DPAPI-protected HKCU Registry credentials.
+- **IM shortcut message tags and compatibility aliases** (#646) — IM send shortcuts now add the same AI-sent marker as `chat message send` by default, support `--ai-tag=false` to opt out, and preserve compatible search, conversation-ID, and page-size aliases.
+- **Aitable import upload file-size validation** (#654) — `dws aitable import upload` and `dws aitable +import-upload` now require a positive `--file-size` and always send it to the upload-preparation API, preventing invalid requests without the actual file size.
 
 ## [1.0.53-beta.2] - 2026-07-16
 
@@ -25,11 +48,12 @@ This beta validates the accumulated post-v1.0.52 command surface, release automa
 ### Changed
 
 - **Guarded prerelease and stable automation** — adds the guided `dws-release` entry for one-command CHANGELOG preparation, validation-only and annotated-tag publication flows; promotes only an explicitly validated beta; verifies command-tree compatibility and all six packaged binaries; and serializes immutable GitHub Release, npm channel, OSS, Homebrew, and optional Gitee delivery with fail-closed recovery checks.
+- **Reviewed historical release recovery proofs** — release preflight can recognize an explicitly pinned successful recovery delivery for a historical stable tag while still rejecting arbitrary workflow dispatches, mismatched commits, and incomplete release, signing, or publication jobs.
 
 ### Fixed
 
 - **PAT organization-policy denials stop immediately** — `PAT_ORG_POLICY_DENIED` now remains terminal even if a backend also returns `flowId`, authorization URLs, or client credentials; the CLI does not mutate process credentials, open a browser, poll, or retry until an organization administrator changes the policy.
-- **Sheet and Todo invalid-target failures** — `sheet range read/get` now rejects a null cell-info response instead of printing `null` and exiting successfully, while Todo completion and attachment listing verify that a task exists before calling lenient backend endpoints. Attachment listing is also published through Runtime Schema for schema-first Agent discovery.
+- **Sheet and task invalid-target failures** — `sheet range read/get` now rejects a null cell-info response instead of printing `null` and exiting successfully, while task completion and attachment listing verify that a task exists before calling lenient backend endpoints. Attachment listing is also published through Runtime Schema for schema-first Agent discovery.
 - **Concurrent credential writes and reentrant CLI execution** — secure-token writers now use isolated, exclusive temporary files before atomic replacement so concurrent processes cannot remove each other's in-flight data, and repeated in-process CLI runs close the previous file logger before replacing it instead of retaining the prior log-file handle.
 
 ## [1.0.52] - 2026-07-14

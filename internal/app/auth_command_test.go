@@ -20,9 +20,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -58,7 +60,7 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 		return err
 	}
 
-	exportCmd := newAuthExportCommand()
+	exportCmd := newAuthExportCommandWithSupport(func() error { return nil })
 	var exported bytes.Buffer
 	exportCmd.SetOut(&exported)
 	exportCmd.SetErr(&bytes.Buffer{})
@@ -84,7 +86,7 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 		return authpkg.PortableImportReport{}, err
 	}
 
-	importCmd := newAuthImportCommand()
+	importCmd := newAuthImportCommandWithSupport(func() error { return nil })
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&bytes.Buffer{})
 	importCmd.SetArgs([]string{"--input", inputPath, "--base64"})
@@ -93,6 +95,260 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 	}
 	if !bytes.Equal(imported, bundle) {
 		t.Fatalf("imported bundle = %q, want %q", imported, bundle)
+	}
+}
+
+func TestCrossPlatformCoverageAuthExportUnsupportedBackendIsValidationError(t *testing.T) {
+	exportCmd := newAuthExportCommandWithSupport(func() error {
+		return errors.New("portable auth export is unavailable for the test backend")
+	})
+	exportCmd.SetOut(&bytes.Buffer{})
+	exportCmd.SetErr(&bytes.Buffer{})
+	exportCmd.SetArgs([]string{"--base64"})
+
+	err := exportCmd.Execute()
+	if err == nil {
+		t.Fatal("auth export should reject an unsupported credential backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "test backend") {
+		t.Fatalf("error = %v, want backend-specific reason", err)
+	}
+}
+
+func TestCrossPlatformCoverageAuthExportRejectsWindowsDPAPIBackend(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows DPAPI contract requires a native Windows runner")
+	}
+	t.Cleanup(CloseFileLogger)
+
+	exportCmd := NewRootCommand()
+	exportCmd.SetOut(&bytes.Buffer{})
+	exportCmd.SetErr(&bytes.Buffer{})
+	exportCmd.SetArgs([]string{"auth", "export", "--base64"})
+
+	err := exportCmd.Execute()
+	if err == nil {
+		t.Fatal("auth export should reject the Windows DPAPI backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	for _, want := range []string{"Windows", "DPAPI", "HKCU"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want substring %q", err, want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAuthImportUnsupportedBackendIsValidationErrorBeforeReadingInput(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, ".dws")
+	keychainDir := filepath.Join(root, "keychain")
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	t.Setenv(keychain.StorageDirEnv, keychainDir)
+
+	importCmd := newAuthImportCommandWithSupport(func() error {
+		return errors.New("portable auth import is unavailable for the test backend")
+	})
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"--input", filepath.Join(root, "missing-bundle.tar.gz")})
+
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import should reject an unsupported credential backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "test backend") {
+		t.Fatalf("error = %v, want backend-specific reason", err)
+	}
+	for _, path := range []string{configDir, keychainDir} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("unsupported import touched %s: stat error = %v", path, statErr)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackend(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows DPAPI contract requires a native Windows runner")
+	}
+
+	root := t.TempDir()
+	// NewRootCommand initializes the normal CLI file logger below configDir.
+	// Register its cleanup after TempDir so the Windows handle is closed before
+	// testing removes the temporary directory.
+	t.Cleanup(CloseFileLogger)
+	configDir := filepath.Join(root, ".dws")
+	keychainDir := filepath.Join(root, "keychain")
+	inputPath := filepath.Join(root, "bundle.tar.gz")
+	if err := os.WriteFile(inputPath, []byte("the capability guard must run before this input is read"), 0o600); err != nil {
+		t.Fatalf("write input sentinel error = %v", err)
+	}
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	t.Setenv(keychain.StorageDirEnv, keychainDir)
+
+	importCmd := NewRootCommand()
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"auth", "import", "--input", inputPath})
+
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import should reject the Windows DPAPI backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	for _, want := range []string{"Windows", "DPAPI", "HKCU"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want substring %q", err, want)
+		}
+	}
+	// The root command may create configDir/logs as part of normal CLI startup.
+	// The capability guard must still run before any auth state is imported.
+	for _, path := range []string{
+		keychainDir,
+		authpkg.ProfilesPath(configDir),
+		filepath.Join(configDir, "app.json"),
+		filepath.Join(configDir, "token.json"),
+	} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("unsupported Windows import touched %s: stat error = %v", path, statErr)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackendWithPopulatedCredentialBeforeRead(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows DPAPI contract requires a native Windows runner")
+	}
+
+	previous, previousErr := authpkg.LoadTokenDataKeychain()
+	if previousErr != nil && !errors.Is(previousErr, authpkg.ErrTokenDataNotFound) {
+		t.Fatalf("capture existing Windows credential: %v", previousErr)
+	}
+	hadPrevious := previousErr == nil
+	t.Cleanup(func() {
+		if hadPrevious {
+			_ = authpkg.SaveTokenDataKeychain(previous)
+		} else {
+			_ = authpkg.DeleteTokenDataKeychain()
+		}
+	})
+
+	want := &authpkg.TokenData{
+		AccessToken:  "windows-existing-access",
+		RefreshToken: "windows-existing-refresh",
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "windows-existing-corp",
+	}
+	if err := authpkg.SaveTokenDataKeychain(want); err != nil {
+		t.Fatalf("seed cleanup-scoped Windows DPAPI credential: %v", err)
+	}
+
+	originalTarget := authPortableTargetPopulated
+	originalRead := authReadFile
+	targetChecks := 0
+	bundleReads := 0
+	authPortableTargetPopulated = func(configDir string) bool {
+		targetChecks++
+		return originalTarget(configDir)
+	}
+	authReadFile = func(path string) ([]byte, error) {
+		bundleReads++
+		return originalRead(path)
+	}
+	t.Cleanup(func() {
+		authPortableTargetPopulated = originalTarget
+		authReadFile = originalRead
+	})
+
+	root := t.TempDir()
+	inputPath := filepath.Join(root, "bundle.tar.gz")
+	if err := os.WriteFile(inputPath, []byte("unsupported Windows import must not read this bundle"), 0o600); err != nil {
+		t.Fatalf("write bundle sentinel: %v", err)
+	}
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(root, ".dws"))
+
+	importCmd := newAuthImportCommand()
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"--input", inputPath})
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import should reject a populated Windows DPAPI backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	for _, required := range []string{"Windows", "DPAPI", "HKCU"} {
+		if !strings.Contains(err.Error(), required) {
+			t.Fatalf("error = %v, want substring %q", err, required)
+		}
+	}
+	if strings.Contains(err.Error(), "--force") {
+		t.Fatalf("unsupported Windows import suggested impossible --force remediation: %v", err)
+	}
+	if targetChecks != 0 || bundleReads != 0 {
+		t.Fatalf("unsupported Windows import inspected credentials/bundle: target_checks=%d bundle_reads=%d", targetChecks, bundleReads)
+	}
+
+	got, err := authpkg.LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("reload Windows DPAPI credential after rejection: %v", err)
+	}
+	if got.AccessToken != want.AccessToken || got.RefreshToken != want.RefreshToken || got.CorpID != want.CorpID {
+		t.Fatalf("Windows auth state changed after rejected import: got=%#v want=%#v", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageAuthImportRequiresForceWhenPopulated(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	root := t.TempDir()
+	t.Cleanup(CloseFileLogger)
+	configDir := filepath.Join(root, ".dws")
+	t.Setenv(keychain.StorageDirEnv, filepath.Join(root, "keychain"))
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	if err := authpkg.SaveTokenData(configDir, &authpkg.TokenData{
+		AccessToken:  "existing",
+		RefreshToken: "existing-refresh",
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+
+	bundlePath := filepath.Join(root, "bundle.tar.gz")
+	if err := os.WriteFile(bundlePath, []byte("not-a-real-bundle"), 0o600); err != nil {
+		t.Fatalf("write bundle stub error = %v", err)
+	}
+
+	importCmd := newAuthImportCommandWithSupport(func() error { return nil })
+	var stderr bytes.Buffer
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&stderr)
+	importCmd.SetArgs([]string{"--input", bundlePath})
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import without --force should fail when auth exists")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("error = %v, want --force hint", err)
 	}
 }
 
@@ -110,10 +366,9 @@ func TestAuthImportRequiresForceWhenPopulated(t *testing.T) {
 		t.Fatalf("write bundle stub error = %v", err)
 	}
 
-	importCmd := newAuthImportCommand()
-	var stderr bytes.Buffer
+	importCmd := newAuthImportCommandWithSupport(func() error { return nil })
 	importCmd.SetOut(&bytes.Buffer{})
-	importCmd.SetErr(&stderr)
+	importCmd.SetErr(&bytes.Buffer{})
 	importCmd.SetArgs([]string{"--input", bundlePath})
 	err := importCmd.Execute()
 	if err == nil {
@@ -244,7 +499,7 @@ func TestAuthStatusDiagnosticReportsCiphertextKeyMismatch(t *testing.T) {
 	}
 }
 
-func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
+func TestAuthStatusRefreshFailureReportsUnauthenticatedDiagnostic(t *testing.T) {
 	// Isolate keychain storage to a per-test directory so the saved
 	// token can't leak into other test packages running in parallel.
 	t.Setenv(keychain.StorageDirEnv, t.TempDir())
@@ -263,6 +518,9 @@ func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 		ExpiresAt:    time.Now().Add(-time.Hour),
 		RefreshExpAt: time.Now().Add(24 * time.Hour),
 		CorpID:       "dingcorp",
+		UserID:       "user-dingcorp",
+		ClientID:     "client-dingcorp",
+		Source:       "mcp",
 	})
 	if err != nil {
 		t.Skipf("SaveTokenData() unavailable in this environment: %v", err)
@@ -280,7 +538,7 @@ func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"auth", "status"})
+	cmd.SetArgs([]string{"--format", "json", "auth", "status"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
@@ -291,8 +549,18 @@ func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 		t.Fatal("secure token data should remain in keychain after refresh failure")
 	}
 
-	if !bytes.Contains(out.Bytes(), []byte("\"authenticated\"")) {
-		t.Fatalf("output should still report authenticated status:\n%s", out.String())
+	var resp authStatusResponse
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("Unmarshal() error = %v\noutput:\n%s", err, out.String())
+	}
+	if resp.Authenticated {
+		t.Fatalf("authenticated = true after refresh failure: %+v", resp)
+	}
+	if resp.Reason != "token_refresh_failed" {
+		t.Fatalf("reason = %q, want token_refresh_failed: %+v", resp.Reason, resp)
+	}
+	if !strings.Contains(resp.Message, "refresh failed") {
+		t.Fatalf("message = %q, want original refresh failure", resp.Message)
 	}
 }
 
@@ -340,8 +608,35 @@ func TestAuthStatusProfileOverrideDoesNotSwitchCurrentProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_secondary" {
-		t.Fatalf("currentProfile = %q, want unchanged corp_secondary", cfg.CurrentProfile)
+	if cfg.CurrentProfile != "corp_secondary:user-corp_secondary" {
+		t.Fatalf("currentProfile = %q, want unchanged exact secondary identity", cfg.CurrentProfile)
+	}
+}
+
+func TestAuthStatusRejectsAmbiguousProfileSelector(t *testing.T) {
+	first := authLogoutTestToken("corp_first")
+	first.CorpName = "Shared Org"
+	second := authLogoutTestToken("corp_second")
+	second.CorpName = "Shared Org"
+	setupAuthLogoutProfiles(t, first, second)
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "json", "auth", "status", "--profile", "Shared Org"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("auth status accepted ambiguous profile selector\noutput:\n%s", out.String())
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("error = %T %v, want validation error", err, err)
+	}
+	for _, candidate := range []string{"corp_first", "corp_second"} {
+		if !strings.Contains(err.Error(), candidate) {
+			t.Fatalf("error = %q, want candidate %q", err.Error(), candidate)
+		}
 	}
 }
 
@@ -515,8 +810,8 @@ func TestAuthLogoutProfileDeletesOnlySelectedProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.PrimaryProfile != "corp_secondary" || cfg.CurrentProfile != "corp_secondary" {
-		t.Fatalf("profiles pointers = primary %q current %q, want corp_secondary/corp_secondary", cfg.PrimaryProfile, cfg.CurrentProfile)
+	if cfg.PrimaryProfile != "" || cfg.CurrentProfile != "corp_secondary:user-corp_secondary" {
+		t.Fatalf("profiles pointers = primary %q current %q", cfg.PrimaryProfile, cfg.CurrentProfile)
 	}
 	if len(cfg.Profiles) != 1 || cfg.Profiles[0].CorpID != "corp_secondary" {
 		t.Fatalf("profiles = %#v, want only corp_secondary retained", cfg.Profiles)
@@ -533,6 +828,102 @@ func TestAuthLogoutProfileDeletesOnlySelectedProfile(t *testing.T) {
 	}
 	if loaded.CorpID != "corp_secondary" || loaded.AccessToken != "access-corp_secondary" {
 		t.Fatalf("default token = (%q, %q), want retained secondary token", loaded.CorpID, loaded.AccessToken)
+	}
+}
+
+func TestAuthLogoutExactProfilePreservesSameCorpAccount(t *testing.T) {
+	first := authLogoutTestToken("corp_same")
+	first.UserID = "user_1"
+	second := authLogoutTestToken("corp_same")
+	second.AccessToken = "access-second"
+	second.RefreshToken = "refresh-second"
+	second.UserID = "user_2"
+	configDir := setupAuthLogoutProfiles(t, first, second)
+
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() {
+		http.DefaultTransport = originalTransport
+	})
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("remote revoke disabled in unit test")
+	})
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"auth", "logout", "--profile", "corp_same:user_2"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth logout exact profile error = %v\noutput:\n%s", err, out.String())
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if len(cfg.Profiles) != 1 || cfg.Profiles[0].UserID != "user_1" {
+		t.Fatalf("profiles = %#v, want only user_1 retained", cfg.Profiles)
+	}
+	if authpkg.TokenDataExistsKeychainForIdentity("corp_same", "user_2") {
+		t.Fatal("selected identity token should be deleted")
+	}
+	loaded, err := authpkg.LoadTokenDataForProfile(configDir, "corp_same")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile(org) error = %v", err)
+	}
+	if loaded.UserID != "user_1" || loaded.AccessToken != first.AccessToken {
+		t.Fatalf("org current token = %#v, want retained user_1", loaded)
+	}
+}
+
+func TestAuthLogoutLocalProfileNameRevokesOnlySelectedAccount(t *testing.T) {
+	first := authLogoutTestToken("corp_same")
+	first.UserID = "user_1"
+	first.UserName = "账号一"
+	second := authLogoutTestToken("corp_same")
+	second.AccessToken = "access-second"
+	second.RefreshToken = "refresh-second"
+	second.UserID = "user_2"
+	second.UserName = "账号二"
+	configDir := setupAuthLogoutProfiles(t, first, second)
+
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	var selector string
+	for _, profile := range cfg.Profiles {
+		if profile.UserID == "user_2" {
+			selector = profile.Name
+		}
+	}
+	if selector == "" || selector == second.CorpName {
+		t.Fatalf("second local profile name = %q, want unique non-org alias", selector)
+	}
+
+	requests := 0
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() {
+		http.DefaultTransport = originalTransport
+	})
+	http.DefaultTransport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	})
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"auth", "logout", "--profile", selector})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth logout local profile error = %v\noutput:\n%s", err, out.String())
+	}
+	if requests != 1 {
+		t.Fatalf("remote revoke requests = %d, want 1", requests)
 	}
 }
 
@@ -621,8 +1012,15 @@ func TestLoginRecommendProductLabelMatchesTUITarget(t *testing.T) {
 }
 
 func TestResolveAuthLoginConfigReadsInheritedYes(t *testing.T) {
+	t.Setenv("DWS_DEBUG_AUTH", "1")
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().String("profile", "", "")
 	login := &cobra.Command{Use: "login"}
 	login.Flags().String("token", "", "")
 	login.Flags().Bool("device", false, "")
@@ -646,6 +1044,11 @@ func TestResolveAuthLoginConfigReadsInheritedYes(t *testing.T) {
 	}
 	if !cfg.Yes {
 		t.Fatal("Yes = false, want true")
+	}
+	if got := logs.String(); !strings.Contains(got, `"msg":"auth.login.request"`) ||
+		!strings.Contains(got, `"profile_selector":""`) ||
+		!strings.Contains(got, `"target_corp_id":""`) {
+		t.Fatalf("login request diagnostic log missing selector resolution:\n%s", got)
 	}
 }
 
@@ -697,6 +1100,12 @@ func TestAuthLoginRecommendSkipsPostLoginTUI(t *testing.T) {
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
 	}}
+	authpkg.SetRuntimeProfile("corp_old:user_old")
+	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
+	var authorizationProfiles []string
+	fake.beforeCall = func(string) {
+		authorizationProfiles = append(authorizationProfiles, authpkg.RuntimeProfile())
+	}
 	cmd := newAuthLoginCommand(fake)
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -714,6 +1123,61 @@ func TestAuthLoginRecommendSkipsPostLoginTUI(t *testing.T) {
 	}
 	if got := fake.args[0]["recommend"]; got != true {
 		t.Fatalf("--recommend plan recommend = %#v, want true", got)
+	}
+	for _, profile := range authorizationProfiles {
+		if profile != "" {
+			t.Fatalf("manual token post-login profile = %q, want empty runtime selector", profile)
+		}
+	}
+	if got := authpkg.RuntimeProfile(); got != "corp_old:user_old" {
+		t.Fatalf("runtime profile after authorization = %q, want restored selector", got)
+	}
+}
+
+func TestAuthLoginRecommendUsesNewExactIdentity(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+
+	oldOAuthLogin := authOAuthLogin
+	oldInteractive := authLoginInteractiveTerminal
+	t.Cleanup(func() {
+		authOAuthLogin = oldOAuthLogin
+		authLoginInteractiveTerminal = oldInteractive
+		authpkg.SetRuntimeProfile("")
+	})
+	authLoginInteractiveTerminal = func() bool { return false }
+	authOAuthLogin = func(*authpkg.OAuthProvider, context.Context, bool) (*authpkg.TokenData, error) {
+		return &authpkg.TokenData{
+			AccessToken: "new-token",
+			CorpID:      "corp_same",
+			UserID:      "user_new",
+			ExpiresAt:   time.Now().Add(time.Hour),
+		}, nil
+	}
+	fake := &authLoginRecommendSequenceCaller{responses: []string{
+		`{"success":true,"data":{"items":[],"selectedScopes":[]}}`,
+	}}
+	var authorizationProfiles []string
+	fake.beforeCall = func(string) {
+		authorizationProfiles = append(authorizationProfiles, authpkg.RuntimeProfile())
+	}
+	authpkg.SetRuntimeProfile("corp_same:user_old")
+
+	cmd := newAuthLoginCommand(fake)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"--recommend"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth login --recommend error = %v", err)
+	}
+	for _, profile := range authorizationProfiles {
+		if profile != "corp_same:user_new" {
+			t.Fatalf("post-login authorization profile = %q, want new exact identity", profile)
+		}
+	}
+	if got := authpkg.RuntimeProfile(); got != "corp_same:user_old" {
+		t.Fatalf("runtime profile after authorization = %q, want restored old identity", got)
 	}
 }
 
@@ -939,7 +1403,7 @@ func TestAuthLoginDefaultTUIRunsAfterLoginTokenSaved(t *testing.T) {
 	}
 }
 
-func TestEnrichAuthLoginProfileFromContactPersistsCorpName(t *testing.T) {
+func TestEnrichAuthLoginProfileFromContactBeforePersist(t *testing.T) {
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 	configDir := t.TempDir()
@@ -954,12 +1418,8 @@ func TestEnrichAuthLoginProfileFromContactPersistsCorpName(t *testing.T) {
 		ClientID:     "client-id",
 		Source:       "mcp",
 	}
-	if err := authpkg.SaveTokenData(configDir, token); err != nil {
-		t.Fatalf("SaveTokenData() error = %v", err)
-	}
-
 	fake := &authLoginRecommendSequenceCaller{responses: []string{
-		`{"success":true,"result":[{"orgEmployeeModel":{"corpId":"ding32fff839a3e0105d","orgName":"钉钉（中国）信息技术有限公司","userId":"011352590165863362195","orgUserName":"玄玦(主用钉)"}}]}`,
+		`{"success":true,"result":[{"isAdmin":false,"orgEmployeeModel":{"jobNumber":"202397","orgId":null,"orgName":"钉钉（中国）信息技术有限公司","orgUserId":"011352590165863362195","orgUserName":"玄玦(主用钉)"}}]}`,
 	}}
 	if err := enrichAuthLoginProfileFromContact(context.Background(), configDir, fake, token); err != nil {
 		t.Fatalf("enrichAuthLoginProfileFromContact() error = %v", err)
@@ -969,6 +1429,16 @@ func TestEnrichAuthLoginProfileFromContactPersistsCorpName(t *testing.T) {
 	}
 	if token.UserID != "011352590165863362195" || token.UserName != "玄玦(主用钉)" {
 		t.Fatalf("token user identity = (%q, %q), want contact result", token.UserID, token.UserName)
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() before persist error = %v", err)
+	}
+	if len(cfg.Profiles) != 0 {
+		t.Fatalf("identity enrichment persisted token early: %#v", cfg.Profiles)
+	}
+	if err := authpkg.SaveTokenData(configDir, token); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
 	}
 
 	loaded, err := authpkg.LoadTokenDataForProfile(configDir, "ding32fff839a3e0105d")
@@ -981,8 +1451,50 @@ func TestEnrichAuthLoginProfileFromContactPersistsCorpName(t *testing.T) {
 	if len(fake.tools) != 1 || fake.tools[0] != "get_current_user_profile" {
 		t.Fatalf("tool calls = %v, want get_current_user_profile", fake.tools)
 	}
-	if got := fake.args[0]["profile"]; got != "ding32fff839a3e0105d" {
-		t.Fatalf("contact profile arg = %#v, want ding32fff839a3e0105d", got)
+	if len(fake.args[0]) != 0 {
+		t.Fatalf("contact profile args = %#v, want no arguments", fake.args[0])
+	}
+	if len(fake.tokens) != 1 || fake.tokens[0] != "access-token" {
+		t.Fatalf("token overrides = %v, want access-token", fake.tokens)
+	}
+}
+
+func TestEnrichAuthLoginProfileLogsIdentityResolutionWithoutCredentials(t *testing.T) {
+	t.Setenv("DWS_DEBUG_AUTH", "1")
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	token := &authpkg.TokenData{
+		AccessToken:  "secret-access-token",
+		RefreshToken: "secret-refresh-token",
+		CorpID:       "ding_same_corp",
+	}
+	fake := &authLoginRecommendSequenceCaller{responses: []string{
+		`{"success":true,"result":[{"orgEmployeeModel":{"corpId":"ding_same_corp","orgName":"同一组织","userId":"user_two","orgUserName":"账号二"}}]}`,
+	}}
+
+	if err := enrichAuthLoginProfileFromContact(context.Background(), t.TempDir(), fake, token); err != nil {
+		t.Fatalf("enrichAuthLoginProfileFromContact() error = %v", err)
+	}
+
+	got := logs.String()
+	for _, want := range []string{
+		`"msg":"auth.login.identity.lookup.start"`,
+		`"msg":"auth.login.identity.lookup.result"`,
+		`"corp_id":"ding_same_corp"`,
+		`"user_id":"user_two"`,
+		`"user_name":"账号二"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostic logs missing %q:\n%s", want, got)
+		}
+	}
+	for _, secret := range []string{"secret-access-token", "secret-refresh-token"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("diagnostic logs exposed credential %q:\n%s", secret, got)
+		}
 	}
 }
 
@@ -996,6 +1508,7 @@ type authLoginRecommendSequenceCaller struct {
 	responses  []string
 	tools      []string
 	args       []map[string]any
+	tokens     []string
 	beforeCall func(toolName string)
 }
 
@@ -1015,6 +1528,11 @@ func (f *authLoginRecommendSequenceCaller) CallTool(_ context.Context, _ string,
 		f.responses = f.responses[1:]
 	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: response}}}, nil
+}
+
+func (f *authLoginRecommendSequenceCaller) CallToolWithToken(ctx context.Context, token, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	f.tokens = append(f.tokens, token)
+	return f.CallTool(ctx, productID, toolName, args)
 }
 
 func (f *authLoginRecommendSequenceCaller) Format() string { return "table" }

@@ -61,6 +61,14 @@ cli_version: ">=1.0.15"
 | `wiki` | 1 | `dingtalk-wiki` | `dws shortcut list --service wiki --format json` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
+## 多组织 / 多账号
+
+- `dws profile list --format json` 默认返回全部账号。自动化只使用每项稳定的 `profile=corpId:userId`；`status/expiresAt/refreshExpAt` 来自真实身份 Token，列表不触发刷新。
+- 输入支持 `corpId:userId`、`corpId:userName`、`corpName:userId`、`corpName:userName`，也兼容单独的 corpId、唯一 corpName 和本地 profile 名。名称只用于输入；重名时必须按报错候选改用 `corpId:userId`。
+- 只传组织时使用该组织明确记录的 `isOrgCurrent=true` 账号。多账号组织没有默认账号时必须让用户指定账号；禁止选择第一项、最近登录或最近使用账号。
+- 不传 `--profile` 使用全局 `isCurrent=true` 账号。`primaryProfile/isPrimary` 仅兼容输出，不参与选择；`previousProfile` 只用于 `profile switch -`。
+- 跨组织读 / 搜：按 `corpId` 去重；每个组织使用唯一 `isOrgCurrent=true` 的 `profile`。组织存在多个账号且没有默认账号时先询问用户。写 / 发 / 删 / 撤回及持久切换前先确认目标组织和账号。
+
 ## 产品总览
 
 | 产品                | 用途                                                   | 参考文件                                                           |
@@ -84,7 +92,7 @@ cli_version: ">=1.0.15"
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理                                | [wiki.md](./references/products/wiki.md)                       |
-| `event`           | 个人消息事件：监听当前用户被 @、指定单聊、指定群聊，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
+| `event`           | 个人 IM 事件：监听消息接收、指定发送人、已读、撤回、表情回应，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 意图判断决策树
 
@@ -109,7 +117,7 @@ cli_version: ">=1.0.15"
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
-用户提到"监听有人@我/监听我和某人的单聊消息/监听某个群消息/订阅个人消息事件/实时接收钉钉消息事件/个人消息事件流/event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group/监听并自动回复消息/驱动 Agent 处理消息" → `event`
+用户提到"监听有人@我/监听单聊或群消息/监听某人发送的消息/监听消息已读/监听消息撤回/监听消息贴表情或表情回应/订阅个人 IM 事件/实时接收钉钉事件/个人事件流/event consume user_im_message_*/监听并自动回复消息/驱动 Agent 处理消息" → `event`
 
 关键区分: aitable(数据表格) vs todo(待办任务)
 关键区分: report(钉钉日志/日报周报) vs todo(待办任务)

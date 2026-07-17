@@ -88,7 +88,7 @@ func TestResolveSkillSetupSourceErrorWhenMissing(t *testing.T) {
 	// Isolate HOME so the ~/.dws/skills/<mode>/ fallback (added by the release
 	// pipeline cache work) does not pick up real cached content on the
 	// developer machine.
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	_, err := resolveSkillSetupSource(tmp, skillSetupModeMono)
 	if err == nil {
 		t.Fatalf("expected error when source missing")
@@ -110,8 +110,9 @@ func TestResolveSkillSetupTargetsSingleAgent(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 dest, got %d", len(got))
 	}
-	if !strings.Contains(got[0], filepath.Join(".claude", "skills", "dws")) {
-		t.Fatalf("expected .claude/skills/dws path, got %s", got[0])
+	want := filepath.Join(home, ".claude", "skills", "dws")
+	if filepath.Clean(got[0]) != filepath.Clean(want) {
+		t.Fatalf("expected %s, got %s", want, got[0])
 	}
 }
 
@@ -133,11 +134,9 @@ func TestResolveSkillSetupTargetsMultiOmitsDwsTail(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 dest, got %d", len(got))
 	}
-	if filepath.Base(got[0]) == "dws" {
-		t.Fatalf("multi target must not end with /dws, got %s", got[0])
-	}
-	if !strings.HasSuffix(got[0], filepath.Join(".claude", "skills")) {
-		t.Fatalf("expected suffix .claude/skills, got %s", got[0])
+	want := filepath.Join(home, ".claude", "skills")
+	if filepath.Clean(got[0]) != filepath.Clean(want) {
+		t.Fatalf("expected %s, got %s", want, got[0])
 	}
 }
 

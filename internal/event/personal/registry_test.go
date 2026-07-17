@@ -33,18 +33,25 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventMention,
 		EventSingleChat,
 		EventInChat,
+		EventFromUser,
+		EventReadO2O,
+		EventReadGroup,
+		EventRecallO2O,
+		EventRecallGroup,
+		EventReactionO2O,
+		EventReactionGroup,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
 	}
 }
 
-func TestEventFromUserRemainsInternalButNotPublic(t *testing.T) {
+func TestEventFromUserIsPublic(t *testing.T) {
 	if _, ok := Lookup(EventFromUser); !ok {
-		t.Fatalf("Lookup(%q) failed, want internal definition retained", EventFromUser)
+		t.Fatalf("Lookup(%q) failed", EventFromUser)
 	}
-	if IsPublic(EventFromUser) {
-		t.Fatalf("IsPublic(%q) = true, want hidden", EventFromUser)
+	if !IsPublic(EventFromUser) {
+		t.Fatalf("IsPublic(%q) = false, want public", EventFromUser)
 	}
 }
 
@@ -54,6 +61,16 @@ func TestLegacyEventKeysAreUnknown(t *testing.T) {
 		"im_message_receive_o2o",
 		"im_message_receive_group",
 		"im_message_receive_user",
+		"im_message_read_o2o",
+		"im_message_read_group",
+		"im_message_recall_o2o",
+		"im_message_recall_group",
+		"im_message_emotion_o2o",
+		"im_message_emotion_group",
+		"im_message_reaction_o2o",
+		"im_message_reaction_group",
+		"user_im_message_emotion_o2o",
+		"user_im_message_emotion_group",
 	}
 	for _, key := range legacyKeys {
 		if _, ok := Lookup(key); ok {
@@ -140,8 +157,8 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 					t.Fatalf("schema for %s leaked %q: %s", eventKey, leaked, out)
 				}
 			}
-			if doc.JQRootPath != ".data | fromjson" {
-				t.Fatalf("jq_root_path = %q, want .data | fromjson", doc.JQRootPath)
+			if doc.JQRootPath != "." {
+				t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
 			}
 			if doc.RequiredParams == nil {
 				t.Fatalf("required_params = nil, want empty slice")
@@ -150,10 +167,148 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 			if !ok {
 				t.Fatalf("schema.properties = %#v, want object", doc.Schema["properties"])
 			}
-			if _, ok := props["content"].(map[string]any); !ok {
-				t.Fatalf("schema.properties.content = %#v, want object", props["content"])
+			wantProperties := []string{
+				"type", "event_id", "timestamp", "subscribe_id", "message_id",
+				"conversation_id", "sender", "sender_open_dingtalk_id", "content",
+				"create_time", "event_time",
+			}
+			if len(props) != len(wantProperties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d DTO fields", props, len(wantProperties))
+			}
+			for _, name := range wantProperties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
 			}
 		})
+	}
+}
+
+func TestTargetUIDEventSchemasRequireUserOrOpenDingTalkID(t *testing.T) {
+	wantConstraints := &ParameterConstraints{
+		RequireOneOf:      [][]string{{"user", "open-dingtalk-id"}},
+		MutuallyExclusive: [][]string{{"user", "open-dingtalk-id"}},
+	}
+	for _, eventKey := range []string{
+		EventSingleChat,
+		EventFromUser,
+		EventReadO2O,
+		EventRecallO2O,
+		EventReactionO2O,
+	} {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			if len(def.RequiredParams) != 0 {
+				t.Fatalf("required_params = %#v, want no unconditional parameters", def.RequiredParams)
+			}
+			if !reflect.DeepEqual(def.Constraints, wantConstraints) {
+				t.Fatalf("constraints = %#v, want %#v", def.Constraints, wantConstraints)
+			}
+			doc := BuildSchemaDocument(def)
+			if !reflect.DeepEqual(doc.Constraints, wantConstraints) {
+				t.Fatalf("schema constraints = %#v, want %#v", doc.Constraints, wantConstraints)
+			}
+		})
+	}
+
+	mention, _ := Lookup(EventMention)
+	if len(mention.RequiredParams) != 0 {
+		t.Fatalf("mention required_params = %#v, want none", mention.RequiredParams)
+	}
+	if mention.Constraints != nil {
+		t.Fatalf("mention constraints = %#v, want none", mention.Constraints)
+	}
+	group, _ := Lookup(EventInChat)
+	if want := []string{"group"}; !reflect.DeepEqual(group.RequiredParams, want) {
+		t.Fatalf("group required_params = %#v, want %#v", group.RequiredParams, want)
+	}
+	if group.Constraints != nil {
+		t.Fatalf("group constraints = %#v, want none", group.Constraints)
+	}
+}
+
+func TestDefinitionCopiesDoNotMutateRegistryConstraints(t *testing.T) {
+	def, ok := Lookup(EventSingleChat)
+	if !ok {
+		t.Fatalf("Lookup(%q) failed", EventSingleChat)
+	}
+	def.Constraints.RequireOneOf[0][0] = "mutated"
+
+	again, _ := Lookup(EventSingleChat)
+	if got := again.Constraints.RequireOneOf[0][0]; got != "user" {
+		t.Fatalf("registry constraint mutated through lookup copy: %q", got)
+	}
+}
+
+func TestActionSchemaDocumentsMatchOutputDTOs(t *testing.T) {
+	tests := []struct {
+		name       string
+		eventKeys  []string
+		properties []string
+	}{
+		{
+			name:      "read",
+			eventKeys: []string{EventReadO2O, EventReadGroup},
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "message_id",
+				"conversation_id", "reader", "reader_open_dingtalk_id", "sender",
+				"sender_open_dingtalk_id", "read_time", "event_time",
+			},
+		},
+		{
+			name:      "recall",
+			eventKeys: []string{EventRecallO2O, EventRecallGroup},
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "message_id",
+				"conversation_id", "recaller", "recaller_open_dingtalk_id", "sender",
+				"sender_open_dingtalk_id", "recall_time", "event_time",
+			},
+		},
+		{
+			name:      "reaction",
+			eventKeys: []string{EventReactionO2O, EventReactionGroup},
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "message_id",
+				"conversation_id", "operator", "operator_open_dingtalk_id", "reaction_name",
+				"reaction_text", "operation_type", "operation_time", "sender",
+				"sender_open_dingtalk_id", "event_time",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		for _, eventKey := range tt.eventKeys {
+			t.Run(tt.name+"/"+eventKey, func(t *testing.T) {
+				def, ok := Lookup(eventKey)
+				if !ok {
+					t.Fatalf("Lookup(%q) failed", eventKey)
+				}
+				doc := BuildSchemaDocument(def)
+				if doc.JQRootPath != "." {
+					t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
+				}
+				props, ok := doc.Schema["properties"].(map[string]any)
+				if !ok {
+					t.Fatalf("schema.properties = %#v", doc.Schema["properties"])
+				}
+				if len(props) != len(tt.properties) {
+					t.Fatalf("schema properties = %#v, want exactly %d DTO fields", props, len(tt.properties))
+				}
+				for _, name := range tt.properties {
+					if _, ok := props[name].(map[string]any); !ok {
+						t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+					}
+				}
+				for _, internal := range []string{"payload", "uid", "corpid", "clientId", "filterSubId", "bizid"} {
+					if _, ok := props[internal]; ok {
+						t.Fatalf("schema exposed internal property %q", internal)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -172,8 +327,8 @@ func TestBuildRuleParamMention(t *testing.T) {
 
 func TestBuildRuleParamSingleChatRequiresPeer(t *testing.T) {
 	_, _, err := BuildRuleParam(EventSingleChat, RuleOptions{})
-	if err == nil || !strings.Contains(err.Error(), "--user is required") {
-		t.Fatalf("error = %v, want user requirement", err)
+	if err == nil || !strings.Contains(err.Error(), "one of --user or --open-dingtalk-id is required") {
+		t.Fatalf("error = %v, want target identity requirement", err)
 	}
 }
 
@@ -190,9 +345,22 @@ func TestBuildRuleParamSingleChatUserIDMapsToStaffID(t *testing.T) {
 	}
 }
 
+func TestBuildRuleParamSingleChatOpenDingTalkID(t *testing.T) {
+	rule, param, err := BuildRuleParam(EventSingleChat, RuleOptions{OpenDingTalkID: "open-user-1"})
+	if err != nil {
+		t.Fatalf("BuildRuleParam() error = %v", err)
+	}
+	if rule != "singleChat" {
+		t.Fatalf("rule = %q, want singleChat", rule)
+	}
+	if param["targetUidType"] != "openDingtalkId" || param["targetUid"] != "open-user-1" {
+		t.Fatalf("param = %#v", param)
+	}
+}
+
 func TestBuildRuleParamSender(t *testing.T) {
 	_, _, err := BuildRuleParam(EventFromUser, RuleOptions{})
-	if err == nil || !strings.Contains(err.Error(), "--user is required") {
+	if err == nil || !strings.Contains(err.Error(), "one of --user or --open-dingtalk-id is required") {
 		t.Fatalf("error = %v, want sender requirement", err)
 	}
 
@@ -205,6 +373,14 @@ func TestBuildRuleParamSender(t *testing.T) {
 	}
 	if param["targetUidType"] != "staffId" || param["targetUid"] != "staff-1" {
 		t.Fatalf("param = %#v", param)
+	}
+
+	rule, param, err = BuildRuleParam(EventFromUser, RuleOptions{OpenDingTalkID: "open-user-1"})
+	if err != nil {
+		t.Fatalf("BuildRuleParam(openDingtalkId) error = %v", err)
+	}
+	if rule != "sender" || param["targetUidType"] != "openDingtalkId" || param["targetUid"] != "open-user-1" {
+		t.Fatalf("openDingtalkId rule = %q, param = %#v", rule, param)
 	}
 }
 
@@ -226,15 +402,72 @@ func TestBuildRuleParamGroup(t *testing.T) {
 	}
 }
 
+func TestBuildRuleParamActionEvents(t *testing.T) {
+	for _, eventKey := range []string{EventReadO2O, EventRecallO2O, EventReactionO2O} {
+		t.Run(eventKey, func(t *testing.T) {
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "one of --user or --open-dingtalk-id is required for "+eventKey) {
+				t.Fatalf("missing target identity error = %v", err)
+			}
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--group is not supported for "+eventKey) {
+				t.Fatalf("wrong group error = %v", err)
+			}
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{UserID: "staff-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rule != "singleChat" || param["targetUid"] != "staff-1" || param["targetUidType"] != "staffId" {
+				t.Fatalf("rule = %q, param = %#v", rule, param)
+			}
+			rule, param, err = BuildRuleParam(eventKey, RuleOptions{OpenDingTalkID: "open-user-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rule != "singleChat" || param["targetUid"] != "open-user-1" || param["targetUidType"] != "openDingtalkId" {
+				t.Fatalf("openDingtalkId rule = %q, param = %#v", rule, param)
+			}
+		})
+	}
+
+	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventReactionGroup} {
+		t.Run(eventKey, func(t *testing.T) {
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
+				t.Fatalf("missing group error = %v", err)
+			}
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{UserID: "staff-1"}); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+eventKey) {
+				t.Fatalf("wrong user error = %v", err)
+			}
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{OpenDingTalkID: "open-user-1"}); err == nil || !strings.Contains(err.Error(), "--open-dingtalk-id is not supported for "+eventKey) {
+				t.Fatalf("wrong openDingtalkId error = %v", err)
+			}
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{GroupID: "cid-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rule != "group" || param["openConversationId"] != "cid-1" {
+				t.Fatalf("rule = %q, param = %#v", rule, param)
+			}
+		})
+	}
+}
+
 func TestBuildRuleParamRejectsWrongScopedFlags(t *testing.T) {
-	if _, _, err := BuildRuleParam(EventMention, RuleOptions{UserID: "staff-1"}); err == nil || !strings.Contains(err.Error(), "--user is only supported") {
+	if _, _, err := BuildRuleParam(EventMention, RuleOptions{UserID: "staff-1"}); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+EventMention) {
 		t.Fatalf("mention with user error = %v, want unsupported user", err)
 	}
-	if _, _, err := BuildRuleParam(EventSingleChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--group is only supported") {
+	if _, _, err := BuildRuleParam(EventSingleChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--group is not supported for "+EventSingleChat) {
 		t.Fatalf("singleChat with group error = %v, want unsupported group", err)
 	}
-	if _, _, err := BuildRuleParam(EventInChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--user is only supported") {
+	if _, _, err := BuildRuleParam(EventSingleChat, RuleOptions{UserID: "staff-1", OpenDingTalkID: "open-user-1"}); err == nil || !strings.Contains(err.Error(), "--user and --open-dingtalk-id are mutually exclusive for "+EventSingleChat) {
+		t.Fatalf("singleChat with both identities error = %v, want mutually exclusive", err)
+	}
+	if _, _, err := BuildRuleParam(EventMention, RuleOptions{OpenDingTalkID: "open-user-1"}); err == nil || !strings.Contains(err.Error(), "--open-dingtalk-id is not supported for "+EventMention) {
+		t.Fatalf("mention with openDingtalkId error = %v, want unsupported openDingtalkId", err)
+	}
+	if _, _, err := BuildRuleParam(EventInChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+EventInChat) {
 		t.Fatalf("group with user error = %v, want unsupported user", err)
+	}
+	if _, _, err := BuildRuleParam(EventInChat, RuleOptions{OpenDingTalkID: "open-user-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--open-dingtalk-id is not supported for "+EventInChat) {
+		t.Fatalf("group with openDingtalkId error = %v, want unsupported openDingtalkId", err)
 	}
 }
 
@@ -262,10 +495,25 @@ func TestBuildFilterQueryAndJSON(t *testing.T) {
 func TestIdempotencyKeyUsesLocalIdentityKey(t *testing.T) {
 	left := Identity{LocalSubject: "refresh:left", ClientID: "client-1", SourceID: "open"}
 	right := Identity{LocalSubject: "refresh:right", ClientID: "client-1", SourceID: "open"}
-	ruleParam := map[string]any{"targetUid": "507971", "targetUidType": "staffId"}
+	ruleParam := map[string]any{"targetUid": "test-user-001", "targetUidType": "staffId"}
 	leftKey := IdempotencyKey(left, EventSingleChat, "singleChat", ruleParam, "")
 	rightKey := IdempotencyKey(right, EventSingleChat, "singleChat", ruleParam, "")
 	if leftKey == rightKey {
 		t.Fatalf("idempotency key collapsed for different local subjects: %s", leftKey)
+	}
+}
+
+func TestIdempotencyKeySeparatesTargetUIDTypes(t *testing.T) {
+	identity := Identity{LocalSubject: "refresh:subject", ClientID: "client-1", SourceID: "open"}
+	staffIDKey := IdempotencyKey(identity, EventSingleChat, "singleChat", map[string]any{
+		"targetUid":     "same-value",
+		"targetUidType": "staffId",
+	}, "")
+	openIDKey := IdempotencyKey(identity, EventSingleChat, "singleChat", map[string]any{
+		"targetUid":     "same-value",
+		"targetUidType": "openDingtalkId",
+	}, "")
+	if staffIDKey == openIDKey {
+		t.Fatalf("idempotency key collapsed for different targetUidType: %s", staffIDKey)
 	}
 }

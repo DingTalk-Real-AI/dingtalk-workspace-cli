@@ -193,12 +193,24 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	// invocations within the same process free.
 	logHostOwnedPATDecisionOnce()
 
-	selections, multi, err := runnerResolveMultiProfileSelections(defaultConfigDir(), authpkg.RuntimeProfile())
+	rawProfile := authpkg.RuntimeProfile()
+	selections, multi, err := runnerResolveMultiProfileSelections(defaultConfigDir(), rawProfile)
 	if err != nil {
 		return executor.Result{}, apperrors.NewValidation(err.Error())
 	}
 	if multi {
 		return r.runMultiProfile(ctx, invocation, selections)
+	}
+	if strings.TrimSpace(rawProfile) != "" {
+		profile, err := authpkg.ResolveProfile(defaultConfigDir(), rawProfile)
+		if err != nil {
+			return executor.Result{}, apperrors.NewValidation(err.Error())
+		}
+		if profile == nil {
+			return executor.Result{}, apperrors.NewValidation(fmt.Sprintf("profile %q not found", rawProfile))
+		}
+		authpkg.SetRuntimeProfile(authpkg.ProfileSelector(*profile))
+		defer authpkg.SetRuntimeProfile(rawProfile)
 	}
 
 	return r.runSingle(ctx, invocation, true)
@@ -313,10 +325,11 @@ func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfil
 		if profile == nil {
 			return nil, false, fmt.Errorf("profile %q not found", selector)
 		}
-		if seen[profile.CorpID] {
+		identitySelector := authpkg.ProfileSelector(*profile)
+		if seen[identitySelector] {
 			continue
 		}
-		seen[profile.CorpID] = true
+		seen[identitySelector] = true
 		selections = append(selections, multiProfileSelection{
 			Selector: selector,
 			Profile:  *profile,
@@ -334,13 +347,17 @@ func (r *runtimeRunner) runMultiProfile(ctx context.Context, invocation executor
 	failed := 0
 
 	for _, selection := range selections {
-		authpkg.SetRuntimeProfile(selection.Profile.CorpID)
+		resolvedSelector := authpkg.ProfileSelector(selection.Profile)
+		authpkg.SetRuntimeProfile(resolvedSelector)
 		result, err := r.runSingle(ctx, cloneInvocation(invocation), false)
 
 		entry := map[string]any{
 			"selector": selection.Selector,
+			"profile":  resolvedSelector,
 			"corpId":   selection.Profile.CorpID,
 			"corpName": selection.Profile.CorpName,
+			"userId":   selection.Profile.UserID,
+			"userName": selection.Profile.UserName,
 			"ok":       err == nil,
 		}
 		if err != nil {

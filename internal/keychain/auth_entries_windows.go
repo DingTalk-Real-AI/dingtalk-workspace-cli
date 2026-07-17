@@ -20,3 +20,7 @@ package keychain
 func platformValidateAuthTokenEntries(string) error {
 	return nil
 }
+
+func platformRemoveAuthTokenEntries(service string) error {
+	return registryRemoveAuthTokenEntries(service)
+}

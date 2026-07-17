@@ -596,6 +596,41 @@
       "target": "event consume",
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
+    "event consume user_im_message_receive_user": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_read_o2o": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_read_group": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_recall_o2o": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_recall_group": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_reaction_o2o": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_reaction_group": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
     "event schema user_im_message_receive_at": {
       "status": "alias",
       "target": "event schema",
@@ -607,6 +642,41 @@
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
     "event schema user_im_message_receive_o2o": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_receive_user": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_read_o2o": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_read_group": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_recall_o2o": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_recall_group": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_reaction_o2o": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_reaction_group": {
       "status": "alias",
       "target": "event schema",
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"

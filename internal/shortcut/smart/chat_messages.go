@@ -25,7 +25,7 @@ import (
 //
 // Steps:
 //  1. depending on whether --group or --user is given, call either
-//     list_conversation_message_v2 (group; param openCid) or
+//     list_conversation_message_v2 (group; param openconversation_id) or
 //     list_individual_chat_message (single chat; param userId) on the chat
 //     server — tool names and param keys copied verbatim from chat.go's
 //     `dws chat message list` call sites;
@@ -52,13 +52,16 @@ var ChatMessages = shortcut.Shortcut{
 	Risk: shortcut.RiskRead,
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群会话 ID（openConversationId），与 --user 互斥"},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
 		{Name: "user", Type: shortcut.FlagString, Desc: "单聊对方的 userId，与 --group 互斥"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"（可选）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页拉取的消息条数（可选）"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 		{Name: "direction", Type: shortcut.FlagString, Desc: "时间方向 newer/older（可选，newer 从给定时间往现在拉，older 往以前拉）"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "user"}},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id", "user"}},
 	},
 	Tips: []string{
 		`dws chat +chat-messages --group <openconversation_id> --time "2025-03-01 00:00:00"`,
@@ -67,7 +70,7 @@ var ChatMessages = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — build params and pick the right tool. Param keys
-		// (openCid/cid / userId / time / forward / limit) match the MCP server
+		// (openconversation_id / userId / time / forward / limit) match the MCP server
 		// schema for group and direct message listing.
 		var tool string
 		params := map[string]any{}
@@ -75,8 +78,8 @@ var ChatMessages = shortcut.Shortcut{
 		if rt.Changed("time") && rt.Str("time") != "" {
 			params["time"] = rt.Str("time")
 		}
-		if rt.Changed("limit") && rt.Int("limit") > 0 {
-			params["limit"] = rt.Int("limit")
+		if limit := rt.IntFirst("limit", "size"); limit > 0 {
+			params["limit"] = limit
 		}
 		// direction newer/older maps to the tools' boolean `forward` param
 		// (newer -> forward=true, older -> forward=false), matching chat.go's
@@ -90,10 +93,9 @@ var ChatMessages = shortcut.Shortcut{
 			}
 		}
 
-		if rt.Str("group") != "" {
+		if group := rt.StrFirst("group", "conversation-id", "id"); group != "" {
 			tool = "list_conversation_message_v2"
-			params["openCid"] = rt.Str("group")
-			params["cid"] = rt.Str("group")
+			params["openconversation_id"] = group
 		} else {
 			tool = "list_individual_chat_message"
 			params["userId"] = rt.Str("user")

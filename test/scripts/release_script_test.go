@@ -331,6 +331,67 @@ esac
 	}
 }
 
+func TestReleaseDeliveredStableAcceptsOnlyPinnedSuccessfulRecovery(t *testing.T) {
+	const (
+		tag         = "v1.0.52"
+		commit      = "4e59f9aa7ab057da8d5512ae9818fb66d4c6a045"
+		runID       = "29380892754"
+		workflowSHA = "434251695c19ebbfe2a2240d2eddce2d56af07b7"
+	)
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	root := t.TempDir()
+	mustRun(t, root, "git", "init")
+	binDir := t.TempDir()
+	fakeCurl := filepath.Join(binDir, "curl")
+	mustWriteFile(t, fakeCurl, []byte(`#!/bin/sh
+set -eu
+for arg in "$@"; do last="$arg"; done
+case "$last" in
+  */releases/tags/*)
+    printf '{"tag_name":"v1.0.52","draft":false,"prerelease":false}\n'
+    ;;
+  */actions/workflows/release.yml/runs*)
+    printf '{"workflow_runs":[]}\n'
+    ;;
+  */actions/runs/29380892754/jobs*)
+    printf '{"jobs":[{"name":"release","status":"completed","conclusion":"success","head_sha":"%s"},{"name":"verify-darwin-signatures","status":"completed","conclusion":"success","head_sha":"%s"},{"name":"publish-release","status":"completed","conclusion":"%s","head_sha":"%s"}]}\n' "$WORKFLOW_SHA" "$WORKFLOW_SHA" "$PUBLISH_CONCLUSION" "$WORKFLOW_SHA"
+    ;;
+  */actions/runs/29380892754)
+    printf '{"event":"workflow_dispatch","status":"completed","conclusion":"success","head_sha":"%s","head_branch":"codex/recover-v1.0.52","run_attempt":1,"path":".github/workflows/release.yml","repository":{"full_name":"owner/repo"}}\n' "$RUN_HEAD_SHA"
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-delivered-stable.sh")
+	run := func(runHeadSHA, publishConclusion string) (string, error) {
+		cmd := exec.Command("sh", script, tag, commit)
+		cmd.Dir = root
+		cmd.Env = []string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"DWS_RELEASE_OFFICIAL_REPOSITORY=owner/repo",
+			"WORKFLOW_SHA=" + workflowSHA,
+			"RUN_HEAD_SHA=" + runHeadSHA,
+			"PUBLISH_CONCLUSION=" + publishConclusion,
+		}
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	if output, err := run(workflowSHA, "success"); err != nil || !strings.Contains(output, "reviewed recovery run "+runID) {
+		t.Fatalf("pinned stable recovery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(strings.Repeat("0", 40), "success"); err == nil || !strings.Contains(output, "does not match the pinned delivery proof") {
+		t.Fatalf("mismatched recovery workflow passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(workflowSHA, "failure"); err == nil || !strings.Contains(output, "missing successful job publish-release") {
+		t.Fatalf("failed recovery delivery job passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
 func releaseChangelog(sections ...string) string {
 	text := "# Changelog\n\n## [Unreleased]\n\n"
 	for _, section := range sections {

@@ -45,6 +45,7 @@ var SendToGroup = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称（搜群关键词，用群名里连续的核心词）", Required: true},
 		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true},
+		shortcut.AIMessageTagFlag(),
 	},
 	Tips: []string{`dws chat +send-to-group --group 项目冲刺 --text "今天 5 点前提交进度"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -73,11 +74,11 @@ var SendToGroup = shortcut.Shortcut{
 
 		// Step 2 — send the markdown message to the unique group.
 		content, _ := json.Marshal(map[string]string{"title": text, "text": text})
-		return rt.CallMCP("send_personal_message", map[string]any{
+		return rt.CallMCP("send_personal_message", rt.AddAIMessageTag(map[string]any{
 			"openConversationId": groups[0].id,
 			"msgType":            "markdown",
 			"content":            string(content),
-		})
+		}))
 	},
 }
 

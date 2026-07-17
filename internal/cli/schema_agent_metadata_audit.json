@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:74e388600f02cbac41ea54158bbaa87e7fa625df735f0f2dcd9aa2d13c0fc257",
+  "source_hash": "sha256:a0b8b17fe8979e8644777df9f2b44bace438fb526ac7b645a572689f1bae0d13",
   "surface_hash": "sha256:1bfd9f493add00fbce044a751e83314ac4a19d9107a2eba7899bcdc0e62294dd",
   "source_files": 150,
   "hint_files": 46,
@@ -36,7 +36,7 @@
     "tools_with_avoid_when": 586,
     "tools_with_examples": 586,
     "tools_with_interface_mode": 586,
-    "unmatched_skill_tools": 124,
+    "unmatched_skill_tools": 120,
     "unreviewed_skill_tools": 8
   },
   "source_products": [
@@ -160,7 +160,7 @@
     {
       "tool_path": "calendar participant delete",
       "source": "skills/mono/SKILL.md",
-      "line": 136,
+      "line": 144,
       "candidates": [
         "calendar attendee delete",
         "calendar event delete",
@@ -2721,62 +2721,6 @@
         "drive star list",
         "drive star remove"
       ]
-    },
-    {
-      "tool_path": "event schema user_im_message_receive_o2o",
-      "source": "skills/mono/references/products/event.md",
-      "line": 60,
-      "candidates": [
-        "event schema",
-        "event consume",
-        "event list"
-      ],
-      "review": {
-        "status": "out_of_surface",
-        "reason": "该产品不在当前 21 产品公开命令面中"
-      }
-    },
-    {
-      "tool_path": "event consume user_im_message_receive_at -f ndjson",
-      "source": "skills/mono/references/products/event.md",
-      "line": 62,
-      "candidates": [
-        "event consume",
-        "event list",
-        "event schema"
-      ],
-      "review": {
-        "status": "out_of_surface",
-        "reason": "该产品不在当前 21 产品公开命令面中"
-      }
-    },
-    {
-      "tool_path": "event consume user_im_message_receive_o2o",
-      "source": "skills/mono/references/products/event.md",
-      "line": 63,
-      "candidates": [
-        "event consume",
-        "event list",
-        "event schema"
-      ],
-      "review": {
-        "status": "out_of_surface",
-        "reason": "该产品不在当前 21 产品公开命令面中"
-      }
-    },
-    {
-      "tool_path": "event consume user_im_message_receive_group",
-      "source": "skills/mono/references/products/event.md",
-      "line": 64,
-      "candidates": [
-        "event consume",
-        "event list",
-        "event schema"
-      ],
-      "review": {
-        "status": "out_of_surface",
-        "reason": "该产品不在当前 21 产品公开命令面中"
-      }
     },
     {
       "tool_path": "mail mailbox profile",

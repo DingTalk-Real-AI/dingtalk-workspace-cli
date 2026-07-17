@@ -558,7 +558,7 @@ func TestSheetExportSyncDownloadErrorIncludesSubmittedTaskID(t *testing.T) {
 	}
 }
 
-func TestSheetExportChangesPreserveSheetImportRawGetAndProgressContracts(t *testing.T) {
+func TestSheetExportChangesPreserveSheetImportGetAndJSONContracts(t *testing.T) {
 	getCaller := &sheetImportCaller{responses: map[string][]string{
 		"query_import_task": {`{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-2/","documentType":"1","custom":"kept"}`},
 	}}
@@ -584,9 +584,16 @@ func TestSheetExportChangesPreserveSheetImportRawGetAndProgressContracts(t *test
 	if err != nil {
 		t.Fatalf("sheet import error = %v", err)
 	}
-	for _, fragment := range []string{"[1/4] 创建导入会话", "[4/4] 等待格式转换完成", "导入完成", `"nodeId": "node-1"`} {
-		if !strings.Contains(output, fragment) {
-			t.Fatalf("sheet import output missing %q: %q", fragment, output)
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("sheet import stdout must be one JSON document: %v\n%s", err, output)
+	}
+	if result["nodeId"] != "node-1" || result["success"] != true {
+		t.Fatalf("sheet import JSON contract changed: %#v", result)
+	}
+	for _, progress := range []string{"[1/4] 创建导入会话", "[4/4] 等待格式转换完成", "导入完成"} {
+		if strings.Contains(output, progress) {
+			t.Fatalf("sheet import JSON output contains progress %q: %q", progress, output)
 		}
 	}
 }

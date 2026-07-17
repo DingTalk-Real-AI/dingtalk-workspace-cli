@@ -23,6 +23,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -35,6 +36,13 @@ type RuntimeContext struct {
 	shortcut Shortcut
 }
 
+// AIMessageTagFlag matches `chat message send --ai-tag`: IM send shortcuts
+// default to tagging delivered messages as AI-sent, while still allowing users
+// to opt out with --ai-tag=false.
+func AIMessageTagFlag() Flag {
+	return Flag{Name: "ai-tag", Type: FlagBool, Default: "true", Desc: "消息是否带 AI 发送角标（默认 true）"}
+}
+
 // Command returns the underlying cobra command (escape hatch; prefer the typed
 // accessors below).
 func (rt *RuntimeContext) Command() *cobra.Command { return rt.cmd }
@@ -43,6 +51,17 @@ func (rt *RuntimeContext) Command() *cobra.Command { return rt.cmd }
 func (rt *RuntimeContext) Str(name string) string {
 	v, _ := rt.cmd.Flags().GetString(name)
 	return strings.TrimSpace(v)
+}
+
+// StrFirst returns the first non-empty string value across a primary flag and
+// its aliases.
+func (rt *RuntimeContext) StrFirst(names ...string) string {
+	for _, name := range names {
+		if v := rt.Str(name); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // Bool returns the bool value of a flag.
@@ -55,6 +74,19 @@ func (rt *RuntimeContext) Bool(name string) bool {
 func (rt *RuntimeContext) Int(name string) int {
 	v, _ := rt.cmd.Flags().GetInt(name)
 	return v
+}
+
+// IntFirst returns the int value for a primary flag plus aliases. Explicitly set
+// aliases are considered before the primary's default, matching native helper
+// compatibility flags such as --size for --limit.
+func (rt *RuntimeContext) IntFirst(primary string, aliases ...string) int {
+	for _, alias := range aliases {
+		f := rt.cmd.Flags().Lookup(alias)
+		if f != nil && f.Changed {
+			return rt.Int(alias)
+		}
+	}
+	return rt.Int(primary)
 }
 
 // StrSlice returns the string-slice value of a flag.
@@ -74,6 +106,19 @@ func (rt *RuntimeContext) DryRun() bool { return globalBool(rt.cmd, "dry-run") }
 
 // Yes reports whether --yes is set (skip confirmation prompts).
 func (rt *RuntimeContext) Yes() bool { return globalBool(rt.cmd, "yes") }
+
+// AddAIMessageTag attaches the clawType parameter expected by IM send APIs when
+// the shortcut exposes --ai-tag and the flag is true. This mirrors the native
+// `chat message send` behavior.
+func (rt *RuntimeContext) AddAIMessageTag(params map[string]any) map[string]any {
+	if params == nil {
+		params = map[string]any{}
+	}
+	if f := rt.cmd.Flags().Lookup("ai-tag"); f == nil || rt.Bool("ai-tag") {
+		params["clawType"] = edition.ClawType()
+	}
+	return params
+}
 
 // CallMCP dispatches a single MCP tool call and prints the result, reusing the
 // shared helper path so the shortcut inherits DWS's error classification
