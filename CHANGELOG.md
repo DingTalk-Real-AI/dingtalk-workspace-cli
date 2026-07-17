@@ -10,6 +10,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 - **Official multi-platform Homebrew channel** — stable `Formula/dingtalk-workspace-cli.rb` and keg-only `Formula/dingtalk-workspace-cli-beta.rb` live in this repository and select signed macOS Intel/Apple Silicon or Linux amd64/arm64 artifacts at install time. Stable and beta releases open isolated Formula update PRs after final artifact signing, so beta never replaces the stable Formula. Agent Skills stay under `pkgshare` without mutating the user's home directory, and both tracks are covered by the six-channel post-release verifier.
 
+### Changed
+
+- **Per-product split of the embedded Schema Catalog** — the release Catalog is now committed as `internal/cli/schema_catalog/` (a global `catalog.json` envelope plus one `tools/<product>.json` shard per product) instead of a single 17 MB `schema_catalog.json`. A feature PR that touches one product now rewrites only that product's shard instead of the whole Tools map, eliminating the recurring unmergeable conflicts on `main` whenever two product PRs landed together. The split is storage-only: the loader embeds the directory and reassembles the same `SchemaCatalogSnapshot`, so `source_hash` integrity and every delivery/drift gate are unchanged. Policy `jq` queries keep their single-document interface via a new `scripts/policy/with-catalog.sh` reassembly helper.
+
 ## [1.0.52] - 2026-07-14
 
 This release seals the `v1.0.52` line with personal event subscriptions, a deterministic 22-product Agent command catalog, local user-operation auditing, expanded Open product commands, safer macOS credentials and release signing, and more reliable Connect and IM delivery.

@@ -30,24 +30,64 @@ func TestGenerateSchemaCatalogResolvesBuildExactlyOnce(t *testing.T) {
 		}
 		return resolved, err
 	}
-	outputPath := filepath.Join(t.TempDir(), "schema_catalog.json")
+	outputPath := filepath.Join(t.TempDir(), "schema_catalog")
 	if err := generateSchemaCatalogWithResolver(root, "", outputPath, resolver); err != nil {
 		t.Fatalf("generateSchemaCatalogWithResolver() error = %v", err)
 	}
 	if resolveCalls != 1 {
 		t.Fatalf("Schema build resolver calls = %d, want exactly 1", resolveCalls)
 	}
-	data, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("read generated temporary Catalog: %v", err)
-	}
-	var snapshot cli.SchemaCatalogSnapshot
-	if err := json.Unmarshal(data, &snapshot); err != nil {
-		t.Fatalf("decode generated temporary Catalog: %v", err)
-	}
+	snapshot := loadSplitSchemaCatalogSnapshot(t, outputPath)
 	if snapshot.SurfaceHash != resolvedRegistryHash {
 		t.Fatalf("snapshot Registry hash = %q, want once-resolved hash %q", snapshot.SurfaceHash, resolvedRegistryHash)
 	}
+}
+
+// loadSplitSchemaCatalogSnapshot reassembles the per-product split layout
+// (catalog.json + tools/<product>.json) written by the generator back into a
+// single SchemaCatalogSnapshot, mirroring the production loader.
+func loadSplitSchemaCatalogSnapshot(t *testing.T, dir string) cli.SchemaCatalogSnapshot {
+	t.Helper()
+	var envelope struct {
+		Version     int            `json:"version"`
+		SurfaceHash string         `json:"surface_hash,omitempty"`
+		SourceHash  string         `json:"source_hash"`
+		Catalog     map[string]any `json:"catalog"`
+	}
+	envData, err := os.ReadFile(filepath.Join(dir, "catalog.json"))
+	if err != nil {
+		t.Fatalf("read generated catalog.json: %v", err)
+	}
+	if err := json.Unmarshal(envData, &envelope); err != nil {
+		t.Fatalf("decode generated catalog.json: %v", err)
+	}
+	snapshot := cli.SchemaCatalogSnapshot{
+		Version:     envelope.Version,
+		SurfaceHash: envelope.SurfaceHash,
+		SourceHash:  envelope.SourceHash,
+		Catalog:     envelope.Catalog,
+		Tools:       map[string]map[string]any{},
+	}
+	shards, err := filepath.Glob(filepath.Join(dir, "tools", "*.json"))
+	if err != nil {
+		t.Fatalf("glob tool shards: %v", err)
+	}
+	for _, shardPath := range shards {
+		data, err := os.ReadFile(shardPath)
+		if err != nil {
+			t.Fatalf("read tool shard %s: %v", shardPath, err)
+		}
+		var shard struct {
+			Tools map[string]map[string]any `json:"tools"`
+		}
+		if err := json.Unmarshal(data, &shard); err != nil {
+			t.Fatalf("decode tool shard %s: %v", shardPath, err)
+		}
+		for canonical, spec := range shard.Tools {
+			snapshot.Tools[canonical] = spec
+		}
+	}
+	return snapshot
 }
 
 func TestValidateDeprecatedSurfaceAcceptsEmbeddedRegistrySource(t *testing.T) {
@@ -134,7 +174,7 @@ func TestValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
 			}
 		})
 	}
-	if err := validateCatalogOutputIsolation(root, filepath.Join(root, "internal/cli/schema_catalog.json"), ""); err != nil {
+	if err := validateCatalogOutputIsolation(root, filepath.Join(root, "internal/cli/schema_catalog"), ""); err != nil {
 		t.Fatalf("safe output rejected: %v", err)
 	}
 	if err := validateCatalogOutputIsolation(root, filepath.Join(t.TempDir(), "schema_catalog.json"), ""); err != nil {

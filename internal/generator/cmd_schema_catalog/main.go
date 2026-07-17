@@ -33,7 +33,7 @@ func main() {
 	var outputPath string
 	flag.StringVar(&rootPath, "root", ".", "Repository root used to protect Schema generator inputs")
 	flag.StringVar(&surfacePath, "surface", "", "Deprecated compatibility input relative to --root; when set it must equal the embedded reviewed CommandRegistry")
-	flag.StringVar(&outputPath, "output", "internal/cli/schema_catalog.json", "Output embedded schema catalog")
+	flag.StringVar(&outputPath, "output", "internal/cli/schema_catalog", "Output directory for the split embedded schema catalog (catalog.json + tools/<product>.json)")
 	flag.Parse()
 	resolvedSurfacePath := resolveCatalogRootPath(rootPath, surfacePath)
 	if err := validateCatalogOutputIsolation(rootPath, outputPath, resolvedSurfacePath); err != nil {
@@ -70,12 +70,12 @@ func validateCatalogOutputIsolation(rootPath, outputPath, surfacePath string) er
 	if strings.TrimSpace(surfacePath) != "" {
 		inputs = append(inputs, outputguard.Input{Name: "deprecated Registry compatibility input", Path: surfacePath})
 	}
-	if err := outputguard.Validate(rootPath, inputs, []outputguard.Target{{Name: "--output", Path: outputPath}}); err != nil {
+	if err := outputguard.Validate(rootPath, inputs, []outputguard.Target{{Name: "--output", Path: outputPath, Directory: true}}); err != nil {
 		return err
 	}
 	return outputguard.ValidateRepoTargetAllowlist(rootPath,
-		outputguard.Target{Name: "--output", Path: outputPath},
-		"internal/cli/schema_catalog.json",
+		outputguard.Target{Name: "--output", Path: outputPath, Directory: true},
+		"internal/cli/schema_catalog",
 	)
 }
 
@@ -117,19 +117,97 @@ func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputP
 	if err != nil {
 		return err
 	}
-	encoded, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode catalog: %w", err)
+	if err := writeSchemaCatalogShards(snapshot, outputPath); err != nil {
+		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
-	}
-	if err := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write catalog: %w", err)
-	}
-	_, _ = fmt.Fprintf(os.Stderr, "generated schema catalog: output=%s registry_commands=%d tools=%d registry_hash=%s source_hash=%s\n",
-		outputPath, resolved.CommandCount(), len(snapshot.Tools), snapshot.SurfaceHash, snapshot.SourceHash)
+	_, _ = fmt.Fprintf(os.Stderr, "generated schema catalog: output=%s registry_commands=%d tools=%d products=%d registry_hash=%s source_hash=%s\n",
+		outputPath, resolved.CommandCount(), len(snapshot.Tools), countSchemaCatalogProducts(snapshot), snapshot.SurfaceHash, snapshot.SourceHash)
 	return nil
+}
+
+// schemaCatalogEnvelope is the global half of the split catalog. It carries
+// the release envelope (version + integrity hashes) and the Catalog map, whose
+// products array and cross-product aggregates do not partition by product.
+type schemaCatalogEnvelope struct {
+	Version     int            `json:"version"`
+	SurfaceHash string         `json:"surface_hash,omitempty"`
+	SourceHash  string         `json:"source_hash"`
+	Catalog     map[string]any `json:"catalog"`
+}
+
+// schemaCatalogToolShard is the per-product half of the split catalog. Each
+// product's leaf ToolSpecs live in their own file so concurrent feature PRs
+// only rewrite the shard for the product they touch.
+type schemaCatalogToolShard struct {
+	Product string                    `json:"product"`
+	Tools   map[string]map[string]any `json:"tools"`
+}
+
+// writeSchemaCatalogShards partitions a validated snapshot into a release
+// directory: catalog.json holds the global envelope + Catalog map, and
+// tools/<product>.json holds each product's leaf ToolSpecs keyed by canonical
+// path. The split is a storage concern only: the loader reassembles the exact
+// same SchemaCatalogSnapshot, so source_hash still validates the whole payload.
+func writeSchemaCatalogShards(snapshot cli.SchemaCatalogSnapshot, outputDir string) error {
+	if err := os.RemoveAll(outputDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("clear stale schema catalog output: %w", err)
+	}
+	toolsDir := filepath.Join(outputDir, "tools")
+	if err := os.MkdirAll(toolsDir, 0o755); err != nil {
+		return fmt.Errorf("create schema catalog tools directory: %w", err)
+	}
+
+	envelope := schemaCatalogEnvelope{
+		Version:     snapshot.Version,
+		SurfaceHash: snapshot.SurfaceHash,
+		SourceHash:  snapshot.SourceHash,
+		Catalog:     snapshot.Catalog,
+	}
+	if err := writeSchemaCatalogJSON(filepath.Join(outputDir, "catalog.json"), envelope); err != nil {
+		return fmt.Errorf("write schema catalog.json: %w", err)
+	}
+
+	for product, tools := range partitionSchemaCatalogTools(snapshot.Tools) {
+		shard := schemaCatalogToolShard{Product: product, Tools: tools}
+		if err := writeSchemaCatalogJSON(filepath.Join(toolsDir, product+".json"), shard); err != nil {
+			return fmt.Errorf("write schema catalog tools/%s.json: %w", product, err)
+		}
+	}
+	return nil
+}
+
+// partitionSchemaCatalogTools groups leaf ToolSpecs by the product prefix of
+// their canonical path (the segment before the first dot). Products are
+// returned as a sorted map so generation is deterministic.
+func partitionSchemaCatalogTools(tools map[string]map[string]any) map[string]map[string]map[string]any {
+	partitioned := map[string]map[string]map[string]any{}
+	for canonical, spec := range tools {
+		product := canonical
+		if idx := strings.IndexByte(canonical, '.'); idx > 0 {
+			product = canonical[:idx]
+		}
+		if partitioned[product] == nil {
+			partitioned[product] = map[string]map[string]any{}
+		}
+		partitioned[product][canonical] = spec
+	}
+	return partitioned
+}
+
+func countSchemaCatalogProducts(snapshot cli.SchemaCatalogSnapshot) int {
+	maxProduct := 0
+	for range partitionSchemaCatalogTools(snapshot.Tools) {
+		maxProduct++
+	}
+	return maxProduct
+}
+
+func writeSchemaCatalogJSON(path string, value any) error {
+	encoded, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", filepath.Base(path), err)
+	}
+	return os.WriteFile(path, append(encoded, '\n'), 0o644)
 }
 
 func validateDeprecatedSurface(path string) error {

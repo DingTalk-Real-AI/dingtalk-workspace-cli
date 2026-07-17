@@ -25,7 +25,7 @@ import (
 // Rebuild all dependencies so the Catalog compiler cannot reuse the cli
 // package cached by the preceding metadata generator with the old embedded
 // JSON files.
-//go:generate go run -a ../generator/cmd_schema_catalog -root ../.. -output schema_catalog.json
+//go:generate go run -a ../generator/cmd_schema_catalog -root ../.. -output schema_catalog
 
 //go:embed schema_agent_metadata/*.json
 var embeddedAgentMetadataFS embed.FS

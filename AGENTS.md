@@ -56,7 +56,9 @@ The Schema data flow is one way:
 
 6. One-way publication
    SchemaRegistry
-   └─ internal/cli/schema_catalog.json
+   └─ internal/cli/schema_catalog/
+      (catalog.json + tools/<product>.json; split per product so
+       concurrent feature PRs only rewrite their own shard)
       └─ dws schema list/product/group/leaf/--all
 ```
 
@@ -73,7 +75,8 @@ Build-time gates and the snapshot serializer consume that source-resolved typed
 registry/index. Runtime projections and delivery gates consume the typed
 registry/index returned by the production snapshot loader. Neither path may
 reopen annotations, merge source records, or use a previous Catalog or other
-generated JSON as a source. `schema_catalog.json` is output-only in the
+generated JSON as a source. `schema_catalog/` (catalog.json + per-product
+tools/<product>.json shards) is output-only in the
 generation graph. The production loader decoding the embedded published
 snapshot is a delivery boundary, not source resolution; it must never create or
 repair a Cobra command, flag, registry entry, or later Catalog generation.
@@ -117,7 +120,8 @@ When adding or changing an Agent-visible command, review all relevant inputs:
   must never materialize, infer, or override registry identity.
 - Flag-to-interface property mappings and required/default semantics.
 - Generated files under `internal/cli/schema_agent_metadata/` and
-  `internal/cli/schema_catalog.json` after running generation.
+  `internal/cli/schema_catalog/` (catalog.json + tools/<product>.json) after
+  running generation.
 
 Run the reverse-completeness tests whenever the Cobra tree changes. A command
 that works through `dws <path>` but cannot be found through the matching
@@ -177,7 +181,7 @@ For every curated tool:
 2. Edit `selection/<product>.json` for selection prose (`reviewed: true`,
    `review_reason`, `source_refs`).
 3. Run `make generate-schema`. Do not hand-edit generated
-   `schema_agent_metadata/` or `schema_catalog.json`.
+   `schema_agent_metadata/` or `schema_catalog/`.
 
 ### Pull live MCP descriptions (personal token)
 

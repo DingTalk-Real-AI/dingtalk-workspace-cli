@@ -82,7 +82,7 @@ generate-schema-agent-metadata:
 generate-schema-catalog:
 	$(GO) run -a ./internal/generator/cmd_schema_catalog \
 		-root . \
-		-output internal/cli/schema_catalog.json
+		-output internal/cli/schema_catalog
 
 package:
 	@./scripts/dev/build-all.sh

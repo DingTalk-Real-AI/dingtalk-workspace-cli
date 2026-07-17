@@ -1,0 +1,1782 @@
+{
+  "product": "pat",
+  "tools": {
+    "pat.batch_grant": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=pat.batch_grant",
+        "Skill:skills/mono/references/products/pat.md",
+        "cobra-help:dws pat chmod",
+        "helper:internal/pat/chmod.go#typed_yes",
+        "internal/cli/schema_command_registry.json#pat.batch_grant",
+        "internal/cli/schema_hints/metadata/pat.json",
+        "internal/cli/schema_hints/selection/pat.json",
+        "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant",
+        "live-dws-schema:pat.batch_grant#FAILED",
+        "pinned-mcp:pat.batch_grant",
+        "skills/mono/references/products/pat.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#pat.batch_grant"
+      ],
+      "agent_summary": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+      "agent_summary_source": "dws-agent-selection/pat",
+      "availability": "available",
+      "avoid_when": [
+        "普通 OAuth 登录用 auth，不要用 pat",
+        "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+        "只要改本地浏览器打开策略时用 pat browser-policy"
+      ],
+      "canonical_path": "pat.batch_grant",
+      "cli_name": "chmod",
+      "cli_path": "pat chmod",
+      "confirmation": "user_required",
+      "constraints": {
+        "require_one_of": [
+          [
+            "scope",
+            "product",
+            "products",
+            "domain",
+            "domains",
+            "recommend"
+          ]
+        ]
+      },
+      "description": "授予指定 scope 的操作权限。\n\nscope 格式: \u003cproduct\u003e.\u003centity\u003e:\u003cpermission\u003e\n  例: aitable.record:query  chat.message:list  calendar.event:get\n\ngrantType 规则:\n  once       一次性，执行一次后自动失效\n  session    当前会话有效，需要 --session-id\n  permanent  永久有效（默认）\n\n批量授权:\n  dws pat chmod 支持一次传多个 scope 直接批量授予。\n  也支持 --products / --product 按产品编码批量展开 scope 模板，\n  --domains / --domain 按产品域批量展开 scope 模板，\n  --recommend 使用服务端推荐 scope 集合。\n  使用产品 / 域 / 推荐集合时，CLI 会先生成 batch plan，确认\n  selected / skipped / pending，再对 selected scopes 执行 batch grant；\n  --dry-run 只返回授权计划，不写入授权。真正执行批量授权必须显式\n  添加 --yes；未加 --yes 时 CLI 会阻断并提示 agent 先确认。\n\nagentCode 配置:\n  可通过 --agentCode 或 DINGTALK_DWS_AGENTCODE\n  指定；未传 agentCode 时，CLI 会省略该字段并由服务端默认兜底。",
+      "display": "行为授权管理",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": [
+                "普通 OAuth 登录用 auth，不要用 pat",
+                "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+                "只要改本地浏览器打开策略时用 pat browser-policy"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": [
+            "普通 OAuth 登录用 auth，不要用 pat",
+            "授权产品、grant-type 或 session-id 未明确时不要执行写入",
+            "只要改本地浏览器打开策略时用 pat browser-policy"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "pat chmod",
+              "value": "pat.batch_grant"
+            },
+            {
+              "precedence": "native_annotation",
+              "selected": false,
+              "source": "native_annotation",
+              "source_ref": "hardcoded:pat",
+              "value": "pat.batch_grant"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "pat chmod",
+          "value": "pat.batch_grant"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "user_required"
+            },
+            {
+              "precedence": "skill",
+              "review_reason": "Skill command comment explicitly marks the operation as risky",
+              "selected": false,
+              "source": "skills/mono/references/products/pat.md",
+              "value": "user_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "user_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "授予指定 scope 的操作权限。\n\nscope 格式: \u003cproduct\u003e.\u003centity\u003e:\u003cpermission\u003e\n  例: aitable.record:query  chat.message:list  calendar.event:get\n\ngrantType 规则:\n  once       一次性，执行一次后自动失效\n  session    当前会话有效，需要 --session-id\n  permanent  永久有效（默认）\n\n批量授权:\n  dws pat chmod 支持一次传多个 scope 直接批量授予。\n  也支持 --products / --product 按产品编码批量展开 scope 模板，\n  --domains / --domain 按产品域批量展开 scope 模板，\n  --recommend 使用服务端推荐 scope 集合。\n  使用产品 / 域 / 推荐集合时，CLI 会先生成 batch plan，确认\n  selected / skipped / pending，再对 selected scopes 执行 batch grant；\n  --dry-run 只返回授权计划，不写入授权。真正执行批量授权必须显式\n  添加 --yes；未加 --yes 时 CLI 会阻断并提示 agent 先确认。\n\nagentCode 配置:\n  可通过 --agentCode 或 DINGTALK_DWS_AGENTCODE\n  指定；未传 agentCode 时，CLI 会省略该字段并由服务端默认兜底。"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "按可信上下文为当前用户执行 PAT 批量授权，支持 dryRun 和 pending flow。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "授予指定 scope 的操作权限。\n\nscope 格式: \u003cproduct\u003e.\u003centity\u003e:\u003cpermission\u003e\n  例: aitable.record:query  chat.message:list  calendar.event:get\n\ngrantType 规则:\n  once       一次性，执行一次后自动失效\n  session    当前会话有效，需要 --session-id\n  permanent  永久有效（默认）\n\n批量授权:\n  dws pat chmod 支持一次传多个 scope 直接批量授予。\n  也支持 --products / --product 按产品编码批量展开 scope 模板，\n  --domains / --domain 按产品域批量展开 scope 模板，\n  --recommend 使用服务端推荐 scope 集合。\n  使用产品 / 域 / 推荐集合时，CLI 会先生成 batch plan，确认\n  selected / skipped / pending，再对 selected scopes 执行 batch grant；\n  --dry-run 只返回授权计划，不写入授权。真正执行批量授权必须显式\n  添加 --yes；未加 --yes 时 CLI 会阻断并提示 agent 先确认。\n\nagentCode 配置:\n  可通过 --agentCode 或 DINGTALK_DWS_AGENTCODE\n  指定；未传 agentCode 时，CLI 会省略该字段并由服务端默认兜底。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "write"
+            },
+            {
+              "precedence": "skill",
+              "review_reason": "Skill command comment explicitly marks the operation as risky",
+              "selected": false,
+              "source": "skills/mono/references/products/pat.md",
+              "value": "write"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "command-verb",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": [
+                "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": [
+            "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "unknown"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "unknown"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": {
+                "product_id": "pat",
+                "rpc_name": "pat.batch_grant"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant.interface_ref",
+              "value": "pat.pat.batch_grant"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": {
+            "product_id": "pat",
+            "rpc_name": "pat.batch_grant"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "high"
+            },
+            {
+              "precedence": "skill",
+              "review_reason": "Skill command comment explicitly marks the operation as risky",
+              "selected": false,
+              "source": "skills/mono/references/products/pat.md",
+              "value": "high"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "high"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "授予指定权限"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "批量授权"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "授予指定权限"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": [
+                "命令提示缺少行为授权，需要按产品或 scope 批量授权",
+                "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": [
+            "命令提示缺少行为授权，需要按产品或 scope 批量授权",
+            "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "pat",
+        "rpc_name": "pat.batch_grant"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "batch_grant",
+      "parameter_count": 8,
+      "parameters": {
+        "agentCode": {
+          "description": "Agent 唯一标识（可选；也可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先；未传则由服务端默认兜底）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "Agent 唯一标识（可选；也可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先；未传则由服务端默认兜底）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "Agent 唯一标识（可选；也可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先；未传则由服务端默认兜底）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "agentCode"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "agentCode"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "agentCode",
+          "required": false,
+          "type": "string"
+        },
+        "domain": {
+          "description": "产品域/产品编码，可重复；按产品 scope 模板批量授权；执行授权需 --yes",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "产品域/产品编码，可重复；按产品 scope 模板批量授权；执行授权需 --yes"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "产品域/产品编码，可重复；按产品 scope 模板批量授权；执行授权需 --yes"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "aggregate/two-stage wrapper: --domain is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "domain"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "aggregate/two-stage wrapper: --domain is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "array"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "array"
+            }
+          },
+          "required": false,
+          "type": "array"
+        },
+        "domains": {
+          "description": "产品域/产品编码列表，逗号分隔；执行批量授权需 --yes",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "产品域/产品编码列表，逗号分隔；执行批量授权需 --yes"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "产品域/产品编码列表，逗号分隔；执行批量授权需 --yes"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "aggregate/two-stage wrapper: --domains is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "domains"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "aggregate/two-stage wrapper: --domains is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "array"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "array"
+            }
+          },
+          "required": false,
+          "type": "array"
+        },
+        "grant-type": {
+          "default": "permanent",
+          "description": "授权策略: once|session|permanent",
+          "enum": [
+            "once",
+            "session",
+            "permanent"
+          ],
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "授权策略: once|session|permanent"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "授权策略: once|session|permanent"
+            },
+            "enum": {
+              "candidates": [
+                {
+                  "precedence": "native_annotation",
+                  "selected": true,
+                  "source": "native_annotation",
+                  "value": [
+                    "once",
+                    "session",
+                    "permanent"
+                  ]
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": [
+                    "once",
+                    "session",
+                    "permanent"
+                  ]
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": []
+                }
+              ],
+              "precedence": "native_annotation",
+              "resolution": "highest_precedence",
+              "source": "native_annotation",
+              "value": [
+                "once",
+                "session",
+                "permanent"
+              ]
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "grantType"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "grantType"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "grantType",
+          "required": false,
+          "type": "string"
+        },
+        "product": {
+          "description": "产品编码，可重复；与 --products 等价；执行批量授权需 --yes",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "产品编码，可重复；与 --products 等价；执行批量授权需 --yes"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "产品编码，可重复；与 --products 等价；执行批量授权需 --yes"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "aggregate/two-stage wrapper: --product is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "product"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "aggregate/two-stage wrapper: --product is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "array"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "array"
+            }
+          },
+          "required": false,
+          "type": "array"
+        },
+        "products": {
+          "description": "产品编码列表，逗号分隔；执行批量授权需 --yes",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "产品编码列表，逗号分隔；执行批量授权需 --yes"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "产品编码列表，逗号分隔；执行批量授权需 --yes"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "aggregate/two-stage wrapper: --products is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "products"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "aggregate/two-stage wrapper: --products is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "array"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "array"
+            }
+          },
+          "required": false,
+          "type": "array"
+        },
+        "recommend": {
+          "description": "使用推荐 scope 集合批量授权；执行授权需 --yes",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "使用推荐 scope 集合批量授权；执行授权需 --yes"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "使用推荐 scope 集合批量授权；执行授权需 --yes"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "two-stage conditional wrapper: --recommend is sent to pat.batch_plan, and pat.batch_grant receives only the plan-selected scopes; it is not a pat.batch_grant RPC property",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "recommend"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "two-stage conditional wrapper: --recommend is sent to pat.batch_plan, and pat.batch_grant receives only the plan-selected scopes; it is not a pat.batch_grant RPC property",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "required": false,
+          "type": "boolean"
+        },
+        "session-id": {
+          "description": "会话标识（session 模式下必填）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "会话标识（session 模式下必填）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "会话标识（session 模式下必填）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "sessionId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "sessionId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": true,
+                  "source": "tool_schema_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "tool_schema_hint",
+              "resolution": "highest_precedence",
+              "source": "tool_schema_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": true,
+                  "source": "tool_schema_hint",
+                  "value": "grant-type is session"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "tool_schema_hint",
+              "resolution": "highest_precedence",
+              "source": "tool_schema_hint",
+              "value": "grant-type is session"
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "sessionId",
+          "required": false,
+          "required_when": "grant-type is session",
+          "type": "string"
+        }
+      },
+      "path": "pat.batch_grant",
+      "positionals": [
+        {
+          "description": "权限 scope，格式为 \u003cproduct\u003e.\u003centity\u003e:\u003cpermission\u003e；可重复",
+          "index": 0,
+          "name": "scope",
+          "required": false,
+          "type": "array",
+          "variadic": true
+        }
+      ],
+      "primary_cli_path": "pat chmod",
+      "product_id": "pat",
+      "reviewed": true,
+      "risk": "high",
+      "source": "reviewed_command_registry",
+      "title": "授予指定权限",
+      "use_when": [
+        "命令提示缺少行为授权，需要按产品或 scope 批量授权",
+        "先 --dry-run 查看 selected/skipped/pending，用户确认后再执行"
+      ]
+    },
+    "pat.browser_policy": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=pat.browser_policy",
+        "Skill:skills/mono/references/products/pat.md",
+        "cobra-help:dws pat browser-policy",
+        "internal/cli/schema_command_registry.json#pat.browser_policy",
+        "internal/cli/schema_hints/metadata/pat.json",
+        "internal/cli/schema_hints/selection/pat.json",
+        "live-dws-schema:pat.browser_policy#FAILED",
+        "skills/mono/references/products/pat.md",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#pat.browser_policy"
+      ],
+      "agent_summary": "配置 PAT 授权流程是否允许打开本地浏览器",
+      "agent_summary_source": "dws-agent-selection/pat",
+      "availability": "available",
+      "avoid_when": [
+        "需要授予产品 scope 时用 pat chmod，而不是改浏览器策略"
+      ],
+      "canonical_path": "pat.browser_policy",
+      "cli_name": "browser-policy",
+      "cli_path": "pat browser-policy",
+      "confirmation": "not_required",
+      "description": "配置 PAT 授权时是否打开浏览器",
+      "display": "行为授权管理",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws pat browser-policy --enabled --format json",
+        "dws pat browser-policy --enabled=false --agentCode \u003cAGENT_CODE\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": "配置 PAT 授权流程是否允许打开本地浏览器"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": "配置 PAT 授权流程是否允许打开本地浏览器"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": [
+                "需要授予产品 scope 时用 pat chmod，而不是改浏览器策略"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": [
+            "需要授予产品 scope 时用 pat chmod，而不是改浏览器策略"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "pat browser-policy",
+              "value": "pat.browser_policy"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "pat browser-policy",
+          "value": "pat.browser_policy"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "配置 PAT 授权时是否打开浏览器"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "配置 PAT 授权时是否打开浏览器"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "write"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "command-verb",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": [
+                "dws pat browser-policy --enabled --format json",
+                "dws pat browser-policy --enabled=false --agentCode \u003cAGENT_CODE\u003e --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": [
+            "dws pat browser-policy --enabled --format json",
+            "dws pat browser-policy --enabled=false --agentCode \u003cAGENT_CODE\u003e --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "unknown"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "unknown"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "local"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "local"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "命令仅操作本地进程或策略文件，不调用 MCP 接口"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "命令仅操作本地进程或策略文件，不调用 MCP 接口"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/pat.json",
+              "value": "medium"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "medium"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/pat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/pat.json",
+          "value": "medium"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "配置 PAT 授权时是否打开浏览器"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "配置 PAT 授权时是否打开浏览器"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/pat.json",
+              "value": [
+                "需要允许或禁止某 Agent 在 PAT 授权时打开浏览器"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/pat.json",
+          "value": [
+            "需要允许或禁止某 Agent 在 PAT 授权时打开浏览器"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "unknown",
+      "interface_mode": "local",
+      "interface_reason": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+      "is_alias": false,
+      "name": "browser_policy",
+      "parameter_count": 2,
+      "parameters": {
+        "agentCode": {
+          "description": "Agent 唯一标识（可选；不填则写入全局默认策略，不从 env DINGTALK_DWS_AGENTCODE 回退）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "Agent 唯一标识（可选；不填则写入全局默认策略，不从 env DINGTALK_DWS_AGENTCODE 回退）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "Agent 唯一标识（可选；不填则写入全局默认策略，不从 env DINGTALK_DWS_AGENTCODE 回退）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "agentCode"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "agentCode"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "agentCode",
+          "required": false,
+          "type": "string"
+        },
+        "enabled": {
+          "description": "PAT 撞墙时是否允许本地打开浏览器",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "PAT 撞墙时是否允许本地打开浏览器"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "PAT 撞墙时是否允许本地打开浏览器"
+            },
+            "enum": {
+              "candidates": [
+                {
+                  "precedence": "typed_metadata",
+                  "selected": true,
+                  "source": "typed_parameter_metadata",
+                  "value": [
+                    "true",
+                    "false"
+                  ]
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": []
+                }
+              ],
+              "precedence": "typed_metadata",
+              "resolution": "highest_precedence",
+              "source": "typed_parameter_metadata",
+              "value": [
+                "true",
+                "false"
+              ]
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "enabled"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "enabled"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "typed_metadata",
+                  "selected": true,
+                  "source": "typed_parameter_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "typed_metadata",
+              "resolution": "highest_precedence",
+              "source": "typed_parameter_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "enabled",
+          "required": true,
+          "type": "boolean"
+        }
+      },
+      "path": "pat.browser_policy",
+      "primary_cli_path": "pat browser-policy",
+      "product_id": "pat",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "reviewed_command_registry",
+      "title": "配置 PAT 授权时是否打开浏览器",
+      "use_when": [
+        "需要允许或禁止某 Agent 在 PAT 授权时打开浏览器"
+      ]
+    }
+  }
+}

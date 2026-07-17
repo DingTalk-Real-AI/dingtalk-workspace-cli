@@ -1,0 +1,1507 @@
+{
+  "product": "ding",
+  "tools": {
+    "ding.recall_ding_message": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=ding.recall_ding_message",
+        "Skill:skills/mono/references/products/ding.md",
+        "cobra-help:dws ding message recall",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.recall_ding_message",
+        "internal/cli/schema_command_registry.json#ding.recall_ding_message",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/ding.json",
+        "internal/cli/schema_hints/selection/ding.json",
+        "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message",
+        "live-dws-schema:ding.recall_ding_message",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/ding.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#ding.recall_ding_message",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#ding.recall_ding_message"
+      ],
+      "agent_summary": "撤回已发送的机器人 DING",
+      "agent_summary_source": "dws-agent-selection/ding",
+      "availability": "available",
+      "avoid_when": [
+        "需要以用户身份撤回 DING 时不要使用本命令"
+      ],
+      "canonical_path": "ding.recall_ding_message",
+      "cli_name": "recall",
+      "cli_path": "ding message recall",
+      "confirmation": "not_required",
+      "description": "撤回 DING 消息",
+      "display": "DING 消息 / 发送 / 撤回",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": "撤回已发送的机器人 DING"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": "撤回已发送的机器人 DING"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": [
+                "需要以用户身份撤回 DING 时不要使用本命令"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": [
+            "需要以用户身份撤回 DING 时不要使用本命令"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "ding message recall",
+              "value": "ding.recall_ding_message"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "ding message recall",
+          "value": "ding.recall_ding_message"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": "not_required"
+            },
+            {
+              "precedence": "skill",
+              "review_reason": "Skill danger table explicitly reviews this operation",
+              "selected": false,
+              "source": "skills/mono/SKILL.md",
+              "value": "user_required"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "撤回 DING 消息"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "撤回已发送的DING消息"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "撤回 DING 消息"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": "write"
+            },
+            {
+              "precedence": "skill",
+              "review_reason": "Skill danger table explicitly reviews this operation",
+              "selected": false,
+              "source": "skills/mono/SKILL.md",
+              "value": "destructive"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "command-verb",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": [
+                "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": [
+            "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "unknown"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "unknown"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "ding",
+                "rpc_name": "recall_ding_message"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.recall_ding_message.interface_ref",
+              "value": "ding.recall_ding_message"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "ding",
+            "rpc_name": "recall_ding_message"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": "medium"
+            },
+            {
+              "precedence": "skill",
+              "review_reason": "Skill danger table explicitly reviews this operation",
+              "selected": false,
+              "source": "skills/mono/SKILL.md",
+              "value": "high"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "medium"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": "medium"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "撤回 DING 消息"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "撤回已发送的DING消息"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "撤回 DING 消息"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": [
+                "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": [
+            "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
+          ]
+        }
+      },
+      "group": "message",
+      "has_parameters": true,
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "ding",
+        "rpc_name": "recall_ding_message"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "recall_ding_message",
+      "parameter_count": 2,
+      "parameters": {
+        "id": {
+          "description": "DING 消息 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "DING 消息 ID (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "要撤回的钉钉消息ID，可通过发送DING消息接口获取"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "DING 消息 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "openDingId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "id"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "openDingId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "要撤回的钉钉消息ID，可通过发送DING消息接口获取",
+          "property": "openDingId",
+          "required": true,
+          "type": "string"
+        },
+        "robot-code": {
+          "description": "机器人 ID (必填，或设 DINGTALK_DING_ROBOT_CODE)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "机器人 ID (必填，或设 DINGTALK_DING_ROBOT_CODE)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "发送钉钉消息的机器人ID，必须与发送消息的机器人为同一个"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "机器人 ID (必填，或设 DINGTALK_DING_ROBOT_CODE)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "robotCode"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "robotCode"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "发送钉钉消息的机器人ID，必须与发送消息的机器人为同一个",
+          "property": "robotCode",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "ding.recall_ding_message",
+      "primary_cli_path": "ding message recall",
+      "product_id": "ding",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "reviewed_command_registry",
+      "title": "撤回 DING 消息",
+      "use_when": [
+        "已知 openDingId 与同一 robot-code，需要撤回机器人 DING"
+      ]
+    },
+    "ding.send_ding_message": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=ding.send_ding_message",
+        "Skill:skills/mono/references/products/ding.md",
+        "cobra-help:dws ding message send",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json#ding.send_ding_message",
+        "internal/cli/schema_command_registry.json#ding.send_ding_message",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/ding.json",
+        "internal/cli/schema_hints/selection/ding.json",
+        "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message",
+        "live-dws-schema:ding.send_ding_message",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/ding.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#ding.send_ding_message",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#ding.send_ding_message"
+      ],
+      "agent_summary": "以企业机器人发送应用内/短信/电话 DING",
+      "agent_summary_source": "dws-agent-selection/ding",
+      "availability": "available",
+      "avoid_when": [
+        "普通聊天消息用 chat message send / send-by-bot",
+        "需要用户身份 DING 时不要用本命令（机器人身份）",
+        "短信/电话有成本，用户未确认前不要发 call/sms"
+      ],
+      "canonical_path": "ding.send_ding_message",
+      "cli_name": "send",
+      "cli_path": "ding message send",
+      "confirmation": "not_required",
+      "description": "发送 DING 消息给指定用户，支持配置机器人编码、接收人、提醒类型和消息内容。",
+      "display": "DING 消息 / 发送 / 撤回",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": "以企业机器人发送应用内/短信/电话 DING"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": "以企业机器人发送应用内/短信/电话 DING"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": [
+                "普通聊天消息用 chat message send / send-by-bot",
+                "需要用户身份 DING 时不要用本命令（机器人身份）",
+                "短信/电话有成本，用户未确认前不要发 call/sms"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": [
+            "普通聊天消息用 chat message send / send-by-bot",
+            "需要用户身份 DING 时不要用本命令（机器人身份）",
+            "短信/电话有成本，用户未确认前不要发 call/sms"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "ding message send",
+              "value": "ding.send_ding_message"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "ding message send",
+          "value": "ding.send_ding_message"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "tool_schema_hint",
+              "selected": true,
+              "source": "tool_schema_hint",
+              "value": "发送 DING 消息给指定用户，支持配置机器人编码、接收人、提醒类型和消息内容。"
+            },
+            {
+              "precedence": "cobra_help",
+              "selected": false,
+              "source": "cobra_help",
+              "value": "发送 DING 消息。类型:\n  app  = 应用内 DING (默认)\n  sms  = 短信 DING (有成本)\n  call = 电话 DING (有成本)"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "使用企业内机器人发送DING消息，可发送应用内DING、短信DING、电话DING。"
+            }
+          ],
+          "precedence": "tool_schema_hint",
+          "resolution": "highest_precedence",
+          "source": "tool_schema_hint",
+          "value": "发送 DING 消息给指定用户，支持配置机器人编码、接收人、提醒类型和消息内容。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "write"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": [
+                "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+                "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": [
+            "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users userId1,userId2 --content \"请查看\" --format json",
+            "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type call --users userId1 --content \"紧急告警\" --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "unknown"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "unknown"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "ding",
+                "rpc_name": "send_ding_message"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.ding.send_ding_message.interface_ref",
+              "value": "ding.send_ding_message"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "ding",
+            "rpc_name": "send_ding_message"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "tool-schema-hint"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "tool-schema-hint"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/ding.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/ding marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/ding.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "medium"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "medium"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "发送 DING 消息"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "发送DING消息"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "发送 DING 消息"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/ding.json",
+              "value": [
+                "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/ding.json",
+          "value": [
+            "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
+          ]
+        }
+      },
+      "group": "message",
+      "has_parameters": true,
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "ding",
+        "rpc_name": "send_ding_message"
+      },
+      "is_alias": false,
+      "metadata_source": "tool-schema-hint",
+      "name": "send_ding_message",
+      "parameter_count": 4,
+      "parameters": {
+        "content": {
+          "description": "消息内容 (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "消息内容 (必填)"
+                },
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": false,
+                  "source": "tool_schema_hint",
+                  "value": "DING 消息内容。"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "消息内容"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "消息内容 (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "content"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "content"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": true,
+                  "source": "tool_schema_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "tool_schema_hint",
+              "resolution": "highest_precedence",
+              "source": "tool_schema_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "消息内容",
+          "property": "content",
+          "required": true,
+          "type": "string"
+        },
+        "robot-code": {
+          "description": "机器人 ID，发 DING 的机器人编码 (必填，可从 应用管理→机器人 获取，或设 DINGTALK_DING_ROBOT_CODE)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "机器人 ID，发 DING 的机器人编码 (必填，可从 应用管理→机器人 获取，或设 DINGTALK_DING_ROBOT_CODE)"
+                },
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": false,
+                  "source": "tool_schema_hint",
+                  "value": "DING 机器人编码。通常来自开放平台或应用机器人配置。"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "机器人Code"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "机器人 ID，发 DING 的机器人编码 (必填，可从 应用管理→机器人 获取，或设 DINGTALK_DING_ROBOT_CODE)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "robotCode"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "robotCode"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": true,
+                  "source": "tool_schema_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "tool_schema_hint",
+              "resolution": "highest_precedence",
+              "source": "tool_schema_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "机器人Code",
+          "property": "robotCode",
+          "required": true,
+          "type": "string"
+        },
+        "type": {
+          "default": "app",
+          "description": "提醒类型: app/sms/call (默认 app)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "提醒类型: app/sms/call (默认 app)"
+                },
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": false,
+                  "source": "tool_schema_hint",
+                  "value": "提醒类型。CLI 默认使用 app，对应应用内提醒。"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "提醒类型，1：应用内钉钉，2：短信，3：电话"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "提醒类型: app/sms/call (默认 app)"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "remindType"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "type"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "remindType"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "提醒类型，1：应用内钉钉，2：短信，3：电话",
+          "interface_type": "number",
+          "property": "remindType",
+          "required": false,
+          "type": "string"
+        },
+        "users": {
+          "description": "接收人 userId 列表 (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "接收人 userId 列表 (必填)"
+                },
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": false,
+                  "source": "tool_schema_hint",
+                  "value": "接收人的 userId 列表。CLI 使用逗号分隔，例如 user1,user2。"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "接收者用户ID列表"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "接收人 userId 列表 (必填)"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": true,
+                  "source": "tool_schema_hint",
+                  "value": "array"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "tool_schema_hint",
+              "resolution": "highest_precedence",
+              "source": "tool_schema_hint",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "receiverUserIdList"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "users"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "receiverUserIdList"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "tool_schema_hint",
+                  "selected": true,
+                  "source": "tool_schema_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "tool_schema_hint",
+              "resolution": "highest_precedence",
+              "source": "tool_schema_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "接收者用户ID列表",
+          "interface_type": "array",
+          "property": "receiverUserIdList",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "ding.send_ding_message",
+      "primary_cli_path": "ding message send",
+      "product_id": "ding",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "reviewed_command_registry",
+      "title": "发送 DING 消息",
+      "use_when": [
+        "需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"
+      ]
+    }
+  }
+}
