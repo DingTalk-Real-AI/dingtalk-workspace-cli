@@ -433,6 +433,64 @@ func TestCrossPlatformCoverageReplaceBatchDryRunDoesNotCallTool(t *testing.T) {
 	}
 }
 
+func TestAitableImportUploadShortcutRequiresPositiveFileSize(t *testing.T) {
+	silenceProcessOutput(t)
+	fake := &fakeCaller{}
+	helpers.InitDeps(fake)
+
+	tests := []struct {
+		name     string
+		fileSize string
+		wantErr  bool
+	}{
+		{name: "missing", wantErr: true},
+		{name: "zero", fileSize: "0", wantErr: true},
+		{name: "negative", fileSize: "-1", wantErr: true},
+		{name: "positive", fileSize: "204800"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fake.reset()
+			root := newCoverageRoot()
+			args := []string{
+				"aitable", "+import-upload",
+				"--base-id", "base-smoke",
+				"--file-name", "data.xlsx",
+				"--yes",
+			}
+			if test.fileSize != "" {
+				args = append(args, "--file-size", test.fileSize)
+			}
+			root.SetArgs(args)
+			err := root.Execute()
+
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("expected --file-size validation error")
+				}
+				if !strings.Contains(err.Error(), "--file-size") {
+					t.Fatalf("error = %q, want --file-size validation", err)
+				}
+				if fake.called {
+					t.Fatalf("invalid file size called %s/%s with %#v", fake.product, fake.tool, fake.args)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("positive file size returned error: %v", err)
+			}
+			if !fake.called || fake.product != "aitable" || fake.tool != "prepare_import_upload" {
+				t.Fatalf("tool call = called:%v %s/%s, want aitable/prepare_import_upload", fake.called, fake.product, fake.tool)
+			}
+			if got := fake.args["fileSize"]; got != 204800 {
+				t.Fatalf("fileSize = %#v, want 204800", got)
+			}
+		})
+	}
+}
+
 // TestAllToolLiteralsAreReal statically scans every shortcut package source for
 // CallMCP("tool", ...) literals and asserts each tool exists in the helper
 // ground truth. This covers the ~55 shortcuts whose own validation blocks the

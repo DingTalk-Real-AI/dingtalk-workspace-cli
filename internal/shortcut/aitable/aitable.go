@@ -2107,16 +2107,27 @@ var ImportUpload = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "file-name", Type: shortcut.FlagString, Desc: "文件名（含扩展名）", Required: true},
-		{Name: "file-size", Type: shortcut.FlagInt, Desc: "文件大小（字节，可选）"},
+		{Name: "file-size", Type: shortcut.FlagInt, Desc: "文件大小（字节，必须大于 0）", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"file-size"},
+			Description: "--file-size 必须是大于 0 的整数（实际文件大小，单位字节）",
+		},
 	},
 	Tips: []string{`dws aitable +import-upload --base-id B --file-name data.xlsx --file-size 204800`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Int("file-size") <= 0 {
+			return fmt.Errorf("flag --file-size is required and must be a positive integer")
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"baseId":   rt.Str("base-id"),
 			"fileName": rt.Str("file-name"),
-		}
-		if rt.Changed("file-size") {
-			params["fileSize"] = rt.Int("file-size")
+			"fileSize": rt.Int("file-size"),
 		}
 		return rt.CallMCP("prepare_import_upload", params)
 	},
