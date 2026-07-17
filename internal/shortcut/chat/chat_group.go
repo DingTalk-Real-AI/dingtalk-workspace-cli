@@ -31,6 +31,7 @@ var ChatSearch = shortcut.Shortcut{
 		{Name: "query", Type: shortcut.FlagString, Desc: "群名称关键词"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页返回数量"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "分页游标，翻页传 nextCursor"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已设置免打扰的群聊"},
 	},
@@ -45,7 +46,7 @@ var ChatSearch = shortcut.Shortcut{
 		}
 		params := map[string]any{
 			"keyword": query,
-			"limit":   rt.Int("limit"),
+			"limit":   rt.IntFirst("limit", "size"),
 			"cursor":  rt.Str("cursor"),
 		}
 		if rt.Bool("exclude-muted") {

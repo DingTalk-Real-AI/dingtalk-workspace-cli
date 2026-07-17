@@ -53,6 +53,17 @@ func (rt *RuntimeContext) Str(name string) string {
 	return strings.TrimSpace(v)
 }
 
+// StrFirst returns the first non-empty string value across a primary flag and
+// its aliases.
+func (rt *RuntimeContext) StrFirst(names ...string) string {
+	for _, name := range names {
+		if v := rt.Str(name); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // Bool returns the bool value of a flag.
 func (rt *RuntimeContext) Bool(name string) bool {
 	v, _ := rt.cmd.Flags().GetBool(name)
@@ -63,6 +74,19 @@ func (rt *RuntimeContext) Bool(name string) bool {
 func (rt *RuntimeContext) Int(name string) int {
 	v, _ := rt.cmd.Flags().GetInt(name)
 	return v
+}
+
+// IntFirst returns the int value for a primary flag plus aliases. Explicitly set
+// aliases are considered before the primary's default, matching native helper
+// compatibility flags such as --size for --limit.
+func (rt *RuntimeContext) IntFirst(primary string, aliases ...string) int {
+	for _, alias := range aliases {
+		f := rt.cmd.Flags().Lookup(alias)
+		if f != nil && f.Changed {
+			return rt.Int(alias)
+		}
+	}
+	return rt.Int(primary)
 }
 
 // StrSlice returns the string-slice value of a flag.

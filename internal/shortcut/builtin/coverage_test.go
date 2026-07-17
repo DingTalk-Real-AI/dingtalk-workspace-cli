@@ -281,7 +281,7 @@ func TestChatSearchAcceptsKeywordAlias(t *testing.T) {
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(builtin.Commands()...)
-	root.SetArgs([]string{"chat", "+chat-search", "--keyword", "树莓派", "--yes"})
+	root.SetArgs([]string{"chat", "+chat-search", "--keyword", "树莓派", "--size", "5", "--yes"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -290,6 +290,144 @@ func TestChatSearchAcceptsKeywordAlias(t *testing.T) {
 	}
 	if got := fake.args["keyword"]; got != "树莓派" {
 		t.Fatalf("keyword = %#v, want 树莓派", got)
+	}
+	if got := fake.args["limit"]; got != 5 {
+		t.Fatalf("limit = %#v, want 5", got)
+	}
+}
+
+func TestBotFindAcceptsKeywordAlias(t *testing.T) {
+	fake := &fakeCaller{}
+	helpers.InitDeps(fake)
+
+	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().String("format", "json", "")
+	root.AddCommand(builtin.Commands()...)
+	root.SetArgs([]string{"chat", "+bot-find", "--keyword", "日报", "--yes"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if fake.product != "bot" || fake.tool != "search_bots" {
+		t.Fatalf("call = %s/%s, want bot/search_bots", fake.product, fake.tool)
+	}
+	if got := fake.args["keyword"]; got != "日报" {
+		t.Fatalf("keyword = %#v, want 日报", got)
+	}
+}
+
+func TestMessagesListAcceptsConversationIDAndSizeAliases(t *testing.T) {
+	fake := &fakeCaller{}
+	helpers.InitDeps(fake)
+
+	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().String("format", "json", "")
+	root.AddCommand(builtin.Commands()...)
+	root.SetArgs([]string{
+		"chat", "+messages-list",
+		"--conversation-id", "cid-1",
+		"--time", "2026-07-17 10:00:00",
+		"--size", "7",
+		"--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if fake.product != "chat" || fake.tool != "list_conversation_message_v2" {
+		t.Fatalf("call = %s/%s, want chat/list_conversation_message_v2", fake.product, fake.tool)
+	}
+	if got := fake.args["openCid"]; got != "cid-1" {
+		t.Fatalf("openCid = %#v, want cid-1", got)
+	}
+	if got := fake.args["limit"]; got != 7 {
+		t.Fatalf("limit = %#v, want 7", got)
+	}
+}
+
+func TestMessagesReadStatusAcceptsIDAlias(t *testing.T) {
+	fake := &fakeCaller{}
+	helpers.InitDeps(fake)
+
+	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().String("format", "json", "")
+	root.AddCommand(builtin.Commands()...)
+	root.SetArgs([]string{
+		"chat", "+messages-read-status",
+		"--id", "cid-1",
+		"--message-id", "msg-1",
+		"--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if fake.product != "im" || fake.tool != "query_msg_read_status" {
+		t.Fatalf("call = %s/%s, want im/query_msg_read_status", fake.product, fake.tool)
+	}
+	if got := fake.args["openConversationId"]; got != "cid-1" {
+		t.Fatalf("openConversationId = %#v, want cid-1", got)
+	}
+}
+
+func TestSearchMsgAcceptsIDAndKeywordAliases(t *testing.T) {
+	fake := &fakeCaller{}
+	helpers.InitDeps(fake)
+
+	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().String("format", "json", "")
+	root.AddCommand(builtin.Commands()...)
+	root.SetArgs([]string{"chat", "+search-msg", "--id", "cid-1", "--keyword", "树莓派", "--yes"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if fake.product != "chat" || fake.tool != "search_messages_by_keyword" {
+		t.Fatalf("call = %s/%s, want chat/search_messages_by_keyword", fake.product, fake.tool)
+	}
+	if got := fake.args["openConversationId"]; got != "cid-1" {
+		t.Fatalf("openConversationId = %#v, want cid-1", got)
+	}
+	if got := fake.args["keyword"]; got != "树莓派" {
+		t.Fatalf("keyword = %#v, want 树莓派", got)
+	}
+}
+
+func TestChatMessagesAcceptsIDAndSizeAliases(t *testing.T) {
+	fake := &fakeCaller{}
+	helpers.InitDeps(fake)
+
+	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().String("format", "json", "")
+	root.AddCommand(builtin.Commands()...)
+	root.SetArgs([]string{"chat", "+chat-messages", "--id", "cid-1", "--size", "9", "--yes"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if fake.product != "chat" || fake.tool != "list_conversation_message_v2" {
+		t.Fatalf("call = %s/%s, want chat/list_conversation_message_v2", fake.product, fake.tool)
+	}
+	if got := fake.args["openCid"]; got != "cid-1" {
+		t.Fatalf("openCid = %#v, want cid-1", got)
+	}
+	if got := fake.args["limit"]; got != 9 {
+		t.Fatalf("limit = %#v, want 9", got)
 	}
 }
 
