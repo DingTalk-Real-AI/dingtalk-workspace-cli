@@ -462,11 +462,11 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 				}
 				fmt.Fprintf(os.Stderr, "[%d/%d] update_range sheet=%s range=%s\n", i+1, total, item.SheetID, item.Range)
 				if deps.Caller.DryRun() {
-					// The batch command normally uses callMCPToolReturnText in
-					// JSON mode, which intentionally performs a real call. Keep
-					// the dry-run guard before both output branches so neither
-					// format can bypass the shared no-network preview path.
-					_ = callMCPTool("update_range", toolArgs)
+					// JSON mode emits one aggregate preview below. Human formats
+					// reuse the shared per-call preview printer.
+					if !jsonMode {
+						_ = callMCPTool("update_range", toolArgs)
+					}
 					if jsonMode {
 						jsonResults = append(jsonResults, map[string]any{
 							"index":     i + 1,

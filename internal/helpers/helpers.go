@@ -249,6 +249,14 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 
 	// DryRun 模式：仅预览工具名和参数，不实际调用 MCP Server
 	if deps.Caller.DryRun() {
+		if deps.Caller.Format() == "json" {
+			return deps.Out.PrintJSON(map[string]any{
+				"dry_run":   true,
+				"executed":  false,
+				"tool":      toolName,
+				"arguments": args,
+			})
+		}
 		bold := color.New(color.FgYellow, color.Bold)
 		bold.Println("[DRY-RUN] Preview only, not executed:")
 		deps.Out.PrintKeyValue("Tool", toolName)

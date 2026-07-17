@@ -130,7 +130,7 @@ func TestSheetImportRejectsInvalidInputBeforeRemoteCall(t *testing.T) {
 	}
 }
 
-func TestSheetImportRunsSharedDocImportFlow(t *testing.T) {
+func TestCrossPlatformCoverageSheetImportRunsSharedDocImportFlow(t *testing.T) {
 	caller := &sheetImportCaller{responses: map[string][]string{
 		"create_import_session": {`{"sessionId":"session-1","uploadUrl":"https://upload.example.test/object"}`},
 		"confirm_import":        {`{"taskId":"task-1"}`},
@@ -171,12 +171,16 @@ func TestSheetImportRunsSharedDocImportFlow(t *testing.T) {
 		t.Fatalf("session args = %#v, want %#v", caller.calls[0].args, wantSession)
 	}
 
-	if !strings.Contains(output, `"nodeId": "node-1"`) || !strings.Contains(output, `"success": true`) {
-		t.Fatalf("output missing success contract:\n%s", output)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("sheet import stdout must be one JSON document: %v\n%s", err, output)
+	}
+	if payload["nodeId"] != "node-1" || payload["success"] != true {
+		t.Fatalf("output missing success contract: %#v", payload)
 	}
 }
 
-func TestSheetImportCreateLeafMatchesLegacyDryRun(t *testing.T) {
+func TestCrossPlatformCoverageSheetImportCreateLeafMatchesLegacyDryRun(t *testing.T) {
 	filePath := writeImportFixture(t, "xlsx")
 	legacy, err := executeSheetImportCommand(t, &sheetImportCaller{dryRun: true}, fastSheetImportConfig(),
 		"--file", filePath, "--workspace", "workspace-1", "--name", "Sales")
@@ -191,6 +195,13 @@ func TestSheetImportCreateLeafMatchesLegacyDryRun(t *testing.T) {
 	if leaf != legacy {
 		t.Fatalf("create leaf output differs from legacy entry:\nlegacy:\n%s\nleaf:\n%s", legacy, leaf)
 	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(legacy), &payload); err != nil {
+		t.Fatalf("sheet import dry-run stdout must be one JSON document: %v\n%s", err, legacy)
+	}
+	if payload["dry_run"] != true || payload["executed"] != false || payload["preview_kind"] != "plan" || payload["operation"] != "导入本地表格文件为在线电子表格" {
+		t.Fatalf("unexpected dry-run payload: %#v", payload)
+	}
 
 	root := newSheetImportCmdWithConfig(fastSheetImportConfig())
 	create, _, err := root.Find([]string{"create"})
@@ -202,7 +213,7 @@ func TestSheetImportCreateLeafMatchesLegacyDryRun(t *testing.T) {
 	}
 }
 
-func TestSheetImportTimeoutIsStructuredSuccessExit(t *testing.T) {
+func TestCrossPlatformCoverageSheetImportTimeoutIsStructuredSuccessExit(t *testing.T) {
 	cfg := fastSheetImportConfig()
 	cfg.poll.maxPolls = 2
 	caller := &sheetImportCaller{responses: map[string][]string{
@@ -220,15 +231,12 @@ func TestSheetImportTimeoutIsStructuredSuccessExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("timeout should exit successfully, got %v", err)
 	}
-	for _, fragment := range []string{
-		`"success": false`,
-		`"timed_out": true`,
-		`"status": "processing"`,
-		`"next_command": "dws sheet import get --task-id task-1"`,
-	} {
-		if !strings.Contains(output, fragment) {
-			t.Fatalf("output missing %s:\n%s", fragment, output)
-		}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("timeout stdout must be one JSON document: %v\n%s", err, output)
+	}
+	if payload["success"] != false || payload["timed_out"] != true || payload["status"] != "processing" || payload["next_command"] != "dws sheet import get --task-id task-1" {
+		t.Fatalf("unexpected timeout payload: %#v", payload)
 	}
 }
 
@@ -248,12 +256,30 @@ func TestSheetImportGetAddsNodeIDAndUsesDocServer(t *testing.T) {
 	}
 
 	var result map[string]any
-	jsonStart := strings.Index(output, "{")
-	if jsonStart < 0 || json.Unmarshal([]byte(output[jsonStart:]), &result) != nil {
+	if json.Unmarshal([]byte(output), &result) != nil {
 		t.Fatalf("invalid JSON output:\n%s", output)
 	}
 	if result["nodeId"] != "node-2" {
 		t.Fatalf("nodeId = %#v, want node-2", result["nodeId"])
+	}
+}
+
+func TestCrossPlatformCoverageSheetImportGetDryRunJSONIsSingleDocument(t *testing.T) {
+	caller := &sheetImportCaller{dryRun: true}
+	output, err := executeSheetImportCommand(t, caller, fastSheetImportConfig(), "get", "--task-id", "task-dry-run")
+	if err != nil {
+		t.Fatalf("sheet import get dry-run returned error: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("dry-run remote calls = %#v, want none", caller.calls)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("sheet import get dry-run stdout must be one JSON document: %v\n%s", err, output)
+	}
+	if payload["dry_run"] != true || payload["executed"] != false || payload["preview_kind"] != "plan" || payload["taskId"] != "task-dry-run" || payload["operation"] != "查询表格导入任务结果" {
+		t.Fatalf("unexpected sheet import get dry-run payload: %#v", payload)
 	}
 }
 
@@ -269,7 +295,7 @@ func TestDocImportConfigPreservesExistingContract(t *testing.T) {
 	}
 }
 
-func TestDocImportDryRunStillAcceptsMarkdownWithoutTarget(t *testing.T) {
+func TestCrossPlatformCoverageDocImportDryRunStillAcceptsMarkdownWithoutTarget(t *testing.T) {
 	previousDeps := deps
 	previousArgs := os.Args
 	t.Cleanup(func() {
@@ -293,8 +319,12 @@ func TestDocImportDryRunStillAcceptsMarkdownWithoutTarget(t *testing.T) {
 	if len(caller.calls) != 0 {
 		t.Fatalf("dry-run made %d remote calls", len(caller.calls))
 	}
-	if !strings.Contains(output.String(), "导入本地文件为在线文档") || !strings.Contains(output.String(), "md") {
-		t.Fatalf("unexpected dry-run output:\n%s", output.String())
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("doc import dry-run stdout must be one JSON document: %v\n%s", err, output.String())
+	}
+	if payload["operation"] != "导入本地文件为在线文档" || payload["format"] != "md" || payload["dry_run"] != true || payload["preview_kind"] != "plan" {
+		t.Fatalf("unexpected dry-run output: %#v", payload)
 	}
 }
 
