@@ -1351,10 +1351,9 @@ func newChatCommand() *cobra.Command {
 			timeVal := mustGetFlag(cmd, "time")
 			if groupID != "" {
 				toolArgs := map[string]any{
-					"openCid": groupID,
-					"cid":     groupID,
-					"time":    timeVal,
-					"forward": forward,
+					"openconversation_id": groupID,
+					"time":                timeVal,
+					"forward":             forward,
 				}
 				if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 					toolArgs["limit"] = v
