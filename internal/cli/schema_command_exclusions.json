@@ -289,6 +289,24 @@
       ]
     },
     {
+      "id": "hrbrain-out-of-surface",
+      "reason": "The HR Brain product remains executable for compatibility but is outside the currently reviewed open-source Agent command surface.",
+      "reviewed": true,
+      "commands": [
+        "hrbrain profile career",
+        "hrbrain profile labels",
+        "hrbrain profile metadata",
+        "hrbrain profile performance",
+        "hrbrain profile query",
+        "hrbrain search employees",
+        "hrbrain search employees-structured",
+        "hrbrain search fields",
+        "hrbrain talent-pool detail",
+        "hrbrain talent-pool employees",
+        "hrbrain talent-pool list"
+      ]
+    },
+    {
       "id": "compatibility-helpers-pending-review",
       "reason": "This executable compatibility/helper command has not yet completed stable interface, parameter, and Agent safety review; it must be reviewed before entering the release Catalog.",
       "reviewed": true,
