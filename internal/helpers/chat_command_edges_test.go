@@ -43,7 +43,7 @@ func runChatCoverageDirect(t *testing.T, path []string, flags map[string]string)
 	return command.RunE(command, nil)
 }
 
-func TestChatGroupUpdateIconAcceptsUploadedMediaIDPrefixes(t *testing.T) {
+func TestCrossPlatformCoverageChatGroupUpdateIconAcceptsUploadedMediaIDPrefixes(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
 	os.Args = []string{"dws", "chat"}
 	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
@@ -69,7 +69,7 @@ func TestChatGroupUpdateIconAcceptsUploadedMediaIDPrefixes(t *testing.T) {
 	}
 }
 
-func TestChatGroupUpdateIconRejectsBlankMediaID(t *testing.T) {
+func TestCrossPlatformCoverageChatGroupUpdateIconRejectsBlankMediaID(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
 	os.Args = []string{"dws", "chat"}
 	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
