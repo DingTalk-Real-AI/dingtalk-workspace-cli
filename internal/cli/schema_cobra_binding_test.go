@@ -189,6 +189,57 @@ func TestBindEffectiveCommandRegistryResolvesCompatibilityAliasLeaf(t *testing.T
 	}
 }
 
+func TestBindEffectiveCommandRegistryAcceptsReviewedRunnableParentCompatibilityPrimary(t *testing.T) {
+	root, primary, alias := runnableParentCompatibilityFixture()
+	annotateTestCompatibilityPair(primary, alias)
+	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
+		CanonicalPath:  "item.run_action",
+		PrimaryCLIPath: "item action",
+		Aliases:        []string{"item action create"},
+	}})
+
+	bound, err := BindEffectiveCommandRegistry(root, effective)
+	if err != nil {
+		t.Fatalf("BindEffectiveCommandRegistry() error = %v", err)
+	}
+	got := bound.ByCanonical["item.run_action"]
+	if got.PrimaryCommand != primary {
+		t.Fatalf("primary command = %p, want runnable parent %p", got.PrimaryCommand, primary)
+	}
+	if len(got.AliasCommands) != 1 || got.AliasCommands[0].Command != alias || got.AliasCommands[0].Kind != AliasKindCompatibilityLeaf {
+		t.Fatalf("compatibility alias = %#v", got.AliasCommands)
+	}
+}
+
+func TestBindEffectiveCommandRegistryRejectsRunnableParentPrimaryWithoutReviewedAlias(t *testing.T) {
+	root, _, _ := runnableParentCompatibilityFixture()
+	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
+		CanonicalPath:  "item.run_action",
+		PrimaryCLIPath: "item action",
+	}})
+
+	_, err := BindEffectiveCommandRegistry(root, effective)
+	if err == nil || !strings.Contains(err.Error(), "runnable parent compatibility primary requires at least one reviewed alias") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestBindEffectiveCommandRegistryRejectsRunnableParentPrimaryWithNonEquivalentLeaf(t *testing.T) {
+	root, primary, alias := runnableParentCompatibilityFixture()
+	annotateTestCompatibilityPair(primary, alias)
+	primary.Flags().String("node", "", "node")
+	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
+		CanonicalPath:  "item.run_action",
+		PrimaryCLIPath: "item action",
+		Aliases:        []string{"item action create"},
+	}})
+
+	_, err := BindEffectiveCommandRegistry(root, effective)
+	if err == nil || !strings.Contains(err.Error(), "flag --node is missing from compatibility leaf") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestBindEffectiveCommandRegistryAcceptsEquivalentCompatibilityLeafContract(t *testing.T) {
 	root := commandRegistryTestRoot("item get", "item legacy")
 	primary := exactSchemaCommand(root, "item get")
@@ -904,6 +955,17 @@ func commandRegistryTestRoot(paths ...string) *cobra.Command {
 		}
 	}
 	return root
+}
+
+func runnableParentCompatibilityFixture() (*cobra.Command, *cobra.Command, *cobra.Command) {
+	root := &cobra.Command{Use: "dws"}
+	item := &cobra.Command{Use: "item"}
+	primary := &cobra.Command{Use: "action", RunE: compatibilityPrimaryRunE}
+	alias := &cobra.Command{Use: "create", RunE: compatibilityPrimaryRunE}
+	primary.AddCommand(alias)
+	item.AddCommand(primary)
+	root.AddCommand(item)
+	return root, primary, alias
 }
 
 func mustCommandRegistry(t *testing.T, commands []CommandSpec) CommandRegistry {

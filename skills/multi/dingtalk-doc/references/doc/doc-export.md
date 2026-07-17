@@ -41,11 +41,13 @@ Usage:
   dws doc export get [flags]
 Example:
   dws doc export get --task-id <TASK_ID>
+  dws doc export get --job-id <JOB_ID>
 Flags:
-      --task-id string  导出任务 ID (必填)
+      --task-id string  导出任务 ID（与 --job-id 二选一）
+      --job-id string   导出任务 ID（历史参数；与 --task-id 二选一）
 ```
 
-用于查询 `--async` 返回的任务，或同步导出超时、中断后遗留的任务。旧版 `--job-id` 仅作为隐藏兼容参数保留，不应在新命令中使用。
+用于查询 `--async` 返回的任务，或同步导出超时、中断后遗留的任务。`--task-id` 是新流程推荐写法；公开的历史 `--job-id` 继续可用，两者不可同时传入。
 
 ## 关键说明
 

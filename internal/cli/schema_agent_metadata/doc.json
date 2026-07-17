@@ -4141,14 +4141,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": "available",
@@ -4183,14 +4183,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": "not_required",
@@ -4205,14 +4205,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": "read",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": "read",
@@ -4247,14 +4247,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": "idempotent",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": "idempotent",
@@ -4269,14 +4269,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": "mcp",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": "mcp",
@@ -4291,14 +4291,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": "doc.query_export_job",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": "doc.query_export_job",
@@ -4313,14 +4313,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": true,
@@ -4336,14 +4336,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
           "candidates": [
             {
               "value": "low",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property."
+              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
             },
             {
               "value": "low",
@@ -5224,7 +5224,7 @@
         "尚未上传并发起导入时，使用 doc import create"
       ],
       "confirmation": "not_required",
-      "effect": "read",
+      "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
         "dws doc import get --task-id \u003cTASK_ID\u003e --format json"
@@ -5251,14 +5251,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             }
           ]
         },
@@ -5287,14 +5287,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             },
             {
               "value": "not_required",
@@ -5305,18 +5305,18 @@
           ]
         },
         "effect": {
-          "value": "read",
+          "value": "write",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
-              "value": "read",
+              "value": "write",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             },
             {
               "value": "write",
@@ -5347,18 +5347,18 @@
           ]
         },
         "idempotency": {
-          "value": "idempotent",
+          "value": "unknown",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
-              "value": "idempotent",
+              "value": "unknown",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             },
             {
               "value": "unknown",
@@ -5373,14 +5373,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
               "value": "composite",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             }
           ]
         },
@@ -5389,14 +5389,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
               "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             }
           ]
         },
@@ -5421,14 +5421,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             },
             {
               "value": true,
@@ -5440,18 +5440,18 @@
           ]
         },
         "risk": {
-          "value": "low",
+          "value": "medium",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "review_reason": "migrated to reviewed metadata block",
           "candidates": [
             {
-              "value": "low",
+              "value": "medium",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+              "review_reason": "migrated to reviewed metadata block"
             },
             {
               "value": "medium",
@@ -5482,11 +5482,11 @@
           ]
         }
       },
-      "idempotency": "idempotent",
+      "idempotency": "unknown",
       "interface_mode": "composite",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "risk": "low",
+      "risk": "medium",
       "source_refs": [
         "CommandRegistry:canonical_path=doc.import_get",
         "Skill:skills/mono/references/products/doc/doc-import.md",

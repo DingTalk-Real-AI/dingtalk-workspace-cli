@@ -2081,7 +2081,14 @@
         },
         {
           "canonical_path": "sheet.submit_export_job",
-          "cli_path": "sheet export"
+          "cli_path": "sheet export",
+          "aliases": [
+            "sheet export create"
+          ]
+        },
+        {
+          "canonical_path": "sheet.export_get",
+          "cli_path": "sheet export get"
         },
         {
           "canonical_path": "sheet.filter_clear_criteria",

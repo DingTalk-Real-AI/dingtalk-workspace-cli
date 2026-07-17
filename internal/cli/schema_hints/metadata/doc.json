@@ -144,16 +144,15 @@
       "runtime_gate": "none"
     },
     "doc.import_get": {
-      "effect": "read",
-      "risk": "low",
+      "effect": "write",
+      "risk": "medium",
       "confirmation": "not_required",
-      "idempotency": "idempotent",
+      "idempotency": "unknown",
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
-      "runtime_gate": "none"
+      "review_reason": "migrated to reviewed metadata block"
     },
     "doc.insert_document_block": {
       "interface_mode": "mcp",
@@ -209,7 +208,14 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true,
-      "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+      "parameters": {
+        "task-id": {
+          "description": "Preferred task identifier returned as TaskResult.id; maps to the same jobId request property as --job-id.",
+          "required": false
+        }
+      },
+      "cli_path": "doc export get",
+      "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
       "runtime_gate": "none"
     },
     "doc.remove_permission": {

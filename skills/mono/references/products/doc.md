@@ -580,11 +580,13 @@ Usage:
   dws doc export get [flags]
 Example:
   dws doc export get --task-id <TASK_ID>
+  dws doc export get --job-id <JOB_ID>
 Flags:
-      --task-id string  导出任务 ID (必填)
+      --task-id string  导出任务 ID（与 --job-id 二选一）
+      --job-id string   导出任务 ID（历史参数；与 --task-id 二选一）
 ```
 
-用于查询 `--async` 返回的任务，或同步导出超时、中断后遗留的任务。旧版 `--job-id` 仅作为隐藏兼容参数保留。
+用于查询 `--async` 返回的任务，或同步导出超时、中断后遗留的任务。推荐新流程使用 `--task-id`；公开的历史 `--job-id` 继续可用，两者不可同时传入。
 
 
 ## URL 识别与 DOC_ID 提取
@@ -1035,7 +1037,7 @@ EOF
 ## 注意事项
 
 - `export create` 是公开主入口，历史 `export` 入口保持兼容；默认同步模式自动提交、轮询并下载，`--async` 只提交并返回任务
-- 任务结果中的 `id` 可用 `dws doc export get --task-id <TASK_ID>` 查询；旧版 `--job-id` 仅作为隐藏兼容参数保留
+- 任务结果中的 `id` 可用 `dws doc export get --task-id <TASK_ID>` 查询；公开的历史 `--job-id` 继续兼容，两者不可同时传入
 - `export` 支持钉钉在线文档 (alidocs) 导出为 `docx`、`markdown`（`md`）或 `pdf`；在线表格整表导出使用 `dws sheet export`
 - `update --mode overwrite` 会**清空原内容后重写**，⚠️ 谨慎使用；必须先 `--dry-run` 预览并在用户确认后加 `--yes`；默认 `--mode append`（追加）更安全
 - `read` 返回 Markdown 格式的文档内容，仅限有"下载"权限的文档

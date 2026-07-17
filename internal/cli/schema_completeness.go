@@ -329,6 +329,7 @@ func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 	}
 
 	groupPaths := map[string]bool{}
+	exactToolPaths := map[string]bool{}
 	for _, product := range loaded.Registry.Products {
 		expectedProduct, renderErr := renderRegistryProductSummary(product)
 		if renderErr != nil {
@@ -350,6 +351,9 @@ func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 			}
 			paths := append([]string{tool.Identity.CLIPath, tool.Identity.PrimaryCLIPath}, tool.Identity.Aliases...)
 			for _, rawPath := range paths {
+				if exact := normalizeSchemaCLIPath(rawPath); exact != "" {
+					exactToolPaths[exact] = true
+				}
 				tokens := splitSchemaPathTokens(rawPath)
 				for length := 2; length < len(tokens); length++ {
 					groupPaths[strings.Join(tokens[:length], " ")] = true
@@ -363,6 +367,13 @@ func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 
 	groups := make([]string, 0, len(groupPaths))
 	for path := range groupPaths {
+		// Runtime lookup intentionally resolves an exact ToolSpec path before a
+		// same-spelling group. A historical runnable parent can therefore be both
+		// an exact tool (for example, "sheet export") and the prefix of additive
+		// child leaves. Such collisions are leaf queries, not group queries.
+		if exactToolPaths[path] {
+			continue
+		}
 		groups = append(groups, path)
 	}
 	sort.Strings(groups)

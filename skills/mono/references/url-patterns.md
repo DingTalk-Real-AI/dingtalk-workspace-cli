@@ -98,7 +98,7 @@ Step 3 → 按下方路由规则映射到对应产品
 > axls vs xlsx 关键区分：
 > - `axls`（钉钉在线电子表格，`contentType=ALIDOC`）→ 走 `sheet` 产品线（读/写/筛选/导出等服务端原子操作）
 > - `xlsx` / `xls` / `xlsm` / `csv`（上传到文档空间的本地表格文件，`contentType=DOCUMENT`）→ 必须走 `dws drive download` 下载到本地后再解析处理，严禁错误路由到 `sheet` 产品线（sheet 命令只支持在线表格，调用 xlsx 节点会直接报错）
-> - 用户想把在线表格导出为 xlsx 文件 → 开源 dws CLI 暂未暴露在线表格导出能力（旧动态 schema 曾包含 `submit_export_job` / `query_export_job`，但当前 cobra 未注册），需要在钉钉客户端手动导出 xlsx
+> - 用户想把在线表格导出为 xlsx 文件 → 新任务用 `dws sheet export create --node <表格ID或URL>`；需立即返回任务 ID 时加 `--async` 并保存 `TaskResult.id`，已有任务用 `dws sheet export get --task-id <TASK_ID>` 查询。历史 `dws sheet export` 继续可用
 
 ### 示例
 
@@ -136,7 +136,7 @@ dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/ghi789" --format jso
 | extension / contentType | 读取 | 写入 | 删除 | 导出 | 权限 | 媒体 |
 |-------------------------|------|------|------|------|------|------|
 | **adoc**（在线文档） | `doc read` | `doc update` / `doc block update` | ⚠️ `doc delete` | ⚠️ `doc export` (→ docx) | ⚠️ `doc permission *` | ⚠️ `doc media download/insert` |
-| **axls**（在线电子表格） | `sheet range read` / `sheet list` | `sheet range update` / `sheet append` | ⚠️ `doc delete`（节点删除） | `sheet export`（单命令一站式：提交→轮询→下载，可选 `--output` 落盘） | ⚠️ `doc permission *`（节点级，跨产品） | 不适用 |
+| **axls**（在线电子表格） | `sheet range read` / `sheet list` | `sheet range update` / `sheet append` | ⚠️ `doc delete`（节点删除） | `sheet export create`（同步或 `--async`）/ `sheet export get`（已有任务） | ⚠️ `doc permission *`（节点级，跨产品） | 不适用 |
 | **able**（在线多维表） | `aitable base get` / `aitable record query` | `aitable record create/update` | ⚠️ `doc delete`（节点删除）或 `aitable base delete --yes` | `aitable export data --scope all --export-format excel --format json`（取 downloadUrl，`--output` 不落盘） | ⚠️ `doc permission *`（节点级） | `aitable attachment upload` |
 | **xlsx / xls / xlsm / csv**（本地表格文件） | `drive download` → 本地用 xlsx skill 解析 | 不支持服务端写（先下载改本地再上传） | ⚠️ `doc delete`（节点删除） | 不需要（本身就是 xlsx） | ⚠️ `doc permission *` | 不适用 |
 | **普通文件** (nodeType=file) | `drive download` | 不支持服务端写 | ⚠️ `doc delete` | 不需要 | ⚠️ `doc permission *` | 不适用 |

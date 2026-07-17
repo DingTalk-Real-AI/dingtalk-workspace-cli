@@ -400,6 +400,36 @@ func TestCrossPlatformCoverageSchemaRegistryProjectionRemainingEdges(t *testing.
 	}
 }
 
+func TestSchemaRegistryProjectionTreatsExactToolPathBeforeCollidingGroup(t *testing.T) {
+	loaded, err := loadSchemaCatalogSnapshot(schemaDeliveryTestSnapshot(
+		schemaDeliveryTestTool{Canonical: "sample.parent", CLIPath: "sample category", Aliases: []string{"sample category create"}},
+		schemaDeliveryTestTool{Canonical: "sample.get", CLIPath: "sample category get"},
+		schemaDeliveryTestTool{Canonical: "sample.other", CLIPath: "sample other run"},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if problems := schemaRegistryProjectionErrors(loaded); len(problems) != 0 {
+		t.Fatalf("exact tool/group collision must resolve as the tool: %v", problems)
+	}
+
+	oldQuery := deliverySchemaPayload
+	t.Cleanup(func() { deliverySchemaPayload = oldQuery })
+	deliverySchemaPayload = func(loaded loadedSchemaCatalog, args []string) (map[string]any, error) {
+		if len(args) > 0 && args[0] == "sample other" {
+			return map[string]any{"tools": []map[string]any{}}, nil
+		}
+		return oldQuery(loaded, args)
+	}
+	joined := strings.Join(schemaRegistryProjectionErrors(loaded), ";")
+	if !strings.Contains(joined, "group sample other query differs") {
+		t.Fatalf("non-colliding group projection was skipped: %s", joined)
+	}
+	if strings.Contains(joined, "group sample category") {
+		t.Fatalf("exact tool path was incorrectly treated as a group: %s", joined)
+	}
+}
+
 func TestCrossPlatformCoverageCompletenessIdentityAndPathHelpersRemainingEdges(t *testing.T) {
 	bound := BoundCommandRegistry{Commands: []BoundCommandSpec{
 		{CommandSpec: CommandSpec{CanonicalPath: "sample.one", PrimaryCLIPath: "sample run", Visibility: SchemaVisibilityPublic}},

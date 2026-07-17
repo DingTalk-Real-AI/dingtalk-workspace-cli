@@ -93,7 +93,9 @@ type exactCobraPathMatch struct {
 }
 
 // BoundCommandSpec joins one stable registry identity to its executable
-// primary leaf and all executable alias paths.
+// primary command and all executable alias paths. A historical primary may be
+// a reviewed runnable parent only when an equivalent compatibility leaf is
+// registered as an alias; new primary commands remain runnable leaves.
 type BoundCommandSpec struct {
 	CommandSpec
 	PrimaryCommand *cobra.Command
@@ -111,9 +113,11 @@ type BoundCommandRegistry struct {
 
 // BindEffectiveCommandRegistry resolves every registry path against the live
 // Cobra tree. Registry entries may target hidden compatibility leaves when
-// they are explicitly reviewed, but every target must be an actual runnable
-// leaf. Native annotations are optional implementation evidence; when present
-// they must exactly agree with the registry identity.
+// they are explicitly reviewed. A primary is normally a runnable leaf; the
+// only exception is a runnable parent with at least one reviewed alias, whose
+// alias binding must subsequently prove an equivalent runnable leaf contract.
+// Native annotations are optional implementation evidence; when present they
+// must exactly agree with the registry identity.
 func BindEffectiveCommandRegistry(root *cobra.Command, effective EffectiveCommandRegistry) (BoundCommandRegistry, error) {
 	if root == nil {
 		return BoundCommandRegistry{}, fmt.Errorf("bind effective Schema command registry: root is nil")
@@ -236,8 +240,9 @@ type compatibilityFlagRequiredContract struct {
 
 // validateCompatibilityLeafContract proves that an independently executable
 // compatibility leaf has the same invocation contract as the reviewed primary
-// leaf. Unlike a Cobra alias, it is a different command pointer and can drift
-// even while both paths still resolve to the same canonical identity.
+// command (normally a leaf, or a narrowly reviewed historical runnable
+// parent). Unlike a Cobra alias, it is a different command pointer and can
+// drift even while both paths still resolve to the same canonical identity.
 func validateCompatibilityLeafContract(spec CommandSpec, primary, alias *cobra.Command, aliasPath string) error {
 	problems := make([]string, 0)
 	problems = append(problems, compatibilityHandlerContractProblems(primary, alias)...)
@@ -816,7 +821,13 @@ func bindCommandRegistryPath(root *cobra.Command, spec CommandSpec, path string)
 		return nil, fmt.Errorf("schema command registry %s primary path %q must use real Cobra command names, not Aliases", spec.CanonicalPath, path)
 	}
 	if !runnableSchemaLeaf(match.Command) {
-		return nil, fmt.Errorf("schema command registry %s path %q is not a runnable Cobra leaf", spec.CanonicalPath, path)
+		if match.Command.Runnable() && match.Command.HasSubCommands() {
+			if len(spec.Aliases) == 0 {
+				return nil, fmt.Errorf("schema command registry %s path %q runnable parent compatibility primary requires at least one reviewed alias", spec.CanonicalPath, path)
+			}
+		} else {
+			return nil, fmt.Errorf("schema command registry %s path %q is neither a runnable Cobra leaf nor a reviewed runnable-parent compatibility primary", spec.CanonicalPath, path)
+		}
 	}
 	if err := validateCommandRegistryAnnotation(match.Command, path, spec); err != nil {
 		return nil, err
@@ -826,6 +837,26 @@ func bindCommandRegistryPath(root *cobra.Command, spec CommandSpec, path string)
 
 func runnableSchemaLeaf(command *cobra.Command) bool {
 	return command != nil && command.Runnable() && !command.HasSubCommands()
+}
+
+// reviewedRunnableParentCompatibilityPrimary recognizes only the narrow
+// historical-primary shape that BindEffectiveCommandRegistry has already
+// proven: a runnable parent whose every reviewed alias is a separately
+// executable, contract-equivalent compatibility leaf. Downstream consumers
+// use this instead of independently weakening their leaf requirement.
+func reviewedRunnableParentCompatibilityPrimary(command BoundCommandSpec) bool {
+	if command.PrimaryCommand == nil || !command.PrimaryCommand.Runnable() || !command.PrimaryCommand.HasSubCommands() {
+		return false
+	}
+	if len(command.Aliases) == 0 || len(command.AliasCommands) != len(command.Aliases) {
+		return false
+	}
+	for _, alias := range command.AliasCommands {
+		if alias.Kind != AliasKindCompatibilityLeaf || !runnableSchemaLeaf(alias.Command) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateCommandRegistryAnnotation(command *cobra.Command, path string, spec CommandSpec) error {

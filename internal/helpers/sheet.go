@@ -92,7 +92,9 @@ func newSheetCommand() *cobra.Command {
   dws sheet chart create                         创建浮动图表
   dws sheet chart update                         更新浮动图表
   dws sheet chart delete                         删除浮动图表
-  dws sheet export                              导出表格为 xlsx（异步任务一站式：提交→轮询→可选下载）
+  dws sheet export create                       新建表格导出任务（同步轮询；--async 立即返回任务 ID）
+  dws sheet export get                          按任务 ID 查询已有表格导出任务
+  dws sheet export                              历史兼容入口，与 export create 行为一致
   dws sheet import                              导入 xlsx/xls 为在线电子表格
   dws sheet template list                       获取表格模板列表
   dws sheet template search                     搜索表格模板

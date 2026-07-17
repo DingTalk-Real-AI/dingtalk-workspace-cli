@@ -2,8 +2,8 @@
   "version": 3,
   "baseline": {
     "manifest": "schema-parameter-bindings-v3",
-    "sha256": "sha256:84d6149f45f7771d504684f26dbbe93e02c1dddd8e8f4cab7de844c9fde0d5b6",
-    "reason": "Reviewed v3 baseline after adding Doc import composite mappings and local file/async orchestration exclusions while retaining the unpinned import query exclusion.",
+    "sha256": "sha256:363c9f4c3622498b2a9e7c1e6fcb4c46f0b483d3d6d0a7461ad96ab9bddb022a",
+    "reason": "Reviewed v3 baseline after adding Sheet export create/get mappings and CLI-only async orchestration exclusion while retaining the local output exclusion.",
     "reviewed": true
   },
   "removals": {
@@ -1099,6 +1099,9 @@
     "sheet.delete_sheet": {
       "node": "nodeId"
     },
+    "sheet.export_get": {
+      "task-id": "jobId"
+    },
     "sheet.fill_range": {
       "node": "nodeId",
       "target-range": "destinationRange"
@@ -1917,6 +1920,7 @@
     "sheet.range_read --range": "Reviewed unpinned adapter: sheet.range_read has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.range_read --sheet-id": "Reviewed unpinned adapter: sheet.range_read has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.show_gridline --sheet-id": "Reviewed unpinned adapter: sheet.show_gridline has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.submit_export_job --async": "CLI orchestration control that returns after task submission and is not sent to a singular MCP request",
     "sheet.submit_export_job --output": "local destination consumed after export job completion",
     "sheet.table_get --no-header": "Reviewed unpinned adapter: sheet.table_get has no singular pinned interface_ref; --no-header is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.table_get --range": "Reviewed unpinned adapter: sheet.table_get has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",

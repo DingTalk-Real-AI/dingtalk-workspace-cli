@@ -51,10 +51,9 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 			cliPath:             "doc export get",
 			risk:                "low",
 			confirmation:        "not_required",
-			parameters:          []string{"task-id"},
+			parameters:          []string{"job-id", "task-id"},
 			exactParameters:     true,
-			parameterProperties: map[string]string{"task-id": "jobId"},
-			forbiddenParameters: []string{"job-id"},
+			parameterProperties: map[string]string{"job-id": "jobId", "task-id": "jobId"},
 		},
 		{
 			canonical:       "doc.import",
@@ -67,11 +66,30 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 		{
 			canonical:           "doc.import_get",
 			cliPath:             "doc import get",
-			risk:                "low",
+			risk:                "medium",
 			confirmation:        "not_required",
 			parameters:          []string{"task-id"},
 			exactParameters:     true,
 			parameterProperties: map[string]string{"task-id": ""},
+		},
+		{
+			canonical:           "sheet.submit_export_job",
+			cliPath:             "sheet export",
+			risk:                "low",
+			confirmation:        "not_required",
+			parameters:          []string{"async", "node", "output"},
+			exactParameters:     true,
+			parameterProperties: map[string]string{"async": "", "node": "nodeId", "output": ""},
+		},
+		{
+			canonical:           "sheet.export_get",
+			cliPath:             "sheet export get",
+			risk:                "low",
+			confirmation:        "not_required",
+			parameters:          []string{"task-id"},
+			exactParameters:     true,
+			parameterProperties: map[string]string{"task-id": "jobId"},
+			forbiddenParameters: []string{"job-id"},
 		},
 	}
 
@@ -125,6 +143,9 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 	}
 	if _, ok := loaded.Index.Resolve("doc import"); ok {
 		t.Fatal("the runnable historical doc import parent must not be registered as a Schema alias")
+	}
+	if leaf, ok := loaded.Index.Resolve("sheet export create"); !ok || leaf.Identity.CanonicalPath != "sheet.submit_export_job" {
+		t.Fatalf("reviewed sheet export create compatibility alias = (%#v, %t), want sheet.submit_export_job", leaf, ok)
 	}
 
 	docExport := loaded.Snapshot.Tools["doc.export"]
@@ -182,6 +203,13 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 	if got := schemaString(interfaceRef["rpc_name"]); got != "query_export_job" {
 		t.Errorf("doc.query_export_job interface RPC = %q, want query_export_job", got)
 	}
+	docQueryParameters := schemaMap(docQuery["parameters"])
+	if required, _ := docQueryParameters["job-id"]["required"].(bool); !required {
+		t.Error("doc.query_export_job historical --job-id must remain required")
+	}
+	if required, _ := docQueryParameters["task-id"]["required"].(bool); required {
+		t.Error("doc.query_export_job additive --task-id must remain optional")
+	}
 
 	docImport := loaded.Snapshot.Tools["doc.import"]
 	for field, want := range map[string]string{
@@ -224,10 +252,10 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 
 	docImportGet := loaded.Snapshot.Tools["doc.import_get"]
 	for field, want := range map[string]string{
-		"effect":         "read",
-		"risk":           "low",
+		"effect":         "write",
+		"risk":           "medium",
 		"confirmation":   "not_required",
-		"idempotency":    "idempotent",
+		"idempotency":    "unknown",
 		"interface_mode": "composite",
 	} {
 		if got := schemaString(docImportGet[field]); got != want {
@@ -236,6 +264,121 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 	}
 	if _, ok := docImportGet["interface_ref"]; ok {
 		t.Errorf("doc.import_get must remain an unpinned composite query: %#v", docImportGet["interface_ref"])
+	}
+
+	sheetExport := loaded.Snapshot.Tools["sheet.submit_export_job"]
+	for field, want := range map[string]string{
+		"effect":         "read",
+		"risk":           "low",
+		"confirmation":   "not_required",
+		"idempotency":    "idempotent",
+		"interface_mode": "mcp",
+	} {
+		if got := schemaString(sheetExport[field]); got != want {
+			t.Errorf("sheet.submit_export_job %s = %q, want %q", field, got, want)
+		}
+	}
+	sheetExportInterface, _ := sheetExport["interface_ref"].(map[string]any)
+	if got := schemaString(sheetExportInterface["product_id"]); got != "sheet" {
+		t.Errorf("sheet.submit_export_job interface product = %q, want sheet", got)
+	}
+	if got := schemaString(sheetExportInterface["rpc_name"]); got != "submit_export_job" {
+		t.Errorf("sheet.submit_export_job interface RPC = %q, want submit_export_job", got)
+	}
+	sheetExportParameters := schemaMap(sheetExport["parameters"])
+	for _, name := range []string{"async", "output"} {
+		if required, _ := sheetExportParameters[name]["required"].(bool); required {
+			t.Errorf("sheet.submit_export_job --%s must be optional", name)
+		}
+		if got := schemaString(sheetExportParameters[name]["required_when"]); got != "" {
+			t.Errorf("sheet.submit_export_job --%s required_when = %q, want empty", name, got)
+		}
+	}
+	if got := schemaString(sheetExportParameters["async"]["type"]); got != "boolean" {
+		t.Errorf("sheet.submit_export_job --async type = %q, want boolean", got)
+	}
+
+	sheetExportGet := loaded.Snapshot.Tools["sheet.export_get"]
+	for field, want := range map[string]string{
+		"effect":         "read",
+		"risk":           "low",
+		"confirmation":   "not_required",
+		"idempotency":    "idempotent",
+		"interface_mode": "mcp",
+	} {
+		if got := schemaString(sheetExportGet[field]); got != want {
+			t.Errorf("sheet.export_get %s = %q, want %q", field, got, want)
+		}
+	}
+	sheetExportGetInterface, _ := sheetExportGet["interface_ref"].(map[string]any)
+	if got := schemaString(sheetExportGetInterface["product_id"]); got != "doc" {
+		t.Errorf("sheet.export_get interface product = %q, want doc", got)
+	}
+	if got := schemaString(sheetExportGetInterface["rpc_name"]); got != "query_export_job" {
+		t.Errorf("sheet.export_get interface RPC = %q, want query_export_job", got)
+	}
+	if _, ok := sheetExportGet["source_product_id"]; ok {
+		t.Errorf("sheet.export_get must express Doc routing through interface_ref, not source_product_id: %#v", sheetExportGet)
+	}
+}
+
+func TestSheetExportSkillEvidenceTargetsCreateAndGetLeaves(t *testing.T) {
+	repositoryRoot := filepath.Join("..", "..")
+	for _, relativePath := range []string{
+		"skills/mono/references/products/sheet.md",
+		"skills/mono/references/products/sheet/sheet-export.md",
+		"skills/multi/dingtalk-sheet/references/sheet.md",
+		"skills/multi/dingtalk-sheet/references/sheet/sheet-export.md",
+	} {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		text := string(body)
+		for _, fragment := range []string{"dws sheet export create --node", "--async", "TaskResult.id", "dws sheet export get --task-id", "PENDING", "PROCESSING", "SUCCESS", "FAILED", "TIMEOUT"} {
+			if !strings.Contains(text, fragment) {
+				t.Errorf("%s does not document %q", relativePath, fragment)
+			}
+		}
+	}
+
+	for _, relativePath := range []string{
+		"skills/mono/references/url-patterns.md",
+		"skills/multi/dingtalk-sheet/references/url-patterns.md",
+	} {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		text := string(body)
+		if strings.Contains(text, "开源 dws CLI 暂未暴露在线表格导出能力") {
+			t.Errorf("%s still claims Sheet export is unavailable", relativePath)
+		}
+		if !strings.Contains(text, "dws sheet export create --node") || !strings.Contains(text, "dws sheet export get --task-id") {
+			t.Errorf("%s does not route Sheet export create/get", relativePath)
+		}
+	}
+
+	for _, relativePath := range []string{
+		"internal/cli/schema_hints/index.json",
+		"internal/cli/schema_hints/reference-review.json",
+	} {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		var document struct {
+			ReferenceReview map[string]struct {
+				Status string `json:"status"`
+				Target string `json:"target"`
+			} `json:"reference_review"`
+		}
+		if err := json.Unmarshal(body, &document); err != nil {
+			t.Fatalf("decode %s: %v", relativePath, err)
+		}
+		if review, ok := document.ReferenceReview["sheet export"]; ok {
+			t.Errorf("%s sheet export review = %#v, want historical primary resolved by CommandRegistry", relativePath, review)
+		}
 	}
 }
 

@@ -35,6 +35,7 @@ var reviewedDryRunCapabilityGroups = []dryRunCapabilityGroup{
 		"doc.upload",
 		"drive.download_file",
 		"drive.upload",
+		"sheet.export_get",
 		"sheet.filter_view_get_criteria",
 		"sheet.filter_view_info",
 		"sheet.filter_view_list_criteria",

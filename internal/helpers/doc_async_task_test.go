@@ -194,15 +194,15 @@ func TestDocExportGetTaskIDUsesSharedQueryAdapter(t *testing.T) {
 	}
 }
 
-func TestDocExportGetHiddenJobIDCompatibility(t *testing.T) {
+func TestDocExportGetKeepsPublicJobIDCompatibility(t *testing.T) {
 	root := newDocCommand()
 	getCmd, remaining, err := root.Find([]string{"export", "get"})
 	if err != nil || len(remaining) != 0 {
 		t.Fatalf("find doc export get = (%v, %v)", remaining, err)
 	}
 	jobIDFlag := getCmd.Flags().Lookup("job-id")
-	if jobIDFlag == nil || !jobIDFlag.Hidden {
-		t.Fatalf("--job-id flag = %#v, want hidden compatibility flag", jobIDFlag)
+	if jobIDFlag == nil || jobIDFlag.Hidden || jobIDFlag.Deprecated != "" {
+		t.Fatalf("--job-id flag = %#v, want visible non-deprecated compatibility flag", jobIDFlag)
 	}
 
 	caller := &docAsyncRecordingCaller{
@@ -213,6 +213,24 @@ func TestDocExportGetHiddenJobIDCompatibility(t *testing.T) {
 	}
 	if len(caller.calls) != 1 || caller.calls[0].args["jobId"] != "job-1" {
 		t.Fatalf("compatibility query calls = %#v, want jobId=job-1", caller.calls)
+	}
+}
+
+func TestDocTaskGetHelpDocumentsUnifiedTaskResultStatuses(t *testing.T) {
+	root := newDocCommand()
+	for _, path := range [][]string{{"export", "get"}, {"import", "get"}} {
+		cmd, remaining, err := root.Find(path)
+		if err != nil || len(remaining) != 0 {
+			t.Fatalf("find doc %s = (%v, %v)", strings.Join(path, " "), remaining, err)
+		}
+		for _, status := range []string{"PENDING", "PROCESSING", "SUCCESS", "FAILED", "TIMEOUT"} {
+			if !strings.Contains(cmd.Long, status) {
+				t.Errorf("doc %s help does not document %s: %q", strings.Join(path, " "), status, cmd.Long)
+			}
+		}
+		if !strings.Contains(cmd.Long, "resultUrl") {
+			t.Errorf("doc %s help does not document TaskResult.resultUrl: %q", strings.Join(path, " "), cmd.Long)
+		}
 	}
 }
 

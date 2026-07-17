@@ -430,7 +430,8 @@ func collectRuntimeSchemaEntries(root *cobra.Command) ([]runtimeSchemaEntry, err
 // collectRuntimeSchemaEntriesFromBound is the sole identity hand-off into the
 // Schema assembler. It never scans annotations to discover commands: the
 // reviewed registry has already selected the exact command set and the binder
-// has already proved that every path resolves to a runnable Cobra leaf.
+// has already proved that every path resolves to a runnable Cobra command,
+// including the narrowly reviewed runnable-parent compatibility primary.
 func collectRuntimeSchemaEntriesFromBound(bound BoundCommandRegistry) ([]runtimeSchemaEntry, error) {
 	entries := make([]runtimeSchemaEntry, 0, len(bound.Commands))
 	for _, command := range bound.Commands {
@@ -441,8 +442,8 @@ func collectRuntimeSchemaEntriesFromBound(bound BoundCommandRegistry) ([]runtime
 		if command.Visibility != SchemaVisibilityPublic {
 			continue
 		}
-		leaf := command.PrimaryCommand
-		AnnotateRuntimeConstraints(leaf, runtimeSchemaConstraintsByCanonical[command.CanonicalPath])
+		primaryCommand := command.PrimaryCommand
+		AnnotateRuntimeConstraints(primaryCommand, runtimeSchemaConstraintsByCanonical[command.CanonicalPath])
 
 		parts := splitSchemaPathTokens(command.PrimaryCLIPath)
 		group := ""
@@ -450,7 +451,7 @@ func collectRuntimeSchemaEntriesFromBound(bound BoundCommandRegistry) ([]runtime
 			group = strings.Join(parts[1:len(parts)-1], ".")
 		}
 		productName := ""
-		if top := topLevelCommand(leaf); top != nil {
+		if top := topLevelCommand(primaryCommand); top != nil {
 			productName = strings.TrimSpace(top.Short)
 		}
 		entries = append(entries, runtimeSchemaEntry{
@@ -458,14 +459,14 @@ func collectRuntimeSchemaEntriesFromBound(bound BoundCommandRegistry) ([]runtime
 			SourceProductID: command.SourceProductID,
 			ProductName:     productName,
 			ToolName:        toolName,
-			CLIName:         leaf.Name(),
+			CLIName:         primaryCommand.Name(),
 			Group:           group,
 			CLIPath:         command.PrimaryCLIPath,
-			Title:           runtimeCommandTitle(leaf),
-			Description:     runtimeCommandDescription(leaf),
+			Title:           runtimeCommandTitle(primaryCommand),
+			Description:     runtimeCommandDescription(primaryCommand),
 			Source:          command.Source,
-			MetadataSource:  runtimeCommandMetadataSource(leaf),
-			Command:         leaf,
+			MetadataSource:  runtimeCommandMetadataSource(primaryCommand),
+			Command:         primaryCommand,
 			PrimaryCLIPath:  command.PrimaryCLIPath,
 			Aliases:         append([]string(nil), command.Aliases...),
 			IdentityField:   commandRegistryIdentityProvenance(command),

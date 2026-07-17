@@ -489,6 +489,26 @@
         "dws-schema-live:sheet.delete_sheet"
       ]
     },
+    "sheet.export_get": {
+      "agent_summary": "查询已有表格导出任务的状态与下载链接。",
+      "use_when": [
+        "sheet export 异步提交、超时或中断后，已有任务 ID，需要查询状态或取得下载链接时"
+      ],
+      "avoid_when": [
+        "尚未提交导出任务时，使用 sheet export create 创建任务；不要重复提交已有任务"
+      ],
+      "examples": [
+        "dws sheet export get --task-id <TASK_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet export get --help",
+        "skills/mono/references/products/sheet/sheet-export.md",
+        "pinned-mcp:doc/query_export_job"
+      ]
+    },
     "sheet.fill_range": {
       "agent_summary": "按源区域对目标区域做自动填充（复制或序列）。",
       "use_when": [
@@ -1296,23 +1316,23 @@
       ]
     },
     "sheet.submit_export_job": {
-      "agent_summary": "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+      "agent_summary": "通过历史 sheet export 主入口导出 axls 为 xlsx；create 是等价入口，可异步返回任务 ID或同步等待并可选下载。",
       "use_when": [
-        "需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"
+        "需要把在线电子表格导出为 Excel 文件，并选择立即取得任务 ID 或同步等待 downloadUrl/本地文件时"
       ],
       "avoid_when": [
-        "禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"
+        "已有导出任务 ID 时使用 sheet export get；禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download"
       ],
       "examples": [
-        "dws sheet export --node <NODE_ID> --output ./report.xlsx"
+        "dws sheet export create --node <SHEET_ID> --async --format json"
       ],
       "reviewed": true,
-      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。",
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws sheet export --help",
-        "skills/mono/references/products/sheet.md",
-        "dws-schema-live:sheet.submit_export_job"
+        "skills/mono/references/products/sheet/sheet-export.md",
+        "pinned-mcp:sheet/submit_export_job"
       ]
     },
     "sheet.table_get": {

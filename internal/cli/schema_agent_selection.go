@@ -176,8 +176,8 @@ func validateManualAgentSelectionBinding(bound BoundCommandRegistry, canonical s
 	if command.PrimaryCommand == nil {
 		return fmt.Errorf("agent_hints selection canonical %q has no bound primary Cobra command", canonical)
 	}
-	if !runnableSchemaLeaf(command.PrimaryCommand) {
-		return fmt.Errorf("agent_hints selection canonical %q primary path %q is not a runnable Cobra leaf", canonical, command.PrimaryCLIPath)
+	if !runnableSchemaLeaf(command.PrimaryCommand) && !reviewedRunnableParentCompatibilityPrimary(command) {
+		return fmt.Errorf("agent_hints selection canonical %q primary path %q is neither a runnable Cobra leaf nor a reviewed runnable-parent compatibility primary", canonical, command.PrimaryCLIPath)
 	}
 	primaryPath := normalizeSchemaCLIPath(command.PrimaryCLIPath)
 	if primaryPath == "" {

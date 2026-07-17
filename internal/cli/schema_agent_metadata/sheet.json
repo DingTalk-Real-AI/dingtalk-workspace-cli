@@ -5484,32 +5484,32 @@
       ]
     },
     "sheet export": {
-      "agent_summary": "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+      "agent_summary": "通过历史 sheet export 主入口导出 axls 为 xlsx；create 是等价入口，可异步返回任务 ID或同步等待并可选下载。",
       "agent_summary_source": "dws-agent-selection/sheet",
       "availability": "available",
       "avoid_when": [
-        "禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"
+        "已有导出任务 ID 时使用 sheet export get；禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download"
       ],
       "confirmation": "not_required",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws sheet export --node \u003cNODE_ID\u003e --output ./report.xlsx"
+        "dws sheet export create --node \u003cSHEET_ID\u003e --async --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+          "value": "通过历史 sheet export 主入口导出 axls 为 xlsx；create 是等价入口，可异步返回任务 ID或同步等待并可选下载。",
           "source": "internal/cli/schema_hints/selection/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。",
           "candidates": [
             {
-              "value": "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+              "value": "通过历史 sheet export 主入口导出 axls 为 xlsx；create 是等价入口，可异步返回任务 ID或同步等待并可选下载。",
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。"
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。"
             }
           ]
         },
@@ -5518,14 +5518,14 @@
           "source": "internal/cli/schema_hints/metadata/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+              "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional."
             },
             {
               "value": "available",
@@ -5537,21 +5537,21 @@
         },
         "avoid_when": {
           "value": [
-            "禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"
+            "已有导出任务 ID 时使用 sheet export get；禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download"
           ],
           "source": "internal/cli/schema_hints/selection/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。",
           "candidates": [
             {
               "value": [
-                "禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"
+                "已有导出任务 ID 时使用 sheet export get；禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download"
               ],
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。"
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。"
             }
           ]
         },
@@ -5585,21 +5585,21 @@
         },
         "examples": {
           "value": [
-            "dws sheet export --node \u003cNODE_ID\u003e --output ./report.xlsx"
+            "dws sheet export create --node \u003cSHEET_ID\u003e --async --format json"
           ],
           "source": "internal/cli/schema_hints/selection/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。",
           "candidates": [
             {
               "value": [
-                "dws sheet export --node \u003cNODE_ID\u003e --output ./report.xlsx"
+                "dws sheet export create --node \u003cSHEET_ID\u003e --async --format json"
               ],
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。"
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。"
             }
           ]
         },
@@ -5622,14 +5622,14 @@
           "source": "internal/cli/schema_hints/metadata/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional.",
           "candidates": [
             {
               "value": "mcp",
               "source": "internal/cli/schema_hints/metadata/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+              "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional."
             },
             {
               "value": "mcp",
@@ -5658,21 +5658,21 @@
           "source": "internal/cli/schema_hints/metadata/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed",
+          "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/sheet marks this tool as reviewed"
+              "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional."
             },
             {
               "value": true,
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。"
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。"
             }
           ]
         },
@@ -5692,21 +5692,21 @@
         },
         "use_when": {
           "value": [
-            "需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"
+            "需要把在线电子表格导出为 Excel 文件，并选择立即取得任务 ID 或同步等待 downloadUrl/本地文件时"
           ],
           "source": "internal/cli/schema_hints/selection/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。",
           "candidates": [
             {
               "value": [
-                "需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"
+                "需要把在线电子表格导出为 Excel 文件，并选择立即取得任务 ID 或同步等待 downloadUrl/本地文件时"
               ],
               "source": "internal/cli/schema_hints/selection/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。"
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。"
             }
           ]
         }
@@ -5721,17 +5721,288 @@
       "risk": "low",
       "source_refs": [
         "cobra-help:dws sheet export --help",
-        "dws-schema-live:sheet.submit_export_job",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/metadata/sheet.json",
         "internal/cli/schema_hints/selection/sheet.json",
         "internal/cli/schema_mcp_metadata.json#tools.sheet.submit_export_job",
+        "pinned-mcp:sheet/submit_export_job",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-export.md"
       ],
       "use_when": [
-        "需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"
+        "需要把在线电子表格导出为 Excel 文件，并选择立即取得任务 ID 或同步等待 downloadUrl/本地文件时"
+      ]
+    },
+    "sheet export get": {
+      "agent_summary": "查询已有表格导出任务的状态与下载链接。",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "尚未提交导出任务时，使用 sheet export create 创建任务；不要重复提交已有任务"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet export get --task-id \u003cTASK_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询已有表格导出任务的状态与下载链接。",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。",
+          "candidates": [
+            {
+              "value": "查询已有表格导出任务的状态与下载链接。",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚未提交导出任务时，使用 sheet export create 创建任务；不要重复提交已有任务"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。",
+          "candidates": [
+            {
+              "value": [
+                "尚未提交导出任务时，使用 sheet export create 创建任务；不要重复提交已有任务"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet export get --task-id \u003cTASK_ID\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet export get --task-id \u003cTASK_ID\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "doc.query_export_job",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": "doc.query_export_job",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "sheet export 异步提交、超时或中断后，已有任务 ID，需要查询状态或取得下载链接时"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。",
+          "candidates": [
+            {
+              "value": [
+                "sheet export 异步提交、超时或中断后，已有任务 ID，需要查询状态或取得下载链接时"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "query_export_job"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws sheet export get --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json",
+        "pinned-mcp:doc/query_export_job",
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-export.md"
+      ],
+      "use_when": [
+        "sheet export 异步提交、超时或中断后，已有任务 ID，需要查询状态或取得下载链接时"
       ]
     },
     "sheet filter clear-criteria": {
