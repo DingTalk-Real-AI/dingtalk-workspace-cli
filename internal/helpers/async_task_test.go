@@ -86,6 +86,43 @@ func TestQueryAsyncTaskImportRoutesToDocAndParsesTopLevelResponse(t *testing.T) 
 	}
 }
 
+func TestParseAsyncTaskResponsePreservesErrorStatusAsFailed(t *testing.T) {
+	got, err := parseAsyncTaskResponse(`{"status":"ERROR","message":"conversion failed"}`, "export", "job-1")
+	if err != nil {
+		t.Fatalf("parseAsyncTaskResponse() error = %v", err)
+	}
+	want := asynctask.TaskResult{
+		ID:      "job-1",
+		Type:    "export",
+		Status:  asynctask.StatusFailed,
+		Message: "conversion failed",
+	}
+	if got != want {
+		t.Fatalf("parseAsyncTaskResponse() = %#v, want %#v", got, want)
+	}
+}
+
+func TestQueryAsyncTaskPreservesErrorStatusAsFailedThroughTransport(t *testing.T) {
+	caller := &helpersCoreCaller{
+		result: textToolResult(`{"status":"ERROR","message":"conversion failed"}`),
+	}
+	installHelpersCoreDeps(t, caller)
+
+	got, err := queryAsyncTask(context.Background(), "export", "job-1")
+	if err != nil {
+		t.Fatalf("queryAsyncTask() error = %v", err)
+	}
+	want := asynctask.TaskResult{
+		ID:      "job-1",
+		Type:    "export",
+		Status:  asynctask.StatusFailed,
+		Message: "conversion failed",
+	}
+	if got != want {
+		t.Fatalf("queryAsyncTask() = %#v, want %#v", got, want)
+	}
+}
+
 func TestQueryAsyncTaskReturnsBusinessErrors(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -96,6 +133,16 @@ func TestQueryAsyncTaskReturnsBusinessErrors(t *testing.T) {
 			name:     "top level",
 			response: `{"success":false,"message":"top-level failed"}`,
 			wantErr:  "top-level failed",
+		},
+		{
+			name:     "non-empty error",
+			response: `{"error":"conversion request rejected"}`,
+			wantErr:  "conversion request rejected",
+		},
+		{
+			name:     "non-success code",
+			response: `{"code":"INVALID_JOB_ID","message":"unknown job"}`,
+			wantErr:  "unknown job",
 		},
 		{
 			name:     "result envelope",

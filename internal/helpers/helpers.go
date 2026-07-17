@@ -142,6 +142,10 @@ func callMCPToolReturnText(ctx context.Context, toolName string, args map[string
 }
 
 func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	return callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx, serverID, toolName, args, isBusinessError)
+}
+
+func callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx context.Context, serverID, toolName string, args map[string]any, classifiesBusinessError func(map[string]any) bool) (string, error) {
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
 	if err != nil {
 		if patErr := reclassifyPATFromError(err); patErr != nil {
@@ -170,7 +174,7 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 				if patErr := classifyPATError(errBody); patErr != nil {
 					return "", patErr
 				}
-				if isBusinessError(errBody) {
+				if classifiesBusinessError(errBody) {
 					return "", &CLIError{
 						Code:       CodeMCPToolError,
 						Message:    c.Text,
@@ -457,6 +461,14 @@ func buildMinimalPATJSON(code string) string {
 
 // isBusinessError checks if a parsed JSON body represents a business-level error.
 func isBusinessError(body map[string]any) bool {
+	return isBusinessErrorWithStatus(body, true)
+}
+
+func isBusinessErrorWithoutStatus(body map[string]any) bool {
+	return isBusinessErrorWithStatus(body, false)
+}
+
+func isBusinessErrorWithStatus(body map[string]any, statusSignalsError bool) bool {
 	if v, ok := body["error"]; ok {
 		switch t := v.(type) {
 		case string:
@@ -477,7 +489,7 @@ func isBusinessError(body map[string]any) bool {
 			}
 		}
 	}
-	if v, ok := body["status"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "error") {
+	if v, ok := body["status"].(string); statusSignalsError && ok && strings.EqualFold(strings.TrimSpace(v), "error") {
 		return true
 	}
 	for _, key := range []string{"errorCode", "error_code", "code"} {

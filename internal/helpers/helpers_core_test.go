@@ -104,6 +104,7 @@ func TestCrossPlatformCoverageMCPReturnTextClassification(t *testing.T) {
 		{"business-bool", `{"success":false,"message":"failed"}`},
 		{"business-string", `{"success":"false","errorMsg":"failed"}`},
 		{"business-error", `{"error":"failed"}`},
+		{"business-status", `{"status":"error","message":"failed"}`},
 	}
 	for _, tc := range cases {
 		caller.result = textToolResult(tc.text)

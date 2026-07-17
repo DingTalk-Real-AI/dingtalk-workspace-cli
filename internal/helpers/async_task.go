@@ -27,7 +27,11 @@ import (
 type asyncTaskMCPCall func(context.Context, string, string, map[string]any) (string, error)
 
 func queryAsyncTask(ctx context.Context, taskType, id string) (asynctask.TaskResult, error) {
-	return queryAsyncTaskWith(ctx, callMCPToolReturnTextOnServer, taskType, id)
+	return queryAsyncTaskWith(ctx, callAsyncTaskMCPToolReturnTextOnServer, taskType, id)
+}
+
+func callAsyncTaskMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	return callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx, serverID, toolName, args, isBusinessErrorWithoutStatus)
 }
 
 func queryAsyncTaskWith(ctx context.Context, call asyncTaskMCPCall, taskType, id string) (asynctask.TaskResult, error) {
@@ -92,7 +96,7 @@ func parseAsyncTaskResponse(text, taskType, id string) (asynctask.TaskResult, er
 }
 
 func asyncTaskBusinessError(response map[string]any) error {
-	if !isBusinessError(response) {
+	if !isBusinessErrorWithoutStatus(response) {
 		return nil
 	}
 	message := businessErrorMessage(response)
