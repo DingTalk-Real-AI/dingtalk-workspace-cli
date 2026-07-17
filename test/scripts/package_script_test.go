@@ -598,6 +598,203 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	}
 }
 
+func readReleaseWorkflow(t *testing.T) string {
+	t.Helper()
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	return string(data)
+}
+
+func releaseWorkflowSection(t *testing.T, workflow, startMarker, endMarker string) string {
+	t.Helper()
+	start := strings.Index(workflow, startMarker)
+	if start == -1 {
+		t.Fatalf("release workflow is missing section marker %q", startMarker)
+	}
+	end := strings.Index(workflow[start+len(startMarker):], endMarker)
+	if end == -1 {
+		t.Fatalf("release workflow section %q is missing end marker %q", startMarker, endMarker)
+	}
+	return workflow[start : start+len(startMarker)+end]
+}
+
+func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+
+	const (
+		checksCall    = "github.rest.checks.listForRef"
+		immutableCall = `"GET /repos/{owner}/{repo}/immutable-releases"`
+		governanceID  = `github-token: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}`
+	)
+	if got := strings.Count(workflow, checksCall); got != 2 {
+		t.Fatalf("release workflow Checks API call count = %d, want one tag check and one preflight check", got)
+	}
+	if got := strings.Count(workflow, immutableCall); got != 2 {
+		t.Fatalf("release workflow immutable governance call count = %d, want one tag check and one preflight check", got)
+	}
+	if got := strings.Count(workflow, governanceID); got != 2 {
+		t.Fatalf("release workflow dedicated governance identity count = %d, want one per immutable check", got)
+	}
+
+	sections := map[string]string{
+		"preflight": releaseWorkflowSection(t, workflow, "  governance-preflight:\n", "\n  release-contract:\n"),
+		"tag":       releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n"),
+	}
+	for name, section := range sections {
+		for _, required := range []string{
+			"checks: read",
+			checksCall,
+			immutableCall,
+			governanceID,
+			"RELEASE_GOVERNANCE_TOKEN with repository Administration read permission is required",
+		} {
+			if !strings.Contains(section, required) {
+				t.Errorf("%s governance path is missing %q", name, required)
+			}
+		}
+		if strings.Contains(section, "contents: write") {
+			t.Errorf("%s governance path must not grant contents write permission", name)
+		}
+		if strings.Contains(section, `github-token: ${{ secrets.GITHUB_TOKEN }}`) {
+			t.Errorf("%s immutable governance path must not fall back to GITHUB_TOKEN", name)
+		}
+	}
+}
+
+func TestReleaseWorkflowGovernancePreflightCannotPublish(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	preflight := releaseWorkflowSection(t, workflow, "  governance-preflight:\n", "\n  release-contract:\n")
+
+	for _, required := range []string{
+		"governance_preflight_commit:",
+		"governance_preflight_nonce:",
+		`format('Release governance preflight {0}', inputs.governance_preflight_nonce)`,
+		"name: Release governance preflight",
+		"name: Check out trusted preflight tooling",
+		"github.event_name == 'workflow_dispatch'",
+		"EXPECTED_REPOSITORY: DingTalk-Real-AI/dingtalk-workspace-cli",
+		`DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}`,
+		`test "$PREFLIGHT_COMMIT" = "$GITHUB_SHA"`,
+		`ref: ${{ inputs.governance_preflight_commit }}`,
+		"persist-credentials: false",
+		"governance preflight cannot be combined with npm repair",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("governance preflight contract is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"contents: write",
+		"goreleaser",
+		"gh release",
+		"npm publish",
+		"sync-to-oss",
+		"sync-to-gitee",
+	} {
+		if strings.Contains(preflight, forbidden) {
+			t.Errorf("governance preflight must not contain publishing behavior %q", forbidden)
+		}
+	}
+	ciGate := strings.Index(preflight, "Require successful CI Gate on the preflight commit")
+	homebrewCanary := strings.Index(preflight, "Verify Homebrew PR automation permission")
+	if ciGate == -1 || homebrewCanary == -1 || ciGate > homebrewCanary {
+		t.Error("governance preflight must validate the exact CI Gate before exposing Homebrew credentials")
+	}
+
+	mirror := releaseWorkflowSection(t, workflow, "  mirror-gitee-release:\n", "\n  repair-npm:\n")
+	if !strings.Contains(mirror, "needs: [release-contract, release, publish-channels]") {
+		t.Error("Gitee publication must remain downstream of the verified release target and channel jobs")
+	}
+	repair := workflow[strings.Index(workflow, "  repair-npm:\n"):]
+	for _, required := range []string{
+		"needs: dispatch-contract",
+		"needs.dispatch-contract.outputs.mode == 'repair_npm'",
+	} {
+		if !strings.Contains(repair, required) {
+			t.Errorf("npm repair dispatch contract is missing %q", required)
+		}
+	}
+}
+
+func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+
+	for _, required := range []string{
+		"recover_release_version:",
+		"recover_release_tag_object:",
+		"recover_release_commit:",
+		"recover_failed_run_id:",
+		"recover_release_nonce:",
+		"recover_release_confirmation:",
+		`format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce)`,
+		"workflow_dispatch must select exactly one release mode",
+		"release recovery confirmation must equal the exact version",
+		"recover_release_nonce must be bound to the release commit",
+		"environment: release-recovery",
+		"prevent_self_review !== true",
+		"protected_branches !== true",
+		"can_admins_bypass !== false",
+		`run.path !== ".github/workflows/release.yml"`,
+		`run.event !== "push"`,
+		`["failure", "cancelled", "timed_out", "startup_failure", "stale"].includes(run.conclusion)`,
+		`run.head_branch !== version`,
+		`run.head_sha !== commit`,
+		`tagObject !== expectedTagObject`,
+		`["ahead", "identical"].includes(comparison.data.status)`,
+		"already has a public release; use a channel repair instead",
+		"Bind recovery publication to this workflow run",
+		"dws-release-recovery run=%s tag-object=%s commit=%s",
+		"Public release is not bound to this exact recovery run.",
+		"Public recovery asset differs from this run's sealed artifact",
+		`ref: process.env.RELEASE_COMMIT`,
+		`path: tmp/trusted-release-tooling`,
+		`ref: ${{ github.sha }}`,
+		`step.name === "Require immutable published GitHub Release"`,
+		"Require a clean sealed source before GoReleaser",
+		`git status --porcelain --untracked-files=all`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release recovery contract is missing %q", required)
+		}
+	}
+
+	sections := map[string]string{
+		"release":          releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n"),
+		"publish-release":  releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n"),
+		"publish-channels": releaseWorkflowSection(t, workflow, "  publish-channels:\n", "\n  mirror-gitee-release:\n"),
+	}
+	for name, section := range sections {
+		for _, required := range []string{
+			"needs.release-contract.outputs.release_version",
+			"ref: ${{ needs.release-contract.outputs.release_commit }}",
+			"persist-credentials: false",
+			`tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh`,
+		} {
+			if !strings.Contains(section, required) {
+				t.Errorf("%s does not consume the verified recovery target %q", name, required)
+			}
+		}
+		if strings.Contains(section, "github.event_name == 'workflow_dispatch'") {
+			t.Errorf("%s must not fork into a recovery-specific publisher", name)
+		}
+	}
+	if strings.Count(workflow, "name: Build signed release artifacts") != 1 ||
+		strings.Count(workflow, "name: Verify Apple Developer ID signatures") != 1 ||
+		strings.Count(workflow, "name: Publish immutable GitHub Release") != 1 ||
+		strings.Count(workflow, "name: Publish npm and mirrors") != 1 {
+		t.Fatal("normal and recovery publication must share one build/sign/publish job graph")
+	}
+}
+
 func TestReleaseWorkflowUploadsPostProcessedDarwinAssets(t *testing.T) {
 	t.Parallel()
 
@@ -762,7 +959,7 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 	}
 
 	codesign := strings.Index(workflow[verifyJob:publishJob], "codesign --verify --strict --verbose=4")
-	publish := strings.Index(workflow[publishJob:], `gh release edit "$GITHUB_REF_NAME" --draft=false`)
+	publish := strings.Index(workflow[publishJob:], `gh release edit "$RELEASE_VERSION" --draft=false`)
 	if codesign == -1 || publish == -1 {
 		t.Fatal("macOS codesign verification and explicit Draft publication are required")
 	}
@@ -824,13 +1021,24 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 		t.Fatal("the built-in GITHUB_TOKEN must not receive pull-request write permission")
 	}
 	for _, required := range []string{
-		"Check Homebrew PR automation token",
+		"Verify Homebrew PR automation permission",
 		"secrets.HOMEBREW_PR_TOKEN",
-		"HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases",
+		"verify-homebrew-pr-token.sh",
+		"--canary",
+		"HOMEBREW_PR_TOKEN and RELEASE_GOVERNANCE_TOKEN must use separate least-privilege identities",
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("release workflow is missing Homebrew PR token preflight %q", required)
 		}
+	}
+	if got := strings.Count(workflow, "Verify Homebrew PR automation permission"); got != 2 {
+		t.Errorf("Homebrew PR permission preflight count = %d, want one default-branch preflight and one tag contract", got)
+	}
+	tagContract := releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n")
+	tagCI := strings.Index(tagContract, "Require successful CI Gate on the sealed commit")
+	tagHomebrew := strings.Index(tagContract, "Verify Homebrew PR automation permission")
+	if tagCI == -1 || tagHomebrew == -1 || tagCI > tagHomebrew {
+		t.Error("tag contract must validate the sealed CI Gate before exposing Homebrew credentials")
 	}
 
 	start := strings.Index(workflow, "- name: Open stable Homebrew formula PR")
@@ -848,7 +1056,7 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 		"./scripts/release/publish-homebrew-formula.sh",
 		"secrets.HOMEBREW_PR_TOKEN",
 		"DWS_TAP_PR_REPOSITORY",
-		"automation/homebrew-${{ github.ref_name }}",
+		"automation/homebrew-${{ needs.release-contract.outputs.release_version }}",
 	} {
 		if !strings.Contains(section, required) {
 			t.Errorf("Homebrew publication step is missing %q", required)
@@ -891,7 +1099,7 @@ func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
 		"dist/homebrew/dingtalk-workspace-cli-beta.rb",
 		"Formula/dingtalk-workspace-cli-beta.rb",
 		"secrets.HOMEBREW_PR_TOKEN",
-		"automation/homebrew-beta-${{ github.ref_name }}",
+		"automation/homebrew-beta-${{ needs.release-contract.outputs.release_version }}",
 	} {
 		if !strings.Contains(section, required) {
 			t.Errorf("beta Homebrew PR step is missing %q", required)

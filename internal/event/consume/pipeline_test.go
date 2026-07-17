@@ -62,6 +62,48 @@ func TestPipeline_OutputDirFallback(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePipelineStdoutAndOutputDirUseSameProjection(t *testing.T) {
+	ev := transport.Event{
+		EventType:        "personal.message",
+		EventID:          "ev1",
+		ReceivedAtUnixMS: 100,
+	}
+	projector := WithProjector(func(transport.Event) (any, error) {
+		return map[string]any{"type": "personal.message", "content": "hello"}, nil
+	})
+
+	var stdout bytes.Buffer
+	stdoutPipeline, err := BuildPipeline(FormatNDJSON, "", nil, &stdout, projector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdoutPipeline.Close()
+	if err := stdoutPipeline.Deliver(ev); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	filePipeline, err := BuildPipeline(FormatNDJSON, dir, nil, nil, projector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer filePipeline.Close()
+	if err := filePipeline.Deliver(ev); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("ReadDir() entries = %d, err = %v", len(entries), err)
+	}
+	fileBody, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(stdout.Bytes(), fileBody) {
+		t.Fatalf("stdout = %q, file = %q", stdout.Bytes(), fileBody)
+	}
+}
+
 func TestPipeline_RouteWithStdoutFallback(t *testing.T) {
 	root := t.TempDir()
 	imDir := filepath.Join(root, "im")

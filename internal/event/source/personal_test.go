@@ -615,6 +615,82 @@ func TestPersonalSourceParsedHeadersPassNormalBusFilter(t *testing.T) {
 	}
 }
 
+func TestPersonalSourceActionEventPassesNormalBusFilter(t *testing.T) {
+	const (
+		eventKey    = "user_im_message_reaction_group"
+		subscribeID = "sub-reaction-group"
+	)
+	src := personalSourceForRawEventTests()
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{
+		Headers: payload.DataFrameHeader{
+			"EVENT_TYPE": eventKey,
+			"SUB_ID":     subscribeID,
+		},
+		Data: `{"eventKey":"user_im_message_reaction_group","subId":"sub-reaction-group","payload":{}}`,
+	})
+	h := bus.NewHub(10)
+	consumer, err := h.Register(transport.Hello{
+		EventTypes:  []string{eventKey},
+		SubscribeID: subscribeID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.Deliver(raw)
+
+	select {
+	case frame := <-consumer.SendCh:
+		eventFrame, ok := frame.(transport.Event)
+		if !ok {
+			t.Fatalf("frame = %T, want transport.Event", frame)
+		}
+		if eventFrame.EventType != eventKey || eventFrame.SubscribeID != subscribeID {
+			t.Fatalf("event = %#v", eventFrame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for action event")
+	}
+}
+
+func TestPersonalSourceSenderEventPassesNormalBusFilter(t *testing.T) {
+	const (
+		eventKey    = "user_im_message_receive_user"
+		subscribeID = "sub-receive-user"
+	)
+	src := personalSourceForRawEventTests()
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{
+		Headers: payload.DataFrameHeader{
+			"EVENT_TYPE": eventKey,
+			"SUB_ID":     subscribeID,
+		},
+		Data: `{"eventKey":"user_im_message_receive_user","subId":"sub-receive-user","payload":{}}`,
+	})
+	h := bus.NewHub(10)
+	consumer, err := h.Register(transport.Hello{
+		EventTypes:  []string{eventKey},
+		SubscribeID: subscribeID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.Deliver(raw)
+
+	select {
+	case frame := <-consumer.SendCh:
+		eventFrame, ok := frame.(transport.Event)
+		if !ok {
+			t.Fatalf("frame = %T, want transport.Event", frame)
+		}
+		if eventFrame.EventType != eventKey || eventFrame.SubscribeID != subscribeID {
+			t.Fatalf("event = %#v", eventFrame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for sender event")
+	}
+}
+
 func personalSourceForRawEventTests() *PersonalSource {
 	return &PersonalSource{cfg: PersonalConfig{
 		SourceID: "fallback_source",

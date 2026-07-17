@@ -120,21 +120,6 @@ require_github_publication_authority() {
     return 1
   }
 
-  immutable_enabled="$(
-    gh api \
-      -H 'Accept: application/vnd.github+json' \
-      -H 'X-GitHub-Api-Version: 2026-03-10' \
-      "repos/$github_repository/immutable-releases" \
-      --jq '.enabled'
-  )" || {
-    printf 'immutable releases are not enabled for %s; enable them before allocating a tag\n' "$github_repository" >&2
-    return 1
-  }
-  [ "$immutable_enabled" = "true" ] || {
-    printf 'immutable releases are not enabled for %s\n' "$github_repository" >&2
-    return 1
-  }
-
   active_runs="$(
     gh api -H 'Accept: application/vnd.github+json' \
       "repos/$github_repository/actions/workflows/release.yml/runs?per_page=100" \
@@ -195,18 +180,82 @@ require_github_publication_authority() {
       }
     done
     beta_commit="$(git rev-parse "$FROM_BETA^{commit}")"
-    beta_runs="$(
-      gh api -H 'Accept: application/vnd.github+json' \
-        "repos/$github_repository/actions/workflows/release.yml/runs?branch=$FROM_BETA&event=push&status=completed&per_page=100" \
-        --jq '.workflow_runs[] | [.head_sha, .head_branch, .conclusion] | @tsv'
-    )" || return 1
-    printf '%s\n' "$beta_runs" | awk -F '\t' -v sha="$beta_commit" -v tag="$FROM_BETA" '
-      $1 == sha && $2 == tag && $3 == "success" { found = 1 }
-      END { exit(found ? 0 : 1) }
-    ' || {
-      printf 'Release workflow did not succeed for %s at %s\n' "$FROM_BETA" "$beta_commit" >&2
+    DWS_RELEASE_OFFICIAL_REPOSITORY="$github_repository" \
+      "$SCRIPT_DIR/verify-release-workflow-delivery.sh" "$FROM_BETA" "$beta_commit" || return 1
+  fi
+}
+
+require_release_governance_ci() {
+  governance_repository="$(github_repository_from_url "$push_url" 2>/dev/null || true)"
+  if [ -z "$governance_repository" ]; then
+    [ "${DWS_RELEASE_ALLOW_NON_GITHUB_REMOTE:-0}" = "1" ] || {
+      printf 'release governance preflight requires a github.com publication remote\n' >&2
       return 1
     }
+    printf 'warning: Release governance CI preflight explicitly disabled for non-GitHub test remote\n' >&2
+    return 0
+  fi
+  "$SCRIPT_DIR/verify-release-governance-ci.sh" \
+    "$governance_repository" \
+    "$(git rev-parse HEAD)"
+}
+
+preflight_proof_path() {
+  proof_dir="$(git rev-parse --git-path dws-release-preflight)"
+  printf '%s/%s.proof\n' "$proof_dir" "$VERSION"
+}
+
+preflight_proof_is_reusable() {
+  proof_file="$1"
+  [ -f "$proof_file" ] || return 1
+  [ "$(wc -l < "$proof_file" | tr -d '[:space:]')" -eq 9 ] || return 1
+  [ "$(sed -n 's/^format=//p' "$proof_file")" = "1" ] || return 1
+  [ "$(sed -n 's/^channel=//p' "$proof_file")" = "$CHANNEL" ] || return 1
+  [ "$(sed -n 's/^version=//p' "$proof_file")" = "$VERSION" ] || return 1
+  [ "$(sed -n 's/^commit=//p' "$proof_file")" = "$(git rev-parse HEAD)" ] || return 1
+  [ "$(sed -n 's/^repository=//p' "$proof_file")" = "$push_identity" ] || return 1
+  [ "$(sed -n 's/^branch=//p' "$proof_file")" = "$BRANCH" ] || return 1
+  [ "$(sed -n 's/^from_beta=//p' "$proof_file")" = "$FROM_BETA" ] || return 1
+  [ "$(sed -n 's/^previous_stable=//p' "$proof_file")" = "$previous_stable" ] || return 1
+
+  proof_created_at="$(sed -n 's/^created_at=//p' "$proof_file")"
+  printf '%s\n' "$proof_created_at" | grep -Eq '^[0-9]+$' || return 1
+  proof_now="$(date +%s)"
+  [ "$proof_created_at" -le "$proof_now" ] || return 1
+  [ $((proof_now - proof_created_at)) -le 21600 ] || return 1
+}
+
+write_preflight_proof() {
+  proof_file="$1"
+  proof_dir="$(dirname "$proof_file")"
+  umask 077
+  mkdir -p "$proof_dir"
+  proof_tmp="${proof_file}.tmp.$$"
+  {
+    printf 'format=1\n'
+    printf 'channel=%s\n' "$CHANNEL"
+    printf 'version=%s\n' "$VERSION"
+    printf 'commit=%s\n' "$(git rev-parse HEAD)"
+    printf 'repository=%s\n' "$push_identity"
+    printf 'branch=%s\n' "$BRANCH"
+    printf 'from_beta=%s\n' "$FROM_BETA"
+    printf 'previous_stable=%s\n' "$previous_stable"
+    printf 'created_at=%s\n' "$(date +%s)"
+  } > "$proof_tmp"
+  mv "$proof_tmp" "$proof_file"
+}
+
+build_policy_binary() {
+  policy_tmp="$ROOT/tmp/go-build"
+  mkdir -p "$policy_tmp"
+  GOTMPDIR="$policy_tmp" make build
+  if [ "$(uname -s)" = "Darwin" ] && [ "${DWS_RELEASE_ALLOW_NON_GITHUB_REMOTE:-0}" != "1" ]; then
+    command -v codesign >/dev/null 2>&1 || {
+      printf '%s\n' 'codesign is required to prepare the macOS policy binary' >&2
+      return 1
+    }
+    codesign --force --sign - "$ROOT/dws"
+    codesign --verify --strict "$ROOT/dws"
   fi
 }
 
@@ -251,37 +300,45 @@ previous_stable="$(sed -n 's/^previous_stable=//p' "$metadata" | tail -1)"
 printf '==> Verifying delivered stable baseline %s\n' "${previous_stable:-none}"
 require_delivered_previous_stable
 
-if [ "$PUBLISH" -eq 1 ]; then
-  printf '==> Verifying GitHub publication authority before local gates\n'
-  require_github_publication_authority
+printf '==> Verifying GitHub publication authority before local gates\n'
+require_github_publication_authority
+
+proof_path="$(preflight_proof_path)"
+ran_expensive_gates=0
+if [ "$PUBLISH" -eq 1 ] && preflight_proof_is_reusable "$proof_path"; then
+  printf '==> Reusing exact preflight proof for %s at %s\n' "$VERSION" "$(git rev-parse HEAD)"
+else
+  rm -f "$proof_path"
+  printf '==> Running repository test, build, and policy gates\n'
+  make test
+  # Installer tests intentionally exercise source builds. Rebuild the release
+  # binary before policy so policy never depends on a pre-existing ./dws.
+  build_policy_binary
+  make policy
+
+  if [ -n "$previous_stable" ]; then
+    printf '==> Comparing command tree with %s\n' "$previous_stable"
+    "$ROOT/scripts/policy/check-command-compatibility.sh" \
+      --base-ref "$REMOTE/$BRANCH" \
+      --stable-ref "$previous_stable"
+  fi
+
+  printf '==> Building local release artifacts for %s\n' "$VERSION"
+  make package VERSION="$VERSION"
+
+  printf '==> Verifying release artifact set and checksums\n'
+  "$SCRIPT_DIR/verify-release-artifacts.sh" "$VERSION"
+
+  printf '==> Verifying npm package installation\n'
+  "$SCRIPT_DIR/verify-package-managers.sh" --npm-only --expected-version "$VERSION"
+  if command -v brew >/dev/null 2>&1; then
+    printf '==> Verifying Homebrew package installation\n'
+    "$SCRIPT_DIR/verify-package-managers.sh" --brew-only --expected-version "$VERSION"
+  fi
+  ran_expensive_gates=1
 fi
 
-printf '==> Running repository test and policy gates\n'
-make test
-make policy
-
-if [ -n "$previous_stable" ]; then
-  printf '==> Comparing command tree with %s\n' "$previous_stable"
-  "$ROOT/scripts/policy/check-command-compatibility.sh" \
-    --base-ref "$REMOTE/$BRANCH" \
-    --stable-ref "$previous_stable"
-fi
-
-printf '==> Building local release artifacts for %s\n' "$VERSION"
-make package VERSION="$VERSION"
-
-printf '==> Verifying release artifact set and checksums\n'
-"$SCRIPT_DIR/verify-release-artifacts.sh" "$VERSION"
-
-printf '==> Verifying npm package installation\n'
-"$SCRIPT_DIR/verify-package-managers.sh" --npm-only --expected-version "$VERSION"
-if command -v brew >/dev/null 2>&1; then
-  printf '==> Verifying Homebrew package installation\n'
-  "$SCRIPT_DIR/verify-package-managers.sh" --brew-only --expected-version "$VERSION"
-fi
-
-# Collect human confirmation before the final authority refresh. Nothing may
-# block between that refresh and tag creation.
+# Collect human confirmation before the final remote validations.
 if [ "$PUBLISH" -eq 1 ] && [ "$YES" -ne 1 ]; then
   if [ ! -t 0 ]; then
     printf 'interactive confirmation is unavailable; pass --yes after reviewing the preflight\n' >&2
@@ -292,33 +349,64 @@ if [ "$PUBLISH" -eq 1 ] && [ "$YES" -ne 1 ]; then
   [ "$confirmation" = "$VERSION" ] || { printf 'release cancelled\n' >&2; exit 1; }
 fi
 
-# Re-check after every local gate so tag creation cannot race with a modified
-# source tree. dist/ is ignored and therefore does not make the tree dirty.
+printf '==> Verifying the Release workflow publication identity\n'
+require_release_governance_ci
+
+# Refresh after every local gate and the remote governance check. dist/ is
+# ignored and therefore does not make the tree dirty.
 printf '==> Refreshing %s/%s before sealing the tag\n' "$REMOTE" "$BRANCH"
 git fetch --force "$REMOTE" "+refs/heads/$BRANCH:refs/remotes/$REMOTE/$BRANCH"
 fetch_release_tags
 run_contract --metadata-output "$final_metadata"
 final_previous_stable="$(sed -n 's/^previous_stable=//p' "$final_metadata" | tail -1)"
-if [ "$final_previous_stable" != "$previous_stable" ]; then
+[ -n "$final_previous_stable" ] || {
+  printf 'latest stable authority unexpectedly became empty\n' >&2
+  exit 1
+}
+previous_stable_before_refresh="$previous_stable"
+previous_stable="$final_previous_stable"
+
+printf '==> Revalidating delivered stable baseline %s\n' "$previous_stable"
+require_delivered_previous_stable
+
+if [ "$previous_stable" != "$previous_stable_before_refresh" ]; then
   printf '==> Stable authority advanced from %s to %s; rechecking command compatibility\n' \
-    "${previous_stable:-none}" "${final_previous_stable:-none}"
-  [ -n "$final_previous_stable" ] || {
-    printf 'latest stable authority unexpectedly became empty\n' >&2
-    exit 1
-  }
+    "${previous_stable_before_refresh:-none}" "$previous_stable"
   "$ROOT/scripts/policy/check-command-compatibility.sh" \
     --base-ref "$REMOTE/$BRANCH" \
-    --stable-ref "$final_previous_stable"
+    --stable-ref "$previous_stable"
+fi
+
+if [ "$PUBLISH" -eq 1 ]; then
+  printf '==> Reconfirming GitHub publication authority on the settled baseline\n'
+  require_github_publication_authority
+fi
+
+# Delivery, compatibility, and publication checks above may take long enough
+# for main or stable authority to move. This last refresh must be followed only
+# by local proof/tag creation. The atomic push advertises main with the tag, so
+# an already-advanced remote main rejects the whole transaction; a later main
+# advance is safe because the sealed commit remains in protected main history.
+printf '==> Settling final %s/%s and stable authority\n' "$REMOTE" "$BRANCH"
+git fetch --force "$REMOTE" "+refs/heads/$BRANCH:refs/remotes/$REMOTE/$BRANCH"
+fetch_release_tags
+run_contract --metadata-output "$final_metadata"
+settled_previous_stable="$(sed -n 's/^previous_stable=//p' "$final_metadata" | tail -1)"
+[ "$settled_previous_stable" = "$previous_stable" ] || {
+  printf 'stable authority moved from %s to %s during final validation; rerun the release command\n' \
+    "$previous_stable" "$settled_previous_stable" >&2
+  exit 1
+}
+
+if [ "$ran_expensive_gates" -eq 1 ]; then
+  write_preflight_proof "$proof_path"
 fi
 
 if [ "$PUBLISH" -ne 1 ]; then
   printf '\nPreflight passed. No tag was created.\n'
-  printf 'Publish with the same command plus --publish.\n'
+  printf 'Publish within six hours with the same command plus --publish to reuse this exact proof.\n'
   exit 0
 fi
-
-printf '==> Reconfirming GitHub publication authority immediately before tag creation\n'
-require_github_publication_authority
 
 printf '==> Creating annotated tag %s\n' "$VERSION"
 if [ "$CHANNEL" = "stable" ]; then
@@ -327,7 +415,8 @@ else
   git tag -a "$VERSION" -m "Release $VERSION" -m 'Channel: prerelease'
 fi
 
-if ! git push "$push_url" "refs/tags/$VERSION"; then
+if ! git push --atomic "$push_url" \
+  "HEAD:refs/heads/$BRANCH" "refs/tags/$VERSION"; then
   set +e
   remote_refs="$(git ls-remote --tags "$push_url" "refs/tags/$VERSION" "refs/tags/$VERSION^{}")"
   query_status=$?
@@ -351,3 +440,4 @@ if ! git push "$push_url" "refs/tags/$VERSION"; then
 fi
 
 printf 'Release tag pushed: %s -> %s. CI/CD now owns artifact publication.\n' "$VERSION" "$push_url"
+rm -f "$proof_path"

@@ -1475,13 +1475,10 @@ func TestCrossPlatformCoveragePersonalEventPureCoverage(t *testing.T) {
 	if err := renderPersonalSchema(io.Discard, def, "yaml"); err == nil {
 		t.Fatal("unsupported schema format succeeded")
 	}
-	for _, key := range []string{"", "unknown", personal.EventMention} {
+	for _, key := range []string{"", "unknown", personal.EventMention, personal.EventFromUser} {
 		if err := ensurePublicPersonalEvent(key); err != nil {
 			t.Fatalf("public event %q: %v", key, err)
 		}
-	}
-	if err := ensurePublicPersonalEvent(personal.EventFromUser); err == nil {
-		t.Fatal("private event accepted")
 	}
 
 	var cfg consume.Config
@@ -1617,7 +1614,7 @@ func TestCrossPlatformCoveragePersonalSubscriptionAndSourceCoverage(t *testing.T
 		{"lookup", personalConsumeOptions{SubscribeID: "existing"}, true},
 		{"create", personalConsumeOptions{EventKey: personal.EventMention, Name: "name", FilterJSON: `{"field":"content","op":"eq","value":"x"}`, QueryCSV: "a,b", TTL: time.Minute}, true},
 		{"missing", personalConsumeOptions{}, false},
-		{"private", personalConsumeOptions{EventKey: personal.EventFromUser, UserID: "u"}, false},
+		{"sender", personalConsumeOptions{EventKey: personal.EventFromUser, UserID: "u"}, true},
 		{"bad-rule", personalConsumeOptions{EventKey: personal.EventMention, Rule: "other"}, false},
 		{"bad-filter", personalConsumeOptions{EventKey: personal.EventMention, FilterJSON: "{"}, false},
 	} {
@@ -1631,7 +1628,7 @@ func TestCrossPlatformCoveragePersonalSubscriptionAndSourceCoverage(t *testing.T
 			}
 		})
 	}
-	if createCount != 1 {
+	if createCount != 2 {
 		t.Fatalf("create count = %d", createCount)
 	}
 

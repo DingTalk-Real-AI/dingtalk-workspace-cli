@@ -16,6 +16,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: dws-release [version] [options]
        dws-release config [--remote <name>]
+       dws-release recover <version> [--failed-run <run-id>] [--remote <name>]
 
 With no arguments, starts an interactive release guide. For a version that has
 no CHANGELOG section yet, prepares the template and stops. Otherwise, runs the
@@ -34,6 +35,7 @@ Examples:
   dws-release v1.2.3-beta.1 --publish
   dws-release v1.2.3 --from-beta v1.2.3-beta.1
   dws-release v1.2.3 --from-beta v1.2.3-beta.1 --publish
+  dws-release recover v1.2.3-beta.1
 EOF
 }
 
@@ -191,8 +193,45 @@ configure_remote() {
   exit 0
 }
 
+recover_release() {
+  shift
+  recovery_version="${1:-}"
+  [ -n "$recovery_version" ] || die_usage 'recover requires a release version'
+  case "$recovery_version" in -h|--help) usage; exit 0 ;; esac
+  shift
+  recovery_failed_run=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --failed-run)
+        [ "$#" -ge 2 ] || die_usage '--failed-run requires a workflow run ID'
+        recovery_failed_run="$2"
+        shift 2
+        ;;
+      --remote)
+        [ "$#" -ge 2 ] || die_usage '--remote requires a value'
+        REMOTE="$2"
+        shift 2
+        ;;
+      -h|--help) usage; exit 0 ;;
+      *) die_usage "unknown recovery argument: $1" ;;
+    esac
+  done
+
+  cd "$ROOT"
+  require_remote
+  sync_main_if_safe
+  set -- "$recovery_version" --remote "$REMOTE"
+  if [ -n "$recovery_failed_run" ]; then
+    set -- "$@" --failed-run "$recovery_failed_run"
+  fi
+  exec "$SCRIPT_DIR/recover-release.sh" "$@"
+}
+
 if [ "${1:-}" = "config" ]; then
   configure_remote "$@"
+fi
+if [ "${1:-}" = "recover" ]; then
+  recover_release "$@"
 fi
 
 [ "$#" -gt 0 ] || WIZARD=1

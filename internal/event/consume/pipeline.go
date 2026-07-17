@@ -65,8 +65,8 @@ func (p *Pipeline) Close() error { return p.sink.Close() }
 // stdoutW is injected for tests (os.Stdout in production). When nil it
 // defaults to io.Discard so a misconfigured pipeline never writes to
 // the host process's actual stdout.
-func BuildPipeline(format Format, outputDir string, routes []Route, stdoutW io.Writer) (*Pipeline, error) {
-	fmter, err := NewFormatter(format)
+func BuildPipeline(format Format, outputDir string, routes []Route, stdoutW io.Writer, formatterOpts ...FormatterOption) (*Pipeline, error) {
+	fmter, err := NewFormatter(format, formatterOpts...)
 	if err != nil {
 		return nil, err
 	}

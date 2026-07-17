@@ -79,6 +79,14 @@ printf '%s\n' "$stable_runs" | awk -F '\t' -v sha="$EXPECTED_COMMIT" -v tag="$TA
 ' && delivered_by_push=1 || delivered_by_push=0
 
 if [ "$delivered_by_push" -ne 1 ]; then
+  if DWS_RELEASE_OFFICIAL_REPOSITORY="$REPOSITORY" \
+    DWS_RELEASE_GITHUB_TOKEN="$API_TOKEN" \
+    "$SCRIPT_DIR/verify-release-workflow-delivery.sh" "$TAG" "$EXPECTED_COMMIT" 2>/dev/null; then
+    printf 'Delivered stable baseline verified through protected default-branch recovery: %s -> %s\n' \
+      "$TAG" "$EXPECTED_COMMIT"
+    exit 0
+  fi
+
   recovery_proof="$(
     python3 - "$RECOVERY_MANIFEST" "$TAG" "$EXPECTED_COMMIT" <<'PY'
 import json

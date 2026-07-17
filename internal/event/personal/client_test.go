@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -71,7 +72,7 @@ func TestClientCreateSubscriptionDWSRequestAndArrayResponse(t *testing.T) {
 		RuleType: "singleChat",
 		Name:     "test-o2o",
 		RuleParam: map[string]any{
-			"targetUid":     "507971",
+			"targetUid":     "test-user-001",
 			"targetUidType": "staffId",
 		},
 		Filter:         map[string]any{"field": "payload.body.content", "op": "contains", "value": "P0"},
@@ -93,7 +94,7 @@ func TestClientCreateSubscriptionDWSRequestAndArrayResponse(t *testing.T) {
 	if err := json.Unmarshal([]byte(gotReq.FilterRule), &filterRule); err != nil {
 		t.Fatalf("filterRule is not JSON: %q: %v", gotReq.FilterRule, err)
 	}
-	if filterRule["targetUid"] != "507971" || filterRule["targetUidType"] != "staffId" {
+	if filterRule["targetUid"] != "test-user-001" || filterRule["targetUidType"] != "staffId" {
 		t.Fatalf("filterRule = %#v", filterRule)
 	}
 	if gotReq.Ext["ruleType"] != "singleChat" || gotReq.Ext["name"] != "test-o2o" || gotReq.Ext["idempotencyKey"] != "idem-1" {
@@ -104,6 +105,72 @@ func TestClientCreateSubscriptionDWSRequestAndArrayResponse(t *testing.T) {
 	}
 	if sub.EventKey != EventSingleChat || sub.RuleType != "singleChat" || sub.Status != "active" || sub.SourceID != "open" {
 		t.Fatalf("subscription = %#v", sub)
+	}
+}
+
+func TestClientCreateRuleBasedSubscriptionsUsesDocumentedRuleParam(t *testing.T) {
+	tests := []struct {
+		name     string
+		eventKey string
+		opts     RuleOptions
+		wantRule map[string]any
+	}{
+		{"receive_o2o/staffId", EventSingleChat, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{"receive_o2o/openDingtalkId", EventSingleChat, RuleOptions{OpenDingTalkID: "open-user-1"}, map[string]any{"targetUid": "open-user-1", "targetUidType": "openDingtalkId"}},
+		{"read_o2o/staffId", EventReadO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{"read_o2o/openDingtalkId", EventReadO2O, RuleOptions{OpenDingTalkID: "open-user-1"}, map[string]any{"targetUid": "open-user-1", "targetUidType": "openDingtalkId"}},
+		{"recall_o2o/staffId", EventRecallO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{"recall_o2o/openDingtalkId", EventRecallO2O, RuleOptions{OpenDingTalkID: "open-user-1"}, map[string]any{"targetUid": "open-user-1", "targetUidType": "openDingtalkId"}},
+		{"reaction_o2o/staffId", EventReactionO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{"reaction_o2o/openDingtalkId", EventReactionO2O, RuleOptions{OpenDingTalkID: "open-user-1"}, map[string]any{"targetUid": "open-user-1", "targetUidType": "openDingtalkId"}},
+		{"receive_user/staffId", EventFromUser, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{"receive_user/openDingtalkId", EventFromUser, RuleOptions{OpenDingTalkID: "open-user-1"}, map[string]any{"targetUid": "open-user-1", "targetUidType": "openDingtalkId"}},
+		{"read_group", EventReadGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"recall_group", EventRecallGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"reaction_group", EventReactionGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotPath string
+			var gotReq dwsCreateSubscriptionRequest
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+					t.Errorf("decode request: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": []string{"sub-rule"}})
+			}))
+			defer srv.Close()
+
+			ruleType, ruleParam, err := BuildRuleParam(tt.eventKey, tt.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+			if _, err := client.CreateSubscription(t.Context(), CreateSubscriptionRequest{
+				EventKey:  tt.eventKey,
+				RuleType:  ruleType,
+				RuleParam: ruleParam,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			if gotPath != "/subscription/user" || gotReq.EventKey != tt.eventKey {
+				t.Fatalf("path = %q, eventKey = %q", gotPath, gotReq.EventKey)
+			}
+			var gotRule map[string]any
+			if err := json.Unmarshal([]byte(gotReq.FilterRule), &gotRule); err != nil {
+				t.Fatalf("filterRule = %q: %v", gotReq.FilterRule, err)
+			}
+			if !reflect.DeepEqual(gotRule, tt.wantRule) {
+				t.Fatalf("filterRule = %#v, want %#v", gotRule, tt.wantRule)
+			}
+			if gotReq.Ext["ruleType"] != ruleType {
+				t.Fatalf("ext.ruleType = %#v, want %q", gotReq.Ext["ruleType"], ruleType)
+			}
+		})
 	}
 }
 
@@ -151,7 +218,7 @@ func TestClientDebugLogCreateSubscriptionRequestResponse(t *testing.T) {
 		EventKey: EventSingleChat,
 		RuleType: "singleChat",
 		RuleParam: map[string]any{
-			"targetUid":     "507971",
+			"targetUid":     "test-user-001",
 			"targetUidType": "staffId",
 		},
 		IdempotencyKey: "idem-1",
@@ -167,7 +234,7 @@ func TestClientDebugLogCreateSubscriptionRequestResponse(t *testing.T) {
 		EventSingleChat,
 		"filterRule",
 		"targetUid",
-		"507971",
+		"test-user-001",
 		"sub-1",
 		"req-ok",
 	} {

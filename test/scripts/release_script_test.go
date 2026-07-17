@@ -1,6 +1,7 @@
 package scripts_test
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -8,7 +9,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 var releasePlatformAssets = []string{
@@ -389,6 +392,72 @@ esac
 	}
 	if output, err := run(workflowSHA, "failure"); err == nil || !strings.Contains(output, "missing successful job publish-release") {
 		t.Fatalf("failed recovery delivery job passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
+func TestReleaseWorkflowDeliveryAcceptsOnlySharedProtectedRecovery(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	fakeCurl := filepath.Join(binDir, "curl")
+	mustWriteFile(t, fakeCurl, []byte(`#!/bin/sh
+set -eu
+for argument in "$@"; do endpoint="$argument"; done
+case "$endpoint" in
+  *event=push*)
+    printf '{"workflow_runs":[]}\n'
+    ;;
+  *event=workflow_dispatch*)
+    printf '{"workflow_runs":[{"id":42,"display_title":"Release recovery %s at %s %s-1700000000-42","event":"workflow_dispatch","status":"completed","conclusion":"success","head_branch":"main","head_sha":"%s","path":".github/workflows/release.yml","repository":{"full_name":"owner/repo"}}]}\n' "$TAG" "$RELEASE_COMMIT" "$RELEASE_COMMIT" "$WORKFLOW_SHA"
+    ;;
+  */compare/*...main)
+    printf '{"status":"ahead"}\n'
+    ;;
+  */actions/runs/42/jobs*)
+    printf '{"jobs":['
+    printf '{"name":"Build signed release artifacts","status":"completed","conclusion":"success","head_sha":"%s"},' "$WORKFLOW_SHA"
+    printf '{"name":"Verify Apple Developer ID signatures","status":"completed","conclusion":"success","head_sha":"%s"},' "$WORKFLOW_SHA"
+    printf '{"name":"Publish immutable GitHub Release","status":"completed","conclusion":"success","head_sha":"%s"}' "$WORKFLOW_SHA"
+    if [ "${MISSING_CHANNELS:-0}" != 1 ]; then
+      printf ',{"name":"Publish npm and mirrors","status":"completed","conclusion":"success","head_sha":"%s"}' "$WORKFLOW_SHA"
+    fi
+    printf ']}\n'
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-release-workflow-delivery.sh")
+	tag := "v1.2.3-beta.1"
+	commit := strings.Repeat("a", 40)
+	workflowSHA := strings.Repeat("b", 40)
+	run := func(missingChannels bool) (string, error) {
+		cmd := exec.Command("sh", script, tag, commit)
+		missing := "0"
+		if missingChannels {
+			missing = "1"
+		}
+		cmd.Env = []string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"DWS_RELEASE_OFFICIAL_REPOSITORY=owner/repo",
+			"TAG=" + tag,
+			"RELEASE_COMMIT=" + commit,
+			"WORKFLOW_SHA=" + workflowSHA,
+			"MISSING_CHANNELS=" + missing,
+		}
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	output, err := run(false)
+	if err != nil || !strings.Contains(output, "protected recovery run 42") {
+		t.Fatalf("protected shared recovery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	output, err = run(true)
+	if err == nil || !strings.Contains(output, "did not complete the shared release job graph") {
+		t.Fatalf("incomplete recovery job graph passed: err=%v\noutput:\n%s", err, output)
 	}
 }
 
@@ -1002,6 +1071,542 @@ func TestReleaseCommandValidatesThenPushesAnnotatedTag(t *testing.T) {
 	}
 }
 
+func TestReleaseCommandReusesExactPreflightProof(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	installReleaseCommandFixture(t, r)
+	mustWriteFile(t, filepath.Join(r.root, ".gitignore"), []byte("/dws\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(betaSection())), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte(`test:
+	@rm -f dws
+	@printf 'test\n' >> "$$(git rev-parse --git-path release-phases)"
+build:
+	@printf '#!/bin/sh\nexit 0\n' > dws
+	@chmod +x dws
+	@printf 'build\n' >> "$$(git rev-parse --git-path release-phases)"
+policy:
+	@test -x dws
+	@printf 'policy\n' >> "$$(git rev-parse --git-path release-phases)"
+package:
+	@printf 'package\n' >> "$$(git rev-parse --git-path release-phases)"
+`), 0o644)
+	r.commitAndPush(t, "install proof-aware release automation")
+
+	command := filepath.Join(r.root, "scripts", "release", "release.sh")
+	output, err := runReleaseScript(t, r.root, command,
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin",
+	)
+	if err != nil {
+		t.Fatalf("release validation error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "Publish within six hours") {
+		t.Fatalf("validation output missing reusable-proof guidance:\n%s", output)
+	}
+	phasePath := filepath.Join(r.root, ".git", "release-phases")
+	phaseData, err := os.ReadFile(phasePath)
+	if err != nil {
+		t.Fatalf("ReadFile(release phases) error = %v", err)
+	}
+	wantPhases := "test\nbuild\npolicy\npackage\n"
+	if string(phaseData) != wantPhases {
+		t.Fatalf("release phase order = %q, want %q", phaseData, wantPhases)
+	}
+	proofPath := strings.TrimSpace(mustOutput(t, r.root, "git", "rev-parse", "--git-path", "dws-release-preflight/v1.0.1-beta.1.proof"))
+	if !filepath.IsAbs(proofPath) {
+		proofPath = filepath.Join(r.root, proofPath)
+	}
+	proofBefore, err := os.ReadFile(proofPath)
+	if err != nil {
+		t.Fatalf("ReadFile(preflight proof) error = %v", err)
+	}
+	hook := filepath.Join(r.remote, "hooks", "pre-receive")
+	mustWriteFile(t, hook, []byte("#!/bin/sh\nset -eu\nwhile read -r old new ref; do\n  case \"$ref\" in refs/tags/*) exit 1 ;; esac\ndone\nexit 0\n"), 0o755)
+	failedOutput, failedErr := runReleaseScript(t, r.root, command,
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin", "--publish", "--yes",
+	)
+	if failedErr == nil || !strings.Contains(failedOutput, "new local tag was removed") {
+		t.Fatalf("rejected proof-based publish did not fail safely: err=%v\noutput:\n%s", failedErr, failedOutput)
+	}
+	proofAfterFailure, err := os.ReadFile(proofPath)
+	if err != nil {
+		t.Fatalf("ReadFile(preflight proof after failure) error = %v", err)
+	}
+	if string(proofAfterFailure) != string(proofBefore) {
+		t.Fatalf("failed publish refreshed reusable proof:\nbefore:\n%s\nafter:\n%s", proofBefore, proofAfterFailure)
+	}
+	if err := os.Remove(hook); err != nil {
+		t.Fatalf("Remove(rejecting hook) error = %v", err)
+	}
+
+	output, err = runReleaseScript(t, r.root, command,
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin", "--publish", "--yes",
+	)
+	if err != nil {
+		t.Fatalf("release publish error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "Reusing exact preflight proof") {
+		t.Fatalf("publish did not reuse the exact preflight proof:\n%s", output)
+	}
+	phaseData, err = os.ReadFile(phasePath)
+	if err != nil {
+		t.Fatalf("ReadFile(release phases after publish) error = %v", err)
+	}
+	if string(phaseData) != wantPhases {
+		t.Fatalf("publish reran expensive phases: %q", phaseData)
+	}
+}
+
+func TestReleaseGovernanceCIDispatchBindsExactRunIdentity(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	stateDir := t.TempDir()
+	fakeGH := filepath.Join(binDir, "gh")
+	mustWriteFile(t, fakeGH, []byte(`#!/bin/sh
+set -eu
+command="$1"
+shift
+case "$command" in
+  workflow)
+    test "$1" = run
+    shift
+    printf '%s\n' "$@" > "$GH_STATE/workflow-args"
+    for argument in "$@"; do
+      case "$argument" in
+        governance_preflight_nonce=*)
+          printf 'Release governance preflight %s\n' "${argument#governance_preflight_nonce=}" > "$GH_STATE/title"
+          ;;
+        governance_preflight_commit=*)
+          printf '%s\n' "${argument#governance_preflight_commit=}" > "$GH_STATE/commit"
+          ;;
+      esac
+    done
+    ;;
+  api)
+    for argument in "$@"; do
+      case "$argument" in repos/*/actions/*) endpoint="$argument" ;; esac
+    done
+    case "$endpoint" in
+      */actions/workflows/release.yml/runs*) printf '42\n' ;;
+      */actions/runs/42)
+        title="$(cat "$GH_STATE/title")"
+        commit="$(cat "$GH_STATE/commit")"
+        repository=owner/repo
+        if [ "${GH_BAD_STATE:-0}" = 1 ]; then repository=attacker/repo; fi
+        printf '%s\tworkflow_dispatch\tcompleted\tsuccess\tmain\t%s\t.github/workflows/release.yml\t%s\n' "$title" "$commit" "$repository"
+        ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  run)
+    test "$1" = watch
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-release-governance-ci.sh")
+	commit := strings.Repeat("a", 40)
+	run := func(badState bool) (string, error) {
+		cmd := exec.Command("sh", script, "owner/repo", commit)
+		cmd.Env = []string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"GH_STATE=" + stateDir,
+			fmt.Sprintf("GH_BAD_STATE=%d", map[bool]int{false: 0, true: 1}[badState]),
+		}
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	output, err := run(false)
+	if err != nil || !strings.Contains(output, "Release governance preflight passed") {
+		t.Fatalf("governance CI preflight error = %v\noutput:\n%s", err, output)
+	}
+	args, err := os.ReadFile(filepath.Join(stateDir, "workflow-args"))
+	if err != nil {
+		t.Fatalf("ReadFile(workflow args) error = %v", err)
+	}
+	for _, required := range []string{
+		"--ref\nmain\n",
+		"governance_preflight_commit=" + commit,
+		"governance_preflight_nonce=" + commit + "-",
+	} {
+		if !strings.Contains(string(args), required) {
+			t.Errorf("workflow dispatch args are missing %q:\n%s", required, args)
+		}
+	}
+
+	output, err = run(true)
+	if err == nil || !strings.Contains(output, "run identity mismatch") {
+		t.Fatalf("mismatched governance run identity passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
+func TestVerifyHomebrewPRTokenRequiresMinimalWorkingIdentity(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	fakeGH := filepath.Join(binDir, "gh")
+	mustWriteFile(t, fakeGH, []byte(`#!/bin/sh
+set -eu
+test "${GH_TOKEN:-}" = valid-token
+command="$1"
+shift
+test "$command" = api
+endpoint=""
+for argument in "$@"; do
+  case "$argument" in
+    repos/*|user) endpoint="$argument" ;;
+  esac
+done
+case "$endpoint" in
+  repos/owner/repo)
+    printf 'HTTP/2.0 200 OK\nX-OAuth-Scopes: %s\n\nowner/repo\t%s\tmain\n' \
+      "${GH_SCOPES-public_repo}" "${GH_CAN_PUSH:-true}"
+    ;;
+  repos/owner/repo/pulls?state=open\&per_page=1) ;;
+  user) printf '%s\n' release-bot ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-homebrew-pr-token.sh")
+	run := func(token, scopes, canPush string) (string, error) {
+		cmd := exec.Command("sh", script, "owner/repo")
+		cmd.Env = []string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"HOMEBREW_PR_TOKEN=" + token,
+			"GH_SCOPES=" + scopes,
+			"GH_CAN_PUSH=" + canPush,
+		}
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	output, err := run("valid-token", "public_repo", "true")
+	if err != nil || !strings.Contains(output, "Homebrew PR token capability passed for owner/repo as release-bot (classic-public_repo)") {
+		t.Fatalf("valid Homebrew PR token rejected: err=%v\noutput:\n%s", err, output)
+	}
+
+	output, err = run("valid-token", "repo", "true")
+	if err == nil || !strings.Contains(output, "must have only public_repo scope") {
+		t.Fatalf("overprivileged Homebrew PR token accepted: err=%v\noutput:\n%s", err, output)
+	}
+
+	output, err = run("valid-token", "", "true")
+	if err != nil || !strings.Contains(output, "(fine-grained)") {
+		t.Fatalf("fine-grained Homebrew PR token rejected: err=%v\noutput:\n%s", err, output)
+	}
+
+	output, err = run("valid-token", "public_repo", "false")
+	if err == nil || !strings.Contains(output, "does not have push permission") {
+		t.Fatalf("non-pushing Homebrew identity accepted: err=%v\noutput:\n%s", err, output)
+	}
+
+	output, err = run("", "public_repo", "true")
+	if err == nil || !strings.Contains(output, "HOMEBREW_PR_TOKEN is required") {
+		t.Fatalf("missing Homebrew token accepted: err=%v\noutput:\n%s", err, output)
+	}
+}
+
+func TestVerifyHomebrewPRTokenCanaryCreatesAndCleans(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	r := newReleaseTestRepo(t)
+	binDir := t.TempDir()
+	stateDir := t.TempDir()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("LookPath(git) error = %v", err)
+	}
+	fakeGit := filepath.Join(binDir, "git")
+	mustWriteFile(t, fakeGit, []byte(`#!/bin/sh
+set -eu
+network=false
+for argument in "$@"; do
+  case "$argument" in
+    clone|push|ls-remote) network=true ;;
+  esac
+done
+if [ "$network" = true ]; then
+  printf '%s\n' "$*" >> "$GH_STATE/git-network-args"
+  case " $* " in
+    *" https://github.com/owner/repo.git "*) ;;
+    *) exit 91 ;;
+  esac
+  test "${GIT_CONFIG_NOSYSTEM:-}" = 1
+  test "${GIT_CONFIG_GLOBAL:-}" = /dev/null
+  test "${GIT_CONFIG_COUNT:-}" = 0
+  test -x "${GIT_ASKPASS:-}"
+  test "$("$GIT_ASKPASS" Username)" = x-access-token
+  test "$("$GIT_ASKPASS" Password)" = valid-token
+  case " $* " in
+    *" HEAD:refs/heads/"*)
+      if [ "${BLOCK_PUSH:-false}" = true ]; then
+        "$REAL_GIT" \
+          -c "url.$TEST_REMOTE.insteadOf=https://github.com/owner/repo.git" \
+          "$@"
+        : > "$GH_STATE/push-complete-${GITHUB_RUN_ID:-unknown}"
+        sleep 2
+        exit 0
+      fi
+      ;;
+  esac
+  case " $* " in
+    *" :refs/heads/"*)
+      if [ "${FAIL_DELETE:-false}" = true ]; then
+        exit 92
+      fi
+      ;;
+  esac
+  exec "$REAL_GIT" \
+    -c "url.$TEST_REMOTE.insteadOf=https://github.com/owner/repo.git" \
+    "$@"
+fi
+exec "$REAL_GIT" "$@"
+`), 0o755)
+	fakeGH := filepath.Join(binDir, "gh")
+	mustWriteFile(t, fakeGH, []byte(`#!/bin/sh
+set -eu
+test "${GH_TOKEN:-}" = valid-token
+command="$1"
+shift
+case "$command" in
+  api)
+    endpoint=""
+    for argument in "$@"; do
+      case "$argument" in
+        repos/*|user) endpoint="$argument" ;;
+      esac
+    done
+    case "$endpoint" in
+      repos/owner/repo)
+        printf 'HTTP/2.0 200 OK\nX-OAuth-Scopes: public_repo\n\nowner/repo\ttrue\tmain\n'
+        ;;
+      repos/owner/repo/pulls?state=open\&per_page=1) ;;
+      repos/owner/repo/pulls?state=open\&head=owner:*\&base=main\&per_page=2)
+        if [ -f "$GH_STATE/pr-open-${GITHUB_RUN_ID:-unknown}" ]; then
+          printf '%s\n' 42
+        fi
+        ;;
+      repos/owner/repo/pulls/42)
+        if [ "${FAIL_CLOSE:-false}" = true ]; then
+          exit 93
+        fi
+        rm -f "$GH_STATE/pr-open-${GITHUB_RUN_ID:-unknown}"
+        printf '%s\n' closed > "$GH_STATE/pr-closed-${GITHUB_RUN_ID:-unknown}"
+        ;;
+      user) printf '%s\n' release-bot ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  pr)
+    test "$1" = create
+    shift
+    printf '%s\n' "$@" > "$GH_STATE/pr-args"
+    : > "$GH_STATE/pr-create-started-${GITHUB_RUN_ID:-unknown}"
+    if [ "${FAIL_PR_CREATE:-false}" = true ]; then
+      exit 94
+    fi
+    : > "$GH_STATE/pr-open-${GITHUB_RUN_ID:-unknown}"
+    if [ "${BLOCK_PR_CREATE:-false}" = true ]; then
+      sleep 2
+    fi
+    printf '%s\n' 'https://github.com/owner/repo/pull/42'
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-homebrew-pr-token.sh")
+	baseEnv := []string{
+		"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"HOME=" + t.TempDir(),
+		"GH_STATE=" + stateDir,
+		"HOMEBREW_PR_TOKEN=valid-token",
+		"GITHUB_RUN_ATTEMPT=2",
+		"REAL_GIT=" + realGit,
+		"TEST_REMOTE=" + r.remote,
+	}
+	runCanary := func(runID string, extraEnv ...string) ([]byte, error) {
+		cmd := exec.Command("sh", script, "owner/repo", "--canary")
+		cmd.Dir = r.root
+		cmd.Env = append(append([]string{}, baseEnv...), "GITHUB_RUN_ID="+runID)
+		cmd.Env = append(cmd.Env, extraEnv...)
+		return cmd.CombinedOutput()
+	}
+	remoteHasBranch := func(branch string) bool {
+		cmd := exec.Command(
+			"git", "--git-dir", r.remote, "show-ref", "--verify",
+			"refs/heads/"+branch,
+		)
+		return cmd.Run() == nil
+	}
+
+	output, err := runCanary("12345")
+	if err != nil || !strings.Contains(string(output), "Homebrew PR token capability passed") {
+		t.Fatalf("Homebrew token canary error = %v\noutput:\n%s", err, output)
+	}
+
+	prArgs, err := os.ReadFile(filepath.Join(stateDir, "pr-args"))
+	if err != nil {
+		t.Fatalf("ReadFile(PR args) error = %v", err)
+	}
+	for _, required := range []string{
+		"--draft",
+		"--base\nmain",
+		"--head\nautomation/homebrew-token-canary-12345-2",
+	} {
+		if !strings.Contains(string(prArgs), required) {
+			t.Errorf("Homebrew token canary PR args are missing %q:\n%s", required, prArgs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "pr-closed-12345")); err != nil {
+		t.Fatalf("Homebrew token canary did not close its PR: %v", err)
+	}
+	gitNetworkArgs, err := os.ReadFile(filepath.Join(stateDir, "git-network-args"))
+	if err != nil {
+		t.Fatalf("ReadFile(git network args) error = %v", err)
+	}
+	for _, required := range []string{
+		"clone",
+		"https://github.com/owner/repo.git",
+		"HEAD:refs/heads/automation/homebrew-token-canary-12345-2",
+		"--force-with-lease=refs/heads/automation/homebrew-token-canary-12345-2:",
+		":refs/heads/automation/homebrew-token-canary-12345-2",
+	} {
+		if !strings.Contains(string(gitNetworkArgs), required) {
+			t.Errorf("Homebrew token canary Git operations are missing %q:\n%s", required, gitNetworkArgs)
+		}
+	}
+
+	if remoteHasBranch("automation/homebrew-token-canary-12345-2") {
+		t.Fatal("Homebrew token canary left its remote branch behind")
+	}
+
+	output, err = runCanary("20001", "FAIL_PR_CREATE=true")
+	if err == nil || !strings.Contains(string(output), "cannot create a canary pull request") {
+		t.Fatalf("PR creation failure was not fail-closed: err=%v\noutput:\n%s", err, output)
+	}
+	if remoteHasBranch("automation/homebrew-token-canary-20001-2") {
+		t.Fatal("PR creation failure left its canary branch behind")
+	}
+
+	output, err = runCanary("20002", "FAIL_CLOSE=true")
+	if err == nil ||
+		!strings.Contains(string(output), "could not close canary PR") ||
+		!strings.Contains(string(output), "could not clean up Homebrew token canary PR") {
+		t.Fatalf("PR cleanup failure was not fail-closed: err=%v\noutput:\n%s", err, output)
+	}
+	if remoteHasBranch("automation/homebrew-token-canary-20002-2") {
+		t.Fatal("PR cleanup failure left its canary branch behind")
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "pr-open-20002")); err != nil {
+		t.Fatalf("PR cleanup failure did not leave an observable open canary PR: %v", err)
+	}
+
+	output, err = runCanary("20003", "FAIL_DELETE=true")
+	if err == nil ||
+		!strings.Contains(string(output), "could not delete canary branch") ||
+		!strings.Contains(string(output), "could not clean up Homebrew token canary branch") {
+		t.Fatalf("branch cleanup failure was not fail-closed: err=%v\noutput:\n%s", err, output)
+	}
+	if !remoteHasBranch("automation/homebrew-token-canary-20003-2") {
+		t.Fatal("branch deletion failure was hidden instead of leaving an observable failed canary")
+	}
+
+	termCmd := exec.Command("sh", script, "owner/repo", "--canary")
+	termCmd.Dir = r.root
+	termCmd.Env = append(append([]string{}, baseEnv...),
+		"GITHUB_RUN_ID=20004",
+		"BLOCK_PR_CREATE=true",
+	)
+	var termStdout bytes.Buffer
+	var termStderr bytes.Buffer
+	termCmd.Stdout = &termStdout
+	termCmd.Stderr = &termStderr
+	if err := termCmd.Start(); err != nil {
+		t.Fatalf("Start(TERM canary) error = %v", err)
+	}
+	marker := filepath.Join(stateDir, "pr-create-started-20004")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			_ = termCmd.Process.Kill()
+			_ = termCmd.Wait()
+			t.Fatalf("TERM canary did not reach PR creation:\n%s%s", termStdout.String(), termStderr.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := termCmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("Signal(TERM canary) error = %v", err)
+	}
+	err = termCmd.Wait()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 143 {
+		t.Fatalf("TERM canary exit = %v, want 143\nstdout:\n%s\nstderr:\n%s",
+			err, termStdout.String(), termStderr.String())
+	}
+	if remoteHasBranch("automation/homebrew-token-canary-20004-2") {
+		t.Fatal("TERM canary left its remote branch behind")
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "pr-closed-20004")); err != nil {
+		t.Fatalf("TERM canary did not close the PR created during the signal race: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "pr-open-20004")); !os.IsNotExist(err) {
+		t.Fatalf("TERM canary left an open PR marker: %v", err)
+	}
+
+	pushTermCmd := exec.Command("sh", script, "owner/repo", "--canary")
+	pushTermCmd.Dir = r.root
+	pushTermCmd.Env = append(append([]string{}, baseEnv...),
+		"GITHUB_RUN_ID=20005",
+		"BLOCK_PUSH=true",
+	)
+	var pushTermStdout bytes.Buffer
+	var pushTermStderr bytes.Buffer
+	pushTermCmd.Stdout = &pushTermStdout
+	pushTermCmd.Stderr = &pushTermStderr
+	if err := pushTermCmd.Start(); err != nil {
+		t.Fatalf("Start(push TERM canary) error = %v", err)
+	}
+	pushMarker := filepath.Join(stateDir, "push-complete-20005")
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(pushMarker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			_ = pushTermCmd.Process.Kill()
+			_ = pushTermCmd.Wait()
+			t.Fatalf("push TERM canary did not complete its remote push:\n%s%s",
+				pushTermStdout.String(), pushTermStderr.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := pushTermCmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("Signal(push TERM canary) error = %v", err)
+	}
+	err = pushTermCmd.Wait()
+	exitErr, ok = err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 143 {
+		t.Fatalf("push TERM canary exit = %v, want 143\nstdout:\n%s\nstderr:\n%s",
+			err, pushTermStdout.String(), pushTermStderr.String())
+	}
+	if remoteHasBranch("automation/homebrew-token-canary-20005-2") {
+		t.Fatal("push TERM canary left its remote branch behind")
+	}
+}
+
 func TestReleaseCommandCleansLocalTagWhenPushFails(t *testing.T) {
 	r := newReleaseTestRepo(t)
 	installReleaseCommandFixture(t, r)
@@ -1048,7 +1653,7 @@ func TestReleaseCommandRechecksAdvancedStableAuthority(t *testing.T) {
 	section := "## [1.0.2-beta.1] - 2026-07-11\n\n### Changed\n\n- Validate a candidate after stable authority advances.\n\n"
 	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nprintf 'compatibility %s\\n' \"$*\"\n"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\npolicy:\n\t@:\npackage:\n\t@git tag -a v1.0.1 -m 'Release v1.0.1'\n\t@git push origin refs/tags/v1.0.1\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\nbuild:\n\t@:\npolicy:\n\t@:\npackage:\n\t@git tag -a v1.0.1 -m 'Release v1.0.1'\n\t@git push origin refs/tags/v1.0.1\n"), 0o644)
 	r.commitAndPush(t, "install advancing release fixture")
 
 	output, err := runReleaseScript(t, r.root, filepath.Join(r.root, "scripts", "release", "release.sh"),
@@ -1071,7 +1676,7 @@ func installReleaseCommandFixture(t *testing.T, r *releaseTestRepo) {
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-package-managers.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-release-artifacts.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\npolicy:\n\t@:\npackage:\n\t@:\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\nbuild:\n\t@:\npolicy:\n\t@:\npackage:\n\t@:\n"), 0o644)
 }
 
 func releaseCopyFile(t *testing.T, source, target string, mode os.FileMode) {
