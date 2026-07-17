@@ -42,6 +42,36 @@ The repository defines five focused checks in addition to its existing CI:
   evaluator writes an `AI Behavior Check` commit status to the PR head SHA so
   GitHub rulesets can require it.
 
+## Exact CHANGELOG-only fast path
+
+A pull request qualifies for the fast path only when GitHub reports exactly
+one changed file and that file is an in-place modification of
+`CHANGELOG.md`. Adding, deleting, or renaming the file does not qualify, and
+neither does changing any second file.
+
+The workflow classifies the pull request through GitHub's pull-request files
+API before checking out or executing pull-request code. Qualifying changes run
+the targeted CHANGELOG contract check. Because classification rejects any
+second file, the validator itself is the reviewed version from the base:
+
+```sh
+base_ref=$(git merge-base HEAD origin/main)
+./scripts/policy/check-changelog-pr.sh "$base_ref" HEAD
+```
+
+The `CI Gate` remains present and succeeds only after that targeted check
+passes. `Multi Profile E2E` also remains present as a required successful job,
+but records the fast-path decision in its job summary instead of checking out
+the repository, setting up Go, or running the E2E chain. The workflows use
+job/step conditions rather than workflow-level `paths-ignore`, so required
+checks are never left pending.
+
+All other pull requests run the normal full gates. After a qualifying pull
+request is merged, the `main` push runs the complete CI and Multi Profile E2E
+again; the fast path never applies to a push. Multi Profile E2E listens only
+for pushes to `main`, avoiding a duplicate branch-push run for same-repository
+pull requests.
+
 ## Running the compatibility gates
 
 Run:
