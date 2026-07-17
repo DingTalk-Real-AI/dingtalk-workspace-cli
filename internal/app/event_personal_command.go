@@ -37,6 +37,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -69,6 +70,7 @@ type personalConsumeOptions struct {
 	TTL              time.Duration
 	Ephemeral        bool
 	UserID           string
+	OpenDingTalkID   string
 	GroupID          string
 	ControlBaseURL   string
 	StreamTicketMode string
@@ -226,8 +228,14 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
+	projector := personalEventProjector(opts.DebugRawEvents)
 
 	if opts.Common.DryRun {
+		if strings.TrimSpace(opts.SubscribeID) == "" {
+			if err := validatePersonalSubscriptionOptions(opts); err != nil {
+				return fmt.Errorf("event consume --as user: %w", err)
+			}
+		}
 		cfg := consume.Config{
 			WorkDir:        workDir,
 			IPCEndpoint:    ipcEndpoint,
@@ -240,6 +248,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 			Format:         normalised,
 			OutputDir:      opts.Common.OutputDir,
 			Routes:         routes,
+			Projector:      projector,
 			Stderr:         c.ErrOrStderr(),
 			Quiet:          opts.Common.Quiet,
 			Foreground:     opts.Common.Foreground,
@@ -272,8 +281,8 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		_ = personalDeleteSubscription(client, context.Background(), sub.SubscribeID)
 		_ = personalRemoveRunStates(workDir, []string{sub.SubscribeID})
 	}
-	// Ownership-based cleanup (AI-subprocess contract, aligned with
-	// lark-cli): a subscription this run CREATED is unsubscribed on exit
+	// Ownership-based cleanup: a subscription this run CREATED is
+	// unsubscribed on exit
 	// (any exit — SIGTERM / stdin-EOF / limit / timeout / error), so nothing
 	// leaks server-side. A subscription REUSED via --subscribe-id is left
 	// intact — the caller owns its lifecycle. --ephemeral forces cleanup
@@ -284,22 +293,24 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	}
 
 	cfg := consume.Config{
-		WorkDir:        workDir,
-		IPCEndpoint:    ipcEndpoint,
-		ClientID:       identity.ClientID,
-		SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, opts.StreamTicketURL),
-		Compact:        opts.Common.Compact,
-		MaxEvents:      opts.Common.MaxEvents,
-		Duration:       opts.Common.Duration,
-		EventKey:       eventKey,
-		Format:         normalised,
-		OutputDir:      opts.Common.OutputDir,
-		Routes:         routes,
-		Stdout:         c.OutOrStdout(),
-		Stderr:         c.ErrOrStderr(),
-		Quiet:          opts.Common.Quiet,
-		Foreground:     opts.Common.Foreground,
-		Force:          opts.Common.Force,
+		WorkDir:          workDir,
+		IPCEndpoint:      ipcEndpoint,
+		ClientID:         identity.ClientID,
+		SpawnExtraArgs:   personalBusSpawnArgs(identity, opts.StreamTicketMode, opts.StreamTicketURL),
+		Compact:          opts.Common.Compact,
+		MaxEvents:        opts.Common.MaxEvents,
+		Duration:         opts.Common.Duration,
+		EventKey:         eventKey,
+		Format:           normalised,
+		OutputDir:        opts.Common.OutputDir,
+		Routes:           routes,
+		Projector:        projector,
+		ReadySubscribeID: sub.SubscribeID,
+		Stdout:           c.OutOrStdout(),
+		Stderr:           c.ErrOrStderr(),
+		Quiet:            opts.Common.Quiet,
+		Foreground:       opts.Common.Foreground,
+		Force:            opts.Common.Force,
 	}
 	// Arm the stdin-EOF shutdown watcher only for a pipe-style, unbounded
 	// run (see shouldWatchStdinEOF).
@@ -354,6 +365,13 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	return err
 }
 
+func personalEventProjector(debugRawEvents bool) consume.Projector {
+	if debugRawEvents {
+		return func(ev transport.Event) (any, error) { return ev, nil }
+	}
+	return personal.ProjectOutput
+}
+
 func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOptions, subscribeID, eventKey string) {
 	if cfg == nil {
 		return
@@ -367,6 +385,19 @@ func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOption
 	cfg.EventTypes = personalEventTypes(eventKey, opts.Common.EventTypes)
 	cfg.Filter = opts.Common.Filter
 	cfg.SubscribeID = strings.TrimSpace(subscribeID)
+}
+
+func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
+	if _, _, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
+		RuleType:       opts.Rule,
+		UserID:         opts.UserID,
+		OpenDingTalkID: opts.OpenDingTalkID,
+		GroupID:        opts.GroupID,
+	}); err != nil {
+		return err
+	}
+	_, _, err := personal.BuildFilter(opts.FilterJSON, opts.QueryCSV)
+	return err
 }
 
 func ensurePersonalSubscription(ctx context.Context, client *personal.Client, identity personal.Identity, opts personalConsumeOptions) (*personal.Subscription, string, string, error) {
@@ -398,9 +429,10 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		return nil, "", "", err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
-		RuleType: opts.Rule,
-		UserID:   opts.UserID,
-		GroupID:  opts.GroupID,
+		RuleType:       opts.Rule,
+		UserID:         opts.UserID,
+		OpenDingTalkID: opts.OpenDingTalkID,
+		GroupID:        opts.GroupID,
 	})
 	if err != nil {
 		return nil, "", "", err

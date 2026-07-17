@@ -14,7 +14,9 @@
 package consume
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -146,6 +148,84 @@ func TestCompactFormatter_DispatchesPerEventType(t *testing.T) {
 	// Header field `type` must equal event_type.
 	if got["type"] != "im.message.receive_v1" {
 		t.Errorf("type = %v", got["type"])
+	}
+}
+
+func TestCrossPlatformCoverageStructuredFormatsUseProjector(t *testing.T) {
+	projector := Projector(func(ev transport.Event) (any, error) {
+		return map[string]any{"type": ev.EventType, "content": "hello"}, nil
+	})
+	for _, format := range []Format{FormatNDJSON, FormatJSON, FormatPretty, FormatCompact} {
+		t.Run(string(format), func(t *testing.T) {
+			f, err := NewFormatter(format, WithProjector(projector))
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := f.Render(transport.Event{EventType: "personal.test", Data: `{"raw":true}`})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(out), &got); err != nil {
+				t.Fatalf("output is not JSON: %v", err)
+			}
+			if got["type"] != "personal.test" || got["content"] != "hello" {
+				t.Fatalf("projected output = %#v", got)
+			}
+			if _, ok := got["data"]; ok {
+				t.Fatalf("projected output leaked transport envelope: %#v", got)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectionFailureWarnsAndEmitsFallback(t *testing.T) {
+	var warnings bytes.Buffer
+	f, err := NewFormatter(
+		FormatNDJSON,
+		WithProjector(func(ev transport.Event) (any, error) { return ev, errors.New("bad payload") }),
+		WithProjectionWarnings(&warnings),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := transport.Event{EventID: "outer", EventType: "user_im_message_receive_o2o", Data: "not-json"}
+	for i := 0; i < 2; i++ {
+		out, err := f.Render(ev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got transport.Event
+		if err := json.Unmarshal(bytes.TrimSpace(out), &got); err != nil || got.EventID != "outer" {
+			t.Fatalf("fallback output = %s, err = %v", out, err)
+		}
+	}
+	if count := strings.Count(warnings.String(), "WARN: personal event output projection failed"); count != 1 {
+		t.Fatalf("warning count = %d, output = %q", count, warnings.String())
+	}
+	for _, want := range []string{`event_id="outer"`, `event_type="user_im_message_receive_o2o"`, "bad payload"} {
+		if !strings.Contains(warnings.String(), want) {
+			t.Fatalf("warning missing %q: %q", want, warnings.String())
+		}
+	}
+}
+
+func TestCrossPlatformCoverageRawFormatBypassesProjector(t *testing.T) {
+	called := false
+	raw := `{"payload":{"uid":100001,"clientId":"internal-client","filterSubId":"internal-filter","bizid":"internal-bizid"}}`
+	f, err := NewFormatter(FormatRaw, WithProjector(func(transport.Event) (any, error) {
+		called = true
+		return map[string]any{"projected": true}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.Render(transport.Event{Data: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called || string(out) != raw+"\n" {
+		t.Fatalf("raw output = %q, projector called = %v", out, called)
 	}
 }
 

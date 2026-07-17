@@ -1424,8 +1424,8 @@
 
 **event_event_consume_o2o_001** ✅ PASS
 
-- Prompt: 监听我和 userId 507971 的单聊消息
-- Expected: `dws event consume user_im_message_receive_o2o --user 507971 -f ndjson`
+- Prompt: 监听我和 userId test-user-001 的单聊消息
+- Expected: `dws event consume user_im_message_receive_o2o --user test-user-001 -f ndjson`
 - Skill Reference: references/products/event.md
 - Command path: PASS (event consume user_im_message_receive_o2o)
 - Flags: PASS (1 flags validated)

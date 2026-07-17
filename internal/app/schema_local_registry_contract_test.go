@@ -61,13 +61,22 @@ func TestEventRegistryDeliversOneTypedSchemaPath(t *testing.T) {
 		}
 	}
 	for flag, wantType := range map[string]string{
-		"dry-run":     "boolean",
-		"duration":    "string",
-		"event-types": "array",
-		"max-events":  "integer",
+		"dry-run":          "boolean",
+		"duration":         "string",
+		"event-types":      "array",
+		"max-events":       "integer",
+		"open-dingtalk-id": "string",
 	} {
 		if got := schemaContractString(consumeParams[flag]["type"]); got != wantType {
 			t.Errorf("event.consume --%s type = %q, want %q", flag, got, wantType)
+		}
+	}
+	if _, exists := consumeParams["odid"]; exists {
+		t.Error("event.consume exposes unsupported --odid alias")
+	}
+	for _, name := range []string{"user", "open-dingtalk-id", "group"} {
+		if _, exists := consumeParams[name]["required_when"]; exists {
+			t.Errorf("event.consume --%s unexpectedly declares required_when", name)
 		}
 	}
 	if _, exists := consumeParams["duration"]["default"]; exists {
