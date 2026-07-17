@@ -20,8 +20,8 @@
 //  2. 渐进式退避（1s/2s/5s/10s/15s/30s/30s...，可自定义）
 //  3. 默认 5 分钟超时，超时返回 jobId 让用户用 `... get --job-id <ID>` 续等
 //  4. 状态机统一：PROCESSING/PENDING → SUCCESS → 拿 downloadUrl
-//                              ↓
-//                            FAILED → 返回 error
+//     ↓
+//     FAILED → 返回 error
 //  5. 可选 PUT 下载：传入 OutputPath 时本包负责 HTTP GET 落盘
 package asynctask
 
@@ -32,6 +32,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -45,6 +46,32 @@ const (
 	StatusFailed     Status = "FAILED"
 	StatusTimeout    Status = "TIMEOUT" // 本地超时（非服务端状态）
 )
+
+type TaskResult struct {
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Status     Status `json:"status"`
+	ResultURL  string `json:"resultUrl,omitempty"`
+	Message    string `json:"message,omitempty"`
+	CreateTime string `json:"createTime,omitempty"`
+}
+
+func NormalizeStatus(raw string) Status {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "PENDING", "QUEUED":
+		return StatusPending
+	case "PROCESSING", "RUNNING", "IN_PROGRESS", "DOING":
+		return StatusProcessing
+	case "SUCCESS", "SUCCEED", "SUCCEEDED", "DONE", "FINISHED", "COMPLETE", "COMPLETED":
+		return StatusSuccess
+	case "FAILED", "FAILURE", "FAIL", "ERROR":
+		return StatusFailed
+	case "TIMEOUT", "TIMED_OUT":
+		return StatusTimeout
+	default:
+		return StatusProcessing
+	}
+}
 
 // SubmitFunc 是"提交任务"回调，返回 jobId 或 error。
 type SubmitFunc func(ctx context.Context) (jobID string, err error)
