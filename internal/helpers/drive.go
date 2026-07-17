@@ -1383,6 +1383,7 @@ func newDriveCommand() *cobra.Command {
 		driveShortcutCmd,
 		drivePermissionCmd,
 		drivePublishCmd,
+		newDriveTaskCommand(),
 		newDriveStarCommand(),
 		recycleCmd,
 		// deprecated 兼容命令（Phase 2）— 隐藏，保留向后兼容
