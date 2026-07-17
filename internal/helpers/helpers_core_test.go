@@ -3,9 +3,11 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -173,6 +175,30 @@ func TestCrossPlatformCoverageMCPOutputModesAndDevdocFormatting(t *testing.T) {
 	before := caller.calls
 	if err := callMCPToolInternalOpts("server", "tool", map[string]any{"x": 1}, false); err != nil || caller.calls != before {
 		t.Fatalf("dry run called tool: err=%v calls=%d/%d", err, caller.calls, before)
+	}
+}
+
+func TestCrossPlatformCoverageMCPDryRunJSONOutputIsSingleDocument(t *testing.T) {
+	caller := &helpersCoreCaller{format: "json", dry: true}
+	out, _ := installHelpersCoreDeps(t, caller)
+
+	args := map[string]any{"name": "weekly", "enabled": true}
+	if err := callMCPToolInternalOpts("server", "create_workflow", args, false); err != nil {
+		t.Fatalf("dry run returned error: %v", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("dry run called tool %d times, want 0", caller.calls)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("dry-run stdout must be one JSON document: %v\n%s", err, out.String())
+	}
+	if payload["dry_run"] != true || payload["executed"] != false || payload["tool"] != "create_workflow" {
+		t.Fatalf("unexpected dry-run payload: %#v", payload)
+	}
+	if !reflect.DeepEqual(payload["arguments"], map[string]any{"name": "weekly", "enabled": true}) {
+		t.Fatalf("arguments = %#v", payload["arguments"])
 	}
 }
 

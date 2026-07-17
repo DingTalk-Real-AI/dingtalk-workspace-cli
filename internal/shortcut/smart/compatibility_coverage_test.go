@@ -112,16 +112,18 @@ func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
 
 func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 	tests := []struct {
-		name     string
-		argv     []string
-		wantTool string
-		wantArgs map[string]any
+		name       string
+		argv       []string
+		wantTool   string
+		wantArgs   map[string]any
+		wantAbsent []string
 	}{
 		{
-			name:     "chat messages id and size",
-			argv:     []string{"chat", "+chat-messages", "--id", "cid-1", "--size", "9", "--yes"},
-			wantTool: "list_conversation_message_v2",
-			wantArgs: map[string]any{"openCid": "cid-1", "limit": 9},
+			name:       "chat messages id and size",
+			argv:       []string{"chat", "+chat-messages", "--id", "cid-1", "--size", "9", "--yes"},
+			wantTool:   "list_conversation_message_v2",
+			wantArgs:   map[string]any{"openconversation_id": "cid-1", "limit": 9},
+			wantAbsent: []string{"openCid", "cid"},
 		},
 		{
 			name:     "search message id and keyword",
@@ -147,6 +149,11 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			for key, want := range tc.wantArgs {
 				if got := call.args[key]; got != want {
 					t.Errorf("%s = %#v, want %#v", key, got, want)
+				}
+			}
+			for _, key := range tc.wantAbsent {
+				if _, ok := call.args[key]; ok {
+					t.Errorf("unexpected legacy argument %q in %#v", key, call.args)
 				}
 			}
 		})

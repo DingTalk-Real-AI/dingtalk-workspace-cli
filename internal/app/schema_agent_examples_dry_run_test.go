@@ -35,6 +35,7 @@ import (
 var (
 	manualAgentExamplePlaceholderPattern = regexp.MustCompile(`<([^>]+)>`)
 	manualAgentExampleDryRunJSONPattern  = regexp.MustCompile(`(?i)"dry_run"\s*:\s*true`)
+	manualAgentExampleDryRunPlanPattern  = regexp.MustCompile(`(?i)"preview_kind"\s*:\s*"plan"`)
 )
 
 // TestManualAgentExamplesContract is the always-on gate. It validates every
@@ -391,6 +392,9 @@ func manualAgentExampleDryRunObserved(capture manualAgentExampleCapture) bool {
 
 func manualAgentExampleDryRunEvidence(capture manualAgentExampleCapture) (string, bool) {
 	normalized := strings.ToLower(capture.Output)
+	if manualAgentExampleDryRunJSONPattern.MatchString(capture.Output) && manualAgentExampleDryRunPlanPattern.MatchString(capture.Output) {
+		return cli.DryRunPreviewPlan, true
+	}
 	if manualAgentExampleDryRunJSONPattern.MatchString(capture.Output) {
 		return cli.DryRunPreviewRequest, true
 	}
@@ -425,6 +429,22 @@ func TestManualAgentExampleDryRunEvidenceAcceptsSharedAndCommandPlans(t *testing
 	}
 	if !manualAgentExampleDryRunObserved(manualAgentExampleCapture{Output: operationSummary, DryRunChecks: 1}) {
 		t.Fatal("a command plan guarded by the injected caller's dry-run check was not recognized")
+	}
+}
+
+func TestCrossPlatformCoverageManualAgentExampleDryRunEvidenceClassifiesStructuredPlan(t *testing.T) {
+	kind, observed := manualAgentExampleDryRunEvidence(manualAgentExampleCapture{
+		Output:       `{"dry_run":true,"executed":false,"preview_kind":"plan"}`,
+		DryRunChecks: 1,
+	})
+	if !observed || kind != cli.DryRunPreviewPlan {
+		t.Fatalf("structured plan classified as kind=%q observed=%v", kind, observed)
+	}
+	if manualAgentExampleDryRunObserved(manualAgentExampleCapture{
+		Output:       `{"dry_run":false,"executed":false,"preview_kind":"plan"}`,
+		DryRunChecks: 1,
+	}) {
+		t.Fatal("non-dry-run structured plan was accepted as evidence")
 	}
 }
 

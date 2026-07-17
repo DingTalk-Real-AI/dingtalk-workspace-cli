@@ -221,10 +221,9 @@ var MessagesList = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		group := rt.StrFirst("group", "conversation-id", "id")
 		params := map[string]any{
-			"openCid": group,
-			"cid":     group,
-			"time":    rt.Str("time"),
-			"forward": rt.Bool("forward"),
+			"openconversation_id": group,
+			"time":                rt.Str("time"),
+			"forward":             rt.Bool("forward"),
 		}
 		if limit := rt.IntFirst("limit", "size"); limit > 0 {
 			params["limit"] = limit
