@@ -9,12 +9,86 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
 var expectedHomeSkillTargets = []string{
 	".agents/skills/dws",
 	".cursor/skills/dws",
+}
+
+var repoBinaryMutationMu sync.Mutex
+
+func preserveRepoBinary(t *testing.T, repoRoot string) {
+	t.Helper()
+
+	repoBinaryMutationMu.Lock()
+	binaryPath := filepath.Join(repoRoot, "dws")
+	info, err := os.Stat(binaryPath)
+	existed := err == nil
+	if err != nil && !os.IsNotExist(err) {
+		repoBinaryMutationMu.Unlock()
+		t.Fatalf("Stat(%s) error = %v", binaryPath, err)
+	}
+	var original []byte
+	var mode os.FileMode
+	if existed {
+		original, err = os.ReadFile(binaryPath)
+		if err != nil {
+			repoBinaryMutationMu.Unlock()
+			t.Fatalf("ReadFile(%s) error = %v", binaryPath, err)
+		}
+		mode = info.Mode()
+	}
+
+	t.Cleanup(func() {
+		defer repoBinaryMutationMu.Unlock()
+		if existed {
+			if err := os.WriteFile(binaryPath, original, mode); err != nil {
+				t.Errorf("restore %s error = %v", binaryPath, err)
+				return
+			}
+			if err := os.Chmod(binaryPath, mode.Perm()); err != nil {
+				t.Errorf("restore mode for %s error = %v", binaryPath, err)
+			}
+			return
+		}
+		if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove generated %s error = %v", binaryPath, err)
+		}
+	})
+}
+
+func TestPreserveRepoBinaryRestoresExistingFile(t *testing.T) {
+	repoRoot := t.TempDir()
+	binaryPath := filepath.Join(repoRoot, "dws")
+	mustWriteFile(t, binaryPath, []byte("original-binary\n"), 0o751)
+
+	t.Run("mutation", func(t *testing.T) {
+		preserveRepoBinary(t, repoRoot)
+		if err := os.WriteFile(binaryPath, []byte("generated-binary\n"), 0o755); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", binaryPath, err)
+		}
+		if err := os.Chmod(binaryPath, 0o755); err != nil {
+			t.Fatalf("Chmod(%s) error = %v", binaryPath, err)
+		}
+	})
+
+	data, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", binaryPath, err)
+	}
+	if string(data) != "original-binary\n" {
+		t.Fatalf("restored binary = %q, want original content", data)
+	}
+	info, err := os.Stat(binaryPath)
+	if err != nil {
+		t.Fatalf("Stat(%s) error = %v", binaryPath, err)
+	}
+	if info.Mode().Perm() != 0o751 {
+		t.Fatalf("restored binary mode = %o, want 751", info.Mode().Perm())
+	}
 }
 
 func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
@@ -32,6 +106,7 @@ func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
 	// in the project root (the -C target directory).
 	stubRoot := filepath.Join(root, "stubs")
 	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
+	preserveRepoBinary(t, repoRoot)
 	makeStub := `#!/bin/sh
 set -eu
 dir=""
@@ -54,9 +129,6 @@ done
 		"DWS_INSTALL_NAME=dws-test",
 	)
 	output, err := cmd.CombinedOutput()
-
-	// Clean up the fake binary created in the real repo root
-	_ = os.Remove(filepath.Join(repoRoot, "dws"))
 
 	if err != nil {
 		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))
@@ -98,6 +170,7 @@ func TestInstallScriptSourceModeInstallsSkillsIntoAgentsDir(t *testing.T) {
 
 	stubRoot := filepath.Join(root, "stubs")
 	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
+	preserveRepoBinary(t, repoRoot)
 	makeStub := `#!/bin/sh
 set -eu
 dir=""
@@ -124,9 +197,6 @@ done
 		"DWS_INSTALL_DIR="+installDir,
 	)
 	output, err := cmd.CombinedOutput()
-
-	// Clean up the fake binary created in the real repo root
-	_ = os.Remove(filepath.Join(repoRoot, "dws"))
 
 	if err != nil {
 		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))
@@ -705,6 +775,7 @@ func TestInstallScriptCachesMultiEndToEnd(t *testing.T) {
 
 	stubRoot := filepath.Join(root, "stubs")
 	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
+	preserveRepoBinary(t, repoRoot)
 	makeStub := `#!/bin/sh
 set -eu
 dir=""
@@ -726,9 +797,6 @@ done
 		"DWS_INSTALL_DIR="+installDir,
 	)
 	output, err := cmd.CombinedOutput()
-
-	// Clean up the fake binary created in the real repo root
-	_ = os.Remove(filepath.Join(repoRoot, "dws"))
 
 	if err != nil {
 		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))

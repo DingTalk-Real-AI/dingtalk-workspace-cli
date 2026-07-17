@@ -45,7 +45,7 @@ rebuild:
 	@./scripts/dev/build.sh
 
 test:
-	@./test/scripts/run_all_tests.sh
+	@./test/scripts/run_all_tests.sh --timeout 5m
 
 lint:
 	@./scripts/dev/lint.sh

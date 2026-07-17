@@ -984,6 +984,7 @@ func TestReleaseCommandValidatesThenPushesAnnotatedTag(t *testing.T) {
 	if !strings.Contains(output, "No tag was created") {
 		t.Fatalf("validation output missing dry-run result:\n%s", output)
 	}
+	assertReleaseGateRuns(t, r, 1)
 	if mustOutput(t, r.root, "git", "tag", "--list", "v1.0.1-beta.1") != "" {
 		t.Fatal("validation-only release created a tag")
 	}
@@ -994,12 +995,43 @@ func TestReleaseCommandValidatesThenPushesAnnotatedTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("release publish error = %v\noutput:\n%s", err, output)
 	}
+	if !strings.Contains(output, "Reusing sealed local preflight") {
+		t.Fatalf("publish did not reuse the validated local preflight:\n%s", output)
+	}
+	assertReleaseGateRuns(t, r, 1)
 	if got := strings.TrimSpace(mustOutput(t, r.root, "git", "cat-file", "-t", "v1.0.1-beta.1")); got != "tag" {
 		t.Fatalf("release tag type = %q, want annotated tag", got)
 	}
 	if got := mustOutput(t, r.root, "git", "ls-remote", "--tags", "origin", "refs/tags/v1.0.1-beta.1"); !strings.Contains(got, "refs/tags/v1.0.1-beta.1") {
 		t.Fatalf("remote release tag missing:\n%s", got)
 	}
+}
+
+func TestReleaseCommandInvalidatesSealWhenArtifactsChange(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	installReleaseCommandFixture(t, r)
+	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(betaSection())), 0o644)
+	r.commitAndPush(t, "install release automation")
+
+	output, err := runReleaseScript(t, r.root, filepath.Join(r.root, "scripts", "release", "release.sh"),
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin",
+	)
+	if err != nil {
+		t.Fatalf("release validation error = %v\noutput:\n%s", err, output)
+	}
+	assertReleaseGateRuns(t, r, 1)
+	mustWriteFile(t, filepath.Join(r.root, "dist", "checksums.txt"), []byte("tampered\n"), 0o644)
+
+	output, err = runReleaseScript(t, r.root, filepath.Join(r.root, "scripts", "release", "release.sh"),
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin", "--publish", "--yes",
+	)
+	if err != nil {
+		t.Fatalf("release publish error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "release artifact checksums changed since the local preflight") {
+		t.Fatalf("publish did not explain the invalidated seal:\n%s", output)
+	}
+	assertReleaseGateRuns(t, r, 2)
 }
 
 func TestReleaseCommandCleansLocalTagWhenPushFails(t *testing.T) {
@@ -1048,7 +1080,7 @@ func TestReleaseCommandRechecksAdvancedStableAuthority(t *testing.T) {
 	section := "## [1.0.2-beta.1] - 2026-07-11\n\n### Changed\n\n- Validate a candidate after stable authority advances.\n\n"
 	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nprintf 'compatibility %s\\n' \"$*\"\n"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\npolicy:\n\t@:\npackage:\n\t@git tag -a v1.0.1 -m 'Release v1.0.1'\n\t@git push origin refs/tags/v1.0.1\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\nrebuild:\n\t@:\npolicy:\n\t@:\npackage:\n\t@mkdir -p dist\n\t@printf 'fixture-checksums\\n' > dist/checksums.txt\n\t@git tag -a v1.0.1 -m 'Release v1.0.1'\n\t@git push origin refs/tags/v1.0.1\n"), 0o644)
 	r.commitAndPush(t, "install advancing release fixture")
 
 	output, err := runReleaseScript(t, r.root, filepath.Join(r.root, "scripts", "release", "release.sh"),
@@ -1071,7 +1103,29 @@ func installReleaseCommandFixture(t *testing.T, r *releaseTestRepo) {
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-package-managers.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-release-artifacts.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\npolicy:\n\t@:\npackage:\n\t@:\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, ".gitignore"), []byte("dist/\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte(
+		"test:\n\t@printf 'test\\n' >> \"$$(git rev-parse --git-path release-gates.log)\"\n"+
+			"rebuild:\n\t@printf 'rebuild\\n' >> \"$$(git rev-parse --git-path release-gates.log)\"\n"+
+			"policy:\n\t@printf 'policy\\n' >> \"$$(git rev-parse --git-path release-gates.log)\"\n"+
+			"package:\n\t@printf 'package\\n' >> \"$$(git rev-parse --git-path release-gates.log)\"\n"+
+			"\t@mkdir -p dist\n"+
+			"\t@printf 'fixture-checksums\\n' > dist/checksums.txt\n",
+	), 0o644)
+}
+
+func assertReleaseGateRuns(t *testing.T, r *releaseTestRepo, want int) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(r.root, ".git", "release-gates.log"))
+	if err != nil {
+		t.Fatalf("ReadFile(release gate log) error = %v", err)
+	}
+	log := string(data)
+	for _, gate := range []string{"test", "rebuild", "policy", "package"} {
+		if got := strings.Count(log, gate+"\n"); got != want {
+			t.Fatalf("%s gate runs = %d, want %d\nlog:\n%s", gate, got, want, log)
+		}
+	}
 }
 
 func releaseCopyFile(t *testing.T, source, target string, mode os.FileMode) {

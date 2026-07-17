@@ -45,6 +45,11 @@ done
 release_validate_version_channel "$CHANNEL" "$VERSION"
 [ -n "$REMOTE" ] || { printf '%s\n' '--remote is required' >&2; exit 2; }
 cd "$ROOT"
+DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"
+case "$DIST_DIR" in
+  /*) ;;
+  *) DIST_DIR="$ROOT/$DIST_DIR" ;;
+esac
 fetch_url="$(git remote get-url "$REMOTE" 2>/dev/null)" || { printf 'unknown release remote: %s\n' "$REMOTE" >&2; exit 1; }
 push_urls="$(git remote get-url --push --all "$REMOTE" 2>/dev/null)" || {
   printf 'could not resolve push URL for release remote: %s\n' "$REMOTE" >&2
@@ -78,6 +83,130 @@ push_identity="$(repository_identity "$push_url")"
   exit 1
 }
 printf 'Release target: %s\n  fetch: %s\n  push:  %s\n' "$REMOTE" "$fetch_url" "$push_url"
+
+preflight_git_path="$(git rev-parse --git-path dws-release/preflight)"
+case "$preflight_git_path" in
+  /*) PREFLIGHT_DIR="$preflight_git_path" ;;
+  *) PREFLIGHT_DIR="$ROOT/$preflight_git_path" ;;
+esac
+PREFLIGHT_SEAL="$PREFLIGHT_DIR/$VERSION.seal"
+PREFLIGHT_SEAL_REASON=""
+PREFLIGHT_ARTIFACT_SHA=""
+
+sha256_file() {
+  _sf_path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$_sf_path" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$_sf_path" | awk '{print $1}'
+  else
+    printf 'sha256sum or shasum is required\n' >&2
+    return 1
+  fi
+}
+
+preflight_seal_reject() {
+  PREFLIGHT_SEAL_REASON="$1"
+  return 1
+}
+
+preflight_seal_field() {
+  _psf_key="$1"
+  awk -F= -v key="$_psf_key" '
+    $1 == key {
+      count++
+      sub(/^[^=]*=/, "")
+      value = $0
+    }
+    END {
+      if (count != 1) exit 1
+      print value
+    }
+  ' "$PREFLIGHT_SEAL"
+}
+
+preflight_seal_expect() {
+  _pse_key="$1"
+  _pse_expected="$2"
+  _pse_label="$3"
+  _pse_actual="$(preflight_seal_field "$_pse_key" 2>/dev/null)" || {
+    preflight_seal_reject "sealed preflight is missing $_pse_label"
+    return 1
+  }
+  [ "$_pse_actual" = "$_pse_expected" ] || {
+    preflight_seal_reject "$_pse_label changed since the local preflight"
+    return 1
+  }
+}
+
+preflight_seal_is_reusable() {
+  _psir_previous_stable="$1"
+  PREFLIGHT_SEAL_REASON=""
+  [ -f "$PREFLIGHT_SEAL" ] || {
+    preflight_seal_reject "no sealed local preflight exists for $VERSION"
+    return 1
+  }
+
+  preflight_seal_expect schema 1 "preflight seal format" || return 1
+  preflight_seal_expect channel "$CHANNEL" "release channel" || return 1
+  preflight_seal_expect version "$VERSION" "release version" || return 1
+  preflight_seal_expect commit "$(git rev-parse HEAD)" "source commit" || return 1
+  preflight_seal_expect repository "$push_identity" "release repository" || return 1
+  preflight_seal_expect from_beta "$FROM_BETA" "stable beta baseline" || return 1
+  preflight_seal_expect previous_stable "$_psir_previous_stable" "delivered stable baseline" || return 1
+  preflight_seal_expect dist_dir "$DIST_DIR" "release artifact directory" || return 1
+
+  [ -f "$DIST_DIR/checksums.txt" ] || {
+    preflight_seal_reject "sealed release artifacts are missing"
+    return 1
+  }
+  _psir_expected_checksum="$(preflight_seal_field checksums_sha256 2>/dev/null)" || {
+    preflight_seal_reject "sealed preflight is missing the artifact digest"
+    return 1
+  }
+  _psir_actual_checksum="$(sha256_file "$DIST_DIR/checksums.txt")" || {
+    preflight_seal_reject "release artifact digest could not be calculated"
+    return 1
+  }
+  [ "$_psir_actual_checksum" = "$_psir_expected_checksum" ] || {
+    preflight_seal_reject "release artifact checksums changed since the local preflight"
+    return 1
+  }
+  PREFLIGHT_ARTIFACT_SHA="$_psir_actual_checksum"
+
+  if ! "$SCRIPT_DIR/verify-release-artifacts.sh" "$VERSION"; then
+    preflight_seal_reject "sealed release artifacts no longer pass verification"
+    return 1
+  fi
+}
+
+write_preflight_seal() {
+  _wps_previous_stable="$1"
+  [ -f "$DIST_DIR/checksums.txt" ] || {
+    printf 'cannot seal local preflight without %s\n' "$DIST_DIR/checksums.txt" >&2
+    return 1
+  }
+  _wps_checksums_sha256="$(sha256_file "$DIST_DIR/checksums.txt")"
+  _wps_commit="$(git rev-parse HEAD)"
+  mkdir -p "$PREFLIGHT_DIR"
+  _wps_tmp="$(mktemp "$PREFLIGHT_DIR/.${VERSION}.seal.XXXXXX")"
+  (
+    umask 077
+    {
+      printf 'schema=1\n'
+      printf 'channel=%s\n' "$CHANNEL"
+      printf 'version=%s\n' "$VERSION"
+      printf 'commit=%s\n' "$_wps_commit"
+      printf 'repository=%s\n' "$push_identity"
+      printf 'from_beta=%s\n' "$FROM_BETA"
+      printf 'previous_stable=%s\n' "$_wps_previous_stable"
+      printf 'dist_dir=%s\n' "$DIST_DIR"
+      printf 'checksums_sha256=%s\n' "$_wps_checksums_sha256"
+    } > "$_wps_tmp"
+  )
+  mv "$_wps_tmp" "$PREFLIGHT_SEAL"
+  printf '==> Sealed reusable local preflight: %s\n' "$PREFLIGHT_SEAL"
+}
 
 github_repository_from_url() {
   github_identity="$(repository_identity "$1")"
@@ -256,28 +385,46 @@ if [ "$PUBLISH" -eq 1 ]; then
   require_github_publication_authority
 fi
 
-printf '==> Running repository test and policy gates\n'
-make test
-make policy
-
-if [ -n "$previous_stable" ]; then
-  printf '==> Comparing command tree with %s\n' "$previous_stable"
-  "$ROOT/scripts/policy/check-command-compatibility.sh" \
-    --base-ref "$REMOTE/$BRANCH" \
-    --stable-ref "$previous_stable"
+PREFLIGHT_REUSED=0
+if [ "$PUBLISH" -eq 1 ]; then
+  if preflight_seal_is_reusable "$previous_stable"; then
+    PREFLIGHT_REUSED=1
+    printf '==> Reusing sealed local preflight for %s\n' "$VERSION"
+    printf '    source, release authority, and artifact hashes still match\n'
+  else
+    printf '==> Sealed preflight is not reusable: %s\n' "$PREFLIGHT_SEAL_REASON"
+    rm -f "$PREFLIGHT_SEAL"
+  fi
 fi
 
-printf '==> Building local release artifacts for %s\n' "$VERSION"
-make package VERSION="$VERSION"
+if [ "$PREFLIGHT_REUSED" -ne 1 ]; then
+  printf '==> Running repository test, build, and policy gates\n'
+  make test
+  # Policy consumes the repository-root dws binary. Build it explicitly after
+  # tests so the gate never depends on a binary left by an earlier command.
+  make rebuild
+  make policy
 
-printf '==> Verifying release artifact set and checksums\n'
-"$SCRIPT_DIR/verify-release-artifacts.sh" "$VERSION"
+  if [ -n "$previous_stable" ]; then
+    printf '==> Comparing command tree with %s\n' "$previous_stable"
+    "$ROOT/scripts/policy/check-command-compatibility.sh" \
+      --base-ref "$REMOTE/$BRANCH" \
+      --stable-ref "$previous_stable"
+  fi
 
-printf '==> Verifying npm package installation\n'
-"$SCRIPT_DIR/verify-package-managers.sh" --npm-only --expected-version "$VERSION"
-if command -v brew >/dev/null 2>&1; then
-  printf '==> Verifying Homebrew package installation\n'
-  "$SCRIPT_DIR/verify-package-managers.sh" --brew-only --expected-version "$VERSION"
+  printf '==> Building local release artifacts for %s\n' "$VERSION"
+  make package VERSION="$VERSION"
+
+  printf '==> Verifying release artifact set and checksums\n'
+  "$SCRIPT_DIR/verify-release-artifacts.sh" "$VERSION"
+
+  printf '==> Verifying npm package installation\n'
+  "$SCRIPT_DIR/verify-package-managers.sh" --npm-only --expected-version "$VERSION"
+  if command -v brew >/dev/null 2>&1; then
+    printf '==> Verifying Homebrew package installation\n'
+    "$SCRIPT_DIR/verify-package-managers.sh" --brew-only --expected-version "$VERSION"
+  fi
+  PREFLIGHT_ARTIFACT_SHA="$(sha256_file "$DIST_DIR/checksums.txt")"
 fi
 
 # Collect human confirmation before the final authority refresh. Nothing may
@@ -311,9 +458,19 @@ if [ "$final_previous_stable" != "$previous_stable" ]; then
     --stable-ref "$final_previous_stable"
 fi
 
+printf '==> Revalidating sealed release artifacts before tag allocation\n'
+"$SCRIPT_DIR/verify-release-artifacts.sh" "$VERSION"
+final_artifact_sha="$(sha256_file "$DIST_DIR/checksums.txt")"
+[ -n "$PREFLIGHT_ARTIFACT_SHA" ] && [ "$final_artifact_sha" = "$PREFLIGHT_ARTIFACT_SHA" ] || {
+  printf 'release artifacts changed after local preflight verification; run the preflight again\n' >&2
+  exit 1
+}
+
+write_preflight_seal "$final_previous_stable"
+
 if [ "$PUBLISH" -ne 1 ]; then
   printf '\nPreflight passed. No tag was created.\n'
-  printf 'Publish with the same command plus --publish.\n'
+  printf 'Publish with the same command plus --publish; unchanged sealed artifacts will be reused.\n'
   exit 0
 fi
 
@@ -350,4 +507,5 @@ if ! git push "$push_url" "refs/tags/$VERSION"; then
   printf 'warning: push reported failure, but push target %s has the exact sealed tag; treating it as published\n' "$push_url" >&2
 fi
 
+rm -f "$PREFLIGHT_SEAL"
 printf 'Release tag pushed: %s -> %s. CI/CD now owns artifact publication.\n' "$VERSION" "$push_url"
