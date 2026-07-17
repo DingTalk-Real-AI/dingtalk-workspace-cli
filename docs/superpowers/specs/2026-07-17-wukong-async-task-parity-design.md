@@ -178,6 +178,9 @@ dws sheet export get --task-id <TASK_ID>
 - 缺少任务 ID、同时传两个 ID 参数、非法 `--type` 均在 MCP 调用前失败。
 - 非 JSON MCP 响应视为协议错误，不再伪装为成功并直接透传。
 - `success=false` 使用服务端 message 构造可诊断错误。
+- 查询接口中的生命周期 `status=ERROR` 不是传输/协议错误，必须归一化为
+  `TaskResult.status=FAILED`；只有 `success=false`、非空 `error` 或错误码等
+  envelope 信号才在解析前返回错误。
 - 查询到 `FAILED` 或 `TIMEOUT` 时仍输出结构化任务结果；产品级 `get` 命令保留现有非零退出语义，统一 `drive task get` 作为状态查询在收到合法结果后返回成功，由调用方读取 `status`。
 - 不记录、输出或提交登录凭据、OSS 临时凭证和带敏感查询串的真实下载地址。
 
@@ -192,6 +195,15 @@ dws sheet export get --task-id <TASK_ID>
 - mono/multi Skills 中的 Drive、Doc、Sheet 参考文档
 
 生成文件只通过 `go generate ./internal/cli` 或仓库生成目标产生，不手工编辑。新增公开叶子必须通过 Cobra 到 Agent Schema 的双向完整性检查。
+
+Schema 只绑定“可执行且没有子命令”的叶子。为同时保留历史人类入口和
+发布异步提交能力，使用仓库已有的兼容模式：
+
+- `doc export` 继续可直接执行；Schema 主路径为 `doc export create`。
+- `doc import` 继续可直接执行；Schema 主路径为 `doc import create`。
+- `sheet export` 继续可直接执行；Schema 主路径为 `sheet export create`。
+- 三个 `create` 叶子与各自父命令共享同一 handler 和公开 flags。
+- runnable parent 不作为 Registry alias；查询入口仍为各自的 `get` 叶子。
 
 ## 9. 测试策略
 
