@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/asynctask"
 	"github.com/spf13/cobra"
 )
 
@@ -56,6 +57,8 @@ type importFlowConfig struct {
 	serverID             string
 	includeNodeID        bool
 	timeoutAsResult      bool
+	allowAsync           bool
+	unifiedGetResult     bool
 	nextCommand          string
 	poll                 importPollPolicy
 }
@@ -96,6 +99,8 @@ func docImportFlowConfig() importFlowConfig {
 		supportedFormatsText: "docx, doc, xlsx, xls, md, txt, xmind, mark",
 		folderFlags:          []string{"folder", "folder-id"},
 		workspaceFlags:       []string{"workspace", "workspace-id"},
+		allowAsync:           true,
+		unifiedGetResult:     true,
 		nextCommand:          "dws doc import get --task-id %s",
 		poll:                 defaultImportPollPolicy(),
 	}
@@ -216,8 +221,11 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	quietJSON := cfg.allowAsync && strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 
-	deps.Out.PrintInfo("[1/4] 创建导入会话...")
+	if !quietJSON {
+		deps.Out.PrintInfo("[1/4] 创建导入会话...")
+	}
 	sessionArgs := map[string]any{
 		"fileName": file.name,
 		"suffix":   file.extension,
@@ -244,15 +252,23 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		deps.Out.PrintRaw(sessionText)
 		return fmt.Errorf("创建导入会话成功但缺少 sessionId 或 uploadUrl")
 	}
-	deps.Out.PrintInfo(fmt.Sprintf("    会话已创建，sessionId: %s", sessionID))
+	if !quietJSON {
+		deps.Out.PrintInfo(fmt.Sprintf("    会话已创建，sessionId: %s", sessionID))
+	}
 
-	deps.Out.PrintInfo("[2/4] 上传文件...")
+	if !quietJSON {
+		deps.Out.PrintInfo("[2/4] 上传文件...")
+	}
 	if err := httpPutFile(ctx, uploadURL, nil, file.path, file.size); err != nil {
 		return fmt.Errorf("文件上传失败 (sessionId=%s): %w", sessionID, err)
 	}
-	deps.Out.PrintInfo("    文件上传完成")
+	if !quietJSON {
+		deps.Out.PrintInfo("    文件上传完成")
+	}
 
-	deps.Out.PrintInfo("[3/4] 确认导入，启动格式转换...")
+	if !quietJSON {
+		deps.Out.PrintInfo("[3/4] 确认导入，启动格式转换...")
+	}
 	confirmText, err := cfg.callTool(ctx, "confirm_import", map[string]any{"sessionId": sessionID})
 	if err != nil {
 		return fmt.Errorf("确认导入失败 (sessionId=%s): %w", sessionID, err)
@@ -266,9 +282,26 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		deps.Out.PrintRaw(confirmText)
 		return fmt.Errorf("确认导入成功但未返回 taskId")
 	}
-	deps.Out.PrintInfo(fmt.Sprintf("    转换任务已提交，taskId: %s", taskID))
+	if !quietJSON {
+		deps.Out.PrintInfo(fmt.Sprintf("    转换任务已提交，taskId: %s", taskID))
+	}
 
-	deps.Out.PrintInfo("[4/4] 等待格式转换完成...")
+	asyncMode := false
+	if cfg.allowAsync && cmd.Flags().Lookup("async") != nil {
+		asyncMode, _ = cmd.Flags().GetBool("async")
+	}
+	if asyncMode {
+		return deps.Out.PrintJSON(asynctask.TaskResult{
+			ID:      taskID,
+			Type:    "import",
+			Status:  asynctask.StatusPending,
+			Message: "任务已提交，请稍后查询",
+		})
+	}
+
+	if !quietJSON {
+		deps.Out.PrintInfo("[4/4] 等待格式转换完成...")
+	}
 	result, err := pollImportTask(ctx, taskID, cfg)
 	if err != nil {
 		var timeoutErr *importPollTimeoutError
@@ -276,7 +309,9 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 			return err
 		}
 		if cfg.timeoutAsResult {
-			deps.Out.PrintInfo(timeoutErr.Error())
+			if !quietJSON {
+				deps.Out.PrintInfo(timeoutErr.Error())
+			}
 			_ = deps.Out.PrintJSON(map[string]any{
 				"success":      false,
 				"timed_out":    true,
@@ -302,7 +337,9 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if cfg.includeNodeID {
 		finalResult["nodeId"] = extractNodeIDFromDocURL(documentURL)
 	}
-	deps.Out.PrintInfo(fmt.Sprintf("导入完成: %s", documentURL))
+	if !quietJSON {
+		deps.Out.PrintInfo(fmt.Sprintf("导入完成: %s", documentURL))
+	}
 	_ = deps.Out.PrintJSON(finalResult)
 	return nil
 }
@@ -321,6 +358,28 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if cfg.unifiedGetResult {
+		result, err := queryAsyncTask(ctx, "import", taskID)
+		if err != nil {
+			return err
+		}
+		if err := deps.Out.PrintJSON(result); err != nil {
+			return err
+		}
+		switch result.Status {
+		case asynctask.StatusFailed:
+			if result.Message != "" {
+				return fmt.Errorf("导入任务失败 (status=%s): %s", result.Status, result.Message)
+			}
+			return fmt.Errorf("导入任务失败 (status=%s)", result.Status)
+		case asynctask.StatusTimeout:
+			if result.Message != "" {
+				return fmt.Errorf("导入任务超时 (status=%s): %s", result.Status, result.Message)
+			}
+			return fmt.Errorf("导入任务超时 (status=%s)", result.Status)
+		}
+		return nil
 	}
 	text, err := cfg.callTool(ctx, "query_import_task", map[string]any{"taskId": taskID})
 	if err != nil {
@@ -359,9 +418,12 @@ func pollImportTask(ctx context.Context, taskID string, cfg importFlowConfig) (m
 	if poll.maxPolls <= 0 || poll.interval == nil || poll.wait == nil {
 		poll = defaultImportPollPolicy()
 	}
+	quietJSON := cfg.allowAsync && strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 	for attempt := 1; attempt <= poll.maxPolls; attempt++ {
 		interval := poll.interval(attempt)
-		deps.Out.PrintInfo(fmt.Sprintf("    第 %d/%d 次查询，等待 %v ...", attempt, poll.maxPolls, interval))
+		if !quietJSON {
+			deps.Out.PrintInfo(fmt.Sprintf("    第 %d/%d 次查询，等待 %v ...", attempt, poll.maxPolls, interval))
+		}
 		if err := poll.wait(ctx, interval); err != nil {
 			return nil, fmt.Errorf("导入轮询被取消 (taskId=%s): %w", taskID, err)
 		}

@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:c6c2b8d990110d3e1fc61dae8883f7a6969fe4c1f56879b4aa9317e8b953c7cd",
-  "surface_hash": "sha256:011a776ba05af4b29f09afe16b71413cb77ef06c2309b1b4f33de111a645c496",
+  "source_hash": "sha256:f96b8ead419499bac8003fd921a1f00b0503202996dc16a6b6b8922c16529998",
+  "surface_hash": "sha256:dd6bbbfc086f214b9811aabdae8989a4404d9d361a6274eaf123975e60bb5736",
   "source_files": 150,
   "hint_files": 46,
   "hint_products": 39,
-  "hint_tools": 1320,
+  "hint_tools": 1322,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -29,14 +29,14 @@
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 584,
-    "tools_with_metadata": 584,
-    "tools_with_agent_summary": 584,
-    "tools_with_use_when": 584,
-    "tools_with_avoid_when": 584,
-    "tools_with_examples": 584,
-    "tools_with_interface_mode": 584,
-    "unmatched_skill_tools": 125,
+    "surface_tools": 585,
+    "tools_with_metadata": 585,
+    "tools_with_agent_summary": 585,
+    "tools_with_use_when": 585,
+    "tools_with_avoid_when": 585,
+    "tools_with_examples": 585,
+    "tools_with_interface_mode": 585,
+    "unmatched_skill_tools": 124,
     "unreviewed_skill_tools": 8
   },
   "source_products": [
@@ -2710,160 +2710,6 @@
       "review": {
         "status": "group",
         "reason": "Skill 中的命令分组引用，不是可执行 leaf，禁止模糊绑定到任一子命令"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc.md",
-      "line": 143,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc.md",
-      "line": 144,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc.md",
-      "line": 145,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc.md",
-      "line": 661,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc.md",
-      "line": 819,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc.md",
-      "line": 822,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc.md",
-      "line": 825,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc/doc-import.md",
-      "line": 12,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc/doc-import.md",
-      "line": 13,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc/doc-import.md",
-      "line": 14,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-      }
-    },
-    {
-      "tool_path": "doc import",
-      "source": "skills/mono/references/products/doc/doc-import.md",
-      "line": 15,
-      "candidates": [
-        "doc import get",
-        "doc block delete",
-        "doc block insert"
-      ],
-      "review": {
-        "status": "stale",
-        "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
       }
     },
     {

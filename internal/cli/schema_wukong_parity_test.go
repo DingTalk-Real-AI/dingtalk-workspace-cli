@@ -4,6 +4,9 @@
 package cli
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -52,6 +55,23 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 			exactParameters:     true,
 			parameterProperties: map[string]string{"task-id": "jobId"},
 			forbiddenParameters: []string{"job-id"},
+		},
+		{
+			canonical:       "doc.import",
+			cliPath:         "doc import create",
+			risk:            "medium",
+			confirmation:    "not_required",
+			parameters:      []string{"async", "file", "folder", "name", "workspace"},
+			exactParameters: true,
+		},
+		{
+			canonical:           "doc.import_get",
+			cliPath:             "doc import get",
+			risk:                "low",
+			confirmation:        "not_required",
+			parameters:          []string{"task-id"},
+			exactParameters:     true,
+			parameterProperties: map[string]string{"task-id": ""},
 		},
 	}
 
@@ -102,6 +122,9 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 
 	if _, ok := loaded.Index.Resolve("doc.task_get"); ok {
 		t.Fatal("drive.task_get must not publish an alternate doc.task_get command identity")
+	}
+	if _, ok := loaded.Index.Resolve("doc import"); ok {
+		t.Fatal("the runnable historical doc import parent must not be registered as a Schema alias")
 	}
 
 	docExport := loaded.Snapshot.Tools["doc.export"]
@@ -158,6 +181,119 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 	}
 	if got := schemaString(interfaceRef["rpc_name"]); got != "query_export_job" {
 		t.Errorf("doc.query_export_job interface RPC = %q, want query_export_job", got)
+	}
+
+	docImport := loaded.Snapshot.Tools["doc.import"]
+	for field, want := range map[string]string{
+		"effect":         "write",
+		"risk":           "medium",
+		"confirmation":   "not_required",
+		"idempotency":    "non_idempotent",
+		"interface_mode": "composite",
+	} {
+		if got := schemaString(docImport[field]); got != want {
+			t.Errorf("doc.import %s = %q, want %q", field, got, want)
+		}
+	}
+	if _, ok := docImport["interface_ref"]; ok {
+		t.Errorf("doc.import must not publish a singular interface_ref: %#v", docImport["interface_ref"])
+	}
+	docImportParameters := schemaMap(docImport["parameters"])
+	for name, property := range map[string]string{
+		"folder":    "targetFolderId",
+		"workspace": "workspaceId",
+		"name":      "fileName",
+		"file":      "",
+		"async":     "",
+	} {
+		if got := schemaString(docImportParameters[name]["property"]); got != property {
+			t.Errorf("doc.import --%s property = %q, want %q", name, got, property)
+		}
+	}
+	for _, name := range []string{"folder", "workspace", "name", "async"} {
+		if required, _ := docImportParameters[name]["required"].(bool); required {
+			t.Errorf("doc.import --%s must be optional", name)
+		}
+	}
+	if required, _ := docImportParameters["file"]["required"].(bool); !required {
+		t.Error("doc.import --file must be required")
+	}
+	if got := schemaString(docImportParameters["async"]["type"]); got != "boolean" {
+		t.Errorf("doc.import --async type = %q, want boolean", got)
+	}
+
+	docImportGet := loaded.Snapshot.Tools["doc.import_get"]
+	for field, want := range map[string]string{
+		"effect":         "read",
+		"risk":           "low",
+		"confirmation":   "not_required",
+		"idempotency":    "idempotent",
+		"interface_mode": "composite",
+	} {
+		if got := schemaString(docImportGet[field]); got != want {
+			t.Errorf("doc.import_get %s = %q, want %q", field, got, want)
+		}
+	}
+	if _, ok := docImportGet["interface_ref"]; ok {
+		t.Errorf("doc.import_get must remain an unpinned composite query: %#v", docImportGet["interface_ref"])
+	}
+}
+
+func TestDocImportSkillEvidenceTargetsCreateLeaf(t *testing.T) {
+	repositoryRoot := filepath.Join("..", "..")
+	docPaths := []string{
+		"skills/mono/references/products/doc.md",
+		"skills/mono/references/products/doc/doc-import.md",
+		"skills/multi/dingtalk-doc/references/doc.md",
+		"skills/multi/dingtalk-doc/references/doc/doc-import.md",
+	}
+	for _, relativePath := range docPaths {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		text := string(body)
+		if !strings.Contains(text, "dws doc import create --file") {
+			t.Errorf("%s does not cite the Schema-bindable doc import create leaf", relativePath)
+		}
+		if !strings.Contains(text, "--async") || !strings.Contains(text, "TaskResult.id") {
+			t.Errorf("%s does not document async upload semantics and TaskResult.id", relativePath)
+		}
+	}
+	for _, relativePath := range []string{
+		"skills/mono/references/products/doc/doc-import.md",
+		"skills/multi/dingtalk-doc/references/doc/doc-import.md",
+	} {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		if strings.Contains(string(body), "taskId") {
+			t.Errorf("%s uses taskId for the async field/concept; want TaskResult.id or --task-id", relativePath)
+		}
+	}
+
+	for _, relativePath := range []string{
+		"internal/cli/schema_hints/index.json",
+		"internal/cli/schema_hints/reference-review.json",
+	} {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		var document struct {
+			ReferenceReview map[string]struct {
+				Status string `json:"status"`
+				Target string `json:"target"`
+			} `json:"reference_review"`
+		}
+		if err := json.Unmarshal(body, &document); err != nil {
+			t.Fatalf("decode %s: %v", relativePath, err)
+		}
+		review := document.ReferenceReview["doc import"]
+		if review.Status != "alias" || review.Target != "doc import create" {
+			t.Errorf("%s doc import review = %#v, want alias to doc import create", relativePath, review)
+		}
 	}
 }
 

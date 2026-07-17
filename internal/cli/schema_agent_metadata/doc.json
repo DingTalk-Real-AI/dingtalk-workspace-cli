@@ -3009,7 +3009,7 @@
       "avoid_when": [
         "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
         "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-        "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+        "导入本地 Word/Markdown 为在线文档改用 dws doc import create 或 drive upload --convert"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -3061,7 +3061,7 @@
           "value": [
             "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
             "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-            "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+            "导入本地 Word/Markdown 为在线文档改用 dws doc import create 或 drive upload --convert"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -3072,7 +3072,7 @@
               "value": [
                 "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
                 "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-                "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+                "导入本地 Word/Markdown 为在线文档改用 dws doc import create 或 drive upload --convert"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -4923,33 +4923,35 @@
         "兼容入口：创建文件夹（已弃用）时"
       ]
     },
-    "doc import get": {
-      "agent_summary": "根据 taskId 查询文档导入任务的执行结果",
+    "doc import create": {
+      "agent_summary": "上传本地文件并导入为在线文档，可异步返回任务 ID 或同步等待完成。",
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+        "已有导入任务 ID 且只需查询状态或结果链接时，使用 doc import get",
+        "只需原样上传文件且不转换为在线文档时，使用 drive upload"
       ],
       "confirmation": "not_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws doc import get --task-id \u003cTASK_ID\u003e --format json"
+        "dws doc import create --file ./report.docx --async --format json",
+        "dws doc import create --file ./notes.md --folder \u003cFOLDER_ID\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "根据 taskId 查询文档导入任务的执行结果",
+          "value": "上传本地文件并导入为在线文档，可异步返回任务 ID 或同步等待完成。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。",
           "candidates": [
             {
-              "value": "根据 taskId 查询文档导入任务的执行结果",
+              "value": "上传本地文件并导入为在线文档，可异步返回任务 ID 或同步等待完成。",
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。"
             }
           ]
         },
@@ -4958,34 +4960,36 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             }
           ]
         },
         "avoid_when": {
           "value": [
-            "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+            "已有导入任务 ID 且只需查询状态或结果链接时，使用 doc import get",
+            "只需原样上传文件且不转换为在线文档时，使用 drive upload"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。",
           "candidates": [
             {
               "value": [
-                "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+                "已有导入任务 ID 且只需查询状态或结果链接时，使用 doc import get",
+                "只需原样上传文件且不转换为在线文档时，使用 drive upload"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。"
             }
           ]
         },
@@ -4994,14 +4998,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             },
             {
               "value": "not_required",
@@ -5016,14 +5020,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
               "value": "write",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             },
             {
               "value": "write",
@@ -5035,37 +5039,39 @@
         },
         "examples": {
           "value": [
-            "dws doc import get --task-id \u003cTASK_ID\u003e --format json"
+            "dws doc import create --file ./report.docx --async --format json",
+            "dws doc import create --file ./notes.md --folder \u003cFOLDER_ID\u003e --format json"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。",
           "candidates": [
             {
               "value": [
-                "dws doc import get --task-id \u003cTASK_ID\u003e --format json"
+                "dws doc import create --file ./report.docx --async --format json",
+                "dws doc import create --file ./notes.md --folder \u003cFOLDER_ID\u003e --format json"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。"
             }
           ]
         },
         "idempotency": {
-          "value": "unknown",
+          "value": "non_idempotent",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
-              "value": "unknown",
+              "value": "non_idempotent",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             },
             {
               "value": "unknown",
@@ -5080,30 +5086,30 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
               "value": "composite",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             }
           ]
         },
         "interface_reason": {
-          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "value": "Reviewed import orchestration: the command creates an import session, uploads the local file, confirms conversion, and optionally polls the task, so no single interface_ref represents every step.",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
-              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "value": "Reviewed import orchestration: the command creates an import session, uploads the local file, confirms conversion, and optionally polls the task, so no single interface_ref represents every step.",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             }
           ]
         },
@@ -5128,21 +5134,21 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             },
             {
               "value": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。"
             }
           ]
         },
@@ -5151,14 +5157,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "migrated to reviewed metadata block",
+          "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
           "candidates": [
             {
               "value": "medium",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "migrated to reviewed metadata block"
+              "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties."
             },
             {
               "value": "medium",
@@ -5170,43 +5176,328 @@
         },
         "use_when": {
           "value": [
-            "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+            "需要把本地 Word、Excel、Markdown、文本或脑图文件转换为钉钉在线文档时",
+            "需要先完成文件上传和导入确认，再选择立即取得任务 ID 或等待文档创建完成时"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。",
           "candidates": [
             {
               "value": [
-                "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+                "需要把本地 Word、Excel、Markdown、文本或脑图文件转换为钉钉在线文档时",
+                "需要先完成文件上传和导入确认，再选择立即取得任务 ID 或等待文档创建完成时"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。"
             }
           ]
         }
       },
-      "idempotency": "unknown",
+      "idempotency": "non_idempotent",
       "interface_mode": "composite",
-      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "interface_reason": "Reviewed import orchestration: the command creates an import session, uploads the local file, confirms conversion, and optionally polls the task, so no single interface_ref represents every step.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
+        "CommandRegistry:canonical_path=doc.import",
+        "Skill:skills/mono/references/products/doc/doc-import.md",
+        "cobra-help:dws doc import create",
+        "internal/cli/schema_hints/metadata/doc.json",
+        "internal/cli/schema_hints/selection/doc.json",
+        "live-mcp:none (composite: doc/create_import_session + local upload + doc/confirm_import + optional doc/query_import_task)",
+        "skills/mono/references/products/doc.md"
+      ],
+      "use_when": [
+        "需要把本地 Word、Excel、Markdown、文本或脑图文件转换为钉钉在线文档时",
+        "需要先完成文件上传和导入确认，再选择立即取得任务 ID 或等待文档创建完成时"
+      ]
+    },
+    "doc import get": {
+      "agent_summary": "按任务 ID 查询文档导入状态与统一结果链接",
+      "agent_summary_source": "dws-agent-selection/doc",
+      "availability": "available",
+      "avoid_when": [
+        "尚未上传并发起导入时，使用 doc import create"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws doc import get --task-id \u003cTASK_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按任务 ID 查询文档导入状态与统一结果链接",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。",
+          "candidates": [
+            {
+              "value": "按任务 ID 查询文档导入状态与统一结果链接",
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚未上传并发起导入时，使用 doc import create"
+          ],
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。",
+          "candidates": [
+            {
+              "value": [
+                "尚未上传并发起导入时，使用 doc import create"
+              ],
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws doc import get --task-id \u003cTASK_ID\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。",
+          "candidates": [
+            {
+              "value": [
+                "dws doc import get --task-id \u003cTASK_ID\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "异步提交、同步超时或中断后，已有任务 ID 并需要查询导入状态与 resultUrl 时"
+          ],
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。",
+          "candidates": [
+            {
+              "value": [
+                "异步提交、同步超时或中断后，已有任务 ID 并需要查询导入状态与 resultUrl 时"
+              ],
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
         "CommandRegistry:canonical_path=doc.import_get",
-        "Skill:skills/mono/references/products/doc.md",
+        "Skill:skills/mono/references/products/doc/doc-import.md",
         "cobra-help:dws doc import get",
         "internal/cli/schema_hints/metadata/doc.json",
         "internal/cli/schema_hints/selection/doc.json",
         "live-mcp:none (Cobra+Skill; composite/unpinned)",
-        "skills/mono/references/products/doc.md",
-        "skills/mono/references/products/doc/doc-import.md",
-        "structured-hint:internal/cli/schema_hints/products/doc.json"
+        "skills/mono/references/products/doc.md"
       ],
       "use_when": [
-        "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+        "异步提交、同步超时或中断后，已有任务 ID 并需要查询导入状态与 resultUrl 时"
       ]
     },
     "doc info": {

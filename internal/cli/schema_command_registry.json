@@ -1351,6 +1351,10 @@
           "cli_path": "doc folder create"
         },
         {
+          "canonical_path": "doc.import",
+          "cli_path": "doc import create"
+        },
+        {
           "canonical_path": "doc.import_get",
           "cli_path": "doc import get"
         },

@@ -124,16 +124,36 @@
       "availability": "available",
       "reviewed": true
     },
-    "doc.import_get": {
+    "doc.import": {
       "effect": "write",
       "risk": "medium",
       "confirmation": "not_required",
-      "idempotency": "unknown",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed import orchestration: the command creates an import session, uploads the local file, confirms conversion, and optionally polls the task, so no single interface_ref represents every step.",
+      "reviewed": true,
+      "parameters": {
+        "async": {
+          "description": "Create the session, upload and confirm the import, then return TaskResult.id without polling.",
+          "required": false
+        }
+      },
+      "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
+      "cli_path": "doc import create",
+      "runtime_gate": "none"
+    },
+    "doc.import_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "review_reason": "migrated to reviewed metadata block"
+      "review_reason": "Reviewed read-only task lookup through the shared Doc async adapter; query_import_task is absent from pinned MCP metadata, so the command remains composite without an interface_ref.",
+      "runtime_gate": "none"
     },
     "doc.insert_document_block": {
       "interface_mode": "mcp",

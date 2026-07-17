@@ -176,6 +176,32 @@ func TestSheetImportRunsSharedDocImportFlow(t *testing.T) {
 	}
 }
 
+func TestSheetImportJSONProgressContractRemainsUnchanged(t *testing.T) {
+	caller := &sheetImportCaller{responses: map[string][]string{
+		"create_import_session": {`{"sessionId":"session-1","uploadUrl":"https://upload.example.test/object"}`},
+		"confirm_import":        {`{"taskId":"task-1"}`},
+		"query_import_task":     {`{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-1"}`},
+	}}
+	SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error { return nil })
+
+	output, err := executeSheetImportCommand(t, caller, fastSheetImportConfig(),
+		"--file", writeImportFixture(t, "xlsx"), "--workspace", "workspace-1")
+	if err != nil {
+		t.Fatalf("sheet import error = %v", err)
+	}
+	for _, progress := range []string{
+		"[1/4] 创建导入会话",
+		"[2/4] 上传文件",
+		"[3/4] 确认导入",
+		"[4/4] 等待格式转换完成",
+		"导入完成",
+	} {
+		if !strings.Contains(output, progress) {
+			t.Errorf("sheet import output missing historical progress %q: %q", progress, output)
+		}
+	}
+}
+
 func TestSheetImportCreateLeafMatchesLegacyDryRun(t *testing.T) {
 	filePath := writeImportFixture(t, "xlsx")
 	legacy, err := executeSheetImportCommand(t, &sheetImportCaller{dryRun: true}, fastSheetImportConfig(),

@@ -2,8 +2,8 @@
   "version": 3,
   "baseline": {
     "manifest": "schema-parameter-bindings-v3",
-    "sha256": "sha256:70becf3f0fb13bb41f3db5daf4f1cc82b35ff5629bcb1844d3b6509b0bf80cd5",
-    "reason": "Reviewed v3 baseline after adding Doc export composite mappings, local orchestration exclusions, and the public task-id to jobId query binding.",
+    "sha256": "sha256:84d6149f45f7771d504684f26dbbe93e02c1dddd8e8f4cab7de844c9fde0d5b6",
+    "reason": "Reviewed v3 baseline after adding Doc import composite mappings and local file/async orchestration exclusions while retaining the unpinned import query exclusion.",
     "reviewed": true
   },
   "removals": {
@@ -593,6 +593,11 @@
     "doc.export": {
       "export-format": "exportFormat",
       "node": "nodeId"
+    },
+    "doc.import": {
+      "folder": "targetFolderId",
+      "name": "fileName",
+      "workspace": "workspaceId"
     },
     "doc.get_document_content": {
       "content-format": "format",
@@ -1780,6 +1785,8 @@
     "doc.export --async": "Reviewed CLI-only flow control: submit and return the task ID without polling or downloading; it is not sent to an MCP interface.",
     "doc.export --output": "Reviewed local destination consumed only after synchronous export completion; it is not sent to an MCP interface.",
     "doc.get_document_content --output": "local output path",
+    "doc.import --async": "Reviewed CLI-only flow control: create the session, upload and confirm the import, then return TaskResult.id without polling; it is not sent to a singular MCP interface.",
+    "doc.import --file": "Reviewed local upload input consumed by the CLI between create_import_session and confirm_import; it is not sent as a singular MCP interface property.",
     "doc.import_get --task-id": "Reviewed unpinned adapter: doc.import_get has no singular pinned interface_ref; --task-id is a CLI wrapper input and does not publish a direct interface property.",
     "doc.insert_document_block --fix-jsonml": "local JSONML normalization control",
     "doc.insert_document_block --heading": "aggregate convenience input used to build element",
