@@ -716,6 +716,28 @@
         "live-mcp:none (drive/unmark_star; composite/unpinned)"
       ]
     },
+    "drive.task_get": {
+      "agent_summary": "查询已有导出或导入异步任务的状态与结果。",
+      "use_when": [
+        "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",
+        "已有导入任务 ID，需要查询状态、文档链接或失败信息时选择 --type import"
+      ],
+      "avoid_when": [
+        "需要创建或提交导出/导入任务时使用对应发起命令；本命令只查询现有任务",
+        "还没有任务 ID 时先从任务提交响应中取得 ID，不要调用本命令"
+      ],
+      "examples": [
+        "dws drive task get --type export --id <TASK_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.task_get",
+        "cobra-help:dws drive task get --help",
+        "internal/helpers/drive_task.go",
+        "live-mcp:none (composite: doc/query_export_job + doc/query_import_task)"
+      ]
+    },
     "drive.upload": {
       "agent_summary": "上传本地文件到钉盘或文档空间",
       "use_when": [

@@ -1553,6 +1553,10 @@
           "cli_path": "drive stats"
         },
         {
+          "canonical_path": "drive.task_get",
+          "cli_path": "drive task get"
+        },
+        {
           "canonical_path": "drive.upload",
           "cli_path": "drive upload"
         },

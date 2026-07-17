@@ -27,6 +27,7 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 		{"drive.star_add", "drive star add", "low", "not_required", []string{"node"}},
 		{"drive.star_remove", "drive star remove", "low", "not_required", []string{"node"}},
 		{"drive.star_list", "drive star list", "low", "not_required", []string{"content-types", "cursor", "limit", "order-by", "resource-types", "sort"}},
+		{"drive.task_get", "drive task get", "low", "not_required", []string{"type", "id"}},
 		{"sheet.formula_verify", "sheet formula-verify", "low", "not_required", []string{"exit-on-error", "max-cells", "max-locations-per-error", "node", "range", "sheet-id", "targets"}},
 		{"sheet.version_save", "sheet version save", "medium", "not_required", []string{"node"}},
 		{"sheet.version_list", "sheet version list", "low", "not_required", []string{"cursor", "limit", "node"}},
@@ -62,6 +63,10 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	if _, ok := loaded.Index.Resolve("doc.task_get"); ok {
+		t.Fatal("drive.task_get must not publish an alternate doc.task_get command identity")
 	}
 }
 

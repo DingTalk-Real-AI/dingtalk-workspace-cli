@@ -7977,6 +7977,271 @@
         "用户要查看节点阅读/编辑/评论/点赞/预览/下载等统计维度时"
       ]
     },
+    "drive task get": {
+      "agent_summary": "查询已有导出或导入异步任务的状态与结果。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "需要创建或提交导出/导入任务时使用对应发起命令；本命令只查询现有任务",
+        "还没有任务 ID 时先从任务提交响应中取得 ID，不要调用本命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive task get --type export --id \u003cTASK_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询已有导出或导入异步任务的状态与结果。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": "查询已有导出或导入异步任务的状态与结果。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要创建或提交导出/导入任务时使用对应发起命令；本命令只查询现有任务",
+            "还没有任务 ID 时先从任务提交响应中取得 ID，不要调用本命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": [
+                "需要创建或提交导出/导入任务时使用对应发起命令；本命令只查询现有任务",
+                "还没有任务 ID 时先从任务提交响应中取得 ID，不要调用本命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive task get --type export --id \u003cTASK_ID\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive task get --type export --id \u003cTASK_ID\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "The CLI routes --type export to doc/query_export_job and --type import to doc/query_import_task, so no single pinned interface_ref can represent both branches.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "The CLI routes --type export to doc/query_export_job and --type import to doc/query_import_task, so no single pinned interface_ref can represent both branches.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",
+            "已有导入任务 ID，需要查询状态、文档链接或失败信息时选择 --type import"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": [
+                "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",
+                "已有导入任务 ID，需要查询状态、文档链接或失败信息时选择 --type import"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "The CLI routes --type export to doc/query_export_job and --type import to doc/query_import_task, so no single pinned interface_ref can represent both branches.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws drive task get --help",
+        "internal/cli/schema_command_registry.json#drive.task_get",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "internal/helpers/drive_task.go",
+        "live-mcp:none (composite: doc/query_export_job + doc/query_import_task)"
+      ],
+      "use_when": [
+        "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",
+        "已有导入任务 ID，需要查询状态、文档链接或失败信息时选择 --type import"
+      ]
+    },
     "drive upload": {
       "agent_summary": "上传本地文件到钉盘或文档空间",
       "agent_summary_source": "dws-agent-selection/drive",

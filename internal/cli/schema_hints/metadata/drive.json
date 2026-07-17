@@ -275,6 +275,17 @@
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/unmark_star, which is absent from the pinned MCP metadata snapshot.",
       "reviewed": true
     },
+    "drive.task_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "The CLI routes --type export to doc/query_export_job and --type import to doc/query_import_task, so no single pinned interface_ref can represent both branches.",
+      "reviewed": true,
+      "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+    },
     "drive.upload": {
       "effect": "write",
       "risk": "medium",
