@@ -80,3 +80,27 @@ func TestCrossPlatformCoverageRangeBatchSetStyleDryRunNeverCallsRemote(t *testin
 		})
 	}
 }
+
+func TestRangeBatchSetStylePropagatesJSONWriteFailure(t *testing.T) {
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+
+	batchPath := filepath.Join(t.TempDir(), "styles.json")
+	if err := os.WriteFile(batchPath, []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`), 0o600); err != nil {
+		t.Fatalf("write batch fixture: %v", err)
+	}
+
+	caller := &sheetStyleDryRunCaller{format: "json"}
+	InitDeps(caller)
+	deps.Out.w = forcedJSONWriteFailure{}
+
+	cmd := newRangeBatchSetStyleCmd()
+	cmd.SetArgs([]string{"--node", "NODE_ID", "--batch", batchPath})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "forced JSON output failure") {
+		t.Fatalf("error = %v, want JSON write failure", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("remote CallTool count = %d, want 0", caller.calls)
+	}
+}

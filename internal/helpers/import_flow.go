@@ -381,15 +381,15 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 			documentURL, _ := result["documentUrl"].(string)
 			result["nodeId"] = extractNodeIDFromDocURL(documentURL)
 		}
-		_ = deps.Out.PrintJSON(result)
-		return nil
+		return deps.Out.PrintJSON(result)
 	}
 	if strings.EqualFold(status, "processing") {
-		_ = deps.Out.PrintJSON(result)
-		return nil
+		return deps.Out.PrintJSON(result)
 	}
 
-	_ = deps.Out.PrintJSON(result)
+	if err := deps.Out.PrintJSON(result); err != nil {
+		return err
+	}
 	if message != "" {
 		return fmt.Errorf("导入任务失败 (status=%s): %s", status, message)
 	}

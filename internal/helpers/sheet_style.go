@@ -522,12 +522,14 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 			}
 			fmt.Fprintf(os.Stderr, "batch-set-style 完成：共 %d 条，失败 %d 条\n", total, failed)
 			if jsonMode {
-				_ = deps.Out.PrintJSON(map[string]any{
+				if err := deps.Out.PrintJSON(map[string]any{
 					"total":   total,
 					"failed":  failed,
 					"results": jsonResults,
 					"success": failed == 0,
-				})
+				}); err != nil {
+					return err
+				}
 			}
 			if failed > 0 && !continueOnErr {
 				return firstErr

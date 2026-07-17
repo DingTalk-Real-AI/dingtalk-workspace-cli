@@ -34,6 +34,12 @@ type sheetImportCall struct {
 	args   map[string]any
 }
 
+type forcedJSONWriteFailure struct{}
+
+func (forcedJSONWriteFailure) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("forced JSON output failure")
+}
+
 type sheetImportCaller struct {
 	calls     []sheetImportCall
 	responses map[string][]string
@@ -261,6 +267,39 @@ func TestSheetImportGetAddsNodeIDAndUsesDocServer(t *testing.T) {
 	}
 	if result["nodeId"] != "node-2" {
 		t.Fatalf("nodeId = %#v, want node-2", result["nodeId"])
+	}
+}
+
+func TestSheetImportGetPropagatesJSONWriteFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{name: "completed", response: `{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-2/"}`},
+		{name: "processing", response: `{"status":"processing"}`},
+		{name: "failed", response: `{"status":"failed","message":"conversion failed"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			previousDeps := deps
+			t.Cleanup(func() { deps = previousDeps })
+
+			caller := &sheetImportCaller{responses: map[string][]string{
+				"query_import_task": {tt.response},
+			}}
+			InitDeps(caller)
+			deps.Out.w = forcedJSONWriteFailure{}
+
+			root := newSheetImportCmdWithConfig(fastSheetImportConfig())
+			root.SilenceErrors = true
+			root.SilenceUsage = true
+			root.SetArgs([]string{"get", "--task-id", "task-write-failure"})
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), "forced JSON output failure") {
+				t.Fatalf("error = %v, want JSON write failure", err)
+			}
+		})
 	}
 }
 
