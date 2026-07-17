@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       recover_release_version:
-        description: "Recover the existing undelivered v1.0.53-beta.2 tag"
+        description: "Recover the existing undelivered v1.0.53-beta.3 tag"
         required: false
         type: string
       recover_release_previous_tag:
@@ -45,8 +45,8 @@ jobs:
           PREVIOUS_TAG: ${{ inputs.recover_release_previous_tag }}
         run: |
           set -euo pipefail
-          test "$RELEASE_VERSION" = "v1.0.53-beta.2"
-          test "$PREVIOUS_TAG" = "v1.0.52"
+          test "$RELEASE_VERSION" = "v1.0.53-beta.3"
+          test "$PREVIOUS_TAG" = "v1.0.53-beta.2"
           test "$(git cat-file -t "refs/tags/$RELEASE_VERSION")" = tag
           target_commit="$(git rev-parse "$RELEASE_VERSION^{commit}")"
           test "$target_commit" = "$(git rev-parse HEAD)"
