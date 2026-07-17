@@ -600,8 +600,9 @@
       "reviewed": true
     },
     "sheet.submit_export_job": {
-      "interface_mode": "mcp",
+      "interface_mode": "composite",
       "availability": "available",
+      "interface_reason": "The CLI composes sheet/submit_export_job, doc/query_export_job polling, and an optional local HTTP download; no single pinned interface_ref represents the complete synchronous and asynchronous behavior.",
       "reviewed": true,
       "parameters": {
         "async": {
@@ -610,7 +611,7 @@
         }
       },
       "cli_path": "sheet export create",
-      "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional."
+      "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow."
     },
     "sheet.table_get": {
       "interface_mode": "composite",

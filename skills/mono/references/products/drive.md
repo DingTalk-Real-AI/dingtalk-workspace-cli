@@ -21,6 +21,7 @@ dws drive permission apply-info --help
 dws drive permission apply --help
 dws drive permission transfer-owner --help
 dws drive star --help
+dws drive task get --help
 ```
 
 规则：
@@ -29,6 +30,37 @@ dws drive star --help
 - 不确定某个功能是否存在时 → `dws drive --help` 查看命令列表
 
 ## 命令总览
+
+### 查询导出/导入异步任务（统一入口）
+
+`drive task get` 对 Doc/Sheet 导出和 Doc 导入任务做一次只读查询，统一返回 `TaskResult`。已有任务必须查询同一 ID，不要重新提交 create。
+
+```
+Usage:
+  dws drive task get --type export --id <TASK_ID>
+
+Examples:
+  dws drive task get --type export --id <TASK_ID> --format json
+  dws drive task get --type import --id <TASK_ID> --format json
+
+Flags:
+      --type string   任务类型：export 或 import（必填）
+      --id string     提交命令返回的任务 ID（必填）
+```
+
+- `--type export` 查询 Doc 或 Sheet 导出任务；成功时 `resultUrl` 是有时效性的下载链接。
+- `--type import` 查询 Doc 导入任务；成功时 `resultUrl` 是创建后的在线文档地址。
+- 本命令只查询一次，不在 CLI 内轮询。状态为非终态时，稍后使用相同 ID 再查。
+- 产品级 `doc export get`、`sheet export get`、`doc import get` 是等价的专用入口。
+- 任务 ID 必须来自真实提交响应，禁止编造；验证日志不得记录完整临时下载 URL。
+
+| 状态 | 含义 | 后续动作 |
+|---|---|---|
+| `PENDING` | 已排队 | 稍后查询同一 ID |
+| `PROCESSING` | 处理中 | 稍后查询同一 ID |
+| `SUCCESS` | 已完成 | 读取 `resultUrl` |
+| `FAILED` | 任务失败 | 转述 `message`，不要自动重提 |
+| `TIMEOUT` | 查询窗口超时 | 保留 ID，稍后继续查询 |
 
 ### 获取文件/文件夹列表
 

@@ -36,6 +36,33 @@ type importPollTimeoutError struct {
 	maxPolls int
 }
 
+// redactedTransferError preserves errors.Is/errors.As while ensuring the
+// user-facing error never formats the underlying *url.Error, whose Error
+// method includes the complete signed upload or download URL.
+type redactedTransferError struct {
+	cause     error
+	operation string
+}
+
+func (e *redactedTransferError) Error() string {
+	operation := strings.TrimSpace(e.operation)
+	if operation == "" {
+		operation = "transfer"
+	}
+	switch {
+	case errors.Is(e.cause, context.Canceled):
+		return operation + " request canceled"
+	case errors.Is(e.cause, context.DeadlineExceeded):
+		return operation + " request timed out"
+	default:
+		return operation + " request failed"
+	}
+}
+
+func (e *redactedTransferError) Unwrap() error {
+	return e.cause
+}
+
 func (e *importPollTimeoutError) Error() string {
 	return fmt.Sprintf("导入任务超时：已轮询 %d 次仍在处理中 (taskId=%s)", e.maxPolls, e.taskID)
 }
@@ -196,10 +223,16 @@ func prepareImportFile(cmd *cobra.Command, args []string, cfg importFlowConfig) 
 }
 
 func (cfg importFlowConfig) callTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
-	if cfg.serverID != "" {
-		return callMCPToolReturnTextOnServer(ctx, cfg.serverID, toolName, args)
+	if !cfg.allowAsync {
+		if cfg.serverID != "" {
+			return callMCPToolReturnTextOnServer(ctx, cfg.serverID, toolName, args)
+		}
+		return callMCPToolReturnText(ctx, toolName, args)
 	}
-	return callMCPToolReturnText(ctx, toolName, args)
+	if cfg.serverID != "" {
+		return callMCPToolReturnTextOnServerWithRedactedBusinessErrors(ctx, cfg.serverID, toolName, args)
+	}
+	return callMCPToolReturnTextWithRedactedBusinessErrors(ctx, toolName, args)
 }
 
 func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) error {
@@ -207,8 +240,25 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if err != nil {
 		return err
 	}
+	asyncMode := false
+	if cfg.allowAsync && cmd.Flags().Lookup("async") != nil {
+		asyncMode, _ = cmd.Flags().GetBool("async")
+	}
 
 	if deps.Caller.DryRun() {
+		if cfg.allowAsync {
+			return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+				Operation:  "doc_import",
+				TaskType:   "import",
+				Mode:       asyncDryRunMode(asyncMode),
+				File:       file.path,
+				FileName:   file.name,
+				FileFormat: file.extension,
+				FileSize:   file.size,
+				Folder:     file.folder,
+				Workspace:  file.workspace,
+			})
+		}
 		deps.Out.PrintKeyValue("操作", cfg.operation)
 		deps.Out.PrintKeyValue("文件", file.path)
 		deps.Out.PrintKeyValue("名称", file.name)
@@ -249,7 +299,12 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	sessionID, _ := sessionResult["sessionId"].(string)
 	uploadURL, _ := sessionResult["uploadUrl"].(string)
 	if sessionID == "" || uploadURL == "" {
-		deps.Out.PrintRaw(sessionText)
+		// The unified Doc import flow must never echo a malformed session
+		// response because uploadUrl may carry temporary signing credentials.
+		// Keep the historical Sheet import rendering outside this new flow.
+		if !cfg.allowAsync {
+			deps.Out.PrintRaw(sessionText)
+		}
 		return fmt.Errorf("创建导入会话成功但缺少 sessionId 或 uploadUrl")
 	}
 	if !quietJSON {
@@ -260,6 +315,9 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		deps.Out.PrintInfo("[2/4] 上传文件...")
 	}
 	if err := httpPutFile(ctx, uploadURL, nil, file.path, file.size); err != nil {
+		if cfg.allowAsync {
+			err = &redactedTransferError{cause: err, operation: "upload"}
+		}
 		return fmt.Errorf("文件上传失败 (sessionId=%s): %w", sessionID, err)
 	}
 	if !quietJSON {
@@ -279,17 +337,17 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	}
 	taskID, _ := confirmResult["taskId"].(string)
 	if taskID == "" {
-		deps.Out.PrintRaw(confirmText)
+		// Apply the same fail-closed output rule to confirmation responses:
+		// service payloads are not safe diagnostic output for Doc import.
+		if !cfg.allowAsync {
+			deps.Out.PrintRaw(confirmText)
+		}
 		return fmt.Errorf("确认导入成功但未返回 taskId")
 	}
 	if !quietJSON {
 		deps.Out.PrintInfo(fmt.Sprintf("    转换任务已提交，taskId: %s", taskID))
 	}
 
-	asyncMode := false
-	if cfg.allowAsync && cmd.Flags().Lookup("async") != nil {
-		asyncMode, _ = cmd.Flags().GetBool("async")
-	}
 	if asyncMode {
 		return deps.Out.PrintJSON(asynctask.TaskResult{
 			ID:      taskID,
@@ -350,6 +408,13 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 		return fmt.Errorf("flag --task-id is required")
 	}
 	if deps.Caller.DryRun() {
+		if cfg.unifiedGetResult {
+			return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+				Operation: "doc_import_get",
+				TaskType:  "import",
+				TaskID:    taskID,
+			})
+		}
 		deps.Out.PrintKeyValue("操作", cfg.queryOperation)
 		deps.Out.PrintKeyValue("任务ID", taskID)
 		return nil

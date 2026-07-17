@@ -9,6 +9,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 ### Added
 
 - **Wukong Drive and Sheet command parity** — adds Drive permission application and owner transfer, Drive document favorites, Sheet formula verification, and Sheet version save/list/revert commands. The new commands ship with reviewed Agent Schema, mono/multi Skill guidance, local validation and dangerous-operation guards; Aitable field/view/record writes also gain clearer runtime validation and recovery guidance.
+- **Unified asynchronous task flows** — adds `drive task get`, async submission modes for Doc export/import and Sheet export, and normalized task-result queries including `sheet export get`, while keeping existing synchronous behavior as the default.
 
 ## [1.0.53-beta.2] - 2026-07-16
 

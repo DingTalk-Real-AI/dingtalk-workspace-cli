@@ -141,6 +141,25 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 	if _, ok := loaded.Index.Resolve("doc.task_get"); ok {
 		t.Fatal("drive.task_get must not publish an alternate doc.task_get command identity")
 	}
+	driveTaskGet := loaded.Snapshot.Tools["drive.task_get"]
+	driveTaskType := schemaMap(driveTaskGet["parameters"])["type"]
+	if got, want := schemaStringSlice(driveTaskType["enum"]), []string{"export", "import"}; !equalStringSlices(got, want) {
+		t.Errorf("drive.task_get --type enum = %v, want %v", got, want)
+	}
+	for _, canonical := range []string{
+		"doc.export",
+		"doc.import",
+		"doc.import_get",
+		"doc.query_export_job",
+		"drive.task_get",
+		"sheet.export_get",
+		"sheet.submit_export_job",
+	} {
+		dryRun, _ := loaded.Snapshot.Tools[canonical]["dry_run"].(map[string]any)
+		if got := schemaString(dryRun["preview_kind"]); got != "plan" {
+			t.Errorf("%s dry_run.preview_kind = %q, want plan", canonical, got)
+		}
+	}
 	if _, ok := loaded.Index.Resolve("doc import"); ok {
 		t.Fatal("the runnable historical doc import parent must not be registered as a Schema alias")
 	}
@@ -204,11 +223,19 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 		t.Errorf("doc.query_export_job interface RPC = %q, want query_export_job", got)
 	}
 	docQueryParameters := schemaMap(docQuery["parameters"])
-	if required, _ := docQueryParameters["job-id"]["required"].(bool); !required {
-		t.Error("doc.query_export_job historical --job-id must remain required")
+	if required, _ := docQueryParameters["job-id"]["required"].(bool); required {
+		t.Error("doc.query_export_job historical --job-id must be optional inside the exclusive alias group")
 	}
 	if required, _ := docQueryParameters["task-id"]["required"].(bool); required {
 		t.Error("doc.query_export_job additive --task-id must remain optional")
+	}
+	constraints, err := json.Marshal(docQuery["constraints"])
+	if err != nil {
+		t.Fatalf("marshal doc.query_export_job constraints: %v", err)
+	}
+	const wantTaskIDConstraints = `{"mutually_exclusive":[["job-id","task-id"]],"require_one_of":[["job-id","task-id"]]}`
+	if string(constraints) != wantTaskIDConstraints {
+		t.Errorf("doc.query_export_job constraints = %s, want %s", constraints, wantTaskIDConstraints)
 	}
 
 	docImport := loaded.Snapshot.Tools["doc.import"]
@@ -272,18 +299,14 @@ func TestEmbeddedSchemaCatalogContainsWukongDriveSheetParity(t *testing.T) {
 		"risk":           "low",
 		"confirmation":   "not_required",
 		"idempotency":    "idempotent",
-		"interface_mode": "mcp",
+		"interface_mode": "composite",
 	} {
 		if got := schemaString(sheetExport[field]); got != want {
 			t.Errorf("sheet.submit_export_job %s = %q, want %q", field, got, want)
 		}
 	}
-	sheetExportInterface, _ := sheetExport["interface_ref"].(map[string]any)
-	if got := schemaString(sheetExportInterface["product_id"]); got != "sheet" {
-		t.Errorf("sheet.submit_export_job interface product = %q, want sheet", got)
-	}
-	if got := schemaString(sheetExportInterface["rpc_name"]); got != "submit_export_job" {
-		t.Errorf("sheet.submit_export_job interface RPC = %q, want submit_export_job", got)
+	if _, ok := sheetExport["interface_ref"]; ok {
+		t.Errorf("sheet.submit_export_job must not publish a singular interface_ref: %#v", sheetExport["interface_ref"])
 	}
 	sheetExportParameters := schemaMap(sheetExport["parameters"])
 	for _, name := range []string{"async", "output"} {
@@ -378,6 +401,47 @@ func TestSheetExportSkillEvidenceTargetsCreateAndGetLeaves(t *testing.T) {
 		}
 		if review, ok := document.ReferenceReview["sheet export"]; ok {
 			t.Errorf("%s sheet export review = %#v, want historical primary resolved by CommandRegistry", relativePath, review)
+		}
+	}
+}
+
+func TestDriveTaskGetSkillEvidenceIsDiscoverableInMonoAndMulti(t *testing.T) {
+	repositoryRoot := filepath.Join("..", "..")
+	for _, relativePath := range []string{
+		"skills/mono/references/products/drive.md",
+		"skills/multi/dingtalk-drive/references/drive.md",
+	} {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		text := string(body)
+		for _, fragment := range []string{
+			"dws drive task get --type export --id",
+			"dws drive task get --type import --id",
+			"PENDING",
+			"PROCESSING",
+			"SUCCESS",
+			"FAILED",
+			"TIMEOUT",
+			"resultUrl",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Errorf("%s does not document %q", relativePath, fragment)
+			}
+		}
+	}
+
+	for _, relativePath := range []string{
+		"skills/mono/SKILL.md",
+		"skills/multi/dingtalk-drive/SKILL.md",
+	} {
+		body, err := os.ReadFile(filepath.Join(repositoryRoot, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		if !strings.Contains(string(body), "drive task get") {
+			t.Errorf("%s does not route async task status queries to drive task get", relativePath)
 		}
 	}
 }

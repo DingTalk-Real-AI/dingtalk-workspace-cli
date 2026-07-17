@@ -42,10 +42,11 @@ func newDriveTaskCommand() *cobra.Command {
 				return fmt.Errorf("unsupported --type %q; expected export or import", taskType)
 			}
 			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "查询异步任务")
-				deps.Out.PrintKeyValue("类型", taskType)
-				deps.Out.PrintKeyValue("ID", taskID)
-				return nil
+				return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+					Operation: "drive_task_get",
+					TaskType:  taskType,
+					TaskID:    taskID,
+				})
 			}
 			result, err := queryAsyncTask(cmd.Context(), taskType, taskID)
 			if err != nil {

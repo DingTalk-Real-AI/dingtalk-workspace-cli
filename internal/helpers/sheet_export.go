@@ -22,14 +22,17 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("flag --node is required")
 	}
 	outputPath, _ := cmd.Flags().GetString("output")
+	asyncMode, _ := cmd.Flags().GetBool("async")
 
 	if deps.Caller.DryRun() {
-		deps.Out.PrintKeyValue("操作", "导出钉钉表格为 xlsx")
-		deps.Out.PrintKeyValue("节点", nodeID)
-		if outputPath != "" {
-			deps.Out.PrintKeyValue("输出", outputPath)
-		}
-		return nil
+		return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+			Operation:    "sheet_export",
+			TaskType:     "export",
+			Mode:         asyncDryRunMode(asyncMode),
+			Node:         nodeID,
+			ExportFormat: "xlsx",
+			Output:       outputPath,
+		})
 	}
 
 	ctx := cmd.Context()
@@ -38,17 +41,15 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	asyncMode, _ := cmd.Flags().GetBool("async")
-
 	// json 模式下进度提示会污染 stdout（PrintInfo/PrintKeyValue 都写 stdout），
 	// 使得 agent 无法按 JSON 解析。故 json 模式抑制进度、末尾统一输出结果 JSON。
-	jsonMode := deps.Caller.Format() == "json"
+	jsonMode := strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 
 	// Step 1: submit export job
 	if !jsonMode {
 		deps.Out.PrintInfo("[1/3] 提交表格导出任务 (xlsx)...")
 	}
-	submitText, err := callMCPToolReturnText(ctx, "submit_export_job", map[string]any{
+	submitText, err := callMCPToolReturnTextWithRedactedBusinessErrors(ctx, "submit_export_job", map[string]any{
 		"nodeId":       nodeID,
 		"exportFormat": "xlsx",
 	})
@@ -106,6 +107,7 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 		deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载 xlsx 到 %s ...", outputPath))
 	}
 	if err := httpGetFile(ctx, downloadURL, map[string]string{}, outputPath); err != nil {
+		err = &redactedTransferError{cause: err, operation: "download"}
 		return fmt.Errorf("下载 xlsx 失败 (taskId=%s): %w", jobID, err)
 	}
 	if jsonMode {
@@ -138,7 +140,7 @@ func parseExportSubmitResult(text string) (string, error) {
 	}
 	jobID, _ := data["jobId"].(string)
 	if jobID == "" {
-		return "", fmt.Errorf("submit_export_job 未返回 jobId，响应: %s", text)
+		return "", fmt.Errorf("submit_export_job 未返回 jobId")
 	}
 	return jobID, nil
 }
@@ -166,7 +168,7 @@ func exportPollIntervals() []time.Duration {
 // until the job completes successfully, fails, or the 30-attempt cap is hit.
 func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 	// json 模式下轮询进度也要抑制，否则 [INFO] 行会混进 stdout 破坏纯 JSON 输出。
-	quiet := deps.Caller.Format() == "json"
+	quiet := strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 	intervals := exportPollIntervals()
 	for i, wait := range intervals {
 		select {
@@ -175,7 +177,7 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 		case <-helperAfter(wait):
 		}
 
-		text, err := callMCPToolReturnText(ctx, "query_export_job", map[string]any{
+		text, err := callMCPToolReturnTextWithRedactedBusinessErrors(ctx, "query_export_job", map[string]any{
 			"jobId": jobID,
 		})
 		if err != nil {
@@ -362,9 +364,11 @@ func runSheetExportGet(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deps.Caller.DryRun() {
-		deps.Out.PrintKeyValue("操作", "查询表格导出任务结果")
-		deps.Out.PrintKeyValue("任务ID", taskID)
-		return nil
+		return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+			Operation: "sheet_export_get",
+			TaskType:  "export",
+			TaskID:    taskID,
+		})
 	}
 
 	ctx := cmd.Context()

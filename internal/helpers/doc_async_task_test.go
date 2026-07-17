@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"reflect"
 	"sort"
@@ -47,6 +48,7 @@ type docAsyncRecordedResponse struct {
 
 type docAsyncRecordingCaller struct {
 	format    string
+	dryRun    bool
 	responses []docAsyncRecordedResponse
 	calls     []docAsyncRecordedCall
 }
@@ -73,7 +75,7 @@ func (c *docAsyncRecordingCaller) CallTool(ctx context.Context, server, tool str
 }
 
 func (c *docAsyncRecordingCaller) Format() string { return c.format }
-func (*docAsyncRecordingCaller) DryRun() bool     { return false }
+func (c *docAsyncRecordingCaller) DryRun() bool   { return c.dryRun }
 func (*docAsyncRecordingCaller) Fields() string   { return "" }
 func (*docAsyncRecordingCaller) JQ() string       { return "" }
 
@@ -142,6 +144,30 @@ func TestDocExportAsyncSubmitReturnsPendingWithoutPollingOrDownload(t *testing.T
 	}
 	if downloadCalls != 0 {
 		t.Fatalf("download calls = %d, want zero", downloadCalls)
+	}
+}
+
+func TestDocExportSubmitBusinessErrorDoesNotLeakSignedURL(t *testing.T) {
+	const signedURL = "https://download.example.test/object?token=export-secret&signature=private"
+	caller := &docAsyncRecordingCaller{
+		format:    "json",
+		responses: []docAsyncRecordedResponse{{text: `{"success":false,"message":"submit failed","downloadUrl":"` + signedURL + `"}`}},
+	}
+	stdout, err := runDocAsyncCapturedCommand(t, context.Background(), caller,
+		"export", "create", "--node", "node-1", "--async", "--format", "json")
+	if err == nil || !strings.Contains(err.Error(), "submit failed") {
+		t.Fatalf("submit error = %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("submit error stdout = %q, want empty", stdout)
+	}
+	for _, forbidden := range []string{signedURL, "download.example.test", "export-secret", "signature=private"} {
+		if strings.Contains(stdout, forbidden) || strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("submit error leaked %q: stdout=%q error=%v", forbidden, stdout, err)
+		}
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "submit_export_job" {
+		t.Fatalf("submit calls = %#v, want one submit call", caller.calls)
 	}
 }
 
@@ -245,12 +271,12 @@ func TestDocExportGetRejectsBothIDFlagsBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestDocExportAsyncJSONIsExactlyOneTaskResultAndUsesCommandContext(t *testing.T) {
+func TestDocExportAsyncJSONFormatIsCaseInsensitiveTrimmedAndUsesCommandContext(t *testing.T) {
 	type contextKey string
 	const key contextKey = "doc-export-test"
 	ctx := context.WithValue(context.Background(), key, "context-value")
 	caller := &docAsyncRecordingCaller{
-		format:    "json",
+		format:    " JSON ",
 		responses: []docAsyncRecordedResponse{{text: `{"result":{"jobId":"job-1"}}`}},
 	}
 
@@ -406,5 +432,47 @@ func TestDocExportSyncJSONKeepsHistoricalProgressOutput(t *testing.T) {
 		if !strings.Contains(stdout, progress) {
 			t.Errorf("sync stdout missing %q: %q", progress, stdout)
 		}
+	}
+}
+
+func TestDocExportSyncDownloadErrorDoesNotLeakSignedURL(t *testing.T) {
+	previousHTTPGet, previousAfter := httpGetFile, helperAfter
+	const downloadURL = "https://example.test/export.docx?token=temporary&signature=private"
+	downloadErr := errors.New("download interrupted")
+	httpGetFile = func(context.Context, string, map[string]string, string) error {
+		return &url.Error{Op: "GET", URL: downloadURL, Err: downloadErr}
+	}
+	helperAfter = func(time.Duration) <-chan time.Time {
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
+	t.Cleanup(func() {
+		httpGetFile = previousHTTPGet
+		helperAfter = previousAfter
+	})
+
+	caller := &docAsyncRecordingCaller{
+		format: "json",
+		responses: []docAsyncRecordedResponse{
+			{text: `{"jobId":"job-download"}`},
+			{text: `{"status":"SUCCESS","downloadUrl":"` + downloadURL + `"}`},
+		},
+	}
+	stdout, err := runDocAsyncCapturedCommand(t, context.Background(), caller,
+		"export", "--node", "node-1", "--output", "out.docx")
+	if err == nil || !errors.Is(err, downloadErr) {
+		t.Fatalf("download error = %v, want wrapped download failure", err)
+	}
+	if !strings.Contains(err.Error(), "jobId=job-download") {
+		t.Fatalf("download error lost submitted job ID: %v", err)
+	}
+	for _, forbidden := range []string{downloadURL, "token=temporary", "signature=private"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("download error leaked %q: %v", forbidden, err)
+		}
+	}
+	if !strings.Contains(stdout, "[3/3] 下载文件到 out.docx") {
+		t.Fatalf("download progress output = %q", stdout)
 	}
 }

@@ -146,6 +146,33 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 }
 
 func callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx context.Context, serverID, toolName string, args map[string]any, classifiesBusinessError func(map[string]any) bool) (string, error) {
+	return callMCPToolReturnTextOnServerWithBusinessErrorPolicy(ctx, serverID, toolName, args, classifiesBusinessError, false)
+}
+
+// callMCPToolReturnTextWithRedactedBusinessErrors is the data-returning call
+// path for workflows that may receive temporary upload/download URLs. It keeps
+// successful response data intact, but limits business failures to their
+// message and a safe error code instead of echoing the complete JSON envelope.
+func callMCPToolReturnTextWithRedactedBusinessErrors(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	serverID := resolveProductID()
+	if serverID == "" {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: fmt.Sprintf("cannot resolve product for tool %q", toolName),
+		}
+	}
+	return callMCPToolReturnTextOnServerWithRedactedBusinessErrors(ctx, serverID, toolName, args)
+}
+
+func callMCPToolReturnTextOnServerWithRedactedBusinessErrors(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	return callMCPToolReturnTextOnServerWithRedactedBusinessErrorClassifier(ctx, serverID, toolName, args, isBusinessError)
+}
+
+func callMCPToolReturnTextOnServerWithRedactedBusinessErrorClassifier(ctx context.Context, serverID, toolName string, args map[string]any, classifiesBusinessError func(map[string]any) bool) (string, error) {
+	return callMCPToolReturnTextOnServerWithBusinessErrorPolicy(ctx, serverID, toolName, args, classifiesBusinessError, true)
+}
+
+func callMCPToolReturnTextOnServerWithBusinessErrorPolicy(ctx context.Context, serverID, toolName string, args map[string]any, classifiesBusinessError func(map[string]any) bool, redactBusinessError bool) (string, error) {
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
 	if err != nil {
 		if patErr := reclassifyPATFromError(err); patErr != nil {
@@ -158,9 +185,13 @@ func callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx context.Contex
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
 				if _, ok := getDWSGatewayErrorCode(errBody); ok {
+					message := c.Text
+					if redactBusinessError {
+						message = redactedBusinessErrorMessage(errBody)
+					}
 					return "", &CLIError{
 						Code:       CodeAuthTokenExpired,
-						Message:    c.Text,
+						Message:    message,
 						Suggestion: authExpiredSuggestion(),
 					}
 				}
@@ -175,9 +206,13 @@ func callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx context.Contex
 					return "", patErr
 				}
 				if classifiesBusinessError(errBody) {
+					message := c.Text
+					if redactBusinessError {
+						message = redactedBusinessErrorMessage(errBody)
+					}
 					return "", &CLIError{
 						Code:       CodeMCPToolError,
-						Message:    c.Text,
+						Message:    message,
 						Suggestion: suggestForBusinessError(errBody),
 					}
 				}
@@ -602,6 +637,35 @@ func businessErrorMessage(body map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func redactedBusinessErrorMessage(body map[string]any) string {
+	message := strings.TrimSpace(businessErrorMessage(body))
+	if message == "" || strings.Contains(strings.ToLower(message), "http://") || strings.Contains(strings.ToLower(message), "https://") {
+		message = "operation failed"
+	}
+	for _, key := range []string{"errorCode", "error_code", "code", "server_error_code"} {
+		code, ok := body[key].(string)
+		code = strings.TrimSpace(code)
+		if !ok || !isSafeBusinessErrorCode(code) {
+			continue
+		}
+		return fmt.Sprintf("%s (code: %s)", message, code)
+	}
+	return message
+}
+
+func isSafeBusinessErrorCode(code string) bool {
+	if code == "" || len(code) > 128 {
+		return false
+	}
+	for _, r := range code {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func isNoPermissionError(body map[string]any) bool {

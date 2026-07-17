@@ -16,6 +16,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -271,6 +272,7 @@ func executeManualAgentExampleCapture(t testing.TB, args []string) (manualAgentE
 type manualAgentExampleFiles struct {
 	root     string
 	markdown string
+	docx     string
 	json     string
 	batch    string
 	binary   string
@@ -280,12 +282,14 @@ type manualAgentExampleFiles struct {
 func newManualAgentExampleFiles(t testing.TB, root string) manualAgentExampleFiles {
 	t.Helper()
 	markdown := filepath.Join(root, "content.md")
+	docx := filepath.Join(root, "report.docx")
 	jsonFile := filepath.Join(root, "report.json")
 	batch := filepath.Join(root, "styles.json")
 	binary := filepath.Join(root, "report.pdf")
 	image := filepath.Join(root, "chart.png")
 	for path, content := range map[string][]byte{
 		markdown: []byte("# Agent dry-run fixture\n\nNo business call is allowed.\n"),
+		docx:     []byte("Agent dry-run DOCX fixture"),
 		jsonFile: []byte(`[{"content":"Agent dry-run fixture","sort":"0","key":"fixture","contentType":"markdown","type":"1"}]`),
 		batch:    []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
 		binary:   []byte("%PDF-1.4\n%%EOF\n"),
@@ -295,7 +299,7 @@ func newManualAgentExampleFiles(t testing.TB, root string) manualAgentExampleFil
 			t.Fatalf("write dry-run fixture %s: %v", path, err)
 		}
 	}
-	return manualAgentExampleFiles{root: root, markdown: markdown, json: jsonFile, batch: batch, binary: binary, image: image}
+	return manualAgentExampleFiles{root: root, markdown: markdown, docx: docx, json: jsonFile, batch: batch, binary: binary, image: image}
 }
 
 func materializeManualAgentExampleArgv(argv []string, files manualAgentExampleFiles) []string {
@@ -334,9 +338,14 @@ func materializeManualAgentExampleArgv(argv []string, files manualAgentExampleFi
 		replacement := ""
 		switch name {
 		case "file", "file-path":
-			if strings.Contains(strings.ToLower(value), "png") {
+			switch strings.ToLower(filepath.Ext(value)) {
+			case ".png":
 				replacement = files.image
-			} else {
+			case ".md", ".markdown":
+				replacement = files.markdown
+			case ".docx":
+				replacement = files.docx
+			default:
 				replacement = files.binary
 			}
 		case "content-file":
@@ -391,6 +400,15 @@ func manualAgentExampleDryRunObserved(capture manualAgentExampleCapture) bool {
 
 func manualAgentExampleDryRunEvidence(capture manualAgentExampleCapture) (string, bool) {
 	normalized := strings.ToLower(capture.Output)
+	var structuredPlan struct {
+		DryRun      bool   `json:"dryRun"`
+		PreviewKind string `json:"previewKind"`
+		Operation   string `json:"operation"`
+	}
+	if capture.DryRunChecks > 0 && json.Unmarshal([]byte(capture.Output), &structuredPlan) == nil &&
+		structuredPlan.DryRun && structuredPlan.PreviewKind == cli.DryRunPreviewPlan && strings.TrimSpace(structuredPlan.Operation) != "" {
+		return cli.DryRunPreviewPlan, true
+	}
 	if manualAgentExampleDryRunJSONPattern.MatchString(capture.Output) {
 		return cli.DryRunPreviewRequest, true
 	}
@@ -425,6 +443,10 @@ func TestManualAgentExampleDryRunEvidenceAcceptsSharedAndCommandPlans(t *testing
 	}
 	if !manualAgentExampleDryRunObserved(manualAgentExampleCapture{Output: operationSummary, DryRunChecks: 1}) {
 		t.Fatal("a command plan guarded by the injected caller's dry-run check was not recognized")
+	}
+	structuredPlan := `{"dryRun":true,"previewKind":"plan","operation":"doc_export_get","taskType":"export","taskId":"job-1"}`
+	if kind, ok := manualAgentExampleDryRunEvidence(manualAgentExampleCapture{Output: structuredPlan, DryRunChecks: 1}); !ok || kind != cli.DryRunPreviewPlan {
+		t.Fatalf("structured command plan evidence = (%q, %v), want (%q, true)", kind, ok, cli.DryRunPreviewPlan)
 	}
 }
 

@@ -5518,14 +5518,14 @@
           "source": "internal/cli/schema_hints/metadata/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional.",
+          "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional."
+              "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow."
             },
             {
               "value": "available",
@@ -5618,18 +5618,18 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/metadata/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional.",
+          "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow.",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/metadata/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional."
+              "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow."
             },
             {
               "value": "mcp",
@@ -5639,17 +5639,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "sheet.submit_export_job",
-          "source": "internal/cli/schema_mcp_metadata.json#tools.sheet.submit_export_job.interface_ref",
-          "precedence": "mcp_fallback",
+        "interface_reason": {
+          "value": "The CLI composes sheet/submit_export_job, doc/query_export_job polling, and an optional local HTTP download; no single pinned interface_ref represents the complete synchronous and asynchronous behavior.",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow.",
           "candidates": [
+            {
+              "value": "The CLI composes sheet/submit_export_job, doc/query_export_job polling, and an optional local HTTP download; no single pinned interface_ref represents the complete synchronous and asynchronous behavior.",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "sheet.submit_export_job",
               "source": "internal/cli/schema_mcp_metadata.json#tools.sheet.submit_export_job.interface_ref",
               "precedence": "mcp_fallback",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -5658,14 +5684,14 @@
           "source": "internal/cli/schema_hints/metadata/sheet.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional.",
+          "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/sheet.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical pinned sheet/submit_export_job interface contract while reviewing the additive --async orchestration flag as optional."
+              "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow."
             },
             {
               "value": true,
@@ -5712,11 +5738,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "sheet",
-        "rpc_name": "submit_export_job"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "The CLI composes sheet/submit_export_job, doc/query_export_job polling, and an optional local HTTP download; no single pinned interface_ref represents the complete synchronous and asynchronous behavior.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [

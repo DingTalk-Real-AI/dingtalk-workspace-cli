@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"reflect"
 	"sort"
@@ -138,7 +139,7 @@ func TestSheetExportAsyncReturnsOnePendingTaskWithoutPollingOrDownload(t *testin
 	t.Cleanup(func() { httpGetFile = previousHTTPGet })
 
 	caller := &sheetExportRecordingCaller{
-		format:    "json",
+		format:    " JSON ",
 		responses: []sheetExportRecordedResponse{{text: `{"result":{"jobId":"job-1"}}`}},
 	}
 	output, err := executeSheetExportAsyncCommand(t, ctx, caller, "--node", "node-1", "--async")
@@ -174,11 +175,48 @@ func TestSheetExportAsyncReturnsOnePendingTaskWithoutPollingOrDownload(t *testin
 	}
 }
 
+func TestParseExportSubmitResultMissingJobIDDoesNotLeakResponse(t *testing.T) {
+	const signedURL = "https://upload.example.test/object?token=temporary&signature=private"
+	_, err := parseExportSubmitResult(`{"success":true,"downloadUrl":"` + signedURL + `"}`)
+	if err == nil || !strings.Contains(err.Error(), "未返回 jobId") {
+		t.Fatalf("missing jobId error = %v", err)
+	}
+	for _, forbidden := range []string{signedURL, "upload.example.test", "token=temporary", "signature=private"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("missing jobId error leaked %q: %v", forbidden, err)
+		}
+	}
+}
+
+func TestSheetExportSubmitBusinessErrorDoesNotLeakSignedURL(t *testing.T) {
+	const signedURL = "https://download.example.test/object?token=sheet-secret&signature=private"
+	caller := &sheetExportRecordingCaller{
+		format:    "json",
+		responses: []sheetExportRecordedResponse{{text: `{"success":false,"message":"sheet submit failed","downloadUrl":"` + signedURL + `"}`}},
+	}
+	stdout, err := executeSheetExportAsyncCommand(t, context.Background(), caller,
+		"create", "--node", "node-1", "--async", "--format", "json")
+	if err == nil || !strings.Contains(err.Error(), "sheet submit failed") {
+		t.Fatalf("submit error = %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("submit error stdout = %q, want empty", stdout)
+	}
+	for _, forbidden := range []string{signedURL, "download.example.test", "sheet-secret", "signature=private"} {
+		if strings.Contains(stdout, forbidden) || strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("submit error leaked %q: stdout=%q error=%v", forbidden, stdout, err)
+		}
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "submit_export_job" {
+		t.Fatalf("submit calls = %#v, want one submit call", caller.calls)
+	}
+}
+
 func TestSheetExportSyncPollErrorIncludesSubmittedTaskID(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	caller := &sheetExportRecordingCaller{
-		format:    "json",
+		format:    " JSON ",
 		responses: []sheetExportRecordedResponse{{text: `{"jobId":"job-resumable"}`}},
 		afterCall: func(index int) {
 			if index == 0 {
@@ -199,6 +237,35 @@ func TestSheetExportSyncPollErrorIncludesSubmittedTaskID(t *testing.T) {
 	}
 	if strings.TrimSpace(output) != "" {
 		t.Fatalf("JSON stdout on poll error = %q, want empty", output)
+	}
+}
+
+func TestSheetExportTrimmedJSONSuppressesRetryProgressOnPollErrors(t *testing.T) {
+	previousAfter := helperAfter
+	helperAfter = func(time.Duration) <-chan time.Time {
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
+	t.Cleanup(func() { helperAfter = previousAfter })
+
+	queryErr := errors.New("temporary query error")
+	caller := &sheetExportRecordingCaller{
+		format: " JSON ",
+		responses: []sheetExportRecordedResponse{
+			{text: `{"jobId":"job-retry"}`},
+			{err: queryErr},
+		},
+	}
+	output, err := executeSheetExportAsyncCommand(t, context.Background(), caller, "--node", "node-1")
+	if err == nil || !strings.Contains(err.Error(), "taskId=job-retry") {
+		t.Fatalf("poll error = %v, want resumable task ID", err)
+	}
+	if strings.TrimSpace(output) != "" {
+		t.Fatalf("trimmed JSON poll-error stdout = %q, want empty", output)
+	}
+	if len(caller.calls) != 31 || caller.calls[0].tool != "submit_export_job" {
+		t.Fatalf("poll-error calls = %d/%#v, want submit plus 30 queries", len(caller.calls), caller.calls)
 	}
 }
 
@@ -414,7 +481,7 @@ func TestSheetExportSyncJSONKeepsHistoricalContractAndDownload(t *testing.T) {
 				return nil
 			}
 			caller := &sheetExportRecordingCaller{
-				format: "json",
+				format: " JSON ",
 				responses: []sheetExportRecordedResponse{
 					{text: `{"jobId":"job-1"}`},
 					{text: `{"status":"SUCCESS","downloadUrl":"https://example.test/export.xlsx"}`},
@@ -459,7 +526,7 @@ func TestSheetExportSyncDownloadErrorIncludesSubmittedTaskID(t *testing.T) {
 		if gotURL != downloadURL || output != "out.xlsx" {
 			t.Fatalf("download call = (%q, %q)", gotURL, output)
 		}
-		return downloadErr
+		return &url.Error{Op: "GET", URL: downloadURL, Err: downloadErr}
 	}
 	t.Cleanup(func() {
 		httpGetFile = previousHTTPGet

@@ -4141,14 +4141,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": "available",
@@ -4183,14 +4183,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": "not_required",
@@ -4205,14 +4205,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": "read",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": "read",
@@ -4247,14 +4247,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": "idempotent",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": "idempotent",
@@ -4269,14 +4269,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": "mcp",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": "mcp",
@@ -4291,14 +4291,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": "doc.query_export_job",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": "doc.query_export_job",
@@ -4313,14 +4313,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": true,
@@ -4336,14 +4336,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+          "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
           "candidates": [
             {
               "value": "low",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input."
+              "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property."
             },
             {
               "value": "low",

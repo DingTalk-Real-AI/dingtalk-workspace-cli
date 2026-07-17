@@ -82,7 +82,7 @@ func TestFinalSchemaToolsHaveExecutableBaseCommands(t *testing.T) {
 			if primaryMatch.command != command.PrimaryCommand {
 				t.Fatalf("bound primary pointer differs from exact live Cobra path %q", command.PrimaryCLIPath)
 			}
-			assertRunnableSchemaBaseCommand(t, command.PrimaryCommand, command.PrimaryCLIPath)
+			assertRunnableSchemaPrimaryCommand(t, command)
 
 			// Cobra dispatches a parsed --help flag to Help without invoking the
 			// command's Run/RunE or any business interface. Calling Help directly
@@ -151,6 +151,30 @@ func TestFinalSchemaToolsHaveExecutableBaseCommands(t *testing.T) {
 	}
 
 	t.Logf("validated %d final Schema tools and their executable base commands", len(finalCanonicals))
+}
+
+func assertRunnableSchemaPrimaryCommand(t *testing.T, command cli.BoundCommandSpec) {
+	t.Helper()
+	if command.PrimaryCommand == nil || !command.PrimaryCommand.Runnable() {
+		t.Fatalf("Schema primary path %q is not runnable", command.PrimaryCLIPath)
+	}
+	if !command.PrimaryCommand.HasSubCommands() {
+		return
+	}
+
+	// BindEffectiveCommandRegistry has already proved flag/Args/handler and
+	// Schema-contract equivalence. Reassert the delivery shape here so the one
+	// historical runnable-parent primary is accepted only when a separately
+	// executable, reviewed compatibility leaf is shipped with it.
+	if len(command.AliasCommands) == 0 {
+		t.Fatalf("Schema runnable-parent primary %q has no reviewed compatibility leaf", command.PrimaryCLIPath)
+	}
+	for _, alias := range command.AliasCommands {
+		if alias.Kind != cli.AliasKindCompatibilityLeaf || alias.Command == nil ||
+			!alias.Command.Runnable() || alias.Command.HasSubCommands() {
+			t.Fatalf("Schema runnable-parent primary %q has invalid compatibility alias %#v", command.PrimaryCLIPath, alias)
+		}
+	}
 }
 
 func assertRunnableSchemaBaseCommand(t *testing.T, command *cobra.Command, path string) {

@@ -398,6 +398,258 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	}
 }
 
+func TestSchemaCompatibilityAcceptsReviewedDocExportTaskIDAliasMigration(t *testing.T) {
+	baseline, current := docExportTaskIDAliasMigrationContracts()
+	if failures := checkCompatibility(baseline, current); len(failures) != 0 {
+		t.Fatalf("reviewed task ID alias migration failures = %v", failures)
+	}
+}
+
+func TestSchemaCompatibilityDocExportTaskIDAliasMigrationFailsClosed(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*schemaContract)
+	}{
+		{
+			name: "different canonical tool",
+			mutate: func(contract *schemaContract) {
+				product := contract.Products["doc"]
+				tool := product.Tools["doc.query_export_job"]
+				delete(product.Tools, "doc.query_export_job")
+				product.Tools["doc.other_query"] = tool
+				contract.Products["doc"] = product
+			},
+		},
+		{
+			name: "replacement property differs",
+			mutate: func(contract *schemaContract) {
+				mutateDocExportTaskIDParameter(contract, func(parameter *parameterSchema) { parameter.Property = "taskId" })
+			},
+		},
+		{
+			name: "replacement type differs",
+			mutate: func(contract *schemaContract) {
+				mutateDocExportTaskIDParameter(contract, func(parameter *parameterSchema) { parameter.Type = `"integer"` })
+			},
+		},
+		{
+			name: "replacement becomes required",
+			mutate: func(contract *schemaContract) {
+				mutateDocExportTaskIDParameter(contract, func(parameter *parameterSchema) { parameter.Required = true })
+			},
+		},
+		{
+			name: "missing mutual exclusion",
+			mutate: func(contract *schemaContract) {
+				mutateDocExportTaskIDTool(contract, func(tool *toolSchema) {
+					tool.Constraints = `{"require_one_of":[["job-id","task-id"]]}`
+				})
+			},
+		},
+		{
+			name: "missing require one of",
+			mutate: func(contract *schemaContract) {
+				mutateDocExportTaskIDTool(contract, func(tool *toolSchema) {
+					tool.Constraints = `{"mutually_exclusive":[["job-id","task-id"]]}`
+				})
+			},
+		},
+		{
+			name: "unreviewed extra constraint",
+			mutate: func(contract *schemaContract) {
+				mutateDocExportTaskIDTool(contract, func(tool *toolSchema) {
+					tool.Constraints = `{"mutually_exclusive":[["job-id","task-id"]],"require_one_of":[["job-id","task-id"]],"require_together":[["job-id","task-id"]]}`
+				})
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			baseline, current := docExportTaskIDAliasMigrationContracts()
+			test.mutate(&current)
+			if failures := checkCompatibility(baseline, current); len(failures) == 0 {
+				t.Fatal("invalid reviewed task ID alias migration unexpectedly passed")
+			}
+		})
+	}
+}
+
+func TestSchemaCompatibilityAcceptsReviewedSheetExportCompositeMigration(t *testing.T) {
+	baseline, current := sheetExportCompositeMigrationContracts()
+	if failures := checkCompatibility(baseline, current); len(failures) != 0 {
+		t.Fatalf("reviewed Sheet export composite migration failures = %v", failures)
+	}
+}
+
+func TestSchemaCompatibilitySheetExportCompositeMigrationFailsClosed(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*schemaContract, *schemaContract)
+	}{
+		{
+			name: "different canonical tool",
+			mutate: func(_ *schemaContract, current *schemaContract) {
+				product := current.Products["sheet"]
+				tool := product.Tools["sheet.submit_export_job"]
+				delete(product.Tools, "sheet.submit_export_job")
+				product.Tools["sheet.other_export"] = tool
+				current.Products["sheet"] = product
+			},
+		},
+		{
+			name: "historical primary differs",
+			mutate: func(baseline, _ *schemaContract) {
+				mutateSheetExportTool(baseline, func(tool *toolSchema) { tool.PrimaryCLIPath = "sheet export legacy" })
+			},
+		},
+		{
+			name: "current primary differs",
+			mutate: func(_, current *schemaContract) {
+				mutateSheetExportTool(current, func(tool *toolSchema) { tool.PrimaryCLIPath = "sheet export create" })
+			},
+		},
+		{
+			name: "historical interface mode differs",
+			mutate: func(baseline, _ *schemaContract) {
+				mutateSheetExportTool(baseline, func(tool *toolSchema) { tool.InterfaceMode = "composite" })
+			},
+		},
+		{
+			name: "historical interface ref differs",
+			mutate: func(baseline, _ *schemaContract) {
+				mutateSheetExportTool(baseline, func(tool *toolSchema) { tool.InterfaceRef = `{"product_id":"doc","rpc_name":"submit_export_job"}` })
+			},
+		},
+		{
+			name: "current interface mode differs",
+			mutate: func(_, current *schemaContract) {
+				mutateSheetExportTool(current, func(tool *toolSchema) { tool.InterfaceMode = "local" })
+			},
+		},
+		{
+			name: "current interface ref remains",
+			mutate: func(_, current *schemaContract) {
+				mutateSheetExportTool(current, func(tool *toolSchema) { tool.InterfaceRef = `{"product_id":"sheet","rpc_name":"submit_export_job"}` })
+			},
+		},
+		{
+			name: "async becomes required",
+			mutate: func(_, current *schemaContract) {
+				mutateSheetExportTool(current, func(tool *toolSchema) {
+					parameter := tool.Parameters["async"]
+					parameter.Required = true
+					tool.Parameters["async"] = parameter
+				})
+			},
+		},
+		{
+			name: "unreviewed extra parameter",
+			mutate: func(_, current *schemaContract) {
+				mutateSheetExportTool(current, func(tool *toolSchema) {
+					tool.Parameters["extra"] = parameterSchema{Type: `"string"`}
+				})
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			baseline, current := sheetExportCompositeMigrationContracts()
+			test.mutate(&baseline, &current)
+			if failures := checkCompatibility(baseline, current); len(failures) == 0 {
+				t.Fatal("invalid reviewed Sheet export composite migration unexpectedly passed")
+			}
+		})
+	}
+}
+
+func sheetExportCompositeMigrationContracts() (schemaContract, schemaContract) {
+	tool := toolSchema{
+		PrimaryCLIPath: "sheet export",
+		InterfaceMode:  "mcp",
+		InterfaceRef:   `{"product_id":"sheet","rpc_name":"submit_export_job"}`,
+		Availability:   "available",
+		Parameters: map[string]parameterSchema{
+			"node":   {Type: `"string"`, Property: "nodeId", Required: true},
+			"output": {Type: `"string"`},
+		},
+		DryRun:       `{"preview_kind":"plan"}`,
+		Effect:       "read",
+		Risk:         "low",
+		Confirmation: "not_required",
+		Idempotency:  "idempotent",
+	}
+	baseline := schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"sheet": {Tools: map[string]toolSchema{"sheet.submit_export_job": tool}},
+	}}
+	current := cloneContract(baseline)
+	mutateSheetExportTool(&current, func(tool *toolSchema) {
+		tool.InterfaceMode = "composite"
+		tool.InterfaceRef = ""
+		tool.Parameters["async"] = parameterSchema{Type: `"boolean"`}
+	})
+	return baseline, current
+}
+
+func mutateSheetExportTool(contract *schemaContract, mutate func(*toolSchema)) {
+	product := contract.Products["sheet"]
+	tool := product.Tools["sheet.submit_export_job"]
+	mutate(&tool)
+	product.Tools["sheet.submit_export_job"] = tool
+	contract.Products["sheet"] = product
+}
+
+func docExportTaskIDAliasMigrationContracts() (schemaContract, schemaContract) {
+	tool := toolSchema{
+		PrimaryCLIPath: "doc export get",
+		InterfaceMode:  "mcp",
+		InterfaceRef:   `{"product_id":"doc","rpc_name":"query_export_job"}`,
+		Availability:   "available",
+		Parameters: map[string]parameterSchema{
+			"job-id": {
+				Type:          `"string"`,
+				Property:      "jobId",
+				InterfaceType: "string",
+				Required:      true,
+			},
+		},
+		Effect:       "read",
+		Risk:         "low",
+		Confirmation: "not_required",
+		Idempotency:  "idempotent",
+	}
+	baseline := schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"doc": {Tools: map[string]toolSchema{"doc.query_export_job": tool}},
+	}}
+	current := cloneContract(baseline)
+	mutateDocExportTaskIDTool(&current, func(tool *toolSchema) {
+		jobID := tool.Parameters["job-id"]
+		jobID.Required = false
+		tool.Parameters["job-id"] = jobID
+		taskID := jobID
+		tool.Parameters["task-id"] = taskID
+		tool.Constraints = `{"mutually_exclusive":[["job-id","task-id"]],"require_one_of":[["job-id","task-id"]]}`
+	})
+	return baseline, current
+}
+
+func mutateDocExportTaskIDTool(contract *schemaContract, mutate func(*toolSchema)) {
+	product := contract.Products["doc"]
+	tool := product.Tools["doc.query_export_job"]
+	mutate(&tool)
+	product.Tools["doc.query_export_job"] = tool
+	contract.Products["doc"] = product
+}
+
+func mutateDocExportTaskIDParameter(contract *schemaContract, mutate func(*parameterSchema)) {
+	mutateDocExportTaskIDTool(contract, func(tool *toolSchema) {
+		parameter := tool.Parameters["task-id"]
+		mutate(&parameter)
+		tool.Parameters["task-id"] = parameter
+	})
+}
+
 func TestMergeContracts(t *testing.T) {
 	historical := baselineContract()
 	current := cloneContract(historical)

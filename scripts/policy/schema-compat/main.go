@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -472,6 +473,8 @@ func checkCompatibility(baseline, current schemaContract) []string {
 
 func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
 	var failures []string
+	reviewedAliasMigration := reviewedParameterAliasMigrationCompatible(toolPath, oldTool, newTool)
+	reviewedInterfaceMigration := reviewedSheetExportCompositeMigrationCompatible(toolPath, oldTool, newTool)
 	for _, field := range []struct {
 		name string
 		old  string
@@ -488,6 +491,12 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
 	} {
 		if field.old != field.new {
+			if field.name == "constraints" && reviewedAliasMigration {
+				continue
+			}
+			if (field.name == "interface_mode" || field.name == "interface_ref") && reviewedInterfaceMigration {
+				continue
+			}
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
@@ -508,6 +517,106 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	}
 	sort.Strings(failures)
 	return failures
+}
+
+// reviewedSheetExportCompositeMigrationCompatible recognizes one exact
+// correction to a historical Schema classification. The sheet export CLI has
+// always composed task submission, task polling, and optional local download;
+// it therefore cannot truthfully remain bound to only sheet/submit_export_job.
+// The historical primary path and every pre-existing parameter stay intact.
+// Only the optional --async orchestration control is additive.
+func reviewedSheetExportCompositeMigrationCompatible(toolPath string, oldTool, newTool toolSchema) bool {
+	if toolPath != "sheet/sheet.submit_export_job" {
+		return false
+	}
+	if oldTool.PrimaryCLIPath != "sheet export" || newTool.PrimaryCLIPath != "sheet export" {
+		return false
+	}
+	const oldInterfaceRef = `{"product_id":"sheet","rpc_name":"submit_export_job"}`
+	if oldTool.InterfaceMode != "mcp" || oldTool.InterfaceRef != oldInterfaceRef ||
+		newTool.InterfaceMode != "composite" || newTool.InterfaceRef != "" {
+		return false
+	}
+	if oldTool.Availability != "available" || newTool.Availability != "available" ||
+		oldTool.Constraints != "" || newTool.Constraints != "" ||
+		oldTool.Effect != "read" || newTool.Effect != "read" ||
+		oldTool.Risk != "low" || newTool.Risk != "low" ||
+		oldTool.Confirmation != "not_required" || newTool.Confirmation != "not_required" ||
+		oldTool.Idempotency != "idempotent" || newTool.Idempotency != "idempotent" ||
+		oldTool.DryRun != `{"preview_kind":"plan"}` || newTool.DryRun != oldTool.DryRun ||
+		len(oldTool.Positionals) != 0 || len(newTool.Positionals) != 0 {
+		return false
+	}
+	if len(oldTool.Parameters) != 2 || len(newTool.Parameters) != 3 {
+		return false
+	}
+	oldNode, oldHasNode := oldTool.Parameters["node"]
+	oldOutput, oldHasOutput := oldTool.Parameters["output"]
+	_, oldHasAsync := oldTool.Parameters["async"]
+	newNode, newHasNode := newTool.Parameters["node"]
+	newOutput, newHasOutput := newTool.Parameters["output"]
+	newAsync, newHasAsync := newTool.Parameters["async"]
+	if !oldHasNode || !oldHasOutput || oldHasAsync || !newHasNode || !newHasOutput || !newHasAsync {
+		return false
+	}
+	wantNode := parameterSchema{Type: `"string"`, Property: "nodeId", Required: true}
+	wantOutput := parameterSchema{Type: `"string"`}
+	wantAsync := parameterSchema{Type: `"boolean"`}
+	return reflect.DeepEqual(oldNode, wantNode) && reflect.DeepEqual(newNode, wantNode) &&
+		reflect.DeepEqual(oldOutput, wantOutput) && reflect.DeepEqual(newOutput, wantOutput) &&
+		reflect.DeepEqual(newAsync, wantAsync)
+}
+
+// reviewedParameterAliasMigrationCompatible recognizes a single, exact
+// backwards-compatible migration: doc export task lookup keeps the historical
+// --job-id parameter while adding --task-id as an equivalent spelling for the
+// same jobId interface property. Both spellings become optional individually,
+// and the final constraints require exactly one of them.
+//
+// This is intentionally canonical-scoped and fail-closed. It is not a general
+// exemption for changed constraints or renamed parameters; any difference in
+// the old/new parameter sets, interface facts, or the exact exclusive-one-of
+// contract falls back to the normal compatibility failure.
+func reviewedParameterAliasMigrationCompatible(toolPath string, oldTool, newTool toolSchema) bool {
+	if toolPath != "doc/doc.query_export_job" || oldTool.Constraints != "" {
+		return false
+	}
+	const exclusiveTaskIDConstraints = `{"mutually_exclusive":[["job-id","task-id"]],"require_one_of":[["job-id","task-id"]]}`
+	if newTool.Constraints != exclusiveTaskIDConstraints {
+		return false
+	}
+	if len(newTool.Parameters) != len(oldTool.Parameters)+1 {
+		return false
+	}
+	oldJobID, oldHasJobID := oldTool.Parameters["job-id"]
+	_, oldHasTaskID := oldTool.Parameters["task-id"]
+	newJobID, newHasJobID := newTool.Parameters["job-id"]
+	newTaskID, newHasTaskID := newTool.Parameters["task-id"]
+	if !oldHasJobID || oldHasTaskID || !newHasJobID || !newHasTaskID {
+		return false
+	}
+	if !oldJobID.Required || newJobID.Required || newTaskID.Required {
+		return false
+	}
+	if !parameterAliasFactsEqual(oldJobID, newJobID) || !parameterAliasFactsEqual(oldJobID, newTaskID) {
+		return false
+	}
+	for name, oldParameter := range oldTool.Parameters {
+		if name == "job-id" {
+			continue
+		}
+		newParameter, ok := newTool.Parameters[name]
+		if !ok || !reflect.DeepEqual(oldParameter, newParameter) {
+			return false
+		}
+	}
+	return true
+}
+
+func parameterAliasFactsEqual(left, right parameterSchema) bool {
+	left.Required = false
+	right.Required = false
+	return reflect.DeepEqual(left, right)
 }
 
 func compatiblePositionals(oldPositionals, newPositionals []positionalSchema) bool {

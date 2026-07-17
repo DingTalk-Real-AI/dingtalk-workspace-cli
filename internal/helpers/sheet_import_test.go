@@ -319,8 +319,16 @@ func TestDocImportDryRunStillAcceptsMarkdownWithoutTarget(t *testing.T) {
 	if len(caller.calls) != 0 {
 		t.Fatalf("dry-run made %d remote calls", len(caller.calls))
 	}
-	if !strings.Contains(output.String(), "导入本地文件为在线文档") || !strings.Contains(output.String(), "md") {
-		t.Fatalf("unexpected dry-run output:\n%s", output.String())
+	preview := decodeSingleAsyncDryRunPreview(t, output.String())
+	requireAsyncDryRunFields(t, preview, map[string]any{
+		"operation":  "doc_import",
+		"taskType":   "import",
+		"mode":       "sync_wait",
+		"file":       filePath,
+		"fileFormat": "md",
+	})
+	if _, leaked := preview["uploadUrl"]; leaked {
+		t.Fatalf("doc import dry-run leaked uploadUrl: %#v", preview)
 	}
 }
 

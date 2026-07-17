@@ -31,7 +31,7 @@ func queryAsyncTask(ctx context.Context, taskType, id string) (asynctask.TaskRes
 }
 
 func callAsyncTaskMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
-	return callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx, serverID, toolName, args, isBusinessErrorWithoutStatus)
+	return callMCPToolReturnTextOnServerWithRedactedBusinessErrorClassifier(ctx, serverID, toolName, args, isBusinessErrorWithoutStatus)
 }
 
 func queryAsyncTaskWith(ctx context.Context, call asyncTaskMCPCall, taskType, id string) (asynctask.TaskResult, error) {

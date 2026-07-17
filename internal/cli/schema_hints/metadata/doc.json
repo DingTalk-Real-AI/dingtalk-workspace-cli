@@ -209,13 +209,17 @@
       "availability": "available",
       "reviewed": true,
       "parameters": {
+        "job-id": {
+          "description": "Historical task identifier accepted by the CLI; maps to jobId and is mutually exclusive with --task-id.",
+          "required": false
+        },
         "task-id": {
           "description": "Preferred task identifier returned as TaskResult.id; maps to the same jobId request property as --job-id.",
           "required": false
         }
       },
       "cli_path": "doc export get",
-      "review_reason": "Preserve the historical required --job-id contract and review additive optional --task-id as an equivalent jobId input.",
+      "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
       "runtime_gate": "none"
     },
     "doc.remove_permission": {

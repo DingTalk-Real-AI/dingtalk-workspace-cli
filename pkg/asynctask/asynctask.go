@@ -44,7 +44,7 @@ const (
 	StatusPending    Status = "PENDING"
 	StatusSuccess    Status = "SUCCESS"
 	StatusFailed     Status = "FAILED"
-	StatusTimeout    Status = "TIMEOUT" // 本地超时（非服务端状态）
+	StatusTimeout    Status = "TIMEOUT" // 本地轮询或服务端任务超时
 )
 
 type TaskResult struct {

@@ -8059,6 +8059,12 @@
               "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
             }
           ]
         },
@@ -8075,6 +8081,12 @@
               "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
             }
           ]
         },
@@ -8111,6 +8123,12 @@
               "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
             }
           ]
         },
@@ -8198,6 +8216,12 @@
               "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
             }
           ]
         },
@@ -8235,7 +8259,9 @@
         "internal/cli/schema_hints/metadata/drive.json",
         "internal/cli/schema_hints/selection/drive.json",
         "internal/helpers/drive_task.go",
-        "live-mcp:none (composite: doc/query_export_job + doc/query_import_task)"
+        "live-mcp:none (composite: doc/query_export_job + doc/query_import_task)",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/drive.md"
       ],
       "use_when": [
         "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",

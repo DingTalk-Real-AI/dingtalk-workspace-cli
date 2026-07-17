@@ -831,23 +831,24 @@ func runDocExport(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deps.Caller.DryRun() {
-		deps.Out.PrintKeyValue("操作", "导出文档（提交+轮询+下载）")
-		deps.Out.PrintKeyValue("文档", node)
-		if outputPath != "" {
-			deps.Out.PrintKeyValue("输出", outputPath)
-		}
-		deps.Out.PrintKeyValue("格式", format)
-		return nil
+		return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+			Operation:    "doc_export",
+			TaskType:     "export",
+			Mode:         asyncDryRunMode(asyncMode),
+			Node:         node,
+			ExportFormat: format,
+			Output:       outputPath,
+		})
 	}
 
 	ctx := cmd.Context()
-	quietAsyncJSON := asyncMode && deps.Caller.Format() == "json"
+	quietAsyncJSON := asyncMode && strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 
 	// ── Step 1: 提交导出任务 ──
 	if !quietAsyncJSON {
 		deps.Out.PrintInfo("[1/3] 提交导出任务...")
 	}
-	submitText, err := callMCPToolReturnText(ctx, "submit_export_job", submitArgs)
+	submitText, err := callMCPToolReturnTextWithRedactedBusinessErrors(ctx, "submit_export_job", submitArgs)
 	if err != nil {
 		return fmt.Errorf("提交导出任务失败: %w", err)
 	}
@@ -886,6 +887,7 @@ func runDocExport(cmd *cobra.Command, _ []string) error {
 
 	deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载文件到 %s ...", outputPath))
 	if err := httpGetFile(ctx, downloadURL, nil, outputPath); err != nil {
+		err = &redactedTransferError{cause: err, operation: "download"}
 		return fmt.Errorf("文件下载失败 (jobId=%s): %w", jobID, err)
 	}
 
@@ -2509,9 +2511,11 @@ CLI 不会轮询或下载。请保存返回结果中的 id（任务 ID），稍�
 			}
 
 			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "查询导出任务结果")
-				deps.Out.PrintKeyValue("任务ID", taskID)
-				return nil
+				return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+					Operation: "doc_export_get",
+					TaskType:  "export",
+					TaskID:    taskID,
+				})
 			}
 
 			result, err := queryAsyncTask(cmd.Context(), "export", taskID)
@@ -2987,7 +2991,7 @@ func pollDocExportJob(ctx context.Context, jobID string) (downloadURL string, er
 		case <-helperAfter(interval):
 		}
 
-		text, queryErr := callMCPToolReturnText(ctx, "query_export_job", map[string]any{"jobId": jobID})
+		text, queryErr := callMCPToolReturnTextWithRedactedBusinessErrors(ctx, "query_export_job", map[string]any{"jobId": jobID})
 		if queryErr != nil {
 			return "", fmt.Errorf("查询导出任务失败 (jobId=%s): %w", jobID, queryErr)
 		}

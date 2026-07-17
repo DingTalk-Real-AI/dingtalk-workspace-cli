@@ -1,10 +1,10 @@
 # Wukong 统一异步任务能力同步设计
 
-状态：已确认  
-日期：2026-07-17  
-交付目标：追加到 GitHub PR #643 共同审核  
-OpenDWS 开发基线：`2f0cd4fe4db45c7dcbcff7233a985f177f8bc08c`  
-Wukong 参考提交：`fae989ccb163d0aa986283acefd113bddcfaf7c3`
+- 状态：已确认
+- 日期：2026-07-17
+- 交付目标：追加到 GitHub PR #643 共同审核
+- OpenDWS 开发基线：`2f0cd4fe4db45c7dcbcff7233a985f177f8bc08c`
+- Wukong 参考提交：`fae989ccb163d0aa986283acefd113bddcfaf7c3`
 
 ## 1. 背景与结论
 
@@ -70,8 +70,8 @@ dws doc export get --task-id <TASK_ID>
 - `doc export` 新增 `--async`。
 - 同步模式保持 `--output` 必填，并继续执行“提交、轮询、下载”。
 - 异步模式下 `--output` 不再必填；提交成功后立即返回 `PENDING` 的 `TaskResult`，不轮询、不下载。
-- `doc export get` 的公开主参数改为 `--task-id`。
-- 保留隐藏的 `--job-id` 作为兼容别名；两者都提供时以显式冲突错误结束，避免静默选值。
+- `doc export get` 新流程推荐 `--task-id`。
+- 为保持 authoritative 历史命令合同，公开的 `--job-id` 继续可见、可执行；两者都提供时以显式冲突错误结束，避免静默选值。
 - 查询结果由原始 MCP 响应改为统一 `TaskResult`。
 
 ### 4.3 Doc 导入
@@ -173,7 +173,7 @@ dws sheet export get --task-id <TASK_ID>
 ## 7. 兼容性与错误处理
 
 - 未使用 `--async` 的用户行为不变。
-- `doc export get --job-id` 继续可执行，但不出现在普通 Help 中。
+- `doc export get --job-id` 继续可执行且保持公开，避免破坏历史 Help/Schema 合同。
 - `sheet export get --job-id` 作为同样的隐藏兼容入口。
 - 缺少任务 ID、同时传两个 ID 参数、非法 `--type` 均在 MCP 调用前失败。
 - 非 JSON MCP 响应视为协议错误，不再伪装为成功并直接透传。
@@ -182,7 +182,7 @@ dws sheet export get --task-id <TASK_ID>
   `TaskResult.status=FAILED`；只有 `success=false`、非空 `error` 或错误码等
   envelope 信号才在解析前返回错误。
 - 查询到 `FAILED` 或 `TIMEOUT` 时仍输出结构化任务结果；产品级 `get` 命令保留现有非零退出语义，统一 `drive task get` 作为状态查询在收到合法结果后返回成功，由调用方读取 `status`。
-- 不记录、输出或提交登录凭据、OSS 临时凭证和带敏感查询串的真实下载地址。
+- 成功查询或同步导出可按 CLI 合同向直接调用者返回 `resultUrl`/`downloadUrl`；除此之外，进度、错误、测试日志、PR 证据和提交物不得记录登录凭据、OSS 临时凭证或完整的临时 URL。
 
 ## 8. Agent Schema 与 Skills
 
@@ -194,16 +194,21 @@ dws sheet export get --task-id <TASK_ID>
 - 必要的 `internal/cli/schema_parameter_bindings.json`
 - mono/multi Skills 中的 Drive、Doc、Sheet 参考文档
 
+所有新增异步命令的 `--dry-run --format json` 统一输出单个、无副作用的 plan JSON；大小写和首尾空白格式值按统一 formatter 规则处理。预览和错误输出不得包含上传签名 URL、下载 URL 或临时凭证；显式成功结果仍按合同返回结果地址。
+
 生成文件只通过 `go generate ./internal/cli` 或仓库生成目标产生，不手工编辑。新增公开叶子必须通过 Cobra 到 Agent Schema 的双向完整性检查。
 
-Schema 只绑定“可执行且没有子命令”的叶子。为同时保留历史人类入口和
-发布异步提交能力，使用仓库已有的兼容模式：
+Schema 默认只绑定“可执行且没有子命令”的叶子。为同时保留历史人类入口和
+发布异步提交能力，采用 fail-closed 兼容模型：
 
 - `doc export` 继续可直接执行；Schema 主路径为 `doc export create`。
 - `doc import` 继续可直接执行；Schema 主路径为 `doc import create`。
-- `sheet export` 继续可直接执行；Schema 主路径为 `sheet export create`。
+- `sheet export` 继续可直接执行，并为保持历史 Schema identity 继续作为 `sheet.submit_export_job` 主路径；`sheet export create` 是公开等价 alias。
 - 三个 `create` 叶子与各自父命令共享同一 handler 和公开 flags。
-- runnable parent 不作为 Registry alias；查询入口仍为各自的 `get` 叶子。
+- runnable parent 不作为 Registry alias。唯一例外是已存在的历史 primary：必须同时注册至少一个经审阅的可执行 alias，且 binder 必须证明两者 handler、flags、required facts、Args、constraints 和 positionals 完全等价。
+- `doc.query_export_job` 在 Schema 中保留公开 `job-id` 并增加 `task-id`；两者各自可选，Schema 通过 `require_one_of` 与 `mutually_exclusive` 精确表达“必须且只能提供一个”。兼容门禁只放行这一组参数别名迁移。
+- `sheet.submit_export_job` 保留历史 `sheet export` 主路径，但从不准确的单一 `mcp` 映射迁为 `composite` 且不发布 `interface_ref`，因为真实流程包含提交、查询和可选本地下载。兼容门禁只放行该 canonical path 的精确 before/after 合同，其他字段变化仍失败。
+- 查询入口仍为各自的 `get` 叶子。
 
 ## 9. 测试策略
 
@@ -262,7 +267,7 @@ PR 更新前至少完成：
 
 ## 12. 验收标准
 
-- 本文列出的七个命令面变化均可通过真实 Cobra 命令发现和执行。
+- 本文列出的命令面变化均可通过真实 Cobra 命令发现和执行。
 - 新旧参数兼容，默认同步行为无回归。
 - 所有查询输出符合统一 `TaskResult`，状态映射覆盖 `TIMEOUT`。
 - Agent Schema 和 Skills 可发现新增能力，生成资产通过检查。

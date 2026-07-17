@@ -33,6 +33,7 @@ type driveParityCall struct {
 type driveParityCaller struct {
 	calls  []driveParityCall
 	dryRun bool
+	format string
 }
 
 func (c *driveParityCaller) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -40,7 +41,12 @@ func (c *driveParityCaller) CallTool(_ context.Context, server, tool string, arg
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{}`}}}, nil
 }
 
-func (*driveParityCaller) Format() string { return "json" }
+func (c *driveParityCaller) Format() string {
+	if c.format == "" {
+		return "json"
+	}
+	return c.format
+}
 func (c *driveParityCaller) DryRun() bool { return c.dryRun }
 func (*driveParityCaller) Fields() string { return "" }
 func (*driveParityCaller) JQ() string     { return "" }
@@ -58,6 +64,7 @@ func executeDriveParityCommand(t *testing.T, caller *driveParityCaller, stdin st
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().BoolP("yes", "y", false, "skip confirmation")
 	root.PersistentFlags().Bool("dry-run", false, "preview")
+	root.PersistentFlags().String("format", "json", "output format")
 	root.SetIn(strings.NewReader(stdin))
 	root.SetOut(&output)
 	root.SetErr(&output)

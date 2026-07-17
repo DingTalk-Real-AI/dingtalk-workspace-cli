@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"reflect"
 	"sort"
@@ -123,6 +124,133 @@ func TestDocImportAsyncJSONFormatIsCaseInsensitive(t *testing.T) {
 	}
 	if result := decodeSingleTaskResult(t, stdout); result.ID != "task-1" || result.Status != asynctask.StatusPending {
 		t.Fatalf("TaskResult = %#v", result)
+	}
+}
+
+func TestDocImportMalformedSessionDoesNotLeakSignedUploadURL(t *testing.T) {
+	filePath := writeImportFixture(t, "md")
+	uploadCalls := 0
+	SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error {
+		uploadCalls++
+		return nil
+	})
+	t.Cleanup(func() { SetHTTPPutFile(nil) })
+
+	const signedURL = "https://upload.example.test/object?token=session-secret&signature=private"
+	caller := &docAsyncRecordingCaller{
+		format:    "json",
+		responses: []docAsyncRecordedResponse{{text: `{"uploadUrl":"` + signedURL + `"}`}},
+	}
+	stdout, err := runDocAsyncCapturedCommand(t, context.Background(), caller,
+		"import", "create", "--file", filePath, "--async", "--format", "json")
+	if err == nil || !strings.Contains(err.Error(), "缺少 sessionId 或 uploadUrl") {
+		t.Fatalf("malformed session error = %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("malformed session JSON stdout = %q, want empty", stdout)
+	}
+	for _, forbidden := range []string{signedURL, "upload.example.test", "session-secret", "signature=private"} {
+		if strings.Contains(stdout, forbidden) || strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("malformed session leaked %q: stdout=%q error=%v", forbidden, stdout, err)
+		}
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "create_import_session" || uploadCalls != 0 {
+		t.Fatalf("malformed session calls=%#v uploadCalls=%d, want one session call and no upload", caller.calls, uploadCalls)
+	}
+}
+
+func TestDocImportSessionBusinessErrorDoesNotLeakSignedUploadURL(t *testing.T) {
+	filePath := writeImportFixture(t, "md")
+	uploadCalls := 0
+	SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error {
+		uploadCalls++
+		return nil
+	})
+	t.Cleanup(func() { SetHTTPPutFile(nil) })
+
+	const signedURL = "https://upload.example.test/object?token=import-secret&signature=private"
+	caller := &docAsyncRecordingCaller{
+		format:    "json",
+		responses: []docAsyncRecordedResponse{{text: `{"success":false,"message":"session failed","uploadUrl":"` + signedURL + `"}`}},
+	}
+	stdout, err := runDocAsyncCapturedCommand(t, context.Background(), caller,
+		"import", "create", "--file", filePath, "--async", "--format", "json")
+	if err == nil || !strings.Contains(err.Error(), "session failed") {
+		t.Fatalf("session error = %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("session error stdout = %q, want empty", stdout)
+	}
+	for _, forbidden := range []string{signedURL, "upload.example.test", "import-secret", "signature=private"} {
+		if strings.Contains(stdout, forbidden) || strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("session error leaked %q: stdout=%q error=%v", forbidden, stdout, err)
+		}
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "create_import_session" || uploadCalls != 0 {
+		t.Fatalf("session calls=%#v uploadCalls=%d, want one session call and no upload", caller.calls, uploadCalls)
+	}
+}
+
+func TestDocImportMalformedConfirmationDoesNotLeakResponseOrPoll(t *testing.T) {
+	filePath := writeImportFixture(t, "md")
+	uploadCalls := 0
+	installDocImportUploadStub(t, "https://upload.example.test/input?token=input-secret", filePath, &uploadCalls)
+
+	const leakedURL = "https://upload.example.test/confirm?token=confirm-secret&signature=private"
+	caller := &docAsyncRecordingCaller{
+		format: "json",
+		responses: []docAsyncRecordedResponse{
+			{text: `{"sessionId":"session-1","uploadUrl":"https://upload.example.test/input?token=input-secret"}`},
+			{text: `{"uploadUrl":"` + leakedURL + `","message":"task not ready"}`},
+		},
+	}
+	stdout, err := runDocAsyncCapturedCommand(t, context.Background(), caller,
+		"import", "create", "--file", filePath, "--async", "--format", "json")
+	if err == nil || !strings.Contains(err.Error(), "未返回 taskId") {
+		t.Fatalf("malformed confirmation error = %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("malformed confirmation JSON stdout = %q, want empty", stdout)
+	}
+	for _, forbidden := range []string{leakedURL, "upload.example.test", "input-secret", "confirm-secret", "signature=private"} {
+		if strings.Contains(stdout, forbidden) || strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("malformed confirmation leaked %q: stdout=%q error=%v", forbidden, stdout, err)
+		}
+	}
+	if len(caller.calls) != 2 || caller.calls[0].tool != "create_import_session" || caller.calls[1].tool != "confirm_import" || uploadCalls != 1 {
+		t.Fatalf("malformed confirmation calls=%#v uploadCalls=%d, want create+confirm and one upload", caller.calls, uploadCalls)
+	}
+}
+
+func TestDocImportUploadFailureDoesNotLeakSignedUploadURL(t *testing.T) {
+	filePath := writeImportFixture(t, "md")
+	const signedURL = "https://upload.example.test/object?token=upload-secret&signature=private"
+	uploadCalls := 0
+	SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error {
+		uploadCalls++
+		return &url.Error{Op: "PUT", URL: signedURL, Err: errors.New("dial failed")}
+	})
+	t.Cleanup(func() { SetHTTPPutFile(nil) })
+
+	caller := &docAsyncRecordingCaller{
+		format:    "json",
+		responses: []docAsyncRecordedResponse{{text: `{"sessionId":"session-1","uploadUrl":"` + signedURL + `"}`}},
+	}
+	stdout, err := runDocAsyncCapturedCommand(t, context.Background(), caller,
+		"import", "create", "--file", filePath, "--async", "--format", "json")
+	if err == nil || !strings.Contains(err.Error(), "文件上传失败") {
+		t.Fatalf("upload failure error = %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("upload failure JSON stdout = %q, want empty", stdout)
+	}
+	for _, forbidden := range []string{signedURL, "upload.example.test", "upload-secret", "signature=private"} {
+		if strings.Contains(stdout, forbidden) || strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("upload failure leaked %q: stdout=%q error=%v", forbidden, stdout, err)
+		}
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "create_import_session" || uploadCalls != 1 {
+		t.Fatalf("upload failure calls=%#v uploadCalls=%d, want one session call and one upload", caller.calls, uploadCalls)
 	}
 }
 

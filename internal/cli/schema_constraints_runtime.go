@@ -58,6 +58,7 @@ func init() {
 	registerRequireOneOf("devdoc.search_open_error_code_rag", "query", "request-id", "error-code", "error-message", "context")
 	registerRequireOneOf("devdoc.search_open_platform_docs_rag", "query", "keyword")
 	registerRequireOneOf("drive.permission_transfer_owner", "node", "workspace")
+	registerExclusiveOneOf("doc.query_export_job", "job-id", "task-id")
 	registerRequireOneOf("event.consume", "event_key", "subscribe-id")
 	registerExclusiveOneOf("event.stop", "all", "subscribe_id")
 	registerRequireOneOf("doc.insert_document_block", "text", "heading", "element")
