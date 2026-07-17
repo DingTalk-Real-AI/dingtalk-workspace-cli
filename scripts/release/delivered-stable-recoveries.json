@@ -1,0 +1,14 @@
+{
+  "recoveries": [
+    {
+      "tag": "v1.0.52",
+      "commit": "4e59f9aa7ab057da8d5512ae9818fb66d4c6a045",
+      "run_id": 29380892754,
+      "workflow_sha": "434251695c19ebbfe2a2240d2eddce2d56af07b7",
+      "head_branch": "codex/recover-v1.0.52",
+      "run_attempt": 1,
+      "reviewed": true,
+      "review_reason": "The original stable tag push selected the colocated v1.0.52-beta.5 tag. This pinned workflow_dispatch run checked out the annotated v1.0.52 tag, required it to equal origin/main, built and signed that exact commit, published all channels, and completed every delivery job successfully."
+    }
+  ]
+}

@@ -6,11 +6,45 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.53-beta.3] - 2026-07-17
+
+This beta validates multi-account profile support and the post-v1.0.53-beta.2 compatibility fixes for Windows portable authentication, IM shortcuts, and Aitable import uploads.
+
 ### Added
 
+- **Multiple accounts in one DingTalk organization** — profiles are keyed by `corpId:userId`, `--profile` accepts organization IDs/names plus user IDs/names, and organization-only selection uses its explicitly remembered current account or asks for an exact account when ambiguous.
+
+### Changed
+
+- **Profile-scoped logout and consistent token storage** — `dws auth logout --profile` can remove one account or every account in an organization, while identity token slots remain the source of truth and legacy organization/global mirrors stay compatible without overwriting newer account credentials.
+
+### Fixed
+
+- **Windows portable-auth contract** — `dws auth export` and `dws auth import` now fail early without reading credentials, bundles, or writing files instead of claiming portable-bundle support for DPAPI-protected HKCU Registry credentials.
+- **IM shortcut message tags and compatibility aliases** (#646) — IM send shortcuts now add the same AI-sent marker as `chat message send` by default, support `--ai-tag=false` to opt out, and preserve compatible search, conversation-ID, and page-size aliases.
+- **Aitable import upload file-size validation** (#654) — `dws aitable import upload` and `dws aitable +import-upload` now require a positive `--file-size` and always send it to the upload-preparation API, preventing invalid requests without the actual file size.
+
+## [1.0.53-beta.2] - 2026-07-16
+
+This beta validates the accumulated post-v1.0.52 command surface, release automation, and runtime hardening changes, including enterprise contact onboarding, declarative shortcuts, Sheet/Aitable writes, multi-platform Homebrew formulas, and credential and target-validation fixes.
+
+### Added
+
+- **Contact enterprise onboarding commands** — adds `contact org create`, `contact user invite`, and `contact account create` for creating a DingTalk enterprise, inviting an employee by mobile, and provisioning an enterprise login account, with reviewed Schema contracts and mono/multi Skill routing.
 - **Declarative shortcut commands** (#592) — adds 366 `dws <service> +<command>` shortcuts across 16 services, including one-to-one MCP wrappers and multi-step smart workflows. Shortcuts publish stable Agent-visible contracts with named flags, validation and confirmation metadata, dry-run protection for writes, catalog/help routing, and optional local YAML extensions and usage recording.
 - **Sheet imports and Aitable workflow writes** (#624) — adds `dws sheet import` / `sheet import create` for converting local xlsx/xls files into new online sheets, `sheet import get` for polling import tasks, and `dws aitable workflow create/update` for applying validated `workflow-dsl/v1` definitions, with matching reviewed Agent Schema and bundled Skill guidance.
 - **Official multi-platform Homebrew channel** — stable `Formula/dingtalk-workspace-cli.rb` and keg-only `Formula/dingtalk-workspace-cli-beta.rb` live in this repository and select signed macOS Intel/Apple Silicon or Linux amd64/arm64 artifacts at install time. Stable and beta releases open isolated Formula update PRs after final artifact signing, so beta never replaces the stable Formula. Agent Skills stay under `pkgshare` without mutating the user's home directory, and both tracks are covered by the six-channel post-release verifier.
+
+### Changed
+
+- **Guarded prerelease and stable automation** — adds the guided `dws-release` entry for one-command CHANGELOG preparation, validation-only and annotated-tag publication flows; promotes only an explicitly validated beta; verifies command-tree compatibility and all six packaged binaries; and serializes immutable GitHub Release, npm channel, OSS, Homebrew, and optional Gitee delivery with fail-closed recovery checks.
+- **Reviewed historical release recovery proofs** — release preflight can recognize an explicitly pinned successful recovery delivery for a historical stable tag while still rejecting arbitrary workflow dispatches, mismatched commits, and incomplete release, signing, or publication jobs.
+
+### Fixed
+
+- **PAT organization-policy denials stop immediately** — `PAT_ORG_POLICY_DENIED` now remains terminal even if a backend also returns `flowId`, authorization URLs, or client credentials; the CLI does not mutate process credentials, open a browser, poll, or retry until an organization administrator changes the policy.
+- **Sheet and task invalid-target failures** — `sheet range read/get` now rejects a null cell-info response instead of printing `null` and exiting successfully, while task completion and attachment listing verify that a task exists before calling lenient backend endpoints. Attachment listing is also published through Runtime Schema for schema-first Agent discovery.
+- **Concurrent credential writes and reentrant CLI execution** — secure-token writers now use isolated, exclusive temporary files before atomic replacement so concurrent processes cannot remove each other's in-flight data, and repeated in-process CLI runs close the previous file logger before replacing it instead of retaining the prior log-file handle.
 
 ## [1.0.52] - 2026-07-14
 
@@ -114,7 +148,6 @@ This release promotes the sealed **remove-discovery delivery** from the beta lin
 
 - **Command-surface regression tests** — root-command tests now cover real `contact label`/`role` dry-runs, hidden top-level contact compatibility entries, `chat file upload` downline behavior, and `calendar event list --dry-run`.
 - **Release hygiene tests** — skill markdown policy still blocks unsupported conference routes, plugin loader tests assert optional validation failures stay quiet at WARN level, and doc version cursor extraction has nested-envelope coverage.
-
 ## [1.0.47] - 2026-07-05
 
 This release adds **connector supervision & health monitoring** (`dev connect list/status/restart/stop`) and fixes **bot-to-bot @-mention** delivery end-to-end.

@@ -14,13 +14,11 @@
 package output
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/itchyny/gojq"
 )
 
@@ -172,7 +170,7 @@ func ApplyJQ(w io.Writer, payload any, expr string) error {
 		}
 		first = false
 
-		data, marshalErr := jsonutil.MarshalIndent(value, "", "  ")
+		data, marshalErr := marshalJSONIndent(value, "", "  ")
 		if marshalErr != nil {
 			return apperrors.NewInternal("failed to encode --jq result")
 		}
@@ -219,12 +217,12 @@ func toGeneric(payload any) any {
 	if payload == nil {
 		return nil
 	}
-	data, err := json.Marshal(payload)
+	data, err := marshalJSON(payload)
 	if err != nil {
 		return payload
 	}
 	var generic any
-	if err := json.Unmarshal(data, &generic); err != nil {
+	if err := unmarshalJSON(data, &generic); err != nil {
 		return payload
 	}
 	return generic

@@ -51,6 +51,8 @@ type knowledgeBase struct {
 // knowledgeTextExts is the set of plain-text extensions the retriever indexes.
 var knowledgeTextExts = []string{".md", ".markdown", ".mdx", ".txt", ".text"}
 
+var knowledgeReadFile = os.ReadFile
+
 // isKnowledgeTextExt reports whether ext is an indexable plain-text extension.
 func isKnowledgeTextExt(ext string) bool {
 	ext = strings.ToLower(ext)
@@ -84,7 +86,7 @@ func loadKnowledgeBase(dir string) (*knowledgeBase, error) {
 			fmt.Fprintf(os.Stderr, "[connect][knowledge] 跳过超大文件 %s\n", path)
 			return nil
 		}
-		raw, rerr := os.ReadFile(path)
+		raw, rerr := knowledgeReadFile(path)
 		if rerr != nil {
 			return rerr
 		}

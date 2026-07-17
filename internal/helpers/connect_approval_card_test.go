@@ -112,6 +112,48 @@ func (n *fakeNotifier) toUser(userID string) bool {
 
 func (n *fakeNotifier) count() int { n.mu.Lock(); defer n.mu.Unlock(); return len(n.sent) }
 
+func TestDingTalkApprovalCardSenderCoverage(t *testing.T) {
+	if newDingtalkApprovalCardSender("client", "secret", " ") != nil {
+		t.Fatal("empty approval template created a sender")
+	}
+	rec, srv := newCardAPIServer(t)
+	withCardAPIBase(t, srv.URL)
+	sender, ok := newDingtalkApprovalCardSender("client", "secret", "template").(*dingtalkApprovalCardSender)
+	if !ok {
+		t.Fatal("approval sender type mismatch")
+	}
+	req := &ApprovalRequest{ID: "approval", Summary: "Create todo", Requester: "requester"}
+	track, err := sender.SendApprovalCard(context.Background(), "owner", req)
+	if err != nil || track != "dws_approval_approval" {
+		t.Fatalf("SendApprovalCard() = %q, %v", track, err)
+	}
+	if err := sender.UpdateApprovalCard(context.Background(), track, "done"); err != nil {
+		t.Fatal(err)
+	}
+	rec.fail["PUT /v1.0/card/instances"] = 500
+	if err := sender.UpdateApprovalCard(context.Background(), track, "failed"); err == nil {
+		t.Fatal("approval update HTTP failure was ignored")
+	}
+	rec.fail = map[string]int{"POST /v1.0/card/instances": 500}
+	if _, err := sender.SendApprovalCard(context.Background(), "owner", req); err == nil {
+		t.Fatal("approval create HTTP failure was ignored")
+	}
+}
+
+func TestApprovalAutoRetryLifecycleCoverage(t *testing.T) {
+	var nilOrchestrator *approvalOrchestrator
+	nilOrchestrator.startAutoRetry(context.Background(), time.Millisecond)
+	(&approvalOrchestrator{}).startAutoRetry(context.Background(), time.Millisecond)
+	notifier := &fakeNotifier{}
+	orchestrator := &approvalOrchestrator{notifier: notifier, gate: newApprovalGate("")}
+	orchestrator.startAutoRetry(context.Background(), 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	orchestrator.startAutoRetry(ctx, time.Millisecond)
+	time.Sleep(3 * time.Millisecond)
+	cancel()
+	time.Sleep(time.Millisecond)
+}
+
 // cardClickReq builds a card callback as DingTalk delivers it: the tapped
 // button's action id plus its private params (approval id + decision).
 func cardClickReq(outTrackID, approvalID, decision, actionID, userID string) *card.CardRequest {

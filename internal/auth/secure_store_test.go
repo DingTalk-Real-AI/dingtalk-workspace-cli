@@ -164,16 +164,42 @@ func TestSaveSecureTokenData_ConcurrentSaves(t *testing.T) {
 	if loaded.AccessToken != "at_concurrent" {
 		t.Fatalf("AccessToken = %q, want at_concurrent", loaded.AccessToken)
 	}
+
+	tmpPattern := filepath.Join(configDir, secureDataFile+".tmp-*")
+	if matches, err := filepath.Glob(tmpPattern); err != nil || len(matches) != 0 {
+		t.Fatalf("secure temp files should not remain after concurrent saves, matches = %v, err = %v", matches, err)
+	}
 }
 
 func TestDeleteSecureData_Idempotent(t *testing.T) {
 	t.Parallel()
 
 	configDir := t.TempDir()
+	legacyTmpPath := filepath.Join(configDir, secureDataFile+".tmp")
+	if err := os.WriteFile(legacyTmpPath, []byte("legacy temp"), 0o600); err != nil {
+		t.Fatalf("WriteFile() legacy temp error = %v", err)
+	}
+	uniqueTmpPath := filepath.Join(configDir, secureDataFile+".tmp-interrupted")
+	if err := os.WriteFile(uniqueTmpPath, []byte("unique temp"), 0o600); err != nil {
+		t.Fatalf("WriteFile() unique temp error = %v", err)
+	}
+	unrelatedTmpPath := filepath.Join(configDir, secureDataFile+".unrelated.tmp")
+	if err := os.WriteFile(unrelatedTmpPath, []byte("unrelated temp"), 0o600); err != nil {
+		t.Fatalf("WriteFile() unrelated temp error = %v", err)
+	}
 
-	// Delete when file does not exist should not return an error.
+	// Delete when the final file does not exist should still remove both legacy
+	// and per-write crash remnants without returning an error.
 	if err := DeleteSecureData(configDir); err != nil {
 		t.Fatalf("first DeleteSecureData() on empty dir error = %v", err)
+	}
+	for _, tmpPath := range []string{legacyTmpPath, uniqueTmpPath} {
+		if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
+			t.Fatalf("temporary file %q was not removed, stat err = %v", tmpPath, err)
+		}
+	}
+	if _, err := os.Stat(unrelatedTmpPath); err != nil {
+		t.Fatalf("unrelated temporary file was removed: %v", err)
 	}
 
 	// Calling again should still be fine.

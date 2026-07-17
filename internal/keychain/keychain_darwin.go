@@ -19,7 +19,6 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -36,11 +35,12 @@ import (
 )
 
 const (
-	keychainTimeout = 5 * time.Second
-	dekBytes        = 32 // DEK = Data Encryption Key (AES-256)
-	ivBytes         = 12
-	tagBytes        = 16
+	dekBytes = 32 // DEK = Data Encryption Key (AES-256)
+	ivBytes  = 12
+	tagBytes = 16
 )
+
+var keychainTimeout = 5 * time.Second
 
 // StorageDir returns the storage directory for a given service name on macOS.
 // Uses ~/Library/Application Support/<service> following Apple conventions.
@@ -50,7 +50,7 @@ func StorageDir(service string) string {
 	if override := os.Getenv(StorageDirEnv); override != "" {
 		return filepath.Join(override, service)
 	}
-	home, err := os.UserHomeDir()
+	home, err := keychainUserHomeDir()
 	if err != nil || home == "" {
 		return filepath.Join(".dws", "keychain", service)
 	}
@@ -68,9 +68,76 @@ var readDefaultKeychain = func() ([]byte, error) {
 }
 
 var (
-	keyringGet = keyring.Get
-	keyringSet = keyring.Set
+	keyringGet                       = keyring.Get
+	keyringSet                       = keyring.Set
+	keychainAuthTokenCiphertextPaths = authTokenCiphertextPaths
+	keychainEntryReadFile            = os.ReadFile
 )
+
+type darwinKeychainRuntime struct {
+	checkAvailable func() error
+	get            func(service, account string) (string, error)
+	set            func(service, account, value string) error
+	randRead       func([]byte) (int, error)
+	timeout        time.Duration
+}
+
+func snapshotDarwinKeychainRuntime() darwinKeychainRuntime {
+	return darwinKeychainRuntime{
+		checkAvailable: checkDefaultKeychainAvailable,
+		get:            keyringGet,
+		set:            keyringSet,
+		randRead:       keychainRandRead,
+		timeout:        keychainTimeout,
+	}
+}
+
+type darwinKeychainResult struct {
+	key []byte
+	err error
+}
+
+type darwinKeychainWorker struct {
+	result <-chan darwinKeychainResult
+	done   <-chan struct{}
+}
+
+func startDarwinKeychainWorker(operation string, work func() ([]byte, error)) darwinKeychainWorker {
+	result := make(chan darwinKeychainResult, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				result <- darwinKeychainResult{
+					err: NewUnavailableError(operation, fmt.Errorf("panic: %v", recovered)),
+				}
+			}
+		}()
+		key, err := work()
+		result <- darwinKeychainResult{key: key, err: err}
+	}()
+	return darwinKeychainWorker{result: result, done: done}
+}
+
+func waitDarwinKeychainWorker(timeout time.Duration, operation string, worker darwinKeychainWorker) ([]byte, error, <-chan struct{}) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	select {
+	case result := <-worker.result:
+		<-worker.done
+		return result.key, result.err, worker.done
+	case <-ctx.Done():
+		return nil, NewUnavailableError(operation, ctx.Err()), worker.done
+	}
+}
+
+func finishedDarwinKeychainWorker() <-chan struct{} {
+	done := make(chan struct{})
+	close(done)
+	return done
+}
 
 func defaultKeychainPathFromSecurityOutput(output []byte) string {
 	value := strings.TrimSpace(string(output))
@@ -92,7 +159,7 @@ func checkDefaultKeychainAvailable() error {
 	if path == "" {
 		return nil
 	}
-	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+	if _, err := keychainStat(path); err != nil && os.IsNotExist(err) {
 		return NewUnavailableError("read macOS default Keychain", fmt.Errorf("default keychain %q does not exist", path))
 	}
 	return nil
@@ -139,7 +206,7 @@ func platformDiagnose() Diagnostic {
 			Detail:  detail,
 		}
 	}
-	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+	if _, err := keychainStat(path); err != nil && os.IsNotExist(err) {
 		return Diagnostic{
 			OK:      false,
 			Reason:  "keychain_unavailable",
@@ -166,116 +233,93 @@ func platformDiagnose() Diagnostic {
 }
 
 func getSystemDEKReadOnly(service string) ([]byte, error) {
-	if err := checkDefaultKeychainAvailable(); err != nil {
-		return nil, err
+	key, err, _ := getSystemDEKReadOnlyWithRuntime(service, snapshotDarwinKeychainRuntime())
+	return key, err
+}
+
+func getSystemDEKReadOnlyWithRuntime(service string, runtime darwinKeychainRuntime) ([]byte, error, <-chan struct{}) {
+	if err := runtime.checkAvailable(); err != nil {
+		return nil, err, finishedDarwinKeychainWorker()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
-	defer cancel()
-
-	type result struct {
-		key []byte
-		err error
-	}
-	resCh := make(chan result, 1)
-
-	go func() {
-		defer func() { recover() }()
-
-		encodedKey, err := keyringGet(service, "dek")
+	const operation = "read DEK from macOS Keychain"
+	worker := startDarwinKeychainWorker(operation, func() ([]byte, error) {
+		encodedKey, err := runtime.get(service, "dek")
 		if err == nil {
 			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
 			if decodeErr == nil && len(key) == dekBytes {
-				resCh <- result{key: key, err: nil}
-				return
+				return key, nil
 			}
-			resCh <- result{key: nil, err: fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)}
-			return
+			return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
 		}
 		if errors.Is(err, keyring.ErrNotFound) {
-			resCh <- result{key: nil, err: fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)}
-			return
+			return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
 		}
-		resCh <- result{key: nil, err: NewUnavailableError("read DEK from macOS Keychain", err)}
-	}()
+		return nil, NewUnavailableError("read DEK from macOS Keychain", err)
+	})
 
-	select {
-	case res := <-resCh:
-		return res.key, res.err
-	case <-ctx.Done():
-		return nil, NewUnavailableError("read DEK from macOS Keychain", ctx.Err())
-	}
+	return waitDarwinKeychainWorker(runtime.timeout, operation, worker)
 }
 
 func getOrCreateDEK(service string) ([]byte, error) {
 	if os.Getenv(DisableKeychainEnv) != "" {
 		return fileDEK(service)
 	}
-	if err := checkDefaultKeychainAvailable(); err != nil {
-		return nil, err
+	key, err, _ := getOrCreateDEKWithRuntime(service, snapshotDarwinKeychainRuntime())
+	return key, err
+}
+
+func getOrCreateDEKWithRuntime(service string, runtime darwinKeychainRuntime) ([]byte, error, <-chan struct{}) {
+	if err := runtime.checkAvailable(); err != nil {
+		return nil, err, finishedDarwinKeychainWorker()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
-	defer cancel()
-
-	type result struct {
-		key []byte
-		err error
-	}
-	resCh := make(chan result, 1)
-
-	go func() {
-		defer func() { recover() }()
-
+	const operation = "read or create DEK in macOS Keychain"
+	worker := startDarwinKeychainWorker(operation, func() ([]byte, error) {
 		// Try to get existing DEK from system Keychain
-		encodedKey, err := keyringGet(service, "dek")
+		encodedKey, err := runtime.get(service, "dek")
 		if err == nil {
 			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
 			if decodeErr == nil && len(key) == dekBytes {
-				resCh <- result{key: key, err: nil}
-				return
+				return key, nil
 			}
 		} else if !errors.Is(err, keyring.ErrNotFound) {
-			resCh <- result{key: nil, err: NewUnavailableError("read DEK from macOS Keychain", err)}
-			return
+			return nil, NewUnavailableError("read DEK from macOS Keychain", err)
 		}
 
 		// Generate new DEK if not found or invalid
 		key := make([]byte, dekBytes)
-		if _, randErr := rand.Read(key); randErr != nil {
-			resCh <- result{key: nil, err: randErr}
-			return
+		if _, randErr := runtime.randRead(key); randErr != nil {
+			return nil, randErr
 		}
 
 		// Store in system Keychain
 		encodedKey = base64.StdEncoding.EncodeToString(key)
-		if setErr := keyringSet(service, "dek", encodedKey); setErr != nil {
-			resCh <- result{key: nil, err: NewUnavailableError("store DEK in macOS Keychain", setErr)}
-			return
+		if setErr := runtime.set(service, "dek", encodedKey); setErr != nil {
+			return nil, NewUnavailableError("store DEK in macOS Keychain", setErr)
 		}
-		resCh <- result{key: key, err: nil}
-	}()
+		return key, nil
+	})
 
-	select {
-	case res := <-resCh:
-		return res.key, res.err
-	case <-ctx.Done():
-		return nil, NewUnavailableError("read DEK from macOS Keychain", ctx.Err())
-	}
+	return waitDarwinKeychainWorker(runtime.timeout, operation, worker)
 }
 
 func encryptData(plaintext string, key []byte) ([]byte, error) {
+	return encryptDataWithGCM(plaintext, key, cipher.NewGCM)
+}
+
+func encryptDataWithGCM(plaintext string, key []byte, newGCM keychainGCMFactory) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	aesGCM, err := cipher.NewGCM(block)
+	aesGCM, err := newGCM(block)
 	if err != nil {
 		return nil, err
 	}
 
 	iv := make([]byte, ivBytes)
-	if _, err := rand.Read(iv); err != nil {
+	if _, err := keychainRandRead(iv); err != nil {
 		return nil, err
 	}
 
@@ -287,6 +331,10 @@ func encryptData(plaintext string, key []byte) ([]byte, error) {
 }
 
 func decryptData(data []byte, key []byte) (string, error) {
+	return decryptDataWithGCM(data, key, cipher.NewGCM)
+}
+
+func decryptDataWithGCM(data []byte, key []byte, newGCM keychainGCMFactory) (string, error) {
 	if len(data) < ivBytes+tagBytes {
 		return "", fmt.Errorf("ciphertext too short")
 	}
@@ -294,7 +342,7 @@ func decryptData(data []byte, key []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	aesGCM, err := cipher.NewGCM(block)
+	aesGCM, err := newGCM(block)
 	if err != nil {
 		return "", err
 	}
@@ -361,7 +409,7 @@ func keyForNewEntry(service, account string) ([]byte, error) {
 	}
 
 	anchorPath := filepath.Join(StorageDir(service), safeFileName(AccountToken))
-	anchor, err := os.ReadFile(anchorPath)
+	anchor, err := keychainEntryReadFile(anchorPath)
 	if err == nil {
 		_, key, decryptErr := decryptWithAvailableDEK(service, anchor)
 		return key, decryptErr
@@ -374,7 +422,7 @@ func keyForNewEntry(service, account string) ([]byte, error) {
 }
 
 func platformGet(service, account string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(StorageDir(service), safeFileName(account)))
+	data, err := keychainReadFile(filepath.Join(StorageDir(service), safeFileName(account)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil // Not found is not an error
@@ -396,7 +444,7 @@ func platformSet(service, account, data string) error {
 		key []byte
 		err error
 	)
-	existing, readErr := os.ReadFile(targetPath)
+	existing, readErr := keychainEntryReadFile(targetPath)
 	switch {
 	case readErr == nil:
 		_, key, err = decryptWithAvailableDEK(service, existing)
@@ -408,8 +456,7 @@ func platformSet(service, account, data string) error {
 	if err != nil {
 		return err
 	}
-
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := keychainMkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	encrypted, err := encryptData(data, key)
@@ -418,26 +465,26 @@ func platformSet(service, account, data string) error {
 	}
 
 	tmpPath := filepath.Join(dir, safeFileName(account)+"."+uuid.New().String()+".tmp")
-	defer os.Remove(tmpPath)
+	defer keychainRemove(tmpPath)
 
-	if err := os.WriteFile(tmpPath, encrypted, 0600); err != nil {
+	if err := keychainWriteFile(tmpPath, encrypted, 0600); err != nil {
 		return err
 	}
 
 	// Atomic rename to prevent file corruption during multi-process writes
-	if err := os.Rename(tmpPath, targetPath); err != nil {
+	if err := keychainRename(tmpPath, targetPath); err != nil {
 		return err
 	}
 	return nil
 }
 
 func platformValidateAuthTokenEntries(service string) error {
-	paths, err := authTokenCiphertextPaths(service)
+	paths, err := keychainAuthTokenCiphertextPaths(service)
 	if err != nil {
 		return err
 	}
 	for _, path := range paths {
-		ciphertext, err := os.ReadFile(path)
+		ciphertext, err := keychainEntryReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read keychain entry %q: %w", filepath.Base(path), err)
 		}
@@ -449,7 +496,7 @@ func platformValidateAuthTokenEntries(service string) error {
 }
 
 func platformRemove(service, account string) error {
-	err := os.Remove(filepath.Join(StorageDir(service), safeFileName(account)))
+	err := keychainRemove(filepath.Join(StorageDir(service), safeFileName(account)))
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}

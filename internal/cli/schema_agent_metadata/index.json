@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "source_hash": "sha256:53567141622d90e02ce50fe3bc1733357a25b9860a0795eb396d9361f43c41d1",
-  "surface_hash": "sha256:69e1f9fcd3768d49a2a197c40fb26c0bc07385e868753210761c3ea7f676eadb",
+  "source_hash": "sha256:9eac553eaaaf1e3674fe2173ab7373ee76e5ccb20494b05c0be34e0bccba9e6c",
+  "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 568,
-    "tools_with_metadata": 568,
-    "tools_with_agent_summary": 568,
-    "tools_with_use_when": 568,
-    "tools_with_avoid_when": 568,
-    "tools_with_examples": 568,
-    "tools_with_interface_mode": 568,
-    "unmatched_skill_tools": 125,
+    "surface_tools": 572,
+    "tools_with_metadata": 572,
+    "tools_with_agent_summary": 572,
+    "tools_with_use_when": 572,
+    "tools_with_avoid_when": 572,
+    "tools_with_examples": 572,
+    "tools_with_interface_mode": 572,
+    "unmatched_skill_tools": 124,
     "unreviewed_skill_tools": 7
   },
   "products": {
@@ -444,20 +444,20 @@
       ]
     },
     "contact": {
-      "agent_summary": "查询通讯录用户、部门、关注关系与授权花名册",
+      "agent_summary": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
       "agent_summary_source": "dws-agent-selection/contact",
       "avoid_when": [
-        "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息"
+        "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息；写操作前确认当前企业和目标信息"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询通讯录用户、部门、关注关系与授权花名册",
+          "value": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
           "source": "internal/cli/schema_hints/selection/contact.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "查询通讯录用户、部门、关注关系与授权花名册",
+              "value": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
               "source": "internal/cli/schema_hints/selection/contact.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -466,7 +466,7 @@
         },
         "avoid_when": {
           "value": [
-            "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息"
+            "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息；写操作前确认当前企业和目标信息"
           ],
           "source": "internal/cli/schema_hints/selection/contact.json",
           "precedence": "reviewed_explicit",
@@ -474,7 +474,7 @@
           "candidates": [
             {
               "value": [
-                "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息"
+                "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息；写操作前确认当前企业和目标信息"
               ],
               "source": "internal/cli/schema_hints/selection/contact.json",
               "precedence": "reviewed_explicit",
@@ -484,7 +484,7 @@
         },
         "use_when": {
           "value": [
-            "按姓名/手机号/userId/部门条件做通讯录精确查询"
+            "按姓名/手机号/userId/部门条件做通讯录精确查询，或明确执行企业与员工入企管理"
           ],
           "source": "internal/cli/schema_hints/selection/contact.json",
           "precedence": "reviewed_explicit",
@@ -492,7 +492,7 @@
           "candidates": [
             {
               "value": [
-                "按姓名/手机号/userId/部门条件做通讯录精确查询"
+                "按姓名/手机号/userId/部门条件做通讯录精确查询，或明确执行企业与员工入企管理"
               ],
               "source": "internal/cli/schema_hints/selection/contact.json",
               "precedence": "reviewed_explicit",
@@ -512,7 +512,7 @@
         "skills/mono/references/intent-guide.md"
       ],
       "use_when": [
-        "按姓名/手机号/userId/部门条件做通讯录精确查询"
+        "按姓名/手机号/userId/部门条件做通讯录精确查询，或明确执行企业与员工入企管理"
       ]
     },
     "dev": {

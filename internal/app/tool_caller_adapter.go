@@ -17,7 +17,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -27,8 +29,13 @@ import (
 // interface so that private overlays can invoke MCP tools without importing
 // internal packages.
 type toolCallerAdapter struct {
-	runner executor.Runner
-	flags  *GlobalFlags
+	runner  executor.Runner
+	flags   *GlobalFlags
+	tokenMu sync.Mutex
+}
+
+var toolCallerDryRun = func(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	return (executor.EchoRunner{}).Run(ctx, invocation)
 }
 
 func newToolCallerAdapter(runner executor.Runner, flags *GlobalFlags) edition.ToolCaller {
@@ -43,7 +50,7 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 	// without catalog, auth, Keychain, endpoint or transport access.
 	if a != nil && a.DryRun() {
 		inv.DryRun = true
-		result, err := (executor.EchoRunner{}).Run(ctx, inv)
+		result, err := toolCallerDryRun(ctx, inv)
 		if err != nil {
 			return nil, err
 		}
@@ -57,6 +64,26 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 		return nil, err
 	}
 	return convertResult(result), nil
+}
+
+// CallToolWithToken invokes a helper with an in-memory token override. It is
+// used during login before the new token has been persisted to any profile
+// slot.
+func (a *toolCallerAdapter) CallToolWithToken(ctx context.Context, token, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	if a == nil || a.flags == nil {
+		return nil, fmt.Errorf("ToolCaller token override is not configured")
+	}
+	a.tokenMu.Lock()
+	defer a.tokenMu.Unlock()
+	previousToken := a.flags.Token
+	previousProfile := authpkg.RuntimeProfile()
+	a.flags.Token = token
+	authpkg.SetRuntimeProfile("")
+	defer func() {
+		a.flags.Token = previousToken
+		authpkg.SetRuntimeProfile(previousProfile)
+	}()
+	return a.CallTool(ctx, productID, toolName, args)
 }
 
 func (a *toolCallerAdapter) Format() string {

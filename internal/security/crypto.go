@@ -38,6 +38,11 @@ const (
 	Iterations = 600_000
 )
 
+var cryptoRandReader io.Reader = rand.Reader
+
+type aesCipherFactory func([]byte) (cipher.Block, error)
+type gcmWithNonceSizeFactory func(cipher.Block, int) (cipher.AEAD, error)
+
 // DeriveKey derives a KeySize-byte key from password and salt using PBKDF2-SHA256.
 func DeriveKey(password, salt []byte) []byte {
 	return pbkdf2.Key(password, salt, Iterations, KeySize, sha256.New)
@@ -46,21 +51,29 @@ func DeriveKey(password, salt []byte) []byte {
 // Encrypt encrypts plaintext using PBKDF2-derived AES-256-GCM.
 // Output format: salt(32) || nonce(12) || ciphertext+tag.
 func Encrypt(plaintext, password []byte) ([]byte, error) {
+	return encryptWithFactories(plaintext, password, aes.NewCipher, cipher.NewGCMWithNonceSize)
+}
+
+func encryptWithFactories(
+	plaintext, password []byte,
+	newCipher aesCipherFactory,
+	newGCM gcmWithNonceSizeFactory,
+) ([]byte, error) {
 	salt := make([]byte, SaltSize)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+	if _, err := io.ReadFull(cryptoRandReader, salt); err != nil {
 		return nil, fmt.Errorf("generating salt: %w", err)
 	}
 	key := DeriveKey(password, salt)
-	block, err := aes.NewCipher(key)
+	block, err := newCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("creating cipher: %w", err)
 	}
-	gcm, err := cipher.NewGCMWithNonceSize(block, NonceSize)
+	gcm, err := newGCM(block, NonceSize)
 	if err != nil {
 		return nil, fmt.Errorf("creating GCM: %w", err)
 	}
 	nonce := make([]byte, NonceSize)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := io.ReadFull(cryptoRandReader, nonce); err != nil {
 		return nil, fmt.Errorf("generating nonce: %w", err)
 	}
 	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
@@ -74,6 +87,14 @@ func Encrypt(plaintext, password []byte) ([]byte, error) {
 // Decrypt decrypts data produced by Encrypt.
 // Expects salt(32) || nonce(12) || ciphertext+tag.
 func Decrypt(data, password []byte) ([]byte, error) {
+	return decryptWithFactories(data, password, aes.NewCipher, cipher.NewGCMWithNonceSize)
+}
+
+func decryptWithFactories(
+	data, password []byte,
+	newCipher aesCipherFactory,
+	newGCM gcmWithNonceSizeFactory,
+) ([]byte, error) {
 	const minSealed = 16 // GCM tag
 	if len(data) < SaltSize+NonceSize+minSealed {
 		return nil, fmt.Errorf("ciphertext too short (%d bytes)", len(data))
@@ -82,11 +103,11 @@ func Decrypt(data, password []byte) ([]byte, error) {
 	nonce := data[SaltSize : SaltSize+NonceSize]
 	sealed := data[SaltSize+NonceSize:]
 	key := DeriveKey(password, salt)
-	block, err := aes.NewCipher(key)
+	block, err := newCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("creating cipher: %w", err)
 	}
-	gcm, err := cipher.NewGCMWithNonceSize(block, NonceSize)
+	gcm, err := newGCM(block, NonceSize)
 	if err != nil {
 		return nil, fmt.Errorf("creating GCM: %w", err)
 	}

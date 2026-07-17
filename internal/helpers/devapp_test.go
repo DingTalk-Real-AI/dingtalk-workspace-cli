@@ -378,7 +378,7 @@ func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 	}
 }
 
-func TestDevAppGetBuildsDetailParams(t *testing.T) {
+func TestCrossPlatformCoverageDevAppGetBuildsDetailParams(t *testing.T) {
 	runner := &captureRunner{}
 	root := newDevAppCommand(runner)
 	var out bytes.Buffer
@@ -395,6 +395,57 @@ func TestDevAppGetBuildsDetailParams(t *testing.T) {
 	want := map[string]any{"unifiedAppId": "u-1"}
 	if !reflect.DeepEqual(runner.last.Params, want) {
 		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)
+	}
+}
+
+func TestCrossPlatformCoverageDevAppGetBuildsDetailParamsByAppKey(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppCommand(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"get", "--app-key", "dingxxx"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if got := runner.last.Tool; got != "get_dev_app" {
+		t.Fatalf("Tool = %q, want get_dev_app", got)
+	}
+	want := map[string]any{"appKey": "dingxxx"}
+	if !reflect.DeepEqual(runner.last.Params, want) {
+		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)
+	}
+}
+
+func TestCrossPlatformCoverageDevAppGetPrefersUnifiedAppIDWhenBothPresent(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppCommand(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"get", "--unified-app-id", "u-1", "--app-key", "dingxxx"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	want := map[string]any{"unifiedAppId": "u-1", "appKey": "dingxxx"}
+	if !reflect.DeepEqual(runner.last.Params, want) {
+		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)
+	}
+}
+
+func TestCrossPlatformCoverageDevAppGetRequiresLocator(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppCommand(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"get"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--unified-app-id 或 --app-key") {
+		t.Fatalf("error = %v, want locator validation", err)
 	}
 }
 

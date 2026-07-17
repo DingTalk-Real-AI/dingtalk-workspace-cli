@@ -42,6 +42,7 @@ var DM = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "to", Type: shortcut.FlagString, Desc: "收件人姓名/花名", Required: true},
 		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true},
+		shortcut.AIMessageTagFlag(),
 	},
 	Tips: []string{`dws chat +dm --to 张三 --text "周报发我一下"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -58,11 +59,11 @@ var DM = shortcut.Shortcut{
 
 		// Step 2 — send the single-chat message.
 		content, _ := json.Marshal(map[string]string{"title": text, "text": text})
-		return rt.CallMCP("send_personal_message", map[string]any{
+		return rt.CallMCP("send_personal_message", rt.AddAIMessageTag(map[string]any{
 			"receiverOpenDingTalkId": user.openDingTalkID,
 			"msgType":                "markdown",
 			"content":                string(content),
-		})
+		}))
 	},
 }
 

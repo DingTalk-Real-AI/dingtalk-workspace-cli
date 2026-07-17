@@ -14,11 +14,16 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // fakeWikiFetcher is an in-test wikiFetcher: no DingTalk calls, fully scripted.
@@ -214,5 +219,107 @@ func TestSanitizeWikiStem(t *testing.T) {
 		if got := sanitizeWikiStem(in); got != want {
 			t.Errorf("sanitizeWikiStem(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestRunnerWikiFetcherCoverage(t *testing.T) {
+	runner := &onboardSeqRunner{responses: []map[string]any{
+		{
+			"result": map[string]any{"nodes": []any{
+				map[string]any{"nodeId": "n1", "name": "One"},
+				map[string]any{"nodeId": "", "name": "empty"},
+			}},
+			"nextPageToken": "next",
+		},
+		{"data": []any{
+			map[string]any{"nodeId": "n1", "name": "duplicate"},
+			map[string]any{"id": "n2", "title": "Two"},
+		}},
+	}}
+	fetcher := runnerWikiFetcher{runner: runner}
+	nodes, err := fetcher.listNodes(context.Background(), "space")
+	if err != nil || len(nodes) != 2 || nodes[1].id != "n2" {
+		t.Fatalf("listNodes() = %#v, %v", nodes, err)
+	}
+	reader := runnerWikiFetcher{runner: connectResponseRunner{response: map[string]any{"result": map[string]any{"markdown": "# body"}}}}
+	if text, err := reader.readContent(context.Background(), "n1"); err != nil || text != "# body" {
+		t.Fatalf("readContent() = %q, %v", text, err)
+	}
+
+	failed := runnerWikiFetcher{runner: connectResponseRunner{err: errors.New("runner failed")}}
+	if _, err := failed.listNodes(context.Background(), "space"); err == nil {
+		t.Fatal("listNodes runner error was ignored")
+	}
+	if _, err := failed.readContent(context.Background(), "node"); err == nil {
+		t.Fatal("readContent runner error was ignored")
+	}
+}
+
+func TestWikiKnowledgeUtilityCoverage(t *testing.T) {
+	kb := buildKnowledgeBaseFromDocs([]wikiDoc{{stem: "one", text: "# title\nbody"}, {stem: "empty", text: " "}})
+	if len(kb.chunks) == 0 {
+		t.Fatal("in-memory knowledge base is empty")
+	}
+
+	values := []any{
+		map[string]any{"ignored": map[string]any{"content": "nested"}},
+		[]any{map[string]any{"text": "array"}},
+		map[string]any{"content": " direct "},
+		map[string]any{"content": "", "other": "ignored"},
+	}
+	wants := []string{"nested", "array", " direct ", ""}
+	for i, value := range values {
+		if got := firstStringForKeys(value, "content", "text"); got != wants[i] {
+			t.Fatalf("firstStringForKeys case %d = %q, want %q", i, got, wants[i])
+		}
+	}
+
+	cache := filepath.Join(t.TempDir(), "cache")
+	if err := writeWikiCache(cache, []wikiDoc{
+		{stem: "same", text: "one"},
+		{stem: "same", text: "two"},
+		{stem: "", text: "three"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"same.md", "same-2.md", "doc.md"} {
+		if _, err := os.Stat(filepath.Join(cache, name)); err != nil {
+			t.Fatalf("missing cached file %s: %v", name, err)
+		}
+	}
+	if leaf := wikiCacheLeaf(knowledgeSource{kind: knowledgeSourceDoc, ref: "a/b"}); leaf != "doc-a_b" {
+		t.Fatalf("wikiCacheLeaf() = %q", leaf)
+	}
+	if got := sanitizeWikiStem(strings.Repeat("a", 100)); len(got) != 80 {
+		t.Fatalf("long stem length = %d", len(got))
+	}
+}
+
+func TestLoadConnectKnowledgeSourceCoverage(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "knowledge.md"), []byte("# Local\nlocal body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := &cobra.Command{Use: "connect"}
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+	if kb, err := loadConnectKnowledgeSource(cmd, connectResponseRunner{}, "client", dir); err != nil || len(kb.chunks) == 0 {
+		t.Fatalf("local source = %#v, %v", kb, err)
+	}
+	if _, err := loadConnectKnowledgeSource(cmd, connectResponseRunner{}, "client", t.TempDir()); err == nil {
+		t.Fatal("empty local source succeeded")
+	}
+	if _, err := loadConnectKnowledgeSource(cmd, connectResponseRunner{}, "client", ""); err == nil {
+		t.Fatal("empty source succeeded")
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	runner := connectResponseRunner{response: map[string]any{"markdown": "# Remote\nremote body"}}
+	if kb, err := loadConnectKnowledgeSource(cmd, runner, "../client", "doc:node"); err != nil || len(kb.chunks) == 0 {
+		t.Fatalf("remote source = %#v, %v", kb, err)
+	}
+	root := connectKnowledgeCacheRoot("../client")
+	if !strings.Contains(root, filepath.Join("connect", "client", "knowledge")) {
+		t.Fatalf("cache root = %q", root)
 	}
 }

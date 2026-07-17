@@ -44,6 +44,17 @@ var connectChannels = func() map[string]struct{} {
 	return m
 }()
 
+// These indirections keep the command's process/network boundaries testable.
+// Production always uses the real implementations; unit tests replace only the
+// final side-effecting step while exercising the full option/validation flow.
+var (
+	devAppRunStreamConnector      = runStreamConnector
+	devAppLoadConnectKnowledge    = loadConnectKnowledgeSource
+	devAppConnectStdinInteractive = connectStdinInteractive
+	devAppRunConnectOnboarding    = runConnectOnboarding
+	devAppStartConnectDaemon      = startDaemon
+)
+
 // resolveConnectChannel resolves the current agent channel using "explicit wins,
 // then signal fallback". Priority: --channel flag > DWS_AGENT_CHANNEL env var >
 // each agent's known runtime signal. Returns the channel name and the basis for
@@ -284,7 +295,7 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 知识库已加载：%d 个片段（%s）\n", len(kb.chunks), opts.KnowledgeDir)
 		}
 		if opts.KnowledgeSource != "" {
-			if kb, kerr := loadConnectKnowledgeSource(cmd, runner, clientID, opts.KnowledgeSource); kerr != nil {
+			if kb, kerr := devAppLoadConnectKnowledge(cmd, runner, clientID, opts.KnowledgeSource); kerr != nil {
 				return kerr
 			} else if kb != nil {
 				extras.kb = kb
@@ -294,7 +305,7 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 		// chunks into the same retriever (knowledgeBase is just a chunk slice), so
 		// a role can carry several wiki/doc/dir sources without a flag per source.
 		for _, src := range opts.KnowledgeSources {
-			kb, kerr := loadConnectKnowledgeSource(cmd, runner, clientID, src)
+			kb, kerr := devAppLoadConnectKnowledge(cmd, runner, clientID, src)
 			if kerr != nil {
 				return kerr
 			}
@@ -365,7 +376,7 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 提示：机器人默认在空白临时目录里跑、不带你本地项目的上下文，回答可能不如终端准。要对齐终端：加 --agent-workdir <你的项目目录> 让它读到同样的文件，或 --knowledge-dir/--knowledge-source 挂资料。\n")
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s Go 原生 Stream 建联，转发到 %s，回复样式=%s（Ctrl-C 退出）\n", channel, fwd.label(), replyStyle)
-		return runStreamConnector(cmd.Context(), channel, clientID, clientSecret, fwd, cardCli, extras)
+		return devAppRunStreamConnector(cmd.Context(), channel, clientID, clientSecret, fwd, cardCli, extras)
 	}
 
 	// hermes / openclaw run their own official bot provisioning + reply logic
@@ -506,12 +517,12 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 					}
 					clientID, clientSecret = id, secret
 					resolvedBy = "unified-app-id:credentials get"
-				case !commandDryRun(cmd) && connectStdinInteractive():
+				case !commandDryRun(cmd) && devAppConnectStdinInteractive():
 					// No credentials and a real terminal: guide the user through
 					// provisioning a new robot app or picking an existing one,
 					// instead of failing. Scripts/daemons/pipes and dry-run fall
 					// through to the explicit-flag requirement below.
-					creds, oerr := runConnectOnboarding(runner, cmd, cmd.InOrStdin(), cmd.OutOrStdout())
+					creds, oerr := devAppRunConnectOnboarding(runner, cmd, cmd.InOrStdin(), cmd.OutOrStdout())
 					if oerr != nil {
 						return oerr
 					}
@@ -551,7 +562,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 				notifyStaffID := devAppStringFlag(cmd, "notify-staff-id")
 				profile, _ := cmd.Root().PersistentFlags().GetString("profile")
 				alwaysOn, _ := cmd.Flags().GetBool("alwayson")
-				return startDaemon(cmd, daemonDirKey(clientID, unifiedAppID), clientID, unifiedAppID, channel, notifyStaffID, strings.TrimSpace(profile), alwaysOn)
+				return devAppStartConnectDaemon(cmd, daemonDirKey(clientID, unifiedAppID), clientID, unifiedAppID, channel, notifyStaffID, strings.TrimSpace(profile), alwaysOn)
 			}
 
 			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s（%s）凭证来源=%s\n", channel, detectedBy, resolvedBy)

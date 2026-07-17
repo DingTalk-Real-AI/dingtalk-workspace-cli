@@ -119,13 +119,10 @@ func (c *aiCardClient) accessToken(ctx context.Context) (string, error) {
 	if c.token != "" && time.Now().Before(c.tokenExp.Add(-5*time.Minute)) {
 		return c.token, nil
 	}
-	body, err := json.Marshal(map[string]string{
+	body, _ := json.Marshal(map[string]string{
 		"appKey":    c.clientID,
 		"appSecret": c.clientSecret,
 	})
-	if err != nil {
-		return "", err
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		dingtalkCardAPIBase+"/v1.0/oauth2/accessToken", bytes.NewReader(body))
 	if err != nil {
@@ -211,10 +208,7 @@ func (c *aiCardClient) sendOTOText(ctx context.Context, userIDs []string, text s
 	if len(userIDs) == 0 {
 		return nil
 	}
-	param, err := json.Marshal(map[string]string{"content": text})
-	if err != nil {
-		return err
-	}
+	param, _ := json.Marshal(map[string]string{"content": text})
 	return c.call(ctx, http.MethodPost, "/v1.0/robot/oToMessages/batchSend", map[string]any{
 		"robotCode": c.clientID,
 		"userIds":   userIDs,
@@ -304,6 +298,8 @@ func (c *aiCardClient) streamingUpdate(ctx context.Context, card *aiCardInstance
 // a short gap lets the client subscribe before the closing frame lands.
 var aiCardFrameGap = 500 * time.Millisecond
 
+var aiCardSleepCtx = sleepCtx
+
 // cardContentParams is the cardParamMap contract of the openclaw template.
 func cardContentParams(flowStatus, content string) map[string]any {
 	return map[string]any{
@@ -365,7 +361,7 @@ func (c *aiCardClient) finish(ctx context.Context, card *aiCardInstance, content
 	if err := c.streamFrame(ctx, card, content, true); err != nil {
 		return err
 	}
-	if err := sleepCtx(ctx, aiCardFrameGap); err != nil {
+	if err := aiCardSleepCtx(ctx, aiCardFrameGap); err != nil {
 		return err
 	}
 	return c.setFlowStatus(ctx, card, aiCardFlowFinished, normalized, true)
@@ -374,7 +370,7 @@ func (c *aiCardClient) finish(ctx context.Context, card *aiCardInstance, content
 // finalize is the one-shot path for channels without incremental output:
 // INPUTING → final frame → FINISHED in one call.
 func (c *aiCardClient) finalize(ctx context.Context, card *aiCardInstance, content string) error {
-	if err := sleepCtx(ctx, aiCardFrameGap); err != nil {
+	if err := aiCardSleepCtx(ctx, aiCardFrameGap); err != nil {
 		return err
 	}
 	return c.finish(ctx, card, content)
@@ -385,7 +381,7 @@ func (c *aiCardClient) finalize(ctx context.Context, card *aiCardInstance, conte
 // next; our burst of two frames has no such retry, and a missed fetch shows
 // "内容加载失败" until a new frame arrives. Best-effort by design.
 func (c *aiCardClient) repair(ctx context.Context, card *aiCardInstance, content string) {
-	if err := sleepCtx(ctx, aiCardRepairDelay); err != nil {
+	if err := aiCardSleepCtx(ctx, aiCardRepairDelay); err != nil {
 		return
 	}
 	_ = c.setFlowStatus(ctx, card, aiCardFlowFinished, normalizeForCard(content), true)

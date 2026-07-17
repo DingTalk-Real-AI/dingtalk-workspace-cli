@@ -33,6 +33,16 @@ const LockFileName = "bus.lock"
 // ErrBusy is re-exported from lock for callers that only depend on bus.
 var ErrBusy = lock.ErrBusy
 
+var (
+	busTryAcquire   = lock.TryAcquire
+	busSeek         = func(f *os.File, offset int64, whence int) (int64, error) { return f.Seek(offset, whence) }
+	busReadAll      = io.ReadAll
+	busProcessAlive = process.Alive
+	busTruncate     = func(f *os.File, size int64) error { return f.Truncate(size) }
+	busFprintf      = fmt.Fprintf
+	busSync         = func(f *os.File) error { return f.Sync() }
+)
+
 // ErrStaleOwnerAlive indicates the PID stored in bus.lock points at a
 // live process — there is already a bus running for this ClientID and we
 // must not start another one. (This case is hit when the holder is still
@@ -59,24 +69,24 @@ type Lock struct {
 // On success the returned Lock owns an exclusive flock and a file body
 // containing our PID. Concurrent competing processes will get ErrBusy.
 func Acquire(path string) (*Lock, error) {
-	l, err := lock.TryAcquire(path)
+	l, err := busTryAcquire(path)
 	if err != nil {
 		return nil, err // already wraps ErrBusy when busy
 	}
 
 	// flock acquired. Read existing PID (if any).
 	f := l.File()
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	if _, err := busSeek(f, 0, io.SeekStart); err != nil {
 		_ = l.Close()
 		return nil, fmt.Errorf("bus: seek lock: %w", err)
 	}
-	old, err := io.ReadAll(f)
+	old, err := busReadAll(f)
 	if err != nil {
 		_ = l.Close()
 		return nil, fmt.Errorf("bus: read lock: %w", err)
 	}
 
-	if pid := parsePID(old); pid > 0 && process.Alive(pid) {
+	if pid := parsePID(old); pid > 0 && busProcessAlive(pid) {
 		// Defensive: flock returned us the lock, but the stored PID is
 		// alive. This shouldn't normally happen (the live process holds
 		// the flock), but it's possible across odd kernel/FS edge cases
@@ -130,18 +140,18 @@ func (l *Lock) HoldsPath() string {
 }
 
 func truncateAndWritePID(f *os.File, pid int) error {
-	if err := f.Truncate(0); err != nil {
+	if err := busTruncate(f, 0); err != nil {
 		return err
 	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	if _, err := busSeek(f, 0, io.SeekStart); err != nil {
 		return err
 	}
 	if pid > 0 {
-		if _, err := fmt.Fprintf(f, "%d\n", pid); err != nil {
+		if _, err := busFprintf(f, "%d\n", pid); err != nil {
 			return err
 		}
 	}
-	return f.Sync()
+	return busSync(f)
 }
 
 func parsePID(b []byte) int {

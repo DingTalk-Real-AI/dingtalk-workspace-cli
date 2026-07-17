@@ -23,9 +23,14 @@ import (
 	"strings"
 )
 
+var (
+	authEntriesReadDir = os.ReadDir
+	authEntryInfo      = func(entry os.DirEntry) (os.FileInfo, error) { return entry.Info() }
+)
+
 func authTokenCiphertextPaths(service string) ([]string, error) {
 	dir := StorageDir(service)
-	dirEntries, err := os.ReadDir(dir)
+	dirEntries, err := authEntriesReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -38,7 +43,7 @@ func authTokenCiphertextPaths(service string) ([]string, error) {
 		if !isAuthTokenCiphertextFile(dirEntry.Name()) {
 			continue
 		}
-		info, err := dirEntry.Info()
+		info, err := authEntryInfo(dirEntry)
 		if err != nil {
 			return nil, fmt.Errorf("inspect keychain entry %q: %w", dirEntry.Name(), err)
 		}
@@ -55,4 +60,18 @@ func isAuthTokenCiphertextFile(name string) bool {
 	legacyName := safeFileName(AccountToken)
 	return name == legacyName ||
 		(strings.HasPrefix(name, strings.TrimSuffix(legacyName, ".enc")+"_") && strings.HasSuffix(name, ".enc"))
+}
+
+func platformRemoveAuthTokenEntries(service string) error {
+	paths, err := authTokenCiphertextPaths(service)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) && firstErr == nil {
+			firstErr = fmt.Errorf("remove keychain entry %q: %w", filepath.Base(path), err)
+		}
+	}
+	return firstErr
 }

@@ -67,7 +67,7 @@ func TestManualAgentExamplesDryRun(t *testing.T) {
 			t.Fatalf("create isolated test directory %s: %v", dir, err)
 		}
 	}
-	t.Setenv("HOME", homeDir)
+	setTestHome(t, homeDir)
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
@@ -470,7 +470,7 @@ func TestManualAgentExamplePromptObservedRejectsInteractiveConfirmation(t *testi
 }
 
 func TestAitableAdvpermDisableDryRunSkipsConfirmationAndToolCall(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
 	args := []string{
@@ -518,7 +518,7 @@ func TestManualAgentExampleChatGroupMuteMemberUsesCommandDryRunPreview(t *testin
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("create isolated config directory: %v", err)
 	}
-	t.Setenv("HOME", sandboxRoot)
+	setTestHome(t, sandboxRoot)
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 
 	capture, err := executeManualAgentExampleCapture(t, []string{

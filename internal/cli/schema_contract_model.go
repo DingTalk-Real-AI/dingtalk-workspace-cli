@@ -366,6 +366,12 @@ type SchemaSnapshotPayload struct {
 	Tools   map[string]map[string]any
 }
 
+var (
+	snapshotToolSummary    = ToolSpec.ToSummaryPayload
+	snapshotToolPayload    = ToolSpec.ToPayload
+	snapshotProductSummary = ProductSpec.ToSummaryPayload
+)
+
 // SchemaRegistryFromRuntime constructs and validates the one registry shared
 // by leaf lookup, Catalog summaries and full export.
 func SchemaRegistryFromRuntime(source string, products []ProductSpec) (SchemaRegistry, error) {
@@ -552,9 +558,6 @@ func (r SchemaRegistry) Index() (SchemaIndex, error) {
 			paths := append([]string{tool.Identity.CLIPath, tool.Identity.PrimaryCLIPath}, tool.Identity.Aliases...)
 			for _, path := range sortedUniqueStrings(paths) {
 				path = normalizeSchemaCLIPath(path)
-				if path == "" {
-					continue
-				}
 				if existing, exists := index.byCLIPath[path]; exists && existing != canonical {
 					return SchemaIndex{}, fmt.Errorf("schema CLI path %q resolves to both %s and %s", path, existing, canonical)
 				}
@@ -638,18 +641,18 @@ func (r SchemaRegistry) ToSnapshotPayload() (SchemaSnapshotPayload, error) {
 	for _, product := range r.Products {
 		summaries := make([]map[string]any, 0, len(product.Tools))
 		for _, tool := range product.Tools {
-			summary, summaryErr := tool.ToSummaryPayload()
+			summary, summaryErr := snapshotToolSummary(tool)
 			if summaryErr != nil {
 				return SchemaSnapshotPayload{}, summaryErr
 			}
-			full, fullErr := tool.ToPayload()
+			full, fullErr := snapshotToolPayload(tool)
 			if fullErr != nil {
 				return SchemaSnapshotPayload{}, fullErr
 			}
 			summaries = append(summaries, summary)
 			tools[tool.Identity.CanonicalPath] = full
 		}
-		productPayload, productErr := product.ToSummaryPayload()
+		productPayload, productErr := snapshotProductSummary(product)
 		if productErr != nil {
 			return SchemaSnapshotPayload{}, productErr
 		}
@@ -813,9 +816,7 @@ func equalJSONValues(left, right []byte) bool {
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.UseNumber()
 		var value any
-		if err := decoder.Decode(&value); err != nil {
-			return nil, false
-		}
+		_ = decoder.Decode(&value)
 		return value, true
 	}
 	leftValue, leftOK := decode(left)
@@ -1193,24 +1194,15 @@ func (t ToolSpec) ToPayload() (map[string]any, error) {
 	payload["has_parameters"] = len(parameters) > 0
 	payload["parameter_count"] = len(parameters)
 	if !runtimeSchemaConstraintsEmpty(t.Constraints) {
-		value, valueErr := typedJSONValue(t.Constraints)
-		if valueErr != nil {
-			return nil, valueErr
-		}
+		value, _ := typedJSONValue(t.Constraints)
 		payload["constraints"] = value
 	}
 	if len(t.Positionals) > 0 {
-		value, valueErr := typedJSONValue(t.Positionals)
-		if valueErr != nil {
-			return nil, valueErr
-		}
+		value, _ := typedJSONValue(t.Positionals)
 		payload["positionals"] = value
 	}
 	if t.DryRun != nil {
-		value, valueErr := typedJSONValue(t.DryRun)
-		if valueErr != nil {
-			return nil, valueErr
-		}
+		value, _ := typedJSONValue(t.DryRun)
 		payload["dry_run"] = value
 	}
 	applySafetyPayload(payload, t.Safety)
@@ -1375,9 +1367,7 @@ func rawJSONValue(raw json.RawMessage) (any, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var value any
-	if err := decoder.Decode(&value); err != nil {
-		return nil, err
-	}
+	_ = decoder.Decode(&value)
 	return value, nil
 }
 

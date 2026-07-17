@@ -43,6 +43,7 @@ var ShareDoc = shortcut.Shortcut{
 		{Name: "to", Type: shortcut.FlagString, Desc: "收件人姓名/花名", Required: true},
 		{Name: "url", Type: shortcut.FlagString, Desc: "文档链接", Required: true},
 		{Name: "note", Type: shortcut.FlagString, Desc: "附言（可选）"},
+		shortcut.AIMessageTagFlag(),
 	},
 	Tips: []string{`dws doc +share-doc --to 张三 --url https://docs.dingtalk.com/xxx --note "帮忙过一下"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -64,11 +65,11 @@ var ShareDoc = shortcut.Shortcut{
 		content, _ := json.Marshal(map[string]string{"title": title, "text": text})
 
 		// Step 3 — deliver it as a single-chat message.
-		return rt.CallMCP("send_personal_message", map[string]any{
+		return rt.CallMCP("send_personal_message", rt.AddAIMessageTag(map[string]any{
 			"receiverOpenDingTalkId": user.openDingTalkID,
 			"msgType":                "markdown",
 			"content":                string(content),
-		})
+		}))
 	},
 }
 

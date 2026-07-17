@@ -13,6 +13,14 @@ import (
 	"strings"
 )
 
+var (
+	guardAbs          = filepath.Abs
+	guardEvalSymlinks = filepath.EvalSymlinks
+	guardRel          = filepath.Rel
+	guardStat         = os.Stat
+	guardWalk         = filepath.Walk
+)
+
 // Input is a protected generator input. Relative paths are resolved against
 // the generator's explicit repository root.
 type Input struct {
@@ -47,7 +55,7 @@ func Validate(root string, inputs []Input, targets []Target) error {
 		if err != nil {
 			return fmt.Errorf("resolve %s %q: %w", firstNonEmpty(input.Name, "protected input"), input.Path, err)
 		}
-		info, err := os.Stat(path)
+		info, err := guardStat(path)
 		if err != nil {
 			return fmt.Errorf("stat %s %q: %w", firstNonEmpty(input.Name, "protected input"), input.Path, err)
 		}
@@ -62,7 +70,7 @@ func Validate(root string, inputs []Input, targets []Target) error {
 		if err != nil {
 			return fmt.Errorf("resolve %s %q: %w", firstNonEmpty(target.Name, "output"), target.Path, err)
 		}
-		targetInfo, statErr := os.Stat(targetPath)
+		targetInfo, statErr := guardStat(targetPath)
 		if statErr != nil && !os.IsNotExist(statErr) {
 			return fmt.Errorf("stat %s %q: %w", firstNonEmpty(target.Name, "output"), target.Path, statErr)
 		}
@@ -95,7 +103,7 @@ func Validate(root string, inputs []Input, targets []Target) error {
 
 func directoryContainsSameFile(root string, target os.FileInfo) (bool, error) {
 	found := false
-	err := filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+	err := guardWalk(root, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -145,14 +153,14 @@ func overlapError(target Target, input Input, relation string) error {
 }
 
 func canonicalPath(path string) (string, error) {
-	absPath, err := filepath.Abs(filepath.Clean(strings.TrimSpace(path)))
+	absPath, err := guardAbs(filepath.Clean(strings.TrimSpace(path)))
 	if err != nil {
 		return "", err
 	}
 	current := absPath
 	var suffix []string
 	for {
-		resolved, resolveErr := filepath.EvalSymlinks(current)
+		resolved, resolveErr := guardEvalSymlinks(current)
 		if resolveErr == nil {
 			for i := len(suffix) - 1; i >= 0; i-- {
 				resolved = filepath.Join(resolved, suffix[i])
@@ -183,7 +191,7 @@ func samePath(left, right string) bool {
 }
 
 func pathContains(dir, path string) bool {
-	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
+	rel, err := guardRel(filepath.Clean(dir), filepath.Clean(path))
 	if err != nil || rel == "." {
 		return rel == "."
 	}

@@ -4,7 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
+)
+
+var (
+	sinkMarshal = json.Marshal
+	sinkWrite   = func(file *os.File, data []byte) (int, error) { return file.Write(data) }
 )
 
 type Sink interface {
@@ -52,13 +58,13 @@ func (s *FileSink) Emit(evt *Event) error {
 	evt.PrevHash = prevHash
 	evt.Hash = hash
 
-	line, err := json.Marshal(evt)
+	line, err := sinkMarshal(evt)
 	if err != nil {
 		release()
 		return fmt.Errorf("audit: marshal final event: %w", err)
 	}
 	line = append(line, '\n')
-	if _, err := f.Write(line); err != nil {
+	if _, err := sinkWrite(f, line); err != nil {
 		release()
 		return fmt.Errorf("audit: write event: %w", err)
 	}
@@ -105,5 +111,5 @@ func marshalWithoutHash(evt *Event) ([]byte, error) {
 		OS:            evt.OS,
 		Arch:          evt.Arch,
 	}
-	return json.Marshal(saved)
+	return sinkMarshal(saved)
 }

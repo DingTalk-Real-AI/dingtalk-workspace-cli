@@ -29,13 +29,20 @@ type unixListener struct {
 	path string
 }
 
+var (
+	statSocket   = os.Stat
+	removeSocket = os.Remove
+	listenUnix   = net.Listen
+	chmodSocket  = os.Chmod
+)
+
 func (u *unixListener) Accept() (net.Conn, error) { return u.l.Accept() }
 func (u *unixListener) Endpoint() string          { return u.path }
 func (u *unixListener) Close() error {
 	err := u.l.Close()
 	// Best-effort unlink. Ignored errors here because the bus may have
 	// already been replaced by a competing bus that unlinked first.
-	_ = os.Remove(u.path)
+	_ = removeSocket(u.path)
 	return err
 }
 
@@ -54,18 +61,18 @@ func listen(path string) (Listener, error) {
 		return nil, err
 	}
 	// Stale socket cleanup. Caller holds bus.lock so this is race-safe.
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(path); err != nil {
+	if _, err := statSocket(path); err == nil {
+		if err := removeSocket(path); err != nil {
 			return nil, fmt.Errorf("transport: remove stale socket %s: %w", path, err)
 		}
 	}
-	l, err := net.Listen("unix", path)
+	l, err := listenUnix("unix", path)
 	if err != nil {
 		return nil, fmt.Errorf("transport: listen %s: %w", path, err)
 	}
-	if err := os.Chmod(path, config.FilePerm); err != nil {
+	if err := chmodSocket(path, config.FilePerm); err != nil {
 		_ = l.Close()
-		_ = os.Remove(path)
+		_ = removeSocket(path)
 		return nil, fmt.Errorf("transport: chmod %s: %w", path, err)
 	}
 	return &unixListener{l: l, path: path}, nil

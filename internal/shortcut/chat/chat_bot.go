@@ -120,13 +120,17 @@ var BotFind = shortcut.Shortcut{
 	Intent:      "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词", Required: true},
+		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词"},
+		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页返回数量"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传 nextCursor"},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"query", "keyword"}},
+	},
 	Tips: []string{`dws chat +bot-find --query "日报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"keyword": rt.Str("query")}
+		params := map[string]any{"keyword": rt.StrFirst("query", "keyword")}
 		if rt.Int("limit") > 0 {
 			params["limit"] = rt.Int("limit")
 		}

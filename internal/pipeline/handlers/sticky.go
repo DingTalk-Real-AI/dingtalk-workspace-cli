@@ -129,10 +129,6 @@ func trySplitSticky(arg string, specByName map[string]pipeline.FlagInfo) (sticky
 	}
 
 	suffix := bare[bestLen:]
-	if suffix == "" {
-		return stickyPair{}, false
-	}
-
 	// Guard: only split if the suffix plausibly looks like a value
 	// for this flag's declared type/format/enum. Otherwise leave the
 	// token untouched so Cobra reports "unknown flag" instead of

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -62,6 +63,55 @@ func TestCrossPlatformCoverageMountRegistersFlagsAndUse(t *testing.T) {
 	}
 	if v, _ := cmd.Flags().GetInt("limit"); v != 20 {
 		t.Errorf("limit default = %d, want 20", v)
+	}
+}
+
+func TestCrossPlatformCoverageAliasAndAIMessageTagHelpers(t *testing.T) {
+	aiTag := AIMessageTagFlag()
+	if aiTag.Name != "ai-tag" || aiTag.Type != FlagBool || aiTag.Default != "true" {
+		t.Fatalf("AIMessageTagFlag() = %#v", aiTag)
+	}
+
+	s := Shortcut{
+		Service: "chat",
+		Command: "+compat",
+		Flags: []Flag{
+			{Name: "query", Type: FlagString},
+			{Name: "keyword", Type: FlagString},
+			{Name: "limit", Type: FlagInt, Default: "20"},
+			{Name: "size", Type: FlagInt},
+			aiTag,
+		},
+	}
+	cmd := mount(s)
+	rt := &RuntimeContext{cmd: cmd, shortcut: s}
+
+	if err := cmd.Flags().Set("keyword", "树莓派"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rt.StrFirst("query", "keyword"); got != "树莓派" {
+		t.Fatalf("StrFirst() = %q, want 树莓派", got)
+	}
+	if got := rt.IntFirst("limit", "size"); got != 20 {
+		t.Fatalf("IntFirst() default = %d, want 20", got)
+	}
+	if err := cmd.Flags().Set("size", "7"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rt.IntFirst("limit", "size"); got != 7 {
+		t.Fatalf("IntFirst() alias = %d, want 7", got)
+	}
+
+	params := rt.AddAIMessageTag(nil)
+	if got := params["clawType"]; got != edition.ClawType() {
+		t.Fatalf("clawType = %#v, want %q", got, edition.ClawType())
+	}
+	if err := cmd.Flags().Set("ai-tag", "false"); err != nil {
+		t.Fatal(err)
+	}
+	params = rt.AddAIMessageTag(map[string]any{"content": "hello"})
+	if _, ok := params["clawType"]; ok {
+		t.Fatalf("clawType unexpectedly present with --ai-tag=false: %#v", params)
 	}
 }
 

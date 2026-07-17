@@ -22,6 +22,21 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+type connectSessionTempFile interface {
+	Name() string
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Close() error
+}
+
+var (
+	connectSessionReadFile   = os.ReadFile
+	connectSessionMkdirAll   = os.MkdirAll
+	connectSessionCreateTemp = func(dir, pattern string) (connectSessionTempFile, error) { return os.CreateTemp(dir, pattern) }
+	connectSessionRename     = os.Rename
+	connectSessionRemove     = os.Remove
+)
+
 // connectSessionStorePath returns the on-disk location for a robot's
 // conversation→session map, scoped by clientId so multiple bots on one machine
 // stay isolated: <config dir>/connect/<clientId>/sessions.json. An empty
@@ -44,7 +59,7 @@ func loadConvSessionMap(path string) map[string]string {
 	if path == "" {
 		return make(map[string]string)
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := connectSessionReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			fmt.Fprintf(os.Stderr, "[connect][session][warn] 读取会话存档失败，按空会话起：%v\n", err)
@@ -70,17 +85,12 @@ func saveConvSessionMap(path string, m map[string]string) {
 		return
 	}
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := connectSessionMkdirAll(dir, 0o700); err != nil {
 		fmt.Fprintf(os.Stderr, "[connect][session][warn] 创建会话存档目录失败，跳过本次落盘：%v\n", err)
 		return
 	}
-	data, err := json.Marshal(m)
-	if err != nil {
-		// map[string]string never fails to marshal, but stay defensive.
-		fmt.Fprintf(os.Stderr, "[connect][session][warn] 序列化会话失败，跳过本次落盘：%v\n", err)
-		return
-	}
-	tmp, err := os.CreateTemp(dir, "sessions-*.json.tmp")
+	data, _ := json.Marshal(m)
+	tmp, err := connectSessionCreateTemp(dir, "sessions-*.json.tmp")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[connect][session][warn] 创建会话临时文件失败，跳过本次落盘：%v\n", err)
 		return
@@ -88,23 +98,23 @@ func saveConvSessionMap(path string, m map[string]string) {
 	tmpName := tmp.Name()
 	if err := tmp.Chmod(config.FilePerm); err != nil {
 		tmp.Close()
-		_ = os.Remove(tmpName)
+		_ = connectSessionRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][session][warn] 设置会话文件权限失败，跳过本次落盘：%v\n", err)
 		return
 	}
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		_ = os.Remove(tmpName)
+		_ = connectSessionRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][session][warn] 写入会话临时文件失败，跳过本次落盘：%v\n", err)
 		return
 	}
 	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
+		_ = connectSessionRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][session][warn] 关闭会话临时文件失败，跳过本次落盘：%v\n", err)
 		return
 	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+	if err := connectSessionRename(tmpName, path); err != nil {
+		_ = connectSessionRemove(tmpName)
 		fmt.Fprintf(os.Stderr, "[connect][session][warn] 原子替换会话存档失败，跳过本次落盘：%v\n", err)
 		return
 	}

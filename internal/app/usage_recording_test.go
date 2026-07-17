@@ -25,10 +25,21 @@ import (
 
 type crossPlatformCoverageCaller struct {
 	args   map[string]any
+	token  string
 	dryRun bool
 }
 
 func (c *crossPlatformCoverageCaller) CallTool(_ context.Context, _, _ string, args map[string]any) (*edition.ToolResult, error) {
+	c.args = args
+	return &edition.ToolResult{}, nil
+}
+
+func (c *crossPlatformCoverageCaller) CallToolWithToken(
+	_ context.Context,
+	token, _, _ string,
+	args map[string]any,
+) (*edition.ToolResult, error) {
+	c.token = token
 	c.args = args
 	return &edition.ToolResult{}, nil
 }
@@ -88,6 +99,23 @@ func TestCrossPlatformCoverageRecordingToolCaller(t *testing.T) {
 		t.Fatal("sensitive text must not be recorded")
 	}
 
+	tokenCaller, ok := caller.(tokenOverrideToolCaller)
+	if !ok {
+		t.Fatal("recording caller dropped token override support")
+	}
+	if _, err := tokenCaller.CallToolWithToken(
+		context.Background(),
+		"temporary-token",
+		"contact",
+		"get_current_user_profile",
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if inner.token != "temporary-token" || len(inner.args) != 0 {
+		t.Fatalf("token override forwarding = token %q args %#v", inner.token, inner.args)
+	}
+
 	inner.dryRun = true
 	if _, err := caller.CallTool(context.Background(), "chat", "send_message", args); err != nil {
 		t.Fatal(err)
@@ -96,7 +124,7 @@ func TestCrossPlatformCoverageRecordingToolCaller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 1 {
+	if len(records) != 2 {
 		t.Fatalf("dry-run call must not be recorded: %#v", records)
 	}
 }

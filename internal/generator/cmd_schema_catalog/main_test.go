@@ -5,6 +5,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +17,120 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestGenerateSchemaCatalogResolvesBuildExactlyOnce(t *testing.T) {
+func TestCrossPlatformCoverageMainGeneratesCatalogToTemporaryFile(t *testing.T) {
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldArgs, oldFlags := os.Args, flag.CommandLine
+	t.Cleanup(func() {
+		os.Args, flag.CommandLine = oldArgs, oldFlags
+	})
+	flag.CommandLine = flag.NewFlagSet("schema-catalog-coverage", flag.ContinueOnError)
+	os.Args = []string{"cmd_schema_catalog", "-root", repositoryRoot, "-output", filepath.Join(t.TempDir(), "schema_catalog.json")}
+	main()
+}
+
+func TestCrossPlatformCoverageCatalogMainReportsIsolationAndGenerationFailures(t *testing.T) {
+	originalArgs, originalFlags := os.Args, flag.CommandLine
+	originalValidate := validateCatalogParameterBindings
+	originalExit := exitCatalogProcess
+	t.Cleanup(func() {
+		os.Args, flag.CommandLine = originalArgs, originalFlags
+		validateCatalogParameterBindings = originalValidate
+		exitCatalogProcess = originalExit
+	})
+	exitCatalogProcess = func(int) { panic("exit") }
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invoke := func(args ...string) {
+		flag.CommandLine = flag.NewFlagSet("catalog-errors", flag.ContinueOnError)
+		os.Args = append([]string{"cmd_schema_catalog"}, args...)
+		defer func() {
+			if recover() != "exit" {
+				t.Fatal("main did not exit")
+			}
+		}()
+		main()
+	}
+	invoke("-root", repositoryRoot, "-output", filepath.Join(repositoryRoot, "internal/cli/schema_command_registry.json"))
+	validateCatalogParameterBindings = func() error { return errors.New("bindings") }
+	invoke("-root", repositoryRoot, "-output", filepath.Join(t.TempDir(), "catalog.json"))
+}
+
+func TestCrossPlatformCoverageGenerateSchemaCatalogFailureEdges(t *testing.T) {
+	originalValidate := validateCatalogParameterBindings
+	originalSnapshot := buildCatalogSnapshot
+	originalMkdir := makeCatalogDirectory
+	originalWrite := writeCatalogFile
+	t.Cleanup(func() {
+		validateCatalogParameterBindings = originalValidate
+		buildCatalogSnapshot = originalSnapshot
+		makeCatalogDirectory = originalMkdir
+		writeCatalogFile = originalWrite
+	})
+	root := &cobra.Command{Use: "dws"}
+	resolver := func(*cobra.Command) (cli.ResolvedSchemaBuild, error) { return cli.ResolvedSchemaBuild{}, nil }
+	output := filepath.Join(t.TempDir(), "catalog.json")
+
+	if err := generateSchemaCatalogWithResolver(nil, "", output, resolver); err == nil || !strings.Contains(err.Error(), "root is nil") {
+		t.Fatalf("nil root error = %v", err)
+	}
+	if err := generateSchemaCatalogWithResolver(root, "", output, nil); err == nil || !strings.Contains(err.Error(), "resolver is nil") {
+		t.Fatalf("nil resolver error = %v", err)
+	}
+	if err := generateSchemaCatalogWithResolver(root, filepath.Join(t.TempDir(), "missing.json"), output, resolver); err == nil || !strings.Contains(err.Error(), "read deprecated") {
+		t.Fatalf("surface read error = %v", err)
+	}
+	validateCatalogParameterBindings = func() error { return errors.New("bindings") }
+	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "parameter binding") {
+		t.Fatalf("binding error = %v", err)
+	}
+	validateCatalogParameterBindings = func() error { return nil }
+	if err := generateSchemaCatalogWithResolver(root, "", output, func(*cobra.Command) (cli.ResolvedSchemaBuild, error) {
+		return cli.ResolvedSchemaBuild{}, errors.New("resolve")
+	}); err == nil || !strings.Contains(err.Error(), "resolve final") {
+		t.Fatalf("resolver error = %v", err)
+	}
+	buildCatalogSnapshot = func(cli.ResolvedSchemaBuild, cli.SchemaCatalogBuildOptions) (cli.SchemaCatalogSnapshot, error) {
+		return cli.SchemaCatalogSnapshot{}, errors.New("snapshot")
+	}
+	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "snapshot") {
+		t.Fatalf("snapshot error = %v", err)
+	}
+	buildCatalogSnapshot = func(cli.ResolvedSchemaBuild, cli.SchemaCatalogBuildOptions) (cli.SchemaCatalogSnapshot, error) {
+		return cli.SchemaCatalogSnapshot{}, nil
+	}
+	makeCatalogDirectory = func(string, os.FileMode) error { return errors.New("mkdir") }
+	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "create output") {
+		t.Fatalf("mkdir error = %v", err)
+	}
+	makeCatalogDirectory = func(string, os.FileMode) error { return nil }
+	writeCatalogFile = func(string, []byte, os.FileMode) error { return errors.New("write") }
+	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "write catalog") {
+		t.Fatalf("write error = %v", err)
+	}
+
+	if got := resolveCatalogRootPath("root", "relative.json"); got != filepath.Join("root", "relative.json") {
+		t.Fatalf("resolved path = %q", got)
+	}
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	surface := filepath.Join(t.TempDir(), "registry.json")
+	if err := os.WriteFile(surface, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCatalogOutputIsolation(repositoryRoot, filepath.Join(t.TempDir(), "catalog.json"), surface); err != nil {
+		t.Fatalf("surface isolation input rejected safe output: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageGenerateSchemaCatalogResolvesBuildExactlyOnce(t *testing.T) {
 	root := app.NewRootCommand()
 	resolveCalls := 0
 	resolvedRegistryHash := ""
@@ -50,14 +165,14 @@ func TestGenerateSchemaCatalogResolvesBuildExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestValidateDeprecatedSurfaceAcceptsEmbeddedRegistrySource(t *testing.T) {
+func TestCrossPlatformCoverageValidateDeprecatedSurfaceAcceptsEmbeddedRegistrySource(t *testing.T) {
 	path := filepath.Join("..", "..", "cli", "schema_command_registry.json")
 	if err := validateDeprecatedSurface(path); err != nil {
 		t.Fatalf("validateDeprecatedSurface() error = %v", err)
 	}
 }
 
-func TestValidateDeprecatedSurfaceRejectsDifferentIdentitySource(t *testing.T) {
+func TestCrossPlatformCoverageValidateDeprecatedSurfaceRejectsDifferentIdentitySource(t *testing.T) {
 	sourcePath := filepath.Join("..", "..", "cli", "schema_command_registry.json")
 	data, err := os.ReadFile(sourcePath)
 	if err != nil {
@@ -78,13 +193,13 @@ func TestValidateDeprecatedSurfaceRejectsDifferentIdentitySource(t *testing.T) {
 	}
 }
 
-func TestValidateDeprecatedSurfaceAllowsOmittedCompatibilityFlag(t *testing.T) {
+func TestCrossPlatformCoverageValidateDeprecatedSurfaceAllowsOmittedCompatibilityFlag(t *testing.T) {
 	if err := validateDeprecatedSurface(""); err != nil {
 		t.Fatalf("validateDeprecatedSurface() error = %v", err)
 	}
 }
 
-func TestValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
+func TestCrossPlatformCoverageValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
 	root := t.TempDir()
 	files := []string{
 		"skills/mono/SKILL.md",

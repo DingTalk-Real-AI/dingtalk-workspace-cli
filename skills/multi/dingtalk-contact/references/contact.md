@@ -1,8 +1,13 @@
 # 通讯录 (contact) 命令参考
 
-> **CRITICAL — 命令合法性**：contact 只有 `user` / `dept` / `label` / `relation` 四个二级子命令。
+> **CRITICAL — 命令合法性**：contact 二级子命令包括 `user` / `dept` / `label` / `relation` / `org` / `account`。
 > 不存在 `contact search`、`contact find`、`contact list`、`contact get`、`contact user find/list`。
 > 构造命令前必须确认路径在下方「命令总览」中存在；不确定时，**根据意图对照下方「意图判断」选择正确命令**。
+>
+> **CRITICAL — 创建企业 vs 创建企业账号（必须优先匹配长模式）**：
+> - 用户说"创建企业**账号** / 新建企业**账号** / 开通企业**账号** / **专属账号** / **企业登录账号**" → **`account create`**（创建企业专属登录账号）
+> - 用户说"创建企业 / 新建企业 / 开通企业 / 初始化企业"（**不含"账号"二字**）→ **`org create`**（创建企业组织本身）
+> - **判断口径**：先检查 query 是否含"账号"关键词；含则必须路由 `account create`，**禁止**路由 `org create`。
 >
 > **CRITICAL — 根部门**：钉钉根部门 `deptId=1`。`dept` 系列命令查根部门统一传 `--dept 1` 或 `--depts 1`，不要传 `self / me / root / 0`。
 
@@ -67,6 +72,21 @@ Flags:
       --ids string   用户 ID 列表，逗号分隔 (必填)
 Notes:
   - **禁止**将 `self/me/current/whoami` 作为 userId 传入；查自己请用 `dws contact user get-self`
+```
+
+#### 邀请员工加入企业
+```
+Usage:
+  dws contact user invite [flags]
+Example:
+  dws contact user invite --org-user-name "张三" --org-user-mobile "13800138000" --depts '[{"deptId":1}]'
+Flags:
+      --org-user-name string    员工在企业内的名称 (必填)
+      --org-user-mobile string  员工手机号 (必填)
+      --depts string            员工所属部门列表 JSON 数组（可选），格式: [{"deptId":1}]
+Notes:
+  - 通过手机号邀请单个员工加入当前企业
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
 ```
 
 ### profile (用户档案 / 花名册)
@@ -244,6 +264,43 @@ Notes:
   - 不知道角色ID时：先 `dws contact label get --names "角色名"` 或 `dws contact label list` 获取 labelId
 ```
 
+### org (企业管理)
+
+#### 创建企业
+```
+Usage:
+  dws contact org create [flags]
+Example:
+  dws contact org create --org-name "我的企业" --creator-username "张三"
+Flags:
+      --org-name string          企业名称 (必填)
+      --creator-username string  创建者在企业内的名称，对应 creatorUsername (必填)
+Notes:
+  - 创建一个新的钉钉企业，当前用户将成为该企业的创建者
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
+```
+
+### account (企业账号管理)
+
+#### 创建企业专属账号
+```
+Usage:
+  dws contact account create [flags]
+Example:
+  dws contact account create --org-user-name "张三" --login-id "zhangsan001" --org-user-mobile "13800138000" --email "zhangsan@example.com" --dept-ids "1,2,3" --send-pwd-via-sms
+Flags:
+      --org-user-name string    员工在企业内的名称 (必填)
+      --login-id string         登录号 (必填)，请勿包含手机号等联系方式
+      --org-user-mobile string  员工手机号（可选）
+      --email string            邮箱（可选）
+      --dept-ids string         要加入的部门 ID 列表，逗号分隔（可选）
+      --send-pwd-via-sms        是否通过手机短信/邮件发送登录邀请（可选，默认 false）
+Notes:
+  - 为当前企业创建一个专属登录账号
+  - 登录号请勿包含手机号，否则可能被运营商拦截短信
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
+```
+
 ## 意图判断
 
 > **搜人首选 `aisearch person`**：凡是“找人/搜人/找同事/谁负责/上级/下级”均优先用 [aisearch person](../../dingtalk-aisearch/references/aisearch.md)，以下场景才用 contact。
@@ -251,9 +308,12 @@ Notes:
 用户说"我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami" → `user get-self`（无需参数；禁止用 `user get --ids me/self` 代替）
 用户需要 userId 给其他产品使用（发消息/建待办/约日程）→ `user search`（按名字）或 `user search-mobile`（按手机号）
 用户说"查用户详情/部门/主管/管理员" → `user get`（需 userId，返回组织管理信息）
+用户说"邀请员工/添加员工/加人/新员工入职/拉人进企业" → `user invite`（需手机号 + 企业内名称，部门可选）
 用户说"花名册字段/有哪些字段/字段列表" → `user profile fields`
 用户说"花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同" → `user profile get`（需 staffId，返回个人档案信息）
 用户说"离职员工/离职名单/离职人员/已离职" → `user dismission search`
+用户说"创建企业账号/新建企业账号/开通企业账号/专属账号/企业登录账号"（含"账号"）→ `account create`（需员工名称 + 登录号；手机号可选）
+用户说"创建企业/新建企业/开通企业/初始化企业"（不含"账号"）→ `org create`（需企业名称 + 创建者名称）
 用户说"找部门/哪个部门" → `dept search`
 用户说"部门详情/部门信息/部门多少人" → `dept get-info`（返回部门ID、部门名称、部门人数；需 deptId，若只有部门名称需先 `dept search`）
 用户说"子部门/下设部门/部门有哪些下级部门/枚举二级部门" → `dept list-children`（需父 deptId；只有部门名先 `dept search`）
@@ -348,6 +408,15 @@ dws contact user dismission search --format json
 dws contact user dismission search --name "张三" --format json
 dws contact user dismission search --start 2026-01-01 --end 2026-03-31 --format json
 dws contact user dismission search --depts 123456,789012 --hide-retirement=false --format json
+
+# 15. 创建企业
+dws contact org create --org-name "我的企业" --creator-username "张三" --format json
+
+# 16. 创建企业专属账号
+dws contact account create --org-user-name "张三" --login-id "zhangsan001" --format json
+
+# 17. 邀请员工加入企业
+dws contact user invite --org-user-name "张三" --org-user-mobile "13800138000" --depts '[{"deptId":1}]' --format json
 ```
 
 ## 上下文传递表
@@ -362,6 +431,7 @@ dws contact user dismission search --depts 123456,789012 --hide-retirement=false
 | `label get` | `labelId` | `label list-members` 的 --id |
 | `dept search/list-children` | `deptId` | dept get-info/list-children/list-members 的 --dept/--depts |
 | `dept search/list-children` | `deptId` | dismission search 的 --depts |
+| `dept search/list-children` | `deptId` | user invite 的 --depts 或 account create 的 --dept-ids |
 
 ## 注意事项
 
@@ -378,6 +448,7 @@ dws contact user dismission search --depts 123456,789012 --hide-retirement=false
 - `label get` 是精确匹配角色名称，不支持模糊搜索；支持逗号分隔同时查询多个角色名称
 - **`label get` 精确匹配无结果时的降级策略**：若 `label get --names "XX"` 返回空结果，必须降级调用 `label list` 获取全部角色列表，从中模糊匹配包含XX关键词的角色（如用户说"管理员"可匹配到"主管理员"和"子管理员"），再对匹配到的角色调用 `label list-members`
 - `label list-members` 需要先通过 `label list` 或 `label get` 获取 labelId，再用 --id 查询角色下的成员
+- `org create`、`account create`、`user invite` 都是写操作；执行前确认当前 profile 对应的企业以及名称、手机号、登录号和部门信息
 
 ## 自动化脚本
 

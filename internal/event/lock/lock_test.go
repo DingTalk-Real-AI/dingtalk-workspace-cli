@@ -16,11 +16,29 @@ package lock
 import (
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestTryAcquire_FirstCallerWins(t *testing.T) {
+func TestCrossPlatformCoverageTryAcquireErrorBranchesAndEmptyPath(t *testing.T) {
+	if lock, err := TryAcquire(filepath.Join(t.TempDir(), "missing", "lock")); err == nil || lock != nil {
+		t.Fatalf("TryAcquire missing parent = %#v, %v", lock, err)
+	}
+	var empty *File
+	if empty.Path() != "" || (&File{}).Path() != "" {
+		t.Fatal("empty lock path should be empty")
+	}
+
+	previous := acquireFileLock
+	t.Cleanup(func() { acquireFileLock = previous })
+	acquireFileLock = func(*os.File) error { return errors.New("unexpected lock failure") }
+	if lock, err := TryAcquire(filepath.Join(t.TempDir(), "lock")); err == nil || lock != nil || errors.Is(err, ErrBusy) {
+		t.Fatalf("TryAcquire injected failure = %#v, %v", lock, err)
+	}
+}
+
+func TestCrossPlatformCoverageTryAcquire_FirstCallerWins(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bus.lock")
 	l, err := TryAcquire(path)
 	if err != nil {
@@ -32,7 +50,7 @@ func TestTryAcquire_FirstCallerWins(t *testing.T) {
 	}
 }
 
-func TestTryAcquire_SecondCallerGetsBusy(t *testing.T) {
+func TestCrossPlatformCoverageTryAcquire_SecondCallerGetsBusy(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bus.lock")
 	l1, err := TryAcquire(path)
 	if err != nil {
@@ -49,7 +67,7 @@ func TestTryAcquire_SecondCallerGetsBusy(t *testing.T) {
 	}
 }
 
-func TestTryAcquire_ReleasedLockIsReacquirable(t *testing.T) {
+func TestCrossPlatformCoverageTryAcquire_ReleasedLockIsReacquirable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bus.lock")
 	l1, err := TryAcquire(path)
 	if err != nil {
@@ -66,7 +84,7 @@ func TestTryAcquire_ReleasedLockIsReacquirable(t *testing.T) {
 	defer l2.Close()
 }
 
-func TestTryAcquire_ContentReadWriteWhileHeld(t *testing.T) {
+func TestCrossPlatformCoverageTryAcquire_ContentReadWriteWhileHeld(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bus.lock")
 	l, err := TryAcquire(path)
 	if err != nil {
@@ -93,7 +111,7 @@ func TestTryAcquire_ContentReadWriteWhileHeld(t *testing.T) {
 	}
 }
 
-func TestClose_NilSafe(t *testing.T) {
+func TestCrossPlatformCoverageClose_NilSafe(t *testing.T) {
 	var l *File
 	if err := l.Close(); err != nil {
 		t.Fatalf("nil Close should be no-op, got %v", err)

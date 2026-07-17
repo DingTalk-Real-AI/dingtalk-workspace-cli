@@ -184,10 +184,7 @@ func (h *connectHealth) flush() error {
 	snapshot := h.hb
 	h.mu.Unlock()
 
-	data, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return err
-	}
+	data, _ := json.MarshalIndent(snapshot, "", "  ")
 	path := connectHeartbeatPath(h.dir)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, config.FilePerm); err != nil {
@@ -340,8 +337,10 @@ func connectBaseDir() string {
 // the same signal `status` reports for one robot, over all of them. Directories
 // with neither a heartbeat nor a daemon state are skipped (empty leftovers).
 // Results are sorted by clientId for stable output. now is injected for tests.
+var connectHealthReadDir = os.ReadDir
+
 func listConnectors(now time.Time) ([]connectHealthReport, error) {
-	ents, err := os.ReadDir(connectBaseDir())
+	ents, err := connectHealthReadDir(connectBaseDir())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

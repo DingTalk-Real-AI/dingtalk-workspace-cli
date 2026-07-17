@@ -306,6 +306,43 @@ func TestRevokeTokenRemote(t *testing.T) {
 	// Can't easily test since LogoutURL is a const. Just test that it doesn't panic with real URL.
 }
 
+func TestRevokeTokenRemoteForDataUsesExactTokenMetadata(t *testing.T) {
+	configDir := t.TempDir()
+	var got struct {
+		ClientID    string `json:"clientId"`
+		AccessToken string `json:"accessToken"`
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != MCPRevokeTokenPath {
+			t.Errorf("revoke path = %q, want %q", r.URL.Path, MCPRevokeTokenPath)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode revoke body: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL), 0o600); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+	SetClientID("wrong-global-client")
+	t.Cleanup(func() { SetClientID("") })
+
+	data := &TokenData{
+		AccessToken: "exact-account-token",
+		ClientID:    "exact-account-client",
+		Source:      "mcp",
+	}
+	if err := RevokeTokenRemoteForData(t.Context(), data); err != nil {
+		t.Fatalf("RevokeTokenRemoteForData() error = %v", err)
+	}
+	if got.ClientID != data.ClientID || got.AccessToken != data.AccessToken {
+		t.Fatalf("revoke body = %#v, want exact token metadata", got)
+	}
+}
+
 // ─── oauth_helpers.go ──────────────────────────────────────────────────
 
 type tokenResponse struct {

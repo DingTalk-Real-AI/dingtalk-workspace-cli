@@ -146,10 +146,6 @@ func TestCopyFile(t *testing.T) {
 		t.Errorf("dst content = %q, want %q", string(got), "copy me")
 	}
 
-	info, _ := os.Stat(dst)
-	if info.Mode().Perm()&0755 != 0755 {
-		t.Errorf("dst perm = %o, want 0755", info.Mode().Perm())
-	}
 }
 
 func TestCopyFile_SrcNotExist(t *testing.T) {

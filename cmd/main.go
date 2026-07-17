@@ -19,6 +19,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 )
 
+var exit = os.Exit
+
 func main() {
-	os.Exit(app.Execute())
+	exit(app.Execute())
 }

@@ -124,12 +124,16 @@ func (e *PATError) ExitCode() int { return ExitCodePermission }
 func (e *PATError) RawStderr() string { return e.RawJSON }
 
 // patNoPermissionCodes are PAT error codes that should be passed through
-// as transparent PATError without CLI-level wrapping.
+// as transparent PATError without CLI-level wrapping. Some of these are
+// grantable by user authorization; PAT_ORG_POLICY_DENIED is terminal until an
+// org admin changes the policy, but it still belongs to the PAT permission
+// channel so hosts see exit=4 and the raw PAT JSON contract.
 var patNoPermissionCodes = map[string]bool{
 	"PAT_NO_PERMISSION":             true,
 	"PAT_LOW_RISK_NO_PERMISSION":    true,
 	"PAT_MEDIUM_RISK_NO_PERMISSION": true,
 	"PAT_HIGH_RISK_NO_PERMISSION":   true,
+	"PAT_ORG_POLICY_DENIED":         true,
 }
 
 // patAuthRequiredCodes are error codes that trigger the PAT authorization
@@ -349,11 +353,7 @@ var patTopLevelStrip = map[string]bool{
 // function instead of writing the fields directly. out["data"] is
 // promoted to map[string]any if missing or of the wrong type.
 func ApplyHostMutations(out map[string]any) {
-	data, ok := out["data"].(map[string]any)
-	if !ok || data == nil {
-		data = map[string]any{}
-		out["data"] = data
-	}
+	data := ensurePATData(out)
 	if rawURI := patAuthorizationURIFromData(data); rawURI != "" {
 		authURL := PATAuthorizationURL(rawURI)
 		data["uri"] = authURL
@@ -365,6 +365,15 @@ func ApplyHostMutations(out map[string]any) {
 		data["hostControl"] = block
 	}
 	data["openBrowser"] = PATOpenBrowserValue()
+}
+
+func ensurePATData(out map[string]any) map[string]any {
+	data, ok := out["data"].(map[string]any)
+	if !ok || data == nil {
+		data = map[string]any{}
+		out["data"] = data
+	}
+	return data
 }
 
 func patAuthorizationURIFromData(data map[string]any) string {
@@ -473,6 +482,9 @@ func cleanPATJSON(body map[string]any, code string) string {
 		}
 	}
 	ApplyHostMutations(out)
+	if code == "PAT_ORG_POLICY_DENIED" {
+		applyOrgPolicyDeniedHint(out, body)
+	}
 
 	// stderr JSON MUST be a single-line, directly json.Unmarshal-able
 	// payload — pretty-printing would break naïve host parsers that read
@@ -482,6 +494,42 @@ func cleanPATJSON(body map[string]any, code string) string {
 		return fmt.Sprintf(`{"success":false,"code":"%s"}`, code)
 	}
 	return string(b)
+}
+
+func applyOrgPolicyDeniedHint(out map[string]any, body map[string]any) {
+	data := ensurePATData(out)
+	if stringValue(data, "policy") == "" {
+		data["policy"] = "OPEN_SOURCE_ORG_SCOPE_FORBIDDEN"
+	}
+	if stringValue(data, "message") == "" {
+		if msg := stringValue(body, "message", "errorMsg", "error"); msg != "" {
+			data["message"] = msg
+		}
+	}
+	if stringValue(data, "hint") == "" {
+		if desc := stringValue(data, "policyDesc", "message"); desc != "" {
+			data["hint"] = "组织策略已禁止当前工具所需的开源数据权限：" + desc +
+				"。请联系组织管理员在 DWS/PAT 权限管控中放开对应 scope 后重试。"
+		} else {
+			data["hint"] = "组织策略已禁止当前工具所需的开源数据权限，请联系组织管理员在 DWS/PAT 权限管控中放开对应 scope 后重试。"
+		}
+	}
+	data["action"] = "contact_org_admin"
+	data["openBrowser"] = false
+	data["retryable"] = false
+}
+
+func stringValue(body map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := body[key].(string)
+		if !ok {
+			continue
+		}
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func marshalSingleLineJSONNoHTMLEscape(v any) ([]byte, error) {

@@ -33,6 +33,14 @@ const (
 
 var generateConnectVideoStoryboard = buildConnectVideoStoryboard
 
+var (
+	connectStoryboardLookPath = exec.LookPath
+	connectStoryboardCommand  = exec.CommandContext
+	connectStoryboardMkdirAll = os.MkdirAll
+	connectStoryboardStat     = os.Stat
+	connectStoryboardRemove   = os.Remove
+)
+
 // prepareOpenCodeAttachments adapts media that OpenCode's file-part bridge
 // cannot safely send to the provider. OpenCode expands video files into the
 // request in-process (a real 267 MiB merged-forward recording caused Bun to
@@ -82,17 +90,26 @@ func prepareOpenCodeAttachments(ctx context.Context, prompt string, attachments 
 	return prompt, prepared
 }
 
+func prepareConnectForwarderAttachments(fwd forwarder, prompt string, attachments []connectMediaAttachment) (string, []connectMediaAttachment) {
+	if _, isOpenCode := fwd.(*opencodeForwarder); !isOpenCode {
+		return prompt, attachments
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), mediaDownloadTimeout)
+	defer cancel()
+	return prepareOpenCodeAttachments(ctx, prompt, attachments)
+}
+
 func buildConnectVideoStoryboard(ctx context.Context, videoPath string) (string, error) {
-	ffmpegPath, err := exec.LookPath("ffmpeg")
+	ffmpegPath, err := connectStoryboardLookPath("ffmpeg")
 	if err != nil {
 		return "", fmt.Errorf("未安装 ffmpeg")
 	}
-	ffprobePath, err := exec.LookPath("ffprobe")
+	ffprobePath, err := connectStoryboardLookPath("ffprobe")
 	if err != nil {
 		return "", fmt.Errorf("未安装 ffprobe")
 	}
 
-	probe := exec.CommandContext(ctx, ffprobePath,
+	probe := connectStoryboardCommand(ctx, ffprobePath,
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",
@@ -112,12 +129,12 @@ func buildConnectVideoStoryboard(ctx context.Context, videoPath string) (string,
 	}
 
 	dir := filepath.Join(os.TempDir(), "dws-connect-media")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := connectStoryboardMkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	dest := filepath.Join(dir, uuid.NewString()+".storyboard.jpg")
 	filter := fmt.Sprintf("fps=1/%.6f,scale=%d:-2,tile=4x3:padding=4:margin=4", interval, connectVideoStoryboardWidth)
-	cmd := exec.CommandContext(ctx, ffmpegPath,
+	cmd := connectStoryboardCommand(ctx, ffmpegPath,
 		"-nostdin", "-hide_banner", "-loglevel", "error", "-y",
 		"-i", videoPath,
 		"-vf", filter,
@@ -126,15 +143,15 @@ func buildConnectVideoStoryboard(ctx context.Context, videoPath string) (string,
 		dest,
 	)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		_ = os.Remove(dest)
+		_ = connectStoryboardRemove(dest)
 		return "", fmt.Errorf("ffmpeg 生成视频故事板失败: %w (%s)", err, truncateRunes(strings.TrimSpace(string(output)), 300))
 	}
-	info, err := os.Stat(dest)
+	info, err := connectStoryboardStat(dest)
 	if err != nil {
 		return "", fmt.Errorf("视频故事板未生成: %w", err)
 	}
 	if info.Size() <= 0 || info.Size() > connectVideoStoryboardMax {
-		_ = os.Remove(dest)
+		_ = connectStoryboardRemove(dest)
 		return "", fmt.Errorf("视频故事板大小异常: %d 字节", info.Size())
 	}
 	return dest, nil

@@ -78,6 +78,28 @@ func embeddedSchemaCatalogError() error {
 	return runtimeEmbeddedSchemaCatalogErr
 }
 
+var (
+	buildCatalogValidateParameterBindings = ValidateSchemaParameterBindingDelivery
+	buildCatalogValidateDryRun            = ValidateReviewedDryRunCapabilityDelivery
+	buildCatalogValidateExamples          = ValidateEmbeddedManualAgentExampleDelivery
+	buildCatalogValidateCompleteness      = validateResolvedRuntimeSchemaCompleteness
+	buildCatalogValidateRegistry          = validateSchemaRegistryAgainstCommandRegistry
+	buildCatalogValidateInterfaces        = validateSchemaRegistryInterfaces
+	buildCatalogValidateAgentMetadata     = validateSchemaRegistryAgentMetadata
+	buildCatalogValidateProvenance        = validateFinalSchemaProvenanceCoverage
+	buildCatalogValidateDelivery          = ValidateSchemaDeliveryInvariants
+	buildCatalogValidateFinalCompleteness = validateResolvedSchemaCatalogDeliveryCompleteness
+
+	loadCatalogValidateInterfaces    = validateSchemaRegistryInterfaces
+	loadCatalogValidateProvenance    = validateFinalSchemaProvenanceCoverage
+	loadCatalogValidateAgentMetadata = validateSchemaRegistryAgentMetadata
+
+	renderEmbeddedSchemaAll      = func(registry SchemaRegistry) (map[string]any, error) { return registry.ToPayload() }
+	renderEmbeddedSchemaOverview = func(registry SchemaRegistry) (map[string]any, error) { return registry.ToOverviewPayload() }
+	renderSchemaProductSummary   = func(product ProductSpec) (map[string]any, error) { return product.ToSummaryPayload() }
+	renderSchemaToolSummary      = func(tool ToolSpec) (map[string]any, error) { return tool.ToSummaryPayload() }
+)
+
 // BuildSchemaCatalogSnapshot renders a deterministic Catalog from one
 // resolved source-to-delivery hand-off. It deliberately accepts no Cobra root:
 // reapplying manual hints or rebuilding SchemaRegistry at this boundary would
@@ -94,28 +116,28 @@ func BuildSchemaCatalogSnapshot(resolved ResolvedSchemaBuild, options SchemaCata
 	} else if registryHash != effectiveCommands.SourceHash() {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("provided Registry hash %q disagrees with effective CommandRegistry %q", registryHash, effectiveCommands.SourceHash())
 	}
-	if err := ValidateSchemaParameterBindingDelivery(resolved.bound, registry); err != nil {
+	if err := buildCatalogValidateParameterBindings(resolved.bound, registry); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Schema parameter binding delivery: %w", err)
 	}
-	if err := ValidateReviewedDryRunCapabilityDelivery(registry); err != nil {
+	if err := buildCatalogValidateDryRun(registry); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate reviewed dry-run capability delivery: %w", err)
 	}
-	if _, err := ValidateEmbeddedManualAgentExampleDelivery(resolved.bound, registry); err != nil {
+	if _, err := buildCatalogValidateExamples(resolved.bound, registry); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Manual Agent example delivery: %w", err)
 	}
-	if err := validateResolvedRuntimeSchemaCompleteness(resolved.root, resolved.bound); err != nil {
+	if err := buildCatalogValidateCompleteness(resolved.root, resolved.bound); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate reverse command-tree completeness: %w", err)
 	}
-	if err := validateSchemaRegistryAgainstCommandRegistry(registry, effectiveCommands); err != nil {
+	if err := buildCatalogValidateRegistry(registry, effectiveCommands); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate typed Schema registry against reviewed CommandRegistry: %w", err)
 	}
-	if err := validateSchemaRegistryInterfaces(registry); err != nil {
+	if err := buildCatalogValidateInterfaces(registry); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Schema interface disposition: %w", err)
 	}
-	if err := validateSchemaRegistryAgentMetadata(registry); err != nil {
+	if err := buildCatalogValidateAgentMetadata(registry); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Schema Agent metadata set: %w", err)
 	}
-	if err := validateFinalSchemaProvenanceCoverage(registry); err != nil {
+	if err := buildCatalogValidateProvenance(registry); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Schema provenance: %w", err)
 	}
 	// Visibility has already selected the complete public set in
@@ -135,10 +157,10 @@ func BuildSchemaCatalogSnapshot(resolved ResolvedSchemaBuild, options SchemaCata
 		Tools:       payload.Tools,
 	}
 	snapshot.SourceHash = schemaCatalogSnapshotHash(snapshot)
-	if err := ValidateSchemaDeliveryInvariants(registry, snapshot); err != nil {
+	if err := buildCatalogValidateDelivery(registry, snapshot); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Schema delivery invariants: %w", err)
 	}
-	if err := validateResolvedSchemaCatalogDeliveryCompleteness(resolved.root, resolved.bound, snapshot); err != nil {
+	if err := buildCatalogValidateFinalCompleteness(resolved.root, resolved.bound, snapshot); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Catalog delivery completeness: %w", err)
 	}
 	return snapshot, nil
@@ -172,17 +194,17 @@ func loadSchemaCatalogSnapshot(snapshot SchemaCatalogSnapshot) (loadedSchemaCata
 	if err != nil {
 		return loadedSchemaCatalog{}, fmt.Errorf("load typed Schema registry: %w", err)
 	}
-	if err := validateSchemaRegistryInterfaces(registry); err != nil {
+	if err := loadCatalogValidateInterfaces(registry); err != nil {
 		return loadedSchemaCatalog{}, fmt.Errorf("validate final Schema interface disposition: %w", err)
 	}
 	// The production loader validates delivered provenance exactly as encoded.
 	// toolSpecFromSnapshot deliberately does not synthesize candidates or
 	// rewrite winners, and this coverage gate applies to every snapshot source.
-	if err := validateFinalSchemaProvenanceCoverage(registry); err != nil {
+	if err := loadCatalogValidateProvenance(registry); err != nil {
 		return loadedSchemaCatalog{}, fmt.Errorf("validate final Schema provenance: %w", err)
 	}
 	if registry.Source == "embedded-command-catalog" {
-		if err := validateSchemaRegistryAgentMetadata(registry); err != nil {
+		if err := loadCatalogValidateAgentMetadata(registry); err != nil {
 			return loadedSchemaCatalog{}, fmt.Errorf("validate final Schema Agent metadata set: %w", err)
 		}
 	}
@@ -195,7 +217,7 @@ func embeddedSchemaCatalogAvailable() bool {
 
 func embeddedSchemaAllPayload() (map[string]any, error) {
 	loaded := embeddedSchemaCatalog()
-	payload, err := loaded.Registry.ToPayload()
+	payload, err := renderEmbeddedSchemaAll(loaded.Registry)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +230,7 @@ func embeddedSchemaAllPayload() (map[string]any, error) {
 
 func embeddedSchemaOverviewPayload() (map[string]any, error) {
 	loaded := embeddedSchemaCatalog()
-	payload, err := loaded.Registry.ToOverviewPayload()
+	payload, err := renderEmbeddedSchemaOverview(loaded.Registry)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +296,7 @@ func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (
 	tokens := splitSchemaPathTokens(raw)
 	if len(tokens) == 1 {
 		if product, ok := loaded.Index.Product(tokens[0]); ok {
-			payload, err := product.ToSummaryPayload()
+			payload, err := renderSchemaProductSummary(product)
 			if err != nil {
 				return nil, err
 			}
@@ -293,7 +315,7 @@ func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (
 			matched := make([]map[string]any, 0)
 			for _, tool := range product.Tools {
 				if schemaToolUnderGroup(tool, path) {
-					summary, err := tool.ToSummaryPayload()
+					summary, err := renderSchemaToolSummary(tool)
 					if err != nil {
 						return nil, err
 					}

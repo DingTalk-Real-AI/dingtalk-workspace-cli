@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var agoalLoadLocation = time.LoadLocation
+
 // ──────────────────────────────────────────────────────────
 // dws agoal — Agoal 管理
 // ──────────────────────────────────────────────────────────
@@ -595,7 +597,7 @@ func parseISO8601ToMillis(value string) (int64, error) {
 }
 
 func shanghaiLocation() *time.Location {
-	loc, err := time.LoadLocation("Asia/Shanghai")
+	loc, err := agoalLoadLocation("Asia/Shanghai")
 	if err != nil {
 		return time.FixedZone("CST", 8*3600)
 	}

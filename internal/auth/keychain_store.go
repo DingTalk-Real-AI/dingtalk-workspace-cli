@@ -14,6 +14,7 @@
 package auth
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,8 +27,16 @@ import (
 )
 
 var (
-	migrationOnce sync.Once
-	migrationDone bool
+	migrationOnce         sync.Once
+	migrationDone         bool
+	authKeychainMarshal   = json.MarshalIndent
+	authKeychainUnmarshal = json.Unmarshal
+	authKeychainSet       = keychain.Set
+	authKeychainGet       = keychain.Get
+	authKeychainRemove    = keychain.Remove
+	authKeychainExists    = keychain.Exists
+	authKeychainMigrate   = keychain.MigrateFromLegacy
+	authValidateEntries   = keychain.ValidateAuthTokenEntries
 )
 
 // ErrTokenDataNotFound means the requested keychain slot does not exist.
@@ -44,6 +53,14 @@ func TokenAccountForCorpID(corpID string) string {
 	return keychain.AccountToken + ":" + strings.TrimSpace(corpID)
 }
 
+// TokenAccountForIdentity returns the stable keychain account used for one
+// DingTalk identity. The hash avoids collisions caused by delimiter escaping
+// or keychain/file-name restrictions.
+func TokenAccountForIdentity(corpID, userID string) string {
+	identity := strings.TrimSpace(corpID) + "\x00" + strings.TrimSpace(userID)
+	return fmt.Sprintf("%s:id:%x", keychain.AccountToken, sha256.Sum256([]byte(identity)))
+}
+
 // SaveTokenDataKeychainForCorpID saves TokenData to a corp-scoped keychain slot.
 func SaveTokenDataKeychainForCorpID(corpID string, data *TokenData) error {
 	corpID = strings.TrimSpace(corpID)
@@ -53,8 +70,18 @@ func SaveTokenDataKeychainForCorpID(corpID string, data *TokenData) error {
 	return saveTokenDataKeychainAccount(TokenAccountForCorpID(corpID), data)
 }
 
+// SaveTokenDataKeychainForIdentity saves TokenData to an identity-scoped slot.
+func SaveTokenDataKeychainForIdentity(corpID, userID string, data *TokenData) error {
+	corpID = strings.TrimSpace(corpID)
+	userID = strings.TrimSpace(userID)
+	if corpID == "" || userID == "" {
+		return fmt.Errorf("corpId and userId are required for identity token storage")
+	}
+	return saveTokenDataKeychainAccount(TokenAccountForIdentity(corpID, userID), data)
+}
+
 func saveTokenDataKeychainAccount(account string, data *TokenData) error {
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	jsonData, err := authKeychainMarshal(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal token data: %w", err)
 	}
@@ -65,7 +92,7 @@ func saveTokenDataKeychainAccount(account string, data *TokenData) error {
 		}
 	}()
 
-	if err := keychain.Set(keychain.Service, account, string(jsonData)); err != nil {
+	if err := authKeychainSet(keychain.Service, account, string(jsonData)); err != nil {
 		return fmt.Errorf("save to keychain: %w", err)
 	}
 	return nil
@@ -85,8 +112,18 @@ func LoadTokenDataKeychainForCorpID(corpID string) (*TokenData, error) {
 	return loadTokenDataKeychainAccount(TokenAccountForCorpID(corpID))
 }
 
+// LoadTokenDataKeychainForIdentity loads TokenData from an identity-scoped slot.
+func LoadTokenDataKeychainForIdentity(corpID, userID string) (*TokenData, error) {
+	corpID = strings.TrimSpace(corpID)
+	userID = strings.TrimSpace(userID)
+	if corpID == "" || userID == "" {
+		return nil, fmt.Errorf("corpId and userId are required for identity token storage")
+	}
+	return loadTokenDataKeychainAccount(TokenAccountForIdentity(corpID, userID))
+}
+
 func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
-	jsonStr, err := keychain.Get(keychain.Service, account)
+	jsonStr, err := authKeychainGet(keychain.Service, account)
 	if err != nil {
 		return nil, fmt.Errorf("load from keychain: %w", err)
 	}
@@ -95,7 +132,7 @@ func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
 	}
 
 	var data TokenData
-	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+	if err := authKeychainUnmarshal([]byte(jsonStr), &data); err != nil {
 		return nil, fmt.Errorf("parse token data: %w", err)
 	}
 	return &data, nil
@@ -119,17 +156,12 @@ func preflightTokenPersistence(configDir string) error {
 	if err != nil {
 		return fmt.Errorf("load token profiles: %w", err)
 	}
-	seen := make(map[string]struct{}, len(cfg.Profiles))
+	if err := ensureProfilesWritable(cfg); err != nil {
+		return err
+	}
 	for _, profile := range cfg.Profiles {
-		corpID := strings.TrimSpace(profile.CorpID)
-		if corpID == "" {
-			continue
-		}
-		if _, ok := seen[corpID]; ok {
-			continue
-		}
-		seen[corpID] = struct{}{}
-
+		// LoadProfiles normalizes away blank and duplicate corp IDs.
+		corpID := profile.CorpID
 		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 			return fmt.Errorf(
 				"profile token slot %q is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
@@ -137,7 +169,20 @@ func preflightTokenPersistence(configDir string) error {
 			)
 		}
 	}
-	if err := keychain.ValidateAuthTokenEntries(keychain.Service); err != nil {
+	for _, profile := range cfg.Profiles {
+		corpID := strings.TrimSpace(profile.CorpID)
+		userID := strings.TrimSpace(profile.UserID)
+		if corpID == "" || userID == "" {
+			continue
+		}
+		if _, err := LoadTokenDataKeychainForIdentity(corpID, userID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			return fmt.Errorf(
+				"identity token slot %q is unreadable; remove only this account with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
+				TokenAccountForIdentity(corpID, userID), ProfileSelector(profile), err,
+			)
+		}
+	}
+	if err := authValidateEntries(keychain.Service); err != nil {
 		return fmt.Errorf(
 			"auth token ciphertext inventory is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, use `dws auth reset` only when discarding all local profiles: %w",
 			err,
@@ -149,9 +194,16 @@ func preflightTokenPersistence(configDir string) error {
 // preflightTokenRefreshPersistence checks only the slots a refresh can write.
 // An unrelated broken profile must not prevent the current profile from using
 // its still-valid credentials.
-func preflightTokenRefreshPersistence(data *TokenData) error {
+func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
 	if h := edition.Get(); h.SaveToken != nil {
 		return nil
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return err
+	}
+	if err := ensureProfilesWritable(cfg); err != nil {
+		return err
 	}
 
 	if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
@@ -161,15 +213,29 @@ func preflightTokenRefreshPersistence(data *TokenData) error {
 		return nil
 	}
 	corpID := strings.TrimSpace(data.CorpID)
-	if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
-		return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)
+	userID := strings.TrimSpace(data.UserID)
+	if userID != "" {
+		if _, err := LoadTokenDataKeychainForIdentity(corpID, userID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			return fmt.Errorf("identity token slot %q is unreadable: %w", TokenAccountForIdentity(corpID, userID), err)
+		}
+	}
+	checkOrganizationMirror := true
+	if _, _, exact := ParseIdentitySelector(RuntimeProfile()); exact {
+		checkOrganizationMirror =
+			exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]) ==
+				profileSelector(corpID, userID)
+	}
+	if checkOrganizationMirror {
+		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)
+		}
 	}
 	return nil
 }
 
 // DeleteTokenDataKeychain removes TokenData from the platform keychain.
 func DeleteTokenDataKeychain() error {
-	return keychain.Remove(keychain.Service, keychain.AccountToken)
+	return authKeychainRemove(keychain.Service, keychain.AccountToken)
 }
 
 // DeleteTokenDataKeychainForCorpID removes TokenData from a corp-scoped keychain slot.
@@ -178,12 +244,22 @@ func DeleteTokenDataKeychainForCorpID(corpID string) error {
 	if corpID == "" {
 		return fmt.Errorf("corpId is required for profile token storage")
 	}
-	return keychain.Remove(keychain.Service, TokenAccountForCorpID(corpID))
+	return authKeychainRemove(keychain.Service, TokenAccountForCorpID(corpID))
+}
+
+// DeleteTokenDataKeychainForIdentity removes one identity-scoped token.
+func DeleteTokenDataKeychainForIdentity(corpID, userID string) error {
+	corpID = strings.TrimSpace(corpID)
+	userID = strings.TrimSpace(userID)
+	if corpID == "" || userID == "" {
+		return fmt.Errorf("corpId and userId are required for identity token storage")
+	}
+	return authKeychainRemove(keychain.Service, TokenAccountForIdentity(corpID, userID))
 }
 
 // TokenDataExistsKeychain checks if token data exists in keychain.
 func TokenDataExistsKeychain() bool {
-	return keychain.Exists(keychain.Service, keychain.AccountToken)
+	return authKeychainExists(keychain.Service, keychain.AccountToken)
 }
 
 // TokenDataExistsKeychainForCorpID checks if a corp-scoped token exists.
@@ -192,7 +268,17 @@ func TokenDataExistsKeychainForCorpID(corpID string) bool {
 	if corpID == "" {
 		return false
 	}
-	return keychain.Exists(keychain.Service, TokenAccountForCorpID(corpID))
+	return authKeychainExists(keychain.Service, TokenAccountForCorpID(corpID))
+}
+
+// TokenDataExistsKeychainForIdentity checks if an identity-scoped token exists.
+func TokenDataExistsKeychainForIdentity(corpID, userID string) bool {
+	corpID = strings.TrimSpace(corpID)
+	userID = strings.TrimSpace(userID)
+	if corpID == "" || userID == "" {
+		return false
+	}
+	return authKeychainExists(keychain.Service, TokenAccountForIdentity(corpID, userID))
 }
 
 // EnsureMigration performs one-time migration from legacy .data to keychain.
@@ -200,7 +286,7 @@ func TokenDataExistsKeychainForCorpID(corpID string) bool {
 // The migration is idempotent and thread-safe.
 func EnsureMigration(configDir string, logger *slog.Logger) {
 	migrationOnce.Do(func() {
-		result := keychain.MigrateFromLegacy(configDir)
+		result := authKeychainMigrate(configDir)
 		migrationDone = true
 
 		if result.Migrated {
@@ -240,7 +326,7 @@ func SaveClientSecret(clientID, clientSecret string) error {
 		return nil // Nothing to save
 	}
 	account := clientSecretPrefix + clientID
-	if err := keychain.Set(keychain.Service, account, clientSecret); err != nil {
+	if err := authKeychainSet(keychain.Service, account, clientSecret); err != nil {
 		return fmt.Errorf("save client secret: %w", err)
 	}
 	return nil
@@ -253,7 +339,7 @@ func LoadClientSecret(clientID string) string {
 		return ""
 	}
 	account := clientSecretPrefix + clientID
-	secret, err := keychain.Get(keychain.Service, account)
+	secret, err := authKeychainGet(keychain.Service, account)
 	if err != nil {
 		return ""
 	}
@@ -266,5 +352,5 @@ func DeleteClientSecret(clientID string) error {
 		return nil
 	}
 	account := clientSecretPrefix + clientID
-	return keychain.Remove(keychain.Service, account)
+	return authKeychainRemove(keychain.Service, account)
 }

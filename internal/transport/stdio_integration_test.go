@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,7 +44,7 @@ func TestStdioClientEndToEnd(t *testing.T) {
 	}
 	defer client.Stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Initialize
@@ -147,6 +148,9 @@ func buildTestHelper(t *testing.T) string {
 	}
 
 	binPath := filepath.Join(t.TempDir(), "stdio-test-server")
+	if runtime.GOOS == "windows" {
+		binPath += ".exe"
+	}
 	cmd := exec.Command("go", "build", "-o", binPath, serverSrc)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

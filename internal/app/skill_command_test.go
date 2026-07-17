@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -367,21 +368,11 @@ func TestSkillInstallCommandValidation(t *testing.T) {
 }
 
 func TestSkillInstallInvalidTarget(t *testing.T) {
-	// Setup: Create config directory with valid token
 	tempDir := t.TempDir()
+	t.Cleanup(CloseFileLogger)
 	configDir := filepath.Join(tempDir, "config")
 	t.Setenv("DWS_CONFIG_DIR", configDir)
-
-	// Save a valid token
-	err := authpkg.SaveTokenData(configDir, &authpkg.TokenData{
-		AccessToken:  "test-token",
-		RefreshToken: "refresh-token",
-		ExpiresAt:    time.Now().Add(time.Hour),
-		RefreshExpAt: time.Now().Add(24 * time.Hour),
-	})
-	if err != nil {
-		t.Skipf("SaveTokenData() unavailable in this environment: %v", err)
-	}
+	t.Cleanup(CloseFileLogger)
 
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{"skill", "install", "skill-123", "invalid-target"})
@@ -390,7 +381,7 @@ func TestSkillInstallInvalidTarget(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
-	err = cmd.Execute()
+	err := cmd.Execute()
 	if err == nil {
 		t.Error("Execute() should have failed for invalid target")
 	}
@@ -402,8 +393,13 @@ func TestSkillInstallInvalidTarget(t *testing.T) {
 func TestSkillInstallRequiresAuth(t *testing.T) {
 	// Setup: Create config directory without token
 	tempDir := t.TempDir()
+	t.Cleanup(CloseFileLogger)
 	configDir := filepath.Join(tempDir, "config")
 	t.Setenv("DWS_CONFIG_DIR", configDir)
+	t.Cleanup(CloseFileLogger)
+	originalLoadToken := skillLoadTokenData
+	skillLoadTokenData = func(string) (*authpkg.TokenData, error) { return nil, errors.New("missing") }
+	t.Cleanup(func() { skillLoadTokenData = originalLoadToken })
 
 	// Ensure the config directory exists but has no token
 	if err := os.MkdirAll(configDir, 0755); err != nil {
@@ -682,14 +678,17 @@ func TestSkillSearchHelpUsesWukongSourceAndKeepsScopesHidden(t *testing.T) {
 func TestSkillSearchUsesSourceQueryAndKeepsScopesCompat(t *testing.T) {
 	configDir := filepath.Join(t.TempDir(), "config")
 	t.Setenv("DWS_CONFIG_DIR", configDir)
-	if err := authpkg.SaveTokenData(configDir, &authpkg.TokenData{
-		AccessToken:  "test-token",
-		RefreshToken: "refresh-token",
-		ExpiresAt:    time.Now().Add(time.Hour),
-		RefreshExpAt: time.Now().Add(24 * time.Hour),
-	}); err != nil {
-		t.Skipf("SaveTokenData() unavailable in this environment: %v", err)
+	t.Cleanup(CloseFileLogger)
+	originalLoadToken := skillLoadTokenData
+	skillLoadTokenData = func(string) (*authpkg.TokenData, error) {
+		return &authpkg.TokenData{
+			AccessToken:  "test-token",
+			RefreshToken: "refresh-token",
+			ExpiresAt:    time.Now().Add(time.Hour),
+			RefreshExpAt: time.Now().Add(24 * time.Hour),
+		}, nil
 	}
+	t.Cleanup(func() { skillLoadTokenData = originalLoadToken })
 
 	var gotSources []string
 	var gotScopes []string
@@ -711,6 +710,7 @@ func TestSkillSearchUsesSourceQueryAndKeepsScopesCompat(t *testing.T) {
 
 	run := func(args ...string) {
 		t.Helper()
+		defer CloseFileLogger()
 		cmd := NewRootCommand()
 		cmd.SetArgs(args)
 		var out bytes.Buffer

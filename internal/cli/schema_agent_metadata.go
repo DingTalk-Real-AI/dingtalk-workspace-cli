@@ -16,6 +16,7 @@ package cli
 import (
 	"embed"
 	"encoding/json"
+	"io/fs"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -113,8 +114,12 @@ func runtimeAgentMetadata() embeddedAgentMetadata {
 }
 
 func loadEmbeddedAgentMetadata() embeddedAgentMetadata {
+	return loadEmbeddedAgentMetadataFrom(embeddedAgentMetadataFS)
+}
+
+func loadEmbeddedAgentMetadataFrom(source fs.FS) embeddedAgentMetadata {
 	var metadata embeddedAgentMetadata
-	index, err := embeddedAgentMetadataFS.ReadFile("schema_agent_metadata/index.json")
+	index, err := fs.ReadFile(source, "schema_agent_metadata/index.json")
 	if err != nil || json.Unmarshal(index, &metadata) != nil {
 		return emptyEmbeddedAgentMetadata()
 	}
@@ -124,7 +129,7 @@ func loadEmbeddedAgentMetadata() embeddedAgentMetadata {
 		if domain == "" || strings.Contains(domain, "/") || strings.Contains(domain, "\\") {
 			return emptyEmbeddedAgentMetadata()
 		}
-		data, err := embeddedAgentMetadataFS.ReadFile("schema_agent_metadata/" + domain + ".json")
+		data, err := fs.ReadFile(source, "schema_agent_metadata/"+domain+".json")
 		if err != nil {
 			return emptyEmbeddedAgentMetadata()
 		}

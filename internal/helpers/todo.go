@@ -22,6 +22,35 @@ import (
 
 const todoListPageSizeMax = 20
 
+var todoFileMD5Hex = fileMD5Hex
+
+func ensureTodoTaskExists(ctx context.Context, taskID string) error {
+	text, err := callMCPToolReturnTextOnServer(ctx, "todo", "get_todo_detail", map[string]any{
+		"taskId": taskID,
+	})
+	if err != nil {
+		return fmt.Errorf("待办任务 %q 不存在或不可访问: %w", taskID, err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return fmt.Errorf("校验待办任务 %q 时无法解析详情响应: %w", taskID, err)
+	}
+	result, ok := body["result"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("待办任务 %q 不存在或详情响应缺少 result", taskID)
+	}
+	detail, ok := result["todoDetailModel"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("待办任务 %q 不存在或详情响应缺少 todoDetailModel", taskID)
+	}
+	returnedTaskID := stringFromJSONScalar(detail["taskId"])
+	if returnedTaskID == "" || returnedTaskID != taskID {
+		return fmt.Errorf("待办任务 %q 不存在或详情响应中的 taskId 不匹配", taskID)
+	}
+	return nil
+}
+
 func newTodoCommand() *cobra.Command {
 	todoCmd := &cobra.Command{
 		Use:   "todo",
@@ -231,8 +260,14 @@ func newTodoCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "task-id", "status"); err != nil {
 				return err
 			}
+			taskID := mustGetFlag(cmd, "task-id")
+			if !deps.Caller.DryRun() {
+				if err := ensureTodoTaskExists(cmd.Context(), taskID); err != nil {
+					return err
+				}
+			}
 			return callMCPTool("update_todo_done_status", map[string]any{
-				"taskId": mustGetFlag(cmd, "task-id"),
+				"taskId": taskID,
 				"isDone": mustGetFlag(cmd, "status"),
 			})
 		},
@@ -535,10 +570,15 @@ func newTodoCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "task-id"); err != nil {
 				return err
 			}
-			taskId := mustGetFlag(cmd, "task-id")
+			taskID := mustGetFlag(cmd, "task-id")
+			if !deps.Caller.DryRun() {
+				if err := ensureTodoTaskExists(cmd.Context(), taskID); err != nil {
+					return err
+				}
+			}
 			return callMCPTool("list_todo_attachment", map[string]any{
 				"todoAttachmentListRequest": map[string]any{
-					"taskId": taskId,
+					"taskId": taskID,
 				},
 			})
 		},
@@ -869,7 +909,7 @@ func buildTodoLocalFileMeta(filePath, fileName, md5Value string) (todoLocalFileM
 	}
 	fileType := strings.TrimPrefix(filepath.Ext(fileName), ".")
 	if md5Value == "" {
-		md5Value, err = fileMD5Hex(filePath)
+		md5Value, err = todoFileMD5Hex(filePath)
 		if err != nil {
 			return todoLocalFileMeta{}, err
 		}

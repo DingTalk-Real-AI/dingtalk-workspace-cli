@@ -19,6 +19,8 @@ import (
 	"io"
 )
 
+var encodeNDJSON = (*json.Encoder).Encode
+
 // writeNDJSON renders payload as newline-delimited JSON (https://ndjson.org):
 //   - a top-level array       → one element per line
 //   - an object that wraps a  → one element of that list per line
@@ -47,24 +49,24 @@ func writeNDJSON(w io.Writer, payload any) error {
 	switch v := normalized.(type) {
 	case []any:
 		for _, item := range v {
-			if err := enc.Encode(item); err != nil {
+			if err := encodeNDJSON(enc, item); err != nil {
 				return err
 			}
 		}
 	case map[string]any:
 		if loc := findDataList(v); loc != nil {
 			for _, item := range loc.list {
-				if err := enc.Encode(item); err != nil {
+				if err := encodeNDJSON(enc, item); err != nil {
 					return err
 				}
 			}
 		} else {
-			if err := enc.Encode(v); err != nil {
+			if err := encodeNDJSON(enc, v); err != nil {
 				return err
 			}
 		}
 	default:
-		if err := enc.Encode(v); err != nil {
+		if err := encodeNDJSON(enc, v); err != nil {
 			return err
 		}
 	}
@@ -75,12 +77,12 @@ func writeNDJSON(w io.Writer, payload any) error {
 // map[string]any / []any / scalar shape used by the rest of this package by
 // marshalling and unmarshalling it through encoding/json.
 func roundTripJSON(payload any) (any, error) {
-	raw, err := json.Marshal(payload)
+	raw, err := marshalJSON(payload)
 	if err != nil {
 		return nil, err
 	}
 	var out any
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := unmarshalJSON(raw, &out); err != nil {
 		return nil, err
 	}
 	return out, nil

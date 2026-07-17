@@ -50,8 +50,9 @@ func TestRuntimeRunnerAggregatesCommaSeparatedProfiles(t *testing.T) {
 			t.Fatalf("profiles[%d].ok = %#v, want true", i, entry["ok"])
 		}
 		resultPayload := entry["result"].(map[string]any)
-		if resultPayload["runtimeProfile"] != wantCorpID {
-			t.Fatalf("profiles[%d].result.runtimeProfile = %#v, want %q", i, resultPayload["runtimeProfile"], wantCorpID)
+		wantProfile := wantCorpID + ":user-" + wantCorpID
+		if resultPayload["runtimeProfile"] != wantProfile {
+			t.Fatalf("profiles[%d].result.runtimeProfile = %#v, want %q", i, resultPayload["runtimeProfile"], wantProfile)
 		}
 	}
 }
@@ -75,6 +76,37 @@ func TestRuntimeRunnerDeduplicatesCommaSeparatedProfilesByCorpID(t *testing.T) {
 	}
 }
 
+func TestRuntimeRunnerDeduplicatesByResolvedIdentityInSameCorp(t *testing.T) {
+	first := authLogoutTestToken("corp_same")
+	first.UserID = "user_1"
+	second := authLogoutTestToken("corp_same")
+	second.AccessToken = "access-second"
+	second.RefreshToken = "refresh-second"
+	second.UserID = "user_2"
+	configDir := setupAuthLogoutProfiles(t, first, second)
+
+	selections, multi, err := resolveMultiProfileSelections(
+		configDir,
+		"corp_same,corp_same:user_1,corp_same:user_2",
+	)
+	if err != nil {
+		t.Fatalf("resolveMultiProfileSelections() error = %v", err)
+	}
+	if !multi {
+		t.Fatal("multi = false, want true")
+	}
+	if len(selections) != 2 {
+		t.Fatalf("selections len = %d, want 2: %#v", len(selections), selections)
+	}
+	got := []string{
+		authpkg.ProfileSelector(selections[0].Profile),
+		authpkg.ProfileSelector(selections[1].Profile),
+	}
+	if strings.Join(got, ",") != "corp_same:user_2,corp_same:user_1" {
+		t.Fatalf("resolved identities = %v, want current user_2 then user_1", got)
+	}
+}
+
 func TestRuntimeRunnerKeepsSingleProfileBehavior(t *testing.T) {
 	setupAuthLogoutProfiles(t, authLogoutTestToken("corp_a"), authLogoutTestToken("corp_b"))
 	authpkg.SetRuntimeProfile("corp_a")
@@ -91,8 +123,35 @@ func TestRuntimeRunnerKeepsSingleProfileBehavior(t *testing.T) {
 	if _, ok := result.Response["content"].(map[string]any)["multiProfile"]; ok {
 		t.Fatalf("single profile unexpectedly returned aggregate content: %#v", result.Response)
 	}
+	if got := result.Response["content"].(map[string]any)["runtimeProfile"]; got != "corp_a:user-corp_a" {
+		t.Fatalf("fallback runtime profile = %#v, want exact identity selector", got)
+	}
 	if got := authpkg.RuntimeProfile(); got != "corp_a" {
 		t.Fatalf("runtime profile after Run = %q, want corp_a", got)
+	}
+}
+
+func TestRuntimeRunnerRejectsAmbiguousSingleProfile(t *testing.T) {
+	first := authLogoutTestToken("corp_first")
+	first.CorpName = "Shared Org"
+	second := authLogoutTestToken("corp_second")
+	second.CorpName = "Shared Org"
+	setupAuthLogoutProfiles(t, first, second)
+	authpkg.SetRuntimeProfile("Shared Org")
+
+	runner := &runtimeRunner{fallback: multiProfileFallbackRunner{}}
+	_, err := runner.Run(context.Background(), executor.Invocation{
+		Kind:             "helper_invocation",
+		CanonicalProduct: "contact",
+		Tool:             "get_current_user_profile",
+	})
+	if err == nil {
+		t.Fatal("Run() accepted ambiguous single profile selector")
+	}
+	for _, candidate := range []string{"corp_first", "corp_second"} {
+		if !strings.Contains(err.Error(), candidate) {
+			t.Fatalf("error = %q, want candidate %q", err.Error(), candidate)
+		}
 	}
 }
 

@@ -55,6 +55,16 @@ const (
 	perfReportFile = "latest.json"
 )
 
+var (
+	timingMarshalIndent = json.MarshalIndent
+	timingMkdirAll      = os.MkdirAll
+	timingWriteFile     = os.WriteFile
+	timingRemove        = os.Remove
+	timingRename        = os.Rename
+	timingReadFile      = os.ReadFile
+	timingUserHomeDir   = os.UserHomeDir
+)
+
 // timingContextKey is the context key for TimingCollector.
 type timingContextKey struct{}
 
@@ -295,7 +305,7 @@ func (tc *TimingCollector) WriteReportIfEnabled(cliVersion, command string) {
 	}
 
 	report := tc.BuildReport(cliVersion, command)
-	data, err := json.MarshalIndent(report, "", "  ")
+	data, err := timingMarshalIndent(report, "", "  ")
 	if err != nil {
 		return
 	}
@@ -306,22 +316,22 @@ func (tc *TimingCollector) WriteReportIfEnabled(cliVersion, command string) {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := timingMkdirAll(dir, 0o700); err != nil {
 		return
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		_ = os.Remove(tmp)
+	if err := timingWriteFile(tmp, data, 0o600); err != nil {
+		_ = timingRemove(tmp)
 		return
 	}
-	_ = os.Rename(tmp, path)
+	_ = timingRename(tmp, path)
 }
 
 // LoadLatestReport reads the default perf report file (~/.dws/perf/latest.json).
 func LoadLatestReport() (*PerfReport, error) {
 	path := defaultPerfReportPath()
-	data, err := os.ReadFile(path)
+	data, err := timingReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +351,7 @@ func resolvePerfReportPath(dest string) string {
 }
 
 func defaultPerfReportPath() string {
-	home, err := os.UserHomeDir()
+	home, err := timingUserHomeDir()
 	if err != nil {
 		return ""
 	}

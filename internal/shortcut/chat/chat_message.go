@@ -206,21 +206,28 @@ var MessagesList = shortcut.Shortcut{
 	Intent:      "当你想按时间拉取某个群的历史聊天记录（做回顾或分析）时使用；只读，需传群 openConversationId 和起始时间，--forward 控制往新还是往旧方向翻。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId"},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"", Required: true},
 		{Name: "forward", Type: shortcut.FlagBool, Default: "true", Desc: "true=从给定时间往现在拉，false=往以前拉"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id"}},
 	},
 	Tips: []string{`dws chat +messages-list --group <openConversationId> --time "2025-03-01 00:00:00"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		group := rt.StrFirst("group", "conversation-id", "id")
 		params := map[string]any{
-			"openCid": rt.Str("group"),
-			"cid":     rt.Str("group"),
+			"openCid": group,
+			"cid":     group,
 			"time":    rt.Str("time"),
 			"forward": rt.Bool("forward"),
 		}
-		if rt.Int("limit") > 0 {
-			params["limit"] = rt.Int("limit")
+		if limit := rt.IntFirst("limit", "size"); limit > 0 {
+			params["limit"] = limit
 		}
 		data, err := rt.CallMCPData("chat", "list_conversation_message_v2", params)
 		if err != nil {
@@ -312,6 +319,7 @@ var MessagesListDirect = shortcut.Shortcut{
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"", Required: true},
 		{Name: "forward", Type: shortcut.FlagBool, Default: "true", Desc: "true=往现在拉，false=往以前拉"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 	},
 	Tips: []string{`dws chat +messages-list-direct --user <userId> --time "2025-03-01 00:00:00"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -327,8 +335,8 @@ var MessagesListDirect = shortcut.Shortcut{
 		default:
 			return fmt.Errorf("--user 或 --open-dingtalk-id 必填其一")
 		}
-		if rt.Int("limit") > 0 {
-			params["limit"] = rt.Int("limit")
+		if limit := rt.IntFirst("limit", "size"); limit > 0 {
+			params["limit"] = limit
 		}
 		data, err := rt.CallMCPData("chat", "list_individual_chat_message", params)
 		if err != nil {
@@ -480,14 +488,19 @@ var MessagesReadStatus = shortcut.Shortcut{
 	Intent:      "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId"},
+		{Name: "group", Type: shortcut.FlagString, Desc: "--conversation-id 的别名", Hidden: true},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--conversation-id 的别名", Hidden: true},
 		{Name: "message-id", Type: shortcut.FlagString, Desc: "消息 openMessageId（当前用户发送的消息）", Required: true},
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "目标 userId 或 openDingTalkId 列表（不传返回全部接收者）"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"conversation-id", "group", "id"}},
 	},
 	Tips: []string{`dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
-			"openConversationId": rt.Str("conversation-id"),
+			"openConversationId": rt.StrFirst("conversation-id", "group", "id"),
 			"openMessageId":      rt.Str("message-id"),
 		}
 		if v := rt.StrSlice("users"); len(v) > 0 {

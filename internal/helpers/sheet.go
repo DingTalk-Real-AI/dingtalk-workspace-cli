@@ -177,11 +177,7 @@ func newSheetCommand() *cobra.Command {
 		{path: "range move-to", operation: "移动工作表区域", targetHint: "源工作表范围和目标位置"},
 	}
 	for _, guard := range confirmationGuards {
-		command, remaining, err := root.Find(strings.Fields(guard.path))
-		if err != nil || command == nil || len(remaining) != 0 || command == root {
-			panic(fmt.Sprintf("attach Sheet confirmation guard %q: command not found (remaining=%v, err=%v)", guard.path, remaining, err))
-		}
-		protectSheetMutationCommand(command, guard.operation, guard.targetHint)
+		attachSheetConfirmationGuard(root, guard.path, guard.operation, guard.targetHint)
 	}
 
 	// Guards for grouped parent commands
@@ -194,6 +190,14 @@ func newSheetCommand() *cobra.Command {
 	attachUnknownSubcommandGuard(pivotTableCmd)
 
 	return root
+}
+
+func attachSheetConfirmationGuard(root *cobra.Command, path, operation, targetHint string) {
+	command, remaining, err := root.Find(strings.Fields(path))
+	if err != nil || command == nil || len(remaining) != 0 || command == root {
+		panic(fmt.Sprintf("attach Sheet confirmation guard %q: command not found (remaining=%v, err=%v)", path, remaining, err))
+	}
+	protectSheetMutationCommand(command, operation, targetHint)
 }
 
 // attachUnknownSubcommandGuard 为分组型命令挂上拼错子命令时的 did-you-mean 提示。

@@ -55,6 +55,17 @@ var (
 	cachedAppConfigMu   sync.RWMutex
 )
 
+var (
+	appConfigStoreSecret       = StoreSecret
+	appConfigMarshalIndent     = json.MarshalIndent
+	appConfigAtomicWrite       = helpers.AtomicWriteJSON
+	appConfigReadFile          = os.ReadFile
+	appConfigRemove            = os.Remove
+	appConfigLoad              = LoadAppConfig
+	appConfigResolveSecret     = ResolveSecret
+	appConfigBeforeResolveLock = func() {}
+)
+
 // Cached resolved credentials (avoid repeated keychain access).
 var (
 	cachedResolvedID     string
@@ -98,7 +109,7 @@ func LoadAppConfig(configDir string) (*AppConfig, error) {
 func SaveAppConfig(configDir string, config *AppConfig) error {
 	// Store plain secret in keychain, convert to reference
 	if config.ClientSecret.IsPlain() && config.ClientID != "" {
-		storedRef, err := StoreSecret(config.ClientID, config.ClientSecret)
+		storedRef, err := appConfigStoreSecret(config.ClientID, config.ClientSecret)
 		if err != nil {
 			return fmt.Errorf("storing client secret: %w", err)
 		}
@@ -111,13 +122,13 @@ func SaveAppConfig(configDir string, config *AppConfig) error {
 	}
 	config.UpdatedAt = time.Now()
 
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := appConfigMarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling app config: %w", err)
 	}
 
 	path := GetAppConfigPath(configDir)
-	if err := helpers.AtomicWriteJSON(path, append(data, '\n')); err != nil {
+	if err := appConfigAtomicWrite(path, append(data, '\n')); err != nil {
 		return fmt.Errorf("writing app config: %w", err)
 	}
 	cleanupLegacySiblingAppConfig(configDir, config)
@@ -143,11 +154,7 @@ func cleanupLegacySiblingAppConfig(configDir string, config *AppConfig) {
 	}
 
 	legacyPath := filepath.Join(configDir, appConfigFile)
-	if legacyPath == GetAppConfigPath(configDir) {
-		return
-	}
-
-	data, err := os.ReadFile(legacyPath)
+	data, err := appConfigReadFile(legacyPath)
 	if err != nil {
 		return
 	}
@@ -160,7 +167,7 @@ func cleanupLegacySiblingAppConfig(configDir string, config *AppConfig) {
 		return
 	}
 
-	if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
+	if err := appConfigRemove(legacyPath); err != nil && !os.IsNotExist(err) {
 		slog.Debug("auth: best-effort cleanup of legacy app config failed", "path", legacyPath, "error", err)
 	}
 }
@@ -175,7 +182,7 @@ func DeleteAppConfig(configDir string) error {
 
 	// Remove config file
 	path := GetAppConfigPath(configDir)
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := appConfigRemove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("removing app config: %w", err)
 	}
 
@@ -215,7 +222,7 @@ func GetCachedAppConfig(configDir string) *AppConfig {
 // ReloadAppConfig forces a reload of the app configuration from disk.
 // This should be called after SaveAppConfig to ensure the cache is updated.
 func ReloadAppConfig(configDir string) (*AppConfig, error) {
-	cfg, err := LoadAppConfig(configDir)
+	cfg, err := appConfigLoad(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -248,6 +255,7 @@ func ResolveAppCredentials(configDir string) (clientID, clientSecret string) {
 	cachedResolvedMu.RUnlock()
 
 	// Slow path: load and cache
+	appConfigBeforeResolveLock()
 	cachedResolvedMu.Lock()
 	defer cachedResolvedMu.Unlock()
 	// Double-check after acquiring write lock
@@ -258,7 +266,7 @@ func ResolveAppCredentials(configDir string) (clientID, clientSecret string) {
 	cfg := GetCachedAppConfig(configDir)
 	if cfg != nil {
 		cachedResolvedID = cfg.ClientID
-		if secret, err := ResolveSecret(cfg.ClientSecret); err == nil {
+		if secret, err := appConfigResolveSecret(cfg.ClientSecret); err == nil {
 			cachedResolvedSecret = secret
 		}
 	}

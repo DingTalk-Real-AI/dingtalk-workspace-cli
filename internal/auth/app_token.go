@@ -36,6 +36,15 @@ const (
 	tokenExpiryBuffer = 5 * time.Minute
 )
 
+var (
+	appTokenMarshalIndent  = json.MarshalIndent
+	appTokenMarshal        = json.Marshal
+	appTokenNewRequest     = http.NewRequestWithContext
+	appTokenKeychainSet    = keychain.Set
+	appTokenKeychainGet    = keychain.Get
+	appTokenKeychainRemove = keychain.Remove
+)
+
 // AppTokenData stores the app-level access token obtained from the unified
 // POST /v1.0/oauth2/accessToken endpoint. It works for both new-style
 // (api.dingtalk.com) and legacy (oapi.dingtalk.com) APIs — the auth method
@@ -63,7 +72,7 @@ func SaveAppTokenData(data *AppTokenData) error {
 		return fmt.Errorf("clientID is required for saving app token data")
 	}
 	data.UpdatedAt = time.Now()
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	jsonData, err := appTokenMarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal app token data: %w", err)
 	}
@@ -74,7 +83,7 @@ func SaveAppTokenData(data *AppTokenData) error {
 	}()
 
 	account := appTokenPrefix + data.ClientID
-	if err := keychain.Set(keychain.Service, account, string(jsonData)); err != nil {
+	if err := appTokenKeychainSet(keychain.Service, account, string(jsonData)); err != nil {
 		return fmt.Errorf("save app token to keychain: %w", err)
 	}
 	return nil
@@ -87,7 +96,7 @@ func LoadAppTokenData(clientID string) (*AppTokenData, error) {
 		return nil, fmt.Errorf("clientID is required for loading app token data")
 	}
 	account := appTokenPrefix + clientID
-	jsonStr, err := keychain.Get(keychain.Service, account)
+	jsonStr, err := appTokenKeychainGet(keychain.Service, account)
 	if err != nil {
 		return nil, nil // Not found is not an error
 	}
@@ -108,7 +117,7 @@ func DeleteAppTokenData(clientID string) error {
 		return nil
 	}
 	account := appTokenPrefix + clientID
-	return keychain.Remove(keychain.Service, account)
+	return appTokenKeychainRemove(keychain.Service, account)
 }
 
 // --- Token Fetch Function ---
@@ -125,12 +134,12 @@ func FetchAppToken(ctx context.Context, appKey, appSecret string) (token string,
 		"appKey":    appKey,
 		"appSecret": appSecret,
 	}
-	bodyBytes, err := json.Marshal(body)
+	bodyBytes, err := appTokenMarshal(body)
 	if err != nil {
 		return "", 0, fmt.Errorf("marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, AppAccessTokenURL, bytes.NewReader(bodyBytes))
+	req, err := appTokenNewRequest(ctx, http.MethodPost, AppAccessTokenURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return "", 0, fmt.Errorf("creating request: %w", err)
 	}

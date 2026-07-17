@@ -122,3 +122,17 @@ func TestRunConnectOnboardingNewAppMissingField(t *testing.T) {
 		t.Fatalf("should not submit with missing field, got %d calls", len(runner.calls))
 	}
 }
+
+func TestConnectOnboardingSmallHelpers(t *testing.T) {
+	_ = connectStdinInteractive()
+	for _, status := range []string{"fail", " FAILED ", "Error"} {
+		if !isRobotCreateFailed(status) {
+			t.Fatalf("isRobotCreateFailed(%q) = false", status)
+		}
+	}
+	for _, status := range []string{"", "pending", "success"} {
+		if isRobotCreateFailed(status) {
+			t.Fatalf("isRobotCreateFailed(%q) = true", status)
+		}
+	}
+}

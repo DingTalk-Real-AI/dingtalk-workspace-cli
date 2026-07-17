@@ -77,12 +77,12 @@ metadata:
 | 标识 | 是什么 | 用在哪 |
 |------|--------|--------|
 | `unifiedAppId` | 统一应用 ID，全树主键 | 唯一全树定位标识，所有单应用命令都用 `--unified-app-id` |
-| `appKey` = `clientId` | 应用身份标识，同一个标识的两个名字，非密钥 | OpenAPI 调用、建联；也可作 `--app-key` 列表过滤（不能定位单应用） |
+| `appKey` = `clientId` | 应用身份标识，同一个标识的两个名字，非密钥 | OpenAPI 调用、建联；`dev app get --app-key` 只读查详情；也可作 `--app-key` 列表过滤 |
 | `appSecret` = `clientSecret` | 应用密钥，敏感 | 同上，按敏感凭证处理 |
 | `agentId` | 应用 ID，仅出现在返回数据里 | 不能用于写操作定位 |
 | `robotCode` | 机器人编号 | 加群、机器人发消息、建联 |
 
-应用定位统一只用 `--unified-app-id`（--app-key/--name 仅作 list 过滤，不能定位单应用）。agentId 只是返回字段，不能用于写操作定位。appKey 与 clientId 是同一标识的两个名字，无需追问区别。
+应用定位：写操作统一只用 `--unified-app-id`；`dev app get` 可用 `--app-key` 只读查详情（`--name` 仍仅作 list 过滤）。agentId 只是返回字段，不能用于写操作定位。appKey 与 clientId 是同一标识的两个名字，无需追问区别。
 
 ### 生效模型
 - 改配置不等于线上生效，需审批的变更（如 `requiredApproval=true` 的权限点）先累积在开发态，必须走版本通道才上线：
@@ -105,7 +105,7 @@ metadata:
 
 ## 核心规则
 1. `应用`、`机器人` 是泛词：用户只说这两个词、无开放平台上下文时，先追问确认是不是开发者后台的企业内部应用，不要猜——很可能是工作台应用或群消息机器人（转出口见上方「边界与角色」）。
-2. 应用名/appKey 只可用于只读列表过滤或人工排查；任何写操作必须由用户或上游结果提供明确 `unifiedAppId`，不能把单条列表命中当自动确认。
+2. 应用名只可用于只读列表过滤或人工排查；`app get --app-key` 可只读查详情并拿回 `unifiedAppId`。任何写操作必须由用户或上游结果提供明确 `unifiedAppId`，不能把单条列表命中当自动确认。
 3. 权限申请/取消只接受 `scopeValue`，不传 API 名或分组名——权限点才是授权单元，API 名与权限点是多对一。
 4. 主动读取密钥走 `credentials get`（secret 的脱敏要求见 MUST DO）；例外：connect 流程内部把 secret 作为参数传给 `dev connect` 是必要用途。
 5. 审批人必须用户拍板，agent 不代选、不默认取第一个。

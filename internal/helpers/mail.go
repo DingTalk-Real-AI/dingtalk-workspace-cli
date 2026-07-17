@@ -36,6 +36,12 @@ var mailRuleAllowedOperations = map[string]map[string]bool{
 	},
 }
 
+var (
+	mailHTTPClient    = func() *http.Client { return &http.Client{Timeout: 5 * time.Minute} }
+	mailPutAttachment = httpPutMailAttachment
+	mailGetAttachment = httpGetMailAttachment
+)
+
 func parseMailRuleConditions(raw string) ([]any, error) {
 	var conditions []any
 	if err := json.Unmarshal([]byte(raw), &conditions); err != nil {
@@ -204,9 +210,6 @@ func newMailCommand() *cobra.Command {
 				return err
 			}
 			sizeVal := flagOrFallback(cmd, "limit", "size", "page-size")
-			if sizeVal == "" {
-				sizeVal = "20"
-			}
 			toolArgs := map[string]any{
 				"email": mustGetFlag(cmd, "email"),
 				"query": flagOrFallback(cmd, "query", "keyword"),
@@ -244,14 +247,8 @@ func newMailCommand() *cobra.Command {
 				return err
 			}
 			folderId := flagOrFallback(cmd, "folder-id", "folder")
-			if folderId == "" {
-				folderId = "2" // 默认收件箱
-			}
 			query := fmt.Sprintf("folderId:%s", folderId)
 			sizeVal := flagOrFallback(cmd, "limit", "size", "page-size")
-			if sizeVal == "" {
-				sizeVal = "20"
-			}
 			toolArgs := map[string]any{
 				"email": mustGetFlag(cmd, "email"),
 				"query": query,
@@ -2639,7 +2636,7 @@ func runMailDraftWithAttachment(draftTool string, draftArgs map[string]any, mess
 		if err != nil {
 			return "", fmt.Errorf("解析附件 %s 上传信息失败: %w", f.name, err)
 		}
-		if err := httpPutMailAttachment(ctx, accountType, uploadURL, f.path, f.size); err != nil {
+		if err := mailPutAttachment(ctx, accountType, uploadURL, f.path, f.size); err != nil {
 			return "", fmt.Errorf("上传附件 %s 失败: %w", f.name, err)
 		}
 	}
@@ -2661,7 +2658,7 @@ func runMailDraftWithAttachment(draftTool string, draftArgs map[string]any, mess
 		if err != nil {
 			return "", fmt.Errorf("解析内联附件 %s 上传信息失败: %w", f.name, err)
 		}
-		if err := httpPutMailAttachment(ctx, accountType, uploadURL, f.path, f.size); err != nil {
+		if err := mailPutAttachment(ctx, accountType, uploadURL, f.path, f.size); err != nil {
 			return "", fmt.Errorf("上传内联附件 %s 失败: %w", f.name, err)
 		}
 	}
@@ -2803,7 +2800,7 @@ func httpPutMailAttachment(ctx context.Context, accountType string, uploadURL st
 	req.ContentLength = fileSize
 	req.Header.Set("Content-Type", "application/octet-stream")
 
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := mailHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("attachment upload failed: %w", err)
@@ -2919,7 +2916,7 @@ func httpGetMailAttachment(ctx context.Context, accountType string, downloadURL 
 		return fmt.Errorf("failed to create download request: %w", err)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := mailHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("attachment download failed: %w", err)
@@ -2982,7 +2979,7 @@ func runMailAttachmentDownload(cmd *cobra.Command) error {
 	}
 
 	// Step 3: HTTP GET 下载附件内容并保存到本地
-	if err := httpGetMailAttachment(ctx, accountType, downloadURL, destPath); err != nil {
+	if err := mailGetAttachment(ctx, accountType, downloadURL, destPath); err != nil {
 		return fmt.Errorf("下载附件失败: %w", err)
 	}
 

@@ -17,7 +17,10 @@
 // - Windows: DPAPI + Registry storage
 package keychain
 
-import "errors"
+import (
+	"errors"
+	"os"
+)
 
 const (
 	// Service is the unified keychain service name for all secrets.
@@ -40,6 +43,15 @@ const (
 	// at-rest protection — DEK and ciphertext live in the same
 	// directory — and is therefore opt-in.
 	DisableKeychainEnv = "DWS_DISABLE_KEYCHAIN"
+)
+
+// These filesystem hooks are shared by the platform implementations and the
+// platform-neutral legacy migration path.
+var (
+	keychainReadFile = os.ReadFile
+	keychainRename   = os.Rename
+	keychainRemove   = os.Remove
+	keychainStat     = os.Stat
 )
 
 var (
@@ -152,6 +164,13 @@ func MigrateToFileDEK(service string, dryRun bool) (int, error) {
 // creating or rotating key material.
 func ValidateAuthTokenEntries(service string) error {
 	return platformValidateAuthTokenEntries(service)
+}
+
+// RemoveAuthTokenEntries deletes the legacy token plus every organization and
+// identity scoped auth-token entry for service. Other keychain accounts are
+// preserved.
+func RemoveAuthTokenEntries(service string) error {
+	return platformRemoveAuthTokenEntries(service)
 }
 
 // Exists checks if an entry exists in the keychain.
