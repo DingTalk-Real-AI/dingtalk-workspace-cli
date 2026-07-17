@@ -1335,6 +1335,10 @@
           "cli_path": "doc download"
         },
         {
+          "canonical_path": "doc.export",
+          "cli_path": "doc export create"
+        },
+        {
           "canonical_path": "doc.query_export_job",
           "cli_path": "doc export get"
         },

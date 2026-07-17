@@ -562,7 +562,7 @@
     },
     "doc export": {
       "status": "alias",
-      "target": "doc export get",
+      "target": "doc export create",
       "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
     },
     "doc import": {

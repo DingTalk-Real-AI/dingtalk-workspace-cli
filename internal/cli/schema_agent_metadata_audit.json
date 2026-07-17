@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:d5df098987244815b6b1066bfde8d1ec37015138203b42c99346d2e2f332b75c",
-  "surface_hash": "sha256:09fd80a708bd0ba0784b80097af48de4075b5397e0e03e2f10c149ff50e12e25",
+  "source_hash": "sha256:c6c2b8d990110d3e1fc61dae8883f7a6969fe4c1f56879b4aa9317e8b953c7cd",
+  "surface_hash": "sha256:011a776ba05af4b29f09afe16b71413cb77ef06c2309b1b4f33de111a645c496",
   "source_files": 150,
   "hint_files": 46,
   "hint_products": 39,
-  "hint_tools": 1318,
+  "hint_tools": 1320,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -29,13 +29,13 @@
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 583,
-    "tools_with_metadata": 583,
-    "tools_with_agent_summary": 583,
-    "tools_with_use_when": 583,
-    "tools_with_avoid_when": 583,
-    "tools_with_examples": 583,
-    "tools_with_interface_mode": 583,
+    "surface_tools": 584,
+    "tools_with_metadata": 584,
+    "tools_with_agent_summary": 584,
+    "tools_with_use_when": 584,
+    "tools_with_avoid_when": 584,
+    "tools_with_examples": 584,
+    "tools_with_interface_mode": 584,
     "unmatched_skill_tools": 125,
     "unreviewed_skill_tools": 8
   },
@@ -188,7 +188,7 @@
       "candidates": [
         "doc create",
         "doc comment create",
-        "doc file create"
+        "doc export create"
       ],
       "review": {
         "status": "stale",
@@ -2757,7 +2757,7 @@
     {
       "tool_path": "doc import",
       "source": "skills/mono/references/products/doc.md",
-      "line": 659,
+      "line": 661,
       "candidates": [
         "doc import get",
         "doc block delete",
@@ -2771,7 +2771,7 @@
     {
       "tool_path": "doc import",
       "source": "skills/mono/references/products/doc.md",
-      "line": 817,
+      "line": 819,
       "candidates": [
         "doc import get",
         "doc block delete",
@@ -2785,7 +2785,7 @@
     {
       "tool_path": "doc import",
       "source": "skills/mono/references/products/doc.md",
-      "line": 820,
+      "line": 822,
       "candidates": [
         "doc import get",
         "doc block delete",
@@ -2799,7 +2799,7 @@
     {
       "tool_path": "doc import",
       "source": "skills/mono/references/products/doc.md",
-      "line": 823,
+      "line": 825,
       "candidates": [
         "doc import get",
         "doc block delete",

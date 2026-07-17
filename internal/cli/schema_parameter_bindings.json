@@ -2,8 +2,8 @@
   "version": 3,
   "baseline": {
     "manifest": "schema-parameter-bindings-v3",
-    "sha256": "sha256:70d87f32e07604c5c87f871fc38a61fbbee7a22013b5b8e6944fdf0eff58db7e",
-    "reason": "Reviewed v3 baseline after synchronizing the public Wukong Drive permission/star, Sheet formula/version, and Aitable view-create parameter contracts.",
+    "sha256": "sha256:70becf3f0fb13bb41f3db5daf4f1cc82b35ff5629bcb1844d3b6509b0bf80cd5",
+    "reason": "Reviewed v3 baseline after adding Doc export composite mappings, local orchestration exclusions, and the public task-id to jobId query binding.",
     "reviewed": true
   },
   "removals": {
@@ -590,6 +590,10 @@
     "doc.download_file": {
       "node": "nodeId"
     },
+    "doc.export": {
+      "export-format": "exportFormat",
+      "node": "nodeId"
+    },
     "doc.get_document_content": {
       "content-format": "format",
       "node": "nodeId"
@@ -629,6 +633,9 @@
       "folder": "targetFolderId",
       "node": "nodeId",
       "workspace": "workspaceId"
+    },
+    "doc.query_export_job": {
+      "task-id": "jobId"
     },
     "doc.remove_permission": {
       "node": "nodeId",
@@ -1770,6 +1777,8 @@
     "doc.create_document --fix-jsonml": "local JSONML normalization control",
     "doc.delete_comment --comment-key": "Reviewed unpinned adapter: doc.delete_comment has no singular pinned interface_ref; --comment-key is a CLI wrapper input and does not publish a direct interface property.",
     "doc.download_file --output": "local output path",
+    "doc.export --async": "Reviewed CLI-only flow control: submit and return the task ID without polling or downloading; it is not sent to an MCP interface.",
+    "doc.export --output": "Reviewed local destination consumed only after synchronous export completion; it is not sent to an MCP interface.",
     "doc.get_document_content --output": "local output path",
     "doc.import_get --task-id": "Reviewed unpinned adapter: doc.import_get has no singular pinned interface_ref; --task-id is a CLI wrapper input and does not publish a direct interface property.",
     "doc.insert_document_block --fix-jsonml": "local JSONML normalization control",

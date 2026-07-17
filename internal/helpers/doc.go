@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/asynctask"
 	"github.com/spf13/cobra"
 )
 
@@ -784,6 +785,135 @@ func renderDocOverwriteDiff(nodeID, before, after string) string {
 	return sb.String()
 }
 
+func runDocExport(cmd *cobra.Command, _ []string) error {
+	node, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+	if err != nil {
+		return err
+	}
+	outputPath, _ := cmd.Flags().GetString("output")
+	asyncMode, _ := cmd.Flags().GetBool("async")
+	if outputPath == "" && !asyncMode {
+		return fmt.Errorf("flag --output is required")
+	}
+
+	// 解析导出格式：优先 --export-format，兼容旧的 --format 别名。
+	// 注意：--format 与全局输出格式 flag 同名，需排除 json/table/raw/pretty 等全局值。
+	format, _ := cmd.Flags().GetString("export-format")
+	if format == "" {
+		if legacy, _ := cmd.Flags().GetString("format"); legacy != "" {
+			globalFormats := map[string]bool{"json": true, "table": true, "raw": true, "pretty": true}
+			if !globalFormats[strings.ToLower(legacy)] {
+				format = legacy
+			}
+		}
+	}
+	if format == "" {
+		format = "docx"
+	}
+	format = strings.ToLower(format)
+	formatExtMap := map[string]string{
+		"docx":     ".docx",
+		"markdown": ".md",
+		"md":       ".md",
+		"pdf":      ".pdf",
+	}
+	fileExt, ok := formatExtMap[format]
+	if !ok {
+		return fmt.Errorf("unsupported --format %q, expected one of: docx, markdown (or md), pdf", format)
+	}
+	if format == "md" {
+		format = "markdown"
+	}
+
+	submitArgs := map[string]any{
+		"nodeId":       node,
+		"exportFormat": format,
+	}
+
+	if deps.Caller.DryRun() {
+		deps.Out.PrintKeyValue("操作", "导出文档（提交+轮询+下载）")
+		deps.Out.PrintKeyValue("文档", node)
+		if outputPath != "" {
+			deps.Out.PrintKeyValue("输出", outputPath)
+		}
+		deps.Out.PrintKeyValue("格式", format)
+		return nil
+	}
+
+	ctx := cmd.Context()
+	quietAsyncJSON := asyncMode && deps.Caller.Format() == "json"
+
+	// ── Step 1: 提交导出任务 ──
+	if !quietAsyncJSON {
+		deps.Out.PrintInfo("[1/3] 提交导出任务...")
+	}
+	submitText, err := callMCPToolReturnText(ctx, "submit_export_job", submitArgs)
+	if err != nil {
+		return fmt.Errorf("提交导出任务失败: %w", err)
+	}
+	jobID, err := parseExportSubmitResult(submitText)
+	if err != nil {
+		return err
+	}
+	if asyncMode {
+		return deps.Out.PrintJSON(asynctask.TaskResult{
+			ID:      jobID,
+			Type:    "export",
+			Status:  asynctask.StatusPending,
+			Message: "任务已提交，请稍后查询",
+		})
+	}
+	deps.Out.PrintInfo(fmt.Sprintf("    任务已提交，jobId: %s", jobID))
+
+	// ── Step 2: 渐进式退避轮询 ──
+	deps.Out.PrintInfo("[2/3] 等待导出完成...")
+	downloadURL, err := pollDocExportJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+
+	// ── Step 3: 下载文件 ──
+	fi, statErr := os.Stat(outputPath)
+	if statErr == nil && fi.IsDir() {
+		filename := inferFilename(downloadURL)
+		if ext := filepath.Ext(filename); ext == "" {
+			filename += fileExt
+		} else if !strings.EqualFold(ext, fileExt) {
+			filename = strings.TrimSuffix(filename, ext) + fileExt
+		}
+		outputPath = filepath.Join(outputPath, filename)
+	}
+
+	deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载文件到 %s ...", outputPath))
+	if err := httpGetFile(ctx, downloadURL, nil, outputPath); err != nil {
+		return fmt.Errorf("文件下载失败 (jobId=%s): %w", jobID, err)
+	}
+
+	deps.Out.PrintInfo(fmt.Sprintf("导出完成: %s", outputPath))
+	return nil
+}
+
+func registerDocExportFlags(cmd *cobra.Command) {
+	cmd.Flags().String("node", "", "要导出的文档标识，支持文档 URL 或 dentryUuid (必填)")
+	cmd.Flags().String("export-format", "docx", "导出格式：docx (默认) / markdown (或 md) / pdf")
+	cmd.Flags().String("format", "", "--export-format 的别名 (向后兼容，与全局 --format 冲突时以 --export-format 为准)")
+	_ = cmd.Flags().MarkHidden("format")
+	cmd.Flags().String("output", "", "本地保存路径，文件路径或目录（同步模式必填；--async 时可省略）")
+	cmd.Flags().Bool("async", false, "异步模式：提交导出任务后立即返回 TaskResult.id，不等待完成")
+
+	// --node 的隐藏别名（与 doc 下其他命令保持一致）
+	cmd.Flags().String("url", "", "--node 的别名")
+	cmd.Flags().String("id", "", "--node 的别名")
+	cmd.Flags().String("node-id", "", "--node 的别名")
+	cmd.Flags().String("doc-id", "", "--node 的别名")
+	cmd.Flags().String("file-id", "", "--node 的别名 (跨产品兼容 drive)")
+	_ = cmd.Flags().MarkHidden("url")
+	_ = cmd.Flags().MarkHidden("id")
+	_ = cmd.Flags().MarkHidden("node-id")
+	_ = cmd.Flags().MarkHidden("doc-id")
+	_ = cmd.Flags().MarkHidden("file-id")
+}
+
 func newDocCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "doc",
@@ -797,8 +927,9 @@ func newDocCommand() *cobra.Command {
   dws doc update                        更新文档内容
   dws doc block [list|insert|update|delete]  块级编辑
   dws doc comment [list|create|reply|update|delete|create-inline]  文档评论管理
-  dws doc export                        导出在线文档 (支持 docx / markdown / pdf，自动完成提交→轮询→下载)
-  dws doc export get                    查询导出任务结果 (手动兜底)
+  dws doc export create                 导出在线文档 (同步模式自动下载；--async 立即返回任务 ID)
+  dws doc export                        导出在线文档 (兼容入口，行为同 export create)
+  dws doc export get                    按任务 ID 查询异步或未完成的导出任务
   dws doc import                        导入本地文件为在线文档 (支持 docx / xlsx / md 等)
   dws doc import get                    查询导入任务结果 (手动兜底)
   dws doc template list                 获取文档模板列表
@@ -2298,7 +2429,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 
 	permissionCmd.AddCommand(permissionAddCmd, permissionUpdateCmd, permissionListCmd, permissionRemoveCmd)
 
-	// ── export: 文档导出（一体化：提交→轮询→下载）──────────────
+	// ── export: 文档导出（同步下载或异步提交）──────────────
 	exportCmd := &cobra.Command{
 		Use:   "export",
 		Short: "导出在线文档 (支持 docx / markdown / pdf)",
@@ -2309,13 +2440,13 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
   markdown   Markdown 文件 (.md)
   pdf        PDF 文档 (.pdf)
 
-CLI 内部自动完成全部流程：
-  1. 提交导出任务
-  2. 渐进式退避轮询等待完成（最多约 5 分钟）
-  3. 导出成功后自动下载文件到 --output 指定路径
+默认同步模式会自动完成全部流程：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 下载到 --output。
 
-如果轮询超时仍未完成，会输出 jobId 供后续手动查询：
-  dws doc export get --job-id <jobId>`,
+异步模式传入 --async 后，会在提交成功后立即输出一个 PENDING 任务结果；此时可以省略 --output，
+CLI 不会轮询或下载。请保存返回结果中的 id（任务 ID），稍后用 export get 查询。
+
+异步提交或同步轮询超时后，可按任务 ID 查询结果：
+  dws doc export get --task-id <TASK_ID>`,
 		Example: `  # 导出为 docx (默认)
   dws doc export --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
 
@@ -2324,188 +2455,71 @@ CLI 内部自动完成全部流程：
 
   # --output 传入目录时，根据 --export-format 自动追加扩展名
   dws doc export --node <DOC_ID> --export-format markdown --output ~/downloads/`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			node, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
-			if err != nil {
-				return err
-			}
-			outputPath, _ := cmd.Flags().GetString("output")
-			if outputPath == "" {
-				return fmt.Errorf("flag --output is required")
-			}
-
-			// 解析导出格式：优先 --export-format，兼容旧的 --format 别名
-			// 注意：--format 与全局输出格式 flag 同名，需排除 json/table/raw/pretty 等全局值
-			format, _ := cmd.Flags().GetString("export-format")
-			if format == "" {
-				if legacy, _ := cmd.Flags().GetString("format"); legacy != "" {
-					// 排除全局输出格式值（当 --format json 来自 conftest 或用户误传时不应视为导出格式）
-					globalFormats := map[string]bool{"json": true, "table": true, "raw": true, "pretty": true}
-					if !globalFormats[strings.ToLower(legacy)] {
-						format = legacy
-					}
-				}
-			}
-			if format == "" {
-				format = "docx"
-			}
-			format = strings.ToLower(format)
-			// 格式 → 文件扩展名映射（含别名）
-			formatExtMap := map[string]string{
-				"docx":     ".docx",
-				"markdown": ".md",
-				"md":       ".md",
-				"pdf":      ".pdf",
-			}
-			fileExt, ok := formatExtMap[format]
-			if !ok {
-				return fmt.Errorf("unsupported --format %q, expected one of: docx, markdown (or md), pdf", format)
-			}
-			// 规范化为 MCP 接受的格式名（"md" → "markdown"）
-			if format == "md" {
-				format = "markdown"
-			}
-
-			submitArgs := map[string]any{
-				"nodeId":       node,
-				"exportFormat": format,
-			}
-
-			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "导出文档（提交+轮询+下载）")
-				deps.Out.PrintKeyValue("文档", node)
-				deps.Out.PrintKeyValue("输出", outputPath)
-				deps.Out.PrintKeyValue("格式", format)
-				return nil
-			}
-
-			ctx := context.Background()
-
-			// ── Step 1: 提交导出任务 ──
-			deps.Out.PrintInfo("[1/3] 提交导出任务...")
-			submitText, err := callMCPToolReturnText(ctx, "submit_export_job", submitArgs)
-			if err != nil {
-				return fmt.Errorf("提交导出任务失败: %w", err)
-			}
-
-			var submitResult map[string]any
-			if err := json.Unmarshal([]byte(submitText), &submitResult); err != nil {
-				return fmt.Errorf("解析提交结果失败: %w", err)
-			}
-			jobID, _ := submitResult["jobId"].(string)
-			if jobID == "" {
-				deps.Out.PrintRaw(submitText)
-				return fmt.Errorf("提交导出任务成功但未返回 jobId")
-			}
-			deps.Out.PrintInfo(fmt.Sprintf("    任务已提交，jobId: %s", jobID))
-
-			// ── Step 2: 渐进式退避轮询 ──
-			deps.Out.PrintInfo("[2/3] 等待导出完成...")
-			downloadURL, err := pollDocExportJob(ctx, jobID)
-			if err != nil {
-				return err
-			}
-
-			// ── Step 3: 下载文件 ──
-			fi, statErr := os.Stat(outputPath)
-			if statErr == nil && fi.IsDir() {
-				filename := inferFilename(downloadURL)
-				if ext := filepath.Ext(filename); ext == "" {
-					filename += fileExt
-				} else if !strings.EqualFold(ext, fileExt) {
-					// 推断到的扩展名与请求格式不一致时，统一使用请求格式的扩展名
-					filename = strings.TrimSuffix(filename, ext) + fileExt
-				}
-				outputPath = filepath.Join(outputPath, filename)
-			}
-
-			deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载文件到 %s ...", outputPath))
-			if err := httpGetFile(ctx, downloadURL, nil, outputPath); err != nil {
-				return fmt.Errorf("文件下载失败 (jobId=%s): %w", jobID, err)
-			}
-
-			deps.Out.PrintInfo(fmt.Sprintf("导出完成: %s", outputPath))
-			return nil
-		},
+		RunE: runDocExport,
 	}
-	exportCmd.Flags().String("node", "", "要导出的文档标识，支持文档 URL 或 dentryUuid (必填)")
-	exportCmd.Flags().String("export-format", "docx", "导出格式：docx (默认) / markdown (或 md) / pdf")
-	exportCmd.Flags().String("format", "", "--export-format 的别名 (向后兼容，与全局 --format 冲突时以 --export-format 为准)")
-	_ = exportCmd.Flags().MarkHidden("format")
-	exportCmd.Flags().String("output", "", "本地保存路径，文件路径或目录 (必填)")
+	registerDocExportFlags(exportCmd)
 
-	// export get: 手动查询已有任务状态（兜底用）
+	exportCreateCmd := &cobra.Command{
+		Use:     "create",
+		Short:   exportCmd.Short,
+		Long:    exportCmd.Long,
+		Example: strings.ReplaceAll(exportCmd.Example, "dws doc export --", "dws doc export create --"),
+		RunE:    runDocExport,
+	}
+	registerDocExportFlags(exportCreateCmd)
+
+	// export get: 查询已有异步或未完成任务的状态
 	exportGetCmd := &cobra.Command{
 		Use:   "get",
-		Short: "查询导出任务结果（手动兜底）",
-		Long: `根据 jobId 查询文档导出任务的执行结果。
-通常不需要手动调用，dws doc export 会自动完成轮询。
-仅在导出命令超时或中断后，用于手动查询任务状态。
+		Short: "按任务 ID 查询导出任务结果",
+		Long: `根据任务 ID 查询文档导出任务的执行结果。
+用于查询 --async 返回的任务，或同步导出超时、中断后遗留的任务。
 
 任务状态：
   PROCESSING  处理中
   SUCCESS     导出成功，返回 downloadUrl
-  FAILED      导出失败`,
-		Example: `  dws doc export get --job-id <JOB_ID>`,
+  FAILED      导出失败
+  TIMEOUT     查询超时`,
+		Example: `  dws doc export get --task-id <TASK_ID>`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			jobID := mustGetFlag(cmd, "job-id")
-			if jobID == "" {
-				return fmt.Errorf("flag --job-id is required")
-			}
-
-			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "查询导出任务结果")
-				deps.Out.PrintKeyValue("任务ID", jobID)
-				return nil
-			}
-
-			ctx := context.Background()
-			text, err := callMCPToolReturnText(ctx, "query_export_job", map[string]any{"jobId": jobID})
+			taskID, err := taskIDFromFlags(cmd)
 			if err != nil {
 				return err
 			}
 
-			var result map[string]any
-			if err := json.Unmarshal([]byte(text), &result); err != nil {
-				deps.Out.PrintRaw(text)
+			if deps.Caller.DryRun() {
+				deps.Out.PrintKeyValue("操作", "查询导出任务结果")
+				deps.Out.PrintKeyValue("任务ID", taskID)
 				return nil
 			}
 
-			status, _ := result["status"].(string)
-			message, _ := result["message"].(string)
-			normalizedStatus := strings.ToUpper(status)
-
-			switch normalizedStatus {
-			case "SUCCESS":
-				deps.Out.PrintJSON(result)
-				return nil
-			case "PROCESSING":
-				deps.Out.PrintJSON(result)
-				return nil
-			default:
-				deps.Out.PrintJSON(result)
-				if message != "" {
-					return fmt.Errorf("导出任务失败 (status=%s): %s", status, message)
+			result, err := queryAsyncTask(cmd.Context(), "export", taskID)
+			if err != nil {
+				return err
+			}
+			if err := deps.Out.PrintJSON(result); err != nil {
+				return err
+			}
+			switch result.Status {
+			case asynctask.StatusFailed:
+				if result.Message != "" {
+					return fmt.Errorf("导出任务失败 (status=%s): %s", result.Status, result.Message)
 				}
-				return fmt.Errorf("导出任务失败 (status=%s)", status)
+				return fmt.Errorf("导出任务失败 (status=%s)", result.Status)
+			case asynctask.StatusTimeout:
+				if result.Message != "" {
+					return fmt.Errorf("导出任务超时 (status=%s): %s", result.Status, result.Message)
+				}
+				return fmt.Errorf("导出任务超时 (status=%s)", result.Status)
 			}
+			return nil
 		},
 	}
-	exportGetCmd.Flags().String("job-id", "", "导出任务 ID (必填)")
+	exportGetCmd.Flags().String("task-id", "", "导出任务 ID (必填)")
+	exportGetCmd.Flags().String("job-id", "", "--task-id 的兼容别名")
+	_ = exportGetCmd.Flags().MarkHidden("job-id")
 
-	// --node 的隐藏别名（与 doc 下其他命令保持一致）
-	exportCmd.Flags().String("url", "", "--node 的别名")
-	exportCmd.Flags().String("id", "", "--node 的别名")
-	exportCmd.Flags().String("node-id", "", "--node 的别名")
-	exportCmd.Flags().String("doc-id", "", "--node 的别名")
-	exportCmd.Flags().String("file-id", "", "--node 的别名 (跨产品兼容 drive)")
-	_ = exportCmd.Flags().MarkHidden("url")
-	_ = exportCmd.Flags().MarkHidden("id")
-	_ = exportCmd.Flags().MarkHidden("node-id")
-	_ = exportCmd.Flags().MarkHidden("doc-id")
-	_ = exportCmd.Flags().MarkHidden("file-id")
-
-	exportCmd.AddCommand(exportGetCmd)
+	exportCmd.AddCommand(exportCreateCmd, exportGetCmd)
 
 	// ── import: 文件导入为在线文档（一体化：上传→转换→轮询）──────────────
 	importCmd := &cobra.Command{
@@ -2976,7 +2990,7 @@ func pollDocExportJob(ctx context.Context, jobID string) (downloadURL string, er
 		}
 	}
 
-	return "", fmt.Errorf("导出任务超时：已轮询 %d 次仍在处理中 (jobId=%s)，请稍后使用 dws doc export get --job-id %s 手动查询", maxPolls, jobID, jobID)
+	return "", fmt.Errorf("导出任务超时：已轮询 %d 次仍在处理中 (jobId=%s)，请稍后使用 dws doc export get --task-id %s 手动查询", maxPolls, jobID, jobID)
 }
 
 // stripDuplicateTitle removes the leading H1 heading from markdown content

@@ -90,6 +90,30 @@
       "availability": "available",
       "reviewed": true
     },
+    "doc.export": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed export orchestration: the command submits an export job, optionally polls it to completion, and optionally downloads the result to a local path, so no single interface_ref represents every branch.",
+      "reviewed": true,
+      "parameters": {
+        "async": {
+          "description": "Submit the export job and return its task ID without polling or downloading.",
+          "required": false
+        },
+        "output": {
+          "description": "Local destination required for synchronous export; omitted when --async is used.",
+          "required": false,
+          "required_when": "async is false"
+        }
+      },
+      "review_reason": "Reviewed the composite submit, optional polling, and optional local-download branches; async and output are CLI orchestration inputs rather than a singular MCP request.",
+      "cli_path": "doc export create",
+      "runtime_gate": "none"
+    },
     "doc.get_document_content": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -154,9 +178,19 @@
       "reviewed": true
     },
     "doc.query_export_job": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "query_export_job"
+      },
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property.",
+      "runtime_gate": "none"
     },
     "doc.remove_permission": {
       "effect": "write",
