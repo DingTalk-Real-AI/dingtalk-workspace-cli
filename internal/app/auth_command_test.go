@@ -1419,7 +1419,7 @@ func TestEnrichAuthLoginProfileFromContactBeforePersist(t *testing.T) {
 		Source:       "mcp",
 	}
 	fake := &authLoginRecommendSequenceCaller{responses: []string{
-		`{"success":true,"result":[{"orgEmployeeModel":{"corpId":"ding32fff839a3e0105d","orgName":"钉钉（中国）信息技术有限公司","userId":"011352590165863362195","orgUserName":"玄玦(主用钉)"}}]}`,
+		`{"success":true,"result":[{"isAdmin":false,"orgEmployeeModel":{"jobNumber":"202397","orgId":null,"orgName":"钉钉（中国）信息技术有限公司","orgUserId":"011352590165863362195","orgUserName":"玄玦(主用钉)"}}]}`,
 	}}
 	if err := enrichAuthLoginProfileFromContact(context.Background(), configDir, fake, token); err != nil {
 		t.Fatalf("enrichAuthLoginProfileFromContact() error = %v", err)

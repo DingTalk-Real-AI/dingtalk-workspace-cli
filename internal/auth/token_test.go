@@ -30,14 +30,53 @@ import (
 // cleanupKeychain isolates keychain state to a per-test temporary directory
 // so that concurrent test packages (notably internal/app) don't read tokens
 // written by these tests, and removes test data on completion.
-func cleanupKeychain(t *testing.T) {
+func cleanupKeychain(t *testing.T) string {
 	t.Helper()
 	SetRuntimeProfile("")
-	t.Setenv(keychain.StorageDirEnv, t.TempDir())
+	storageDir := t.TempDir()
+	t.Setenv(keychain.StorageDirEnv, storageDir)
+	if err := keychain.RemoveAuthTokenEntries(keychain.Service); err != nil {
+		t.Fatalf("remove auth token entries before test: %v", err)
+	}
 	t.Cleanup(func() {
 		SetRuntimeProfile("")
-		_ = keychain.Remove(keychain.Service, keychain.AccountToken)
+		if err := keychain.RemoveAuthTokenEntries(keychain.Service); err != nil {
+			t.Errorf("remove auth token entries after test: %v", err)
+		}
 	})
+	return storageDir
+}
+
+func TestCleanupKeychainRemovesAllAuthTokenSlots(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
+	_ = keychain.RemoveAuthTokenEntries(keychain.Service)
+	t.Cleanup(func() { _ = keychain.RemoveAuthTokenEntries(keychain.Service) })
+
+	var storageDir string
+	t.Run("seed isolated token slots", func(t *testing.T) {
+		storageDir = cleanupKeychain(t)
+		for _, account := range []string{
+			keychain.AccountToken,
+			TokenAccountForCorpID("corp_same"),
+			TokenAccountForIdentity("corp_same", "user_2"),
+		} {
+			if err := keychain.Set(keychain.Service, account, "test-token"); err != nil {
+				t.Fatalf("keychain.Set(%q) error = %v", account, err)
+			}
+		}
+	})
+
+	t.Setenv(keychain.StorageDirEnv, storageDir)
+	for _, account := range []string{
+		keychain.AccountToken,
+		TokenAccountForCorpID("corp_same"),
+		TokenAccountForIdentity("corp_same", "user_2"),
+	} {
+		if value, err := keychain.Get(keychain.Service, account); err != nil || value != "" {
+			t.Fatalf("token slot %q after cleanup = %q, %v; want empty", account, value, err)
+		}
+	}
 }
 
 func TestTokenSaveLoadAndDelete(t *testing.T) {
@@ -328,6 +367,186 @@ func TestMultiProfileSaveLoadAndSwitch(t *testing.T) {
 	}
 	if loadedB.AccessToken != "at_b" {
 		t.Fatalf("default token after previous = %q, want at_b", loadedB.AccessToken)
+	}
+}
+
+func TestProfileLoginInitializesTimeMetadata(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	if err := SaveTokenData(configDir, testToken("at_login", "corp_login", "登录组织")); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if len(cfg.Profiles) != 1 {
+		t.Fatalf("profiles len = %d, want 1", len(cfg.Profiles))
+	}
+	profile := cfg.Profiles[0]
+	for field, value := range map[string]string{
+		"lastLoginAt": profile.LastLoginAt,
+		"lastUsedAt":  profile.LastUsedAt,
+		"updatedAt":   profile.UpdatedAt,
+	} {
+		if _, err := time.Parse(time.RFC3339, value); err != nil {
+			t.Fatalf("%s = %q, want RFC3339 timestamp: %v", field, value, err)
+		}
+	}
+}
+
+func TestProfileLoginUpdatesExistingTimeMetadata(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	token := testToken("at_first", "corp_login", "登录组织")
+	if err := SaveTokenData(configDir, token); err != nil {
+		t.Fatalf("SaveTokenData(first) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	const oldTime = "2000-01-02T03:04:05Z"
+	cfg.Profiles[0].LastLoginAt = oldTime
+	cfg.Profiles[0].LastUsedAt = oldTime
+	cfg.Profiles[0].UpdatedAt = oldTime
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	token.AccessToken = "at_second"
+	if err := SaveTokenData(configDir, token); err != nil {
+		t.Fatalf("SaveTokenData(second) error = %v", err)
+	}
+	cfg, err = LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() after second login error = %v", err)
+	}
+	profile := cfg.Profiles[0]
+	for field, value := range map[string]string{
+		"lastLoginAt": profile.LastLoginAt,
+		"lastUsedAt":  profile.LastUsedAt,
+		"updatedAt":   profile.UpdatedAt,
+	} {
+		if value == oldTime {
+			t.Fatalf("%s after second login was not updated", field)
+		}
+		if _, err := time.Parse(time.RFC3339, value); err != nil {
+			t.Fatalf("%s = %q, want RFC3339 timestamp: %v", field, value, err)
+		}
+	}
+}
+
+func TestProfileSwitchUpdatesUsageTimeWithoutChangingLoginTime(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	first := testToken("at_first", "corp_same", "同一组织")
+	first.UserID = "user_1"
+	second := testToken("at_second", "corp_same", "同一组织")
+	second.UserID = "user_2"
+	if err := SaveTokenData(configDir, first); err != nil {
+		t.Fatalf("SaveTokenData(first) error = %v", err)
+	}
+	if err := SaveTokenData(configDir, second); err != nil {
+		t.Fatalf("SaveTokenData(second) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	const oldTime = "2000-01-02T03:04:05Z"
+	for i := range cfg.Profiles {
+		cfg.Profiles[i].LastLoginAt = oldTime
+		cfg.Profiles[i].LastUsedAt = oldTime
+		cfg.Profiles[i].UpdatedAt = oldTime
+	}
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	if _, err := SetCurrentProfile(configDir, "corp_same:user_1"); err != nil {
+		t.Fatalf("SetCurrentProfile() error = %v", err)
+	}
+	cfg, err = LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() after switch error = %v", err)
+	}
+	selected := findExactProfile(cfg, "corp_same", "user_1")
+	if selected == nil {
+		t.Fatal("selected profile not found")
+	}
+	if selected.LastLoginAt != oldTime {
+		t.Fatalf("lastLoginAt after switch = %q, want unchanged %q", selected.LastLoginAt, oldTime)
+	}
+	for field, value := range map[string]string{
+		"lastUsedAt": selected.LastUsedAt,
+		"updatedAt":  selected.UpdatedAt,
+	} {
+		if value == oldTime {
+			t.Fatalf("%s after switch was not updated", field)
+		}
+		if _, err := time.Parse(time.RFC3339, value); err != nil {
+			t.Fatalf("%s = %q, want RFC3339 timestamp: %v", field, value, err)
+		}
+	}
+}
+
+func TestUsePreviousProfileUpdatesUsageTimeWithoutChangingLoginTime(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	first := testToken("at_first", "corp_same", "同一组织")
+	first.UserID = "user_1"
+	second := testToken("at_second", "corp_same", "同一组织")
+	second.UserID = "user_2"
+	if err := SaveTokenData(configDir, first); err != nil {
+		t.Fatalf("SaveTokenData(first) error = %v", err)
+	}
+	if err := SaveTokenData(configDir, second); err != nil {
+		t.Fatalf("SaveTokenData(second) error = %v", err)
+	}
+	if _, err := SetCurrentProfile(configDir, "corp_same:user_1"); err != nil {
+		t.Fatalf("SetCurrentProfile() error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	const oldTime = "2000-01-02T03:04:05Z"
+	previous := findExactProfile(cfg, "corp_same", "user_2")
+	previous.LastLoginAt = oldTime
+	previous.LastUsedAt = oldTime
+	previous.UpdatedAt = oldTime
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	if _, err := UsePreviousProfile(configDir); err != nil {
+		t.Fatalf("UsePreviousProfile() error = %v", err)
+	}
+	cfg, err = LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() after switch error = %v", err)
+	}
+	selected := findExactProfile(cfg, "corp_same", "user_2")
+	if selected.LastLoginAt != oldTime {
+		t.Fatalf("lastLoginAt after previous switch = %q, want unchanged %q", selected.LastLoginAt, oldTime)
+	}
+	for field, value := range map[string]string{
+		"lastUsedAt": selected.LastUsedAt,
+		"updatedAt":  selected.UpdatedAt,
+	} {
+		if value == oldTime {
+			t.Fatalf("%s after previous switch was not updated", field)
+		}
+		if _, err := time.Parse(time.RFC3339, value); err != nil {
+			t.Fatalf("%s = %q, want RFC3339 timestamp: %v", field, value, err)
+		}
 	}
 }
 

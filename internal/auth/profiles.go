@@ -385,6 +385,7 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 	}
 	normalizeProfilesConfig(cfg)
 	cfg.Version = profilesVersion
+	now := time.Now().Format(time.RFC3339)
 	userID := strings.TrimSpace(data.UserID)
 	var previousCurrent *Profile
 	if makeCurrent && strings.TrimSpace(cfg.CurrentProfile) != "" {
@@ -396,13 +397,16 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 	}
 	if idx < 0 {
 		profile := Profile{
-			Name:     chooseProfileName(cfg, data),
-			CorpID:   corpID,
-			CorpName: strings.TrimSpace(data.CorpName),
-			UserID:   userID,
-			UserName: strings.TrimSpace(data.UserName),
-			ClientID: strings.TrimSpace(data.ClientID),
-			Status:   ProfileStatusActive,
+			Name:        chooseProfileName(cfg, data),
+			CorpID:      corpID,
+			CorpName:    strings.TrimSpace(data.CorpName),
+			UserID:      userID,
+			UserName:    strings.TrimSpace(data.UserName),
+			ClientID:    strings.TrimSpace(data.ClientID),
+			Status:      ProfileStatusActive,
+			LastLoginAt: now,
+			LastUsedAt:  now,
+			UpdatedAt:   now,
 		}
 		cfg.Profiles = append(cfg.Profiles, profile)
 	} else {
@@ -423,6 +427,9 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 			p.ClientID = v
 		}
 		p.Status = ProfileStatusActive
+		p.LastLoginAt = now
+		p.LastUsedAt = now
+		p.UpdatedAt = now
 	}
 	if makeCurrent {
 		newSelector := profileSelector(corpID, userID)
@@ -618,6 +625,7 @@ func setCurrentProfileLocked(configDir, selector string) (*Profile, error) {
 		cfg.CurrentProfile = storedSelector
 	}
 	setOrgCurrentProfile(cfg, p.CorpID, storedSelector)
+	touchProfileUsage(p)
 	if err := profilesSave(configDir, cfg); err != nil {
 		return nil, err
 	}
@@ -676,6 +684,7 @@ func usePreviousProfileLocked(configDir string) (*Profile, error) {
 		cfg.PreviousProfile = ""
 	}
 	setOrgCurrentProfile(cfg, p.CorpID, ProfileSelector(*p))
+	touchProfileUsage(p)
 	if err := profilesSave(configDir, cfg); err != nil {
 		return nil, err
 	}
@@ -686,6 +695,15 @@ func usePreviousProfileLocked(configDir string) (*Profile, error) {
 		return nil, rollbackProfileSelection(configDir, originalCfg, p.CorpID, mirrors, err)
 	}
 	return findExactProfile(cfg, p.CorpID, p.UserID), nil
+}
+
+func touchProfileUsage(profile *Profile) {
+	if profile == nil {
+		return
+	}
+	now := time.Now().Format(time.RFC3339)
+	profile.LastUsedAt = now
+	profile.UpdatedAt = now
 }
 
 // RemoveProfile removes a profile from metadata and returns the removed profile.

@@ -1384,6 +1384,7 @@ func contactProfileIdentityFromJSON(data []byte) (contactProfileIdentity, bool) 
 				OrgName     string `json:"orgName"`
 				UserID      string `json:"userId"`
 				UserIDLower string `json:"userid"`
+				OrgUserID   string `json:"orgUserId"`
 				OrgUserName string `json:"orgUserName"`
 				Name        string `json:"name"`
 			} `json:"orgEmployeeModel"`
@@ -1399,7 +1400,7 @@ func contactProfileIdentityFromJSON(data []byte) (contactProfileIdentity, bool) 
 	identity := contactProfileIdentity{
 		CorpID:   strings.TrimSpace(org.CorpID),
 		CorpName: strings.TrimSpace(org.OrgName),
-		UserID:   firstNonEmptyString(org.UserID, org.UserIDLower),
+		UserID:   firstNonEmptyString(org.UserID, org.UserIDLower, org.OrgUserID),
 		UserName: firstNonEmptyString(org.OrgUserName, org.Name),
 	}
 	return identity, identity.CorpID != "" || identity.CorpName != "" || identity.UserID != "" || identity.UserName != ""

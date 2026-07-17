@@ -505,8 +505,17 @@ func assertProfileMetadata(cfg *auth.ProfilesConfig) {
 		if prev, ok := names[p.Name]; ok {
 			die("duplicate profile local name %q for %s and %s", p.Name, prev, p.CorpID)
 		}
-		if p.ExpiresAt != "" || p.RefreshExpAt != "" || p.LastLoginAt != "" || p.LastUsedAt != "" || p.UpdatedAt != "" {
-			die("new profile must not persist derived token times: %#v", p)
+		if p.ExpiresAt != "" || p.RefreshExpAt != "" {
+			die("profile must not persist derived token expiry: %#v", p)
+		}
+		for field, value := range map[string]string{
+			"lastLoginAt": p.LastLoginAt,
+			"lastUsedAt":  p.LastUsedAt,
+			"updatedAt":   p.UpdatedAt,
+		} {
+			if _, err := time.Parse(time.RFC3339, value); err != nil {
+				die("profile %s %s=%q, want RFC3339 timestamp: %v", p.CorpID, field, value, err)
+			}
 		}
 		names[p.Name] = p.CorpID
 	}
