@@ -41,17 +41,18 @@ func TestShouldWatchStdinEOF_BoundedIsNeverArmed(t *testing.T) {
 func TestPersonalBusSpawnArgs_ForwardsProfile(t *testing.T) {
 	args := personalBusSpawnArgs(personal.Identity{
 		CorpID:   "dinga626d60c1128d449",
+		UserID:   "user_123",
 		SourceID: "open",
 	}, "", "")
 	found := false
 	for i := 0; i+1 < len(args); i++ {
-		if args[i] == "--profile" && args[i+1] == "dinga626d60c1128d449" {
+		if args[i] == "--profile" && args[i+1] == "dinga626d60c1128d449:user_123" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("spawn args must forward --profile <corpId>; got %v", args)
+		t.Errorf("spawn args must forward --profile <corpId>:<userId>; got %v", args)
 	}
 
 	// No CorpID → no --profile appended (avoid an empty flag value).

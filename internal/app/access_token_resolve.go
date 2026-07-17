@@ -56,9 +56,18 @@ func resolveAccessTokenFromDir(ctx context.Context, configDir string) (string, e
 	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
 		return "", tokenErr
 	}
+	if strings.TrimSpace(authpkg.RuntimeProfile()) != "" {
+		if tokenErr != nil {
+			return "", tokenErr
+		}
+		return "", nil
+	}
 	manager := newLegacyTokenManager(configDir)
 	if leg, _, err := manager.GetToken(); err == nil && strings.TrimSpace(leg) != "" {
 		return strings.TrimSpace(leg), nil
+	}
+	if tokenErr != nil {
+		return "", tokenErr
 	}
 	return "", nil
 }

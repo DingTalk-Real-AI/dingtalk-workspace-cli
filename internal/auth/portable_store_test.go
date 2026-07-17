@@ -288,7 +288,7 @@ func TestPortableAuthBundleRoundTripPreservesProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() after import error = %v", err)
 	}
-	if cfg.PrimaryProfile != "corp_a" || cfg.CurrentProfile != "corp_b" || cfg.PreviousProfile != "corp_a" {
+	if cfg.PrimaryProfile != "" || cfg.CurrentProfile != "corp_b" || cfg.PreviousProfile != "corp_a" {
 		t.Fatalf("profiles after import = %#v", cfg)
 	}
 	if len(cfg.Profiles) != 2 {
@@ -308,6 +308,65 @@ func TestPortableAuthBundleRoundTripPreservesProfiles(t *testing.T) {
 	}
 	if loadedB.AccessToken != "access-b" {
 		t.Fatalf("profile B token = %q, want access-b", loadedB.AccessToken)
+	}
+}
+
+func TestPortableAuthBundleRoundTripPreservesSameCorpAccounts(t *testing.T) {
+	requirePortableFileBackend(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	SetRuntimeProfile("")
+	t.Cleanup(func() { SetRuntimeProfile("") })
+
+	sourceKeychain := filepath.Join(t.TempDir(), "source-keychain")
+	t.Setenv(keychain.StorageDirEnv, sourceKeychain)
+	sourceConfig := filepath.Join(t.TempDir(), ".dws")
+
+	first := &TokenData{
+		AccessToken:  "access-first",
+		RefreshToken: "refresh-first",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(30 * 24 * time.Hour),
+		CorpID:       "corp_same",
+		CorpName:     "Same Org",
+		UserID:       "user_1",
+		UserName:     "账号一",
+	}
+	second := *first
+	second.AccessToken = "access-second"
+	second.RefreshToken = "refresh-second"
+	second.UserID = "user_2"
+	second.UserName = "账号二"
+	if err := SaveTokenData(sourceConfig, first); err != nil {
+		t.Fatalf("SaveTokenData(first) error = %v", err)
+	}
+	if err := SaveTokenData(sourceConfig, &second); err != nil {
+		t.Fatalf("SaveTokenData(second) error = %v", err)
+	}
+
+	var bundle bytes.Buffer
+	if err := ExportPortableAuthBundle(sourceConfig, &bundle); err != nil {
+		t.Fatalf("ExportPortableAuthBundle() error = %v", err)
+	}
+
+	targetKeychain := filepath.Join(t.TempDir(), "target-keychain")
+	t.Setenv(keychain.StorageDirEnv, targetKeychain)
+	targetConfig := filepath.Join(t.TempDir(), ".dws")
+	if _, err := ImportPortableAuthBundle(targetConfig, bytes.NewReader(bundle.Bytes())); err != nil {
+		t.Fatalf("ImportPortableAuthBundle() error = %v", err)
+	}
+
+	for selector, wantToken := range map[string]string{
+		"corp_same:user_1": "access-first",
+		"corp_same:user_2": "access-second",
+		"corp_same":        "access-second",
+	} {
+		loaded, err := LoadTokenDataForProfile(targetConfig, selector)
+		if err != nil {
+			t.Fatalf("LoadTokenDataForProfile(%s) error = %v", selector, err)
+		}
+		if loaded.AccessToken != wantToken {
+			t.Fatalf("profile %s token = %q, want %q", selector, loaded.AccessToken, wantToken)
+		}
 	}
 }
 

@@ -146,6 +146,36 @@ func TestKeychainOverwrite(t *testing.T) {
 	}
 }
 
+func TestRemoveAuthTokenEntriesPreservesOtherAccounts(t *testing.T) {
+	service := "test-service-" + t.Name()
+	authAccounts := []string{
+		AccountToken,
+		AccountToken + ":corp-a",
+		AccountToken + ":id:0123456789abcdef",
+	}
+	for _, account := range authAccounts {
+		if err := Set(service, account, "secret"); err != nil {
+			t.Fatalf("Set(%q) error = %v", account, err)
+		}
+	}
+	const unrelated = "app-secret:client-a"
+	if err := Set(service, unrelated, "preserve"); err != nil {
+		t.Fatalf("Set(unrelated) error = %v", err)
+	}
+
+	if err := RemoveAuthTokenEntries(service); err != nil {
+		t.Fatalf("RemoveAuthTokenEntries() error = %v", err)
+	}
+	for _, account := range authAccounts {
+		if Exists(service, account) {
+			t.Fatalf("auth account %q still exists", account)
+		}
+	}
+	if got, err := Get(service, unrelated); err != nil || got != "preserve" {
+		t.Fatalf("unrelated account = %q, %v; want preserved", got, err)
+	}
+}
+
 func TestMigrationNoLegacyData(t *testing.T) {
 	t.Parallel()
 

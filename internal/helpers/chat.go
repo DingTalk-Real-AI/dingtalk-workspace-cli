@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -188,10 +187,6 @@ func isNumericUserID(value string) bool {
 	}
 	return true
 }
-
-// dingTalkMediaIDPattern 匹配钉钉媒体 ID（上传接口返回），固定以 @ 开头，
-// 后跟 base64 风格字符（如 @lADPfake、@lQDPM4DCjE1Mk_nNBInNBImw...）。
-var dingTalkMediaIDPattern = regexp.MustCompile(`^@[A-Za-z0-9_\-+/=.]{4,}$`)
 
 func isOpenDingTalkID(value string) bool {
 	value = strings.TrimSpace(value)
@@ -3365,10 +3360,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			iconMediaID := strings.TrimSpace(mustGetFlag(cmd, "icon-media-id"))
-			// 客户端预校验：钉钉媒体 ID 由上传接口（如 dt_media_upload）返回，
-			// 固定以 @ 开头（形如 @lADP.../@lQDP...）。明显非法的值本地直接报错。
-			if !dingTalkMediaIDPattern.MatchString(iconMediaID) {
-				return fmt.Errorf("invalid --icon-media-id %q: 钉钉媒体 ID 应以 @ 开头（如 @lADP...）\n  hint: 先通过媒体上传命令（dt_media_upload）上传图片，使用返回的 mediaId", iconMediaID)
+			if iconMediaID == "" {
+				return fmt.Errorf("invalid --icon-media-id: mediaId 不能为空\n  hint: 先通过媒体上传命令（dt_media_upload）上传图片，使用返回的 mediaId")
 			}
 			return callMCPToolOnServer("im", "update_group_icon", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),

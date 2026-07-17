@@ -17,6 +17,7 @@ package keychain
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,14 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
+
+var registryDeleteValue = func(key registry.Key, name string) error {
+	return key.DeleteValue(name)
+}
+
+var registryOpenDeleteKey = func(path string, access uint32) (registry.Key, error) {
+	return registry.OpenKey(registry.CURRENT_USER, path, access)
+}
 
 // ---------------------------------------------------------------------------
 // Windows backend: DPAPI + HKCU registry
@@ -196,11 +205,54 @@ func registrySet(service, account string, protected []byte) error {
 
 func registryRemove(service, account string) error {
 	keyPath := registryPathForService(service)
-	k, err := registry.OpenKey(registry.CURRENT_USER, keyPath, registry.SET_VALUE)
+	k, err := registryOpenDeleteKey(keyPath, registry.SET_VALUE)
 	if err != nil {
-		return nil
+		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+			return nil
+		}
+		return fmt.Errorf("registry open for delete failed: %w", err)
 	}
 	defer k.Close()
-	_ = k.DeleteValue(valueNameForAccount(account))
+	return deleteRegistryValue(k, valueNameForAccount(account))
+}
+
+func deleteRegistryValue(key registry.Key, name string) error {
+	if err := registryDeleteValue(key, name); err != nil {
+		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+			return nil
+		}
+		return fmt.Errorf("registry delete failed: %w", err)
+	}
+	return nil
+}
+
+func registryRemoveAuthTokenEntries(service string) error {
+	keyPath := registryPathForService(service)
+	k, err := registryOpenDeleteKey(keyPath, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+			return nil
+		}
+		return fmt.Errorf("registry open for auth token cleanup failed: %w", err)
+	}
+	defer k.Close()
+
+	names, err := k.ReadValueNames(-1)
+	if err != nil {
+		return fmt.Errorf("registry list values failed: %w", err)
+	}
+	for _, name := range names {
+		accountBytes, decodeErr := base64.RawURLEncoding.DecodeString(name)
+		if decodeErr != nil {
+			continue
+		}
+		account := string(accountBytes)
+		if account != AccountToken && !strings.HasPrefix(account, AccountToken+":") {
+			continue
+		}
+		if err := k.DeleteValue(name); err != nil {
+			return fmt.Errorf("registry delete auth token value failed: %w", err)
+		}
+	}
 	return nil
 }

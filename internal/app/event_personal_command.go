@@ -800,15 +800,14 @@ func personalBusSpawnArgs(identity personal.Identity, ticketMode, ticketURL stri
 		"--source-kind", string(dwsevent.SourceKindPersonalStream),
 		"--stream-source-id", identity.SourceID,
 	}
-	// Forward the organization so the detached _bus child resolves
-	// credentials for the SAME profile the parent used. Without this the
-	// child falls back to the default profile's token slot and fails to
-	// authenticate the personal stream for a non-default `--profile`
-	// (symptom: "bus child reported startup failure on ready pipe", no
-	// bus.log). --profile accepts a corpId; the root pre-parses it into the
-	// runtime profile before the _bus handler resolves the identity.
+	// Forward the exact account so the detached _bus child resolves the same
+	// credentials as the parent, including when one organization has multiple
+	// logged-in users.
 	if cid := strings.TrimSpace(identity.CorpID); cid != "" {
-		args = append(args, "--profile", cid)
+		args = append(args, "--profile", authpkg.ProfileSelector(authpkg.Profile{
+			CorpID: identity.CorpID,
+			UserID: identity.UserID,
+		}))
 	}
 	if strings.TrimSpace(ticketMode) != "" {
 		args = append(args, "--stream-ticket-mode", ticketMode)

@@ -61,3 +61,17 @@ func isAuthTokenCiphertextFile(name string) bool {
 	return name == legacyName ||
 		(strings.HasPrefix(name, strings.TrimSuffix(legacyName, ".enc")+"_") && strings.HasSuffix(name, ".enc"))
 }
+
+func platformRemoveAuthTokenEntries(service string) error {
+	paths, err := authTokenCiphertextPaths(service)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) && firstErr == nil {
+			firstErr = fmt.Errorf("remove keychain entry %q: %w", filepath.Base(path), err)
+		}
+	}
+	return firstErr
+}
