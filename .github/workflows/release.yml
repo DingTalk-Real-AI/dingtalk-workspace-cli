@@ -6,6 +6,11 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      verify_release_governance:
+        description: "Verify immutable-release policy and credentials without publishing"
+        required: false
+        default: false
+        type: boolean
       repair_npm_version:
         description: "Recover npm for a public immutable release without moving latest/beta"
         required: false
@@ -107,21 +112,9 @@ jobs:
         run: ./scripts/release/verify-delivered-stable.sh "$PREVIOUS_STABLE" "$PREVIOUS_STABLE_COMMIT"
 
       - name: Require immutable releases governance
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const response = await github.request(
-              "GET /repos/{owner}/{repo}/immutable-releases",
-              {
-                owner,
-                repo,
-                headers: { "X-GitHub-Api-Version": "2026-03-10" },
-              },
-            );
-            if (response.data.enabled !== true) {
-              core.setFailed("Immutable releases must be enabled before publishing");
-            }
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN || secrets.HOMEBREW_PR_TOKEN }}
+        run: ./scripts/release/verify-immutable-release-governance.sh "$GITHUB_REPOSITORY"
 
       - name: Require successful beta delivery before stable promotion
         if: ${{ steps.contract.outputs.channel == 'stable' }}
@@ -802,6 +795,24 @@ jobs:
           GITEE_USER: ${{ secrets.GITEE_USER }}
           GITEE_REPO: ${{ secrets.GITEE_REPO }}
           DWS_REQUIRE_GITEE: "1"
+
+  verify-release-governance:
+    name: Verify release governance
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_release_governance && inputs.repair_npm_version == '' && github.repository_owner == 'DingTalk-Real-AI' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Verify immutable releases governance
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN || secrets.HOMEBREW_PR_TOKEN }}
+        run: ./scripts/release/verify-immutable-release-governance.sh "$GITHUB_REPOSITORY"
 
   repair-npm:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && github.ref_name == github.event.repository.default_branch && github.repository_owner == 'DingTalk-Real-AI' }}

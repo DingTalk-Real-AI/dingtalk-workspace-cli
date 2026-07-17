@@ -863,6 +863,65 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowUsesExplicitImmutableGovernanceCredential(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+
+	contractStart := strings.Index(workflow, "  release-contract:")
+	releaseStart := strings.Index(workflow, "\n  release:")
+	if contractStart == -1 || releaseStart == -1 || contractStart >= releaseStart {
+		t.Fatal("release workflow is missing its contract and build job boundary")
+	}
+	contract := workflow[contractStart:releaseStart]
+	governanceStart := strings.Index(contract, "- name: Require immutable releases governance")
+	if governanceStart == -1 {
+		t.Fatal("release contract is missing immutable-release governance")
+	}
+	governanceEnd := strings.Index(contract[governanceStart:], "- name: Require successful beta delivery")
+	if governanceEnd == -1 {
+		t.Fatal("release contract is missing the post-governance beta delivery gate")
+	}
+	governance := contract[governanceStart : governanceStart+governanceEnd]
+	for _, required := range []string{
+		"GH_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN || secrets.HOMEBREW_PR_TOKEN }}",
+		`./scripts/release/verify-immutable-release-governance.sh "$GITHUB_REPOSITORY"`,
+	} {
+		if !strings.Contains(governance, required) {
+			t.Errorf("immutable governance gate is missing %q", required)
+		}
+	}
+	if strings.Contains(governance, "actions/github-script") ||
+		strings.Contains(governance, "secrets.GITHUB_TOKEN") {
+		t.Fatal("immutable governance must not use the built-in GITHUB_TOKEN")
+	}
+
+	probeStart := strings.Index(workflow, "  verify-release-governance:")
+	repairStart := strings.Index(workflow, "\n  repair-npm:")
+	if probeStart == -1 || repairStart == -1 || probeStart >= repairStart {
+		t.Fatal("release workflow is missing the standalone governance probe")
+	}
+	probe := workflow[probeStart:repairStart]
+	for _, required := range []string{
+		"inputs.verify_release_governance",
+		"ref: ${{ github.event.repository.default_branch }}",
+		"GH_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN || secrets.HOMEBREW_PR_TOKEN }}",
+		`./scripts/release/verify-immutable-release-governance.sh "$GITHUB_REPOSITORY"`,
+	} {
+		if !strings.Contains(probe, required) {
+			t.Errorf("standalone governance probe is missing %q", required)
+		}
+	}
+}
+
 func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
 	t.Parallel()
 

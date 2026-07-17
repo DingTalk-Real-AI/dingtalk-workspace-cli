@@ -80,6 +80,21 @@ built-in `GITHUB_TOKEN` is insufficient because organization policy prevents
 Actions from creating pull requests, and its generated PR events may require
 separate workflow approval.
 
+## Immutable Release Governance Token
+
+The immutable-release settings endpoint requires repository
+`Administration: read`; the built-in Actions `GITHUB_TOKEN` cannot request
+that permission. Prefer a dedicated `RELEASE_GOVERNANCE_TOKEN` repository
+secret backed by a fine-grained token scoped only to this repository with
+`Administration: read`. It does not need Contents write access.
+
+Where organization policy prevents a fine-grained token, the Release workflow
+falls back to `HOMEBREW_PR_TOKEN`. That fallback only works when the token owner
+has repository admin access. Run the Release workflow manually with
+`verify_release_governance=true` after rotating either credential; this probe
+checks the credential and immutable-release policy without creating a tag,
+building artifacts, or publishing a package.
+
 ## Handoff Checklist
 
 Before handoff, include:

@@ -249,20 +249,7 @@ require_github_publication_authority() {
     return 1
   }
 
-  immutable_enabled="$(
-    gh api \
-      -H 'Accept: application/vnd.github+json' \
-      -H 'X-GitHub-Api-Version: 2026-03-10' \
-      "repos/$github_repository/immutable-releases" \
-      --jq '.enabled'
-  )" || {
-    printf 'immutable releases are not enabled for %s; enable them before allocating a tag\n' "$github_repository" >&2
-    return 1
-  }
-  [ "$immutable_enabled" = "true" ] || {
-    printf 'immutable releases are not enabled for %s\n' "$github_repository" >&2
-    return 1
-  }
+  "$SCRIPT_DIR/verify-immutable-release-governance.sh" "$github_repository"
 
   active_runs="$(
     gh api -H 'Accept: application/vnd.github+json' \

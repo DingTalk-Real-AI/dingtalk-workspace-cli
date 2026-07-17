@@ -931,6 +931,65 @@ func TestReleaseRequiredMirrorsFailWithoutCredentials(t *testing.T) {
 	}
 }
 
+func TestImmutableReleaseGovernanceVerifier(t *testing.T) {
+	t.Parallel()
+
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-immutable-release-governance.sh")
+	binDir := t.TempDir()
+	fakeGH := filepath.Join(binDir, "gh")
+	mustWriteFile(t, fakeGH, []byte(`#!/bin/sh
+set -eu
+case "${FAKE_GH_RESULT:-enabled}" in
+  enabled) printf 'true\n' ;;
+  disabled) printf 'false\n' ;;
+  denied)
+    printf 'gh: Resource not accessible by integration (HTTP 403)\n' >&2
+    exit 1
+    ;;
+esac
+`), 0o755)
+
+	run := func(result string) (string, error) {
+		cmd := exec.Command("sh", script, "owner/repository")
+		cmd.Env = append(os.Environ(),
+			"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"FAKE_GH_RESULT="+result,
+		)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	if output, err := run("enabled"); err != nil {
+		t.Fatalf("enabled immutable governance error = %v\noutput:\n%s", err, output)
+	} else if !strings.Contains(output, "Immutable release governance is enabled") {
+		t.Fatalf("enabled output missing success result:\n%s", output)
+	}
+
+	if output, err := run("disabled"); err == nil {
+		t.Fatalf("disabled immutable governance unexpectedly passed:\n%s", output)
+	} else if !strings.Contains(output, "immutable releases are not enabled") {
+		t.Fatalf("disabled output missing policy guidance:\n%s", output)
+	}
+
+	if output, err := run("denied"); err == nil {
+		t.Fatalf("denied immutable governance unexpectedly passed:\n%s", output)
+	} else {
+		for _, required := range []string{
+			"Administration: read",
+			"built-in GITHUB_TOKEN is insufficient",
+			"RELEASE_GOVERNANCE_TOKEN",
+		} {
+			if !strings.Contains(output, required) {
+				t.Errorf("permission error is missing %q:\n%s", required, output)
+			}
+		}
+	}
+}
+
 func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	r := newReleaseTestRepo(t)
 	dist := t.TempDir()
