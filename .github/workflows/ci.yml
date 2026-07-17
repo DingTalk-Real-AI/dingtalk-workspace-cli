@@ -14,8 +14,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Classify PR changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      changelog_only: ${{ steps.classify.outputs.changelog_only }}
+    steps:
+      - name: Classify exact CHANGELOG-only pull requests
+        id: classify
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let changelogOnly = false;
+            let files = [];
+
+            if (context.eventName === 'pull_request') {
+              files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                per_page: 100,
+              });
+              changelogOnly =
+                files.length === 1 &&
+                files[0].filename === 'CHANGELOG.md' &&
+                files[0].status === 'modified' &&
+                !files[0].previous_filename;
+            }
+
+            core.setOutput('changelog_only', String(changelogOnly));
+            await core.summary
+              .addHeading('PR change classification')
+              .addRaw(`- Event: \`${context.eventName}\`\n`)
+              .addRaw(`- Exact modified CHANGELOG only: \`${changelogOnly}\`\n`)
+              .addRaw(`- Changed files: \`${files.length}\`\n`)
+              .write();
+
+  changelog-check:
+    name: Changelog Check
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out pull request head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate exact CHANGELOG change
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./scripts/policy/check-changelog-pr.sh "$PR_BASE_SHA" "$PR_HEAD_SHA"
+
   lint:
     name: Lint
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,6 +107,8 @@ jobs:
 
   actionlint:
     name: Actionlint
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -60,6 +125,8 @@ jobs:
 
   test-race:
     name: "Test (race: ${{ matrix.shard }})"
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -116,6 +183,8 @@ jobs:
 
   test-release-scripts:
     name: Test (release scripts)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -136,9 +205,10 @@ jobs:
   test:
     name: Test
     needs:
+      - scope
       - test-race
       - test-release-scripts
-    if: ${{ always() }}
+    if: ${{ always() && needs.scope.result == 'success' && needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -164,6 +234,8 @@ jobs:
 
   test-darwin:
     name: Test (macOS auth/keychain)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
@@ -180,6 +252,8 @@ jobs:
 
   test-windows:
     name: Test (Windows)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -202,6 +276,8 @@ jobs:
 
   coverage-darwin:
     name: Coverage (macOS)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -244,6 +320,8 @@ jobs:
 
   coverage-windows:
     name: Coverage (Windows)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -288,6 +366,8 @@ jobs:
 
   coverage-current:
     name: Coverage (current)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -321,6 +401,8 @@ jobs:
 
   coverage-supporting:
     name: Coverage (supporting)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -358,6 +440,8 @@ jobs:
 
   coverage-baseline:
     name: Coverage (baseline)
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -421,10 +505,11 @@ jobs:
   coverage:
     name: Coverage
     needs:
+      - scope
       - coverage-current
       - coverage-supporting
       - coverage-baseline
-    if: ${{ always() }}
+    if: ${{ always() && needs.scope.result == 'success' && needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -517,6 +602,8 @@ jobs:
 
   policy:
     name: Policy Check
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -536,6 +623,8 @@ jobs:
 
   interface-integrity:
     name: Interface Integrity
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -594,6 +683,8 @@ jobs:
 
   cli-smoke:
     name: CLI Smoke
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -613,6 +704,8 @@ jobs:
 
   mock-mcp-smoke:
     name: Mock MCP Smoke
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -629,6 +722,8 @@ jobs:
 
   edition-tests:
     name: Edition Contract Tests
+    needs: scope
+    if: ${{ needs.scope.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -646,6 +741,8 @@ jobs:
   ci-gate:
     name: CI Gate
     needs:
+      - scope
+      - changelog-check
       - lint
       - actionlint
       - test
@@ -666,6 +763,9 @@ jobs:
     steps:
       - name: Verify required checks
         env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          CHANGELOG_ONLY: ${{ needs.scope.outputs.changelog_only }}
+          CHANGELOG_RESULT: ${{ needs.changelog-check.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           ACTIONLINT_RESULT: ${{ needs.actionlint.result }}
           TEST_RESULT: ${{ needs.test.result }}
@@ -681,6 +781,33 @@ jobs:
           EDITION_TESTS_RESULT: ${{ needs.edition-tests.result }}
         run: |
           failed=0
+          if [ "$SCOPE_RESULT" != "success" ]; then
+            printf 'Classify PR changes: %s\n' "$SCOPE_RESULT"
+            failed=1
+          fi
+
+          case "$CHANGELOG_ONLY" in
+            true)
+              expected_heavy_result=skipped
+              expected_changelog_result=success
+              ;;
+            false)
+              expected_heavy_result=success
+              expected_changelog_result=skipped
+              ;;
+            *)
+              printf 'invalid changelog_only classification: %s\n' "$CHANGELOG_ONLY"
+              failed=1
+              expected_heavy_result=invalid
+              expected_changelog_result=invalid
+              ;;
+          esac
+
+          printf 'Changelog Check: %s\n' "$CHANGELOG_RESULT"
+          if [ "$CHANGELOG_RESULT" != "$expected_changelog_result" ]; then
+            failed=1
+          fi
+
           for check in \
             "Lint:$LINT_RESULT" \
             "Actionlint:$ACTIONLINT_RESULT" \
@@ -699,7 +826,7 @@ jobs:
             name="${check%%:*}"
             result="${check#*:}"
             printf '%s: %s\n' "$name" "$result"
-            if [ "$result" != "success" ]; then
+            if [ "$result" != "$expected_heavy_result" ]; then
               failed=1
             fi
           done
