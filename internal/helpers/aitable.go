@@ -4150,6 +4150,10 @@ role-get 自行 merge）。
 			if err := validateRequiredFlags(cmd, "file-name"); err != nil {
 				return err
 			}
+			fileSize, _ := cmd.Flags().GetInt64("file-size")
+			if fileSize <= 0 {
+				return fmt.Errorf("flag --file-size is required and must be a positive integer")
+			}
 			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
 			if err != nil {
 				return err
@@ -4157,9 +4161,7 @@ role-get 自行 merge）。
 			toolArgs := map[string]any{
 				"baseId":   baseID,
 				"fileName": mustGetFlag(cmd, "file-name"),
-			}
-			if v, _ := cmd.Flags().GetInt64("file-size"); v > 0 {
-				toolArgs["fileSize"] = v
+				"fileSize": fileSize,
 			}
 			return callAitableTool("prepare_import_upload", toolArgs)
 		},
