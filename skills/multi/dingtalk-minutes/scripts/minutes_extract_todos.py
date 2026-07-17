@@ -45,54 +45,46 @@ def run_dws(
 
 
 def todos_from_payload(payload: Any) -> List[dict]:
-    """解析 `minutes get todos` 返回为待办列表。
-
-    返回结构: result.dingtalkTodoList(对象数组, 含 title 等)与
-    result.actions(JSON 字符串数组, 每条形如
-    {"mark":[],"value":"..."}). 二者无 todos 键。
-    优先取 dingtalkTodoList; 为空时回退解析 actions。
-    """
-    if isinstance(payload, dict):
-        inner = payload.get('result', payload)
-    else:
-        inner = payload
+    """解析 result.dingtalkTodoList；为空时回退解析 actions。"""
+    inner = payload.get('result', payload) if isinstance(payload, dict) else payload
     out: List[dict] = []
     if isinstance(inner, dict):
         ding_list = inner.get('dingtalkTodoList')
-        if isinstance(ding_list, list) and ding_list:
-            for t in ding_list:
-                if isinstance(t, dict):
-                    content = t.get('title') or t.get('content') or ''
-                    if content:
-                        out.append({'content': str(content), '_raw': t})
+        if isinstance(ding_list, list):
+            for item in ding_list:
+                if not isinstance(item, dict):
+                    continue
+                content = item.get('title') or item.get('content') or ''
+                if content:
+                    out.append({'content': str(content), '_raw': item})
             if out:
                 return out
         actions = inner.get('actions')
         if isinstance(actions, list):
-            for a in actions:
+            for action in actions:
                 content = ''
-                if isinstance(a, str):
-                    text = a.strip()
+                if isinstance(action, str):
+                    text = action.strip()
                     if text.startswith('{'):
                         try:
-                            parsed = json.loads(text)
-                            content = parsed.get('value') or ''
+                            content = json.loads(text).get('value') or ''
                         except json.JSONDecodeError:
                             content = text
                     else:
                         content = text
-                elif isinstance(a, dict):
-                    content = (a.get('value') or a.get('content')
-                               or a.get('title') or '')
+                elif isinstance(action, dict):
+                    content = (action.get('value') or action.get('content')
+                               or action.get('title') or '')
                 if content:
                     out.append({'content': str(content)})
     elif isinstance(inner, list):
-        for t in inner:
-            if isinstance(t, dict):
-                content = (t.get('content') or t.get('text')
-                           or t.get('title') or t.get('value') or '')
-                if content:
-                    out.append({'content': str(content), '_raw': t})
+        for item in inner:
+            if not isinstance(item, dict):
+                continue
+            content = (item.get('content') or item.get('text')
+                       or item.get('title') or item.get('value') or '')
+            if content:
+                out.append({'content': str(content), '_raw': item})
     return out
 
 
@@ -112,7 +104,7 @@ def main():
         print('🎙️ 获取听记列表...')
         data = run_dws([
             'minutes', 'list', 'mine',
-            '--max', str(args.max),
+            '--limit', str(args.max),
             '--format', 'json',
         ], dry_run=args.dry_run)
         if args.dry_run:

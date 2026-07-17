@@ -1,6 +1,6 @@
 # 业务域通用规范
 
-> 仅服务本仓库已迁入的文档与 AI 表格行动指南。安全门控、危险操作确认、`--format json` 等已在根 skill 中定义，此处不重复。
+> 仅服务本 skill 已迁入的行动指南。安全门控、危险操作确认、`--format json` 等已在本 skill 的 `SKILL.md` 中定义，此处不重复。
 
 ## 批量查询规范
 
@@ -9,7 +9,8 @@
 | 1 | **并行查详情**：拿到多个 ID 后，用 `&` 合并到同一条 Shell 命令并行执行 + `wait`，**严禁逐条串行** |
 | 2 | **翻页**：分页接口须拉全直至无更多 |
 | 3 | **优先批量 API**：有批量接口则用批量；无则按 #1 并行 |
-| 4 | **列表少轮次**：带条件搜索/列表 → 一次采全详情；**禁止**无新参数时重复同一 `list` / `search` |
+| 4 | **群消息**：必须先 `chat search --query` 得 `openConversationId`，再 `chat message list --group`；多群同条命令并行 |
+| 5 | **列表少轮次**：带条件搜索/列表 → 一次采全详情；**禁止**无新参数时重复同一 `list` / `search` |
 
 ## 多源并行采集（公共模式）
 
@@ -26,10 +27,18 @@
 
 | 字段 | 来源 | 传递给 |
 |------|------|--------|
-| `nodeId` | `doc search` | `doc read/update/copy/move/rename --node` |
-| `nodeId` | `doc list` 中的 folder 类型节点 / `doc folder create` | `doc list --folder`、`doc create --folder`、`doc upload --folder`、`doc copy/move --folder` |
+| `taskUuid` | `minutes list` | `minutes get summary/info/batch --id(s)` |
+| `userId` | `aisearch person` / `contact user search` / `contact dept list-members` | `contact user get --ids`、`todo --executors`、`calendar --users` |
+| `deptId` | `contact dept search` | `contact dept list-members --depts`；多子部门时对每个子部门分别 `dept search` 取 id |
+| `nodeId` | `drive search` / `wiki node search` | `doc read/update --node`、`drive copy/move/rename/delete --node` |
+| `nodeId` | `wiki node list` 中的 folder 类型节点 / `wiki node create --type folder` | `wiki node list --folder`、`wiki node create --folder`、`drive upload --folder`、`drive copy/move --folder` |
+| `eventId` | `calendar event list` | `calendar event get/update --id` |
+| `processInstanceId` | `oa approval list-*` | `oa approval detail/approve --instance-id` |
+| `openConversationId` | `chat search` | `chat message list/send --group` |
+| `todoTaskId` | `todo task list` | `todo task update/done --task-id` |
+| `reportId` | `report inbox list` / `report outbox list` | `report entry get/stats --report-id` |
 | `baseId` / `tableId` | `aitable base search` | `aitable record query --base-id --table-id` |
-| `dentryUuid` | `drive list` / `drive mkdir` | `drive info/download --file-id`、`drive list/mkdir/upload --parent-id` |
-| `workspaceId` | `wiki space search/list/create` | `doc list/search/create --workspace`、`wiki member * --workspace` |
+| `dentryUuid` | `drive list` / `drive mkdir` | `drive info/download --node`、`drive list/mkdir/upload --folder` |
+| `dentryId` | `drive info` 的数字字段 | 仅用于 `chat message send --dentry-id` |
 
-**ID 边界硬约束**：遇到 `drive --parent-id`、`doc --folder`、`doc --node` 时，只能使用 `dentryUuid` / `nodeId` / 文档 URL。若当前上下文只有数字型 `dentryId`，必须先重新 `drive list` / `doc list` / `doc search` 获取正确 ID，不能把该数字直接代入后续命令。
+**ID 边界硬约束**：`dentryId` 通常是纯数字，只表示聊天文件消息需要的钉盘条目数字 ID；它不是父目录 ID。遇到 `drive --node/--folder`、`doc --node/--folder`、`wiki node --folder` 时，只能使用 `dentryUuid` / `nodeId` / 文档 URL。若当前上下文只有数字型 `dentryId`，必须先重新 `drive list` / `drive search` / `wiki node list` 获取正确 ID，不能把该数字直接代入后续命令。

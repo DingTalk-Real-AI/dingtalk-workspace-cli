@@ -122,7 +122,7 @@ def main():
             '--format', 'json',
         ]
         if args.no_forward:
-            cmd_args.append('--forward=false')
+            cmd_args.extend(['--direction', 'older'])
         page_limit = min(int(remaining), 200) if args.limit > 0 else 0
         if page_limit > 0:
             cmd_args.extend(['--limit', str(page_limit)])
@@ -135,21 +135,27 @@ def main():
         if not data:
             break
 
-        # 兼容两种结构: 顶层 messages / {result: {messages, hasMore}}
+        if isinstance(data, dict) and data.get('success') is False:
+            print(f"拉取失败: {data.get('errorMsg', '未知错误')}", file=sys.stderr)
+            break
+
         if isinstance(data, list):
             page_msgs = data
             has_more = False
-        else:
-            container = data
-            inner = data.get('result')
+        elif isinstance(data, dict):
+            inner = data.get('result', data)
             if isinstance(inner, dict):
-                container = inner
-            page_msgs = container.get('messages')
-            if page_msgs is None and isinstance(inner, list):
+                page_msgs = inner.get('messages', [])
+                has_more = inner.get('hasMore', False)
+            elif isinstance(inner, list):
                 page_msgs = inner
-            if not isinstance(page_msgs, list):
+                has_more = False
+            else:
                 page_msgs = []
-            has_more = bool(container.get('hasMore', False))
+                has_more = False
+        else:
+            page_msgs = []
+            has_more = False
 
         if not page_msgs:
             break
@@ -161,10 +167,13 @@ def main():
         if not has_more:
             break
 
+        # message list 没有 cursor flag；按 CLI 契约用边界 createTime 翻页。
         last_msg = page_msgs[-1]
-        boundary_time = (last_msg.get('createTime')
-                         or last_msg.get('createAt')
-                         or last_msg.get('time', ''))
+        boundary_time = (
+            last_msg.get('createTime')
+            or last_msg.get('createAt')
+            or last_msg.get('time', '')
+        )
         if not boundary_time or boundary_time == current_time:
             break
         current_time = boundary_time
@@ -181,12 +190,13 @@ def main():
         print(f"  ✓ 已导出 {len(all_messages)} 条消息到 {args.output}")
     else:
         for m in all_messages:
-            # 实际字段: sender/createTime/content (兼容旧字段名)
             sender = (m.get('sender') or m.get('senderNick')
-                      or m.get('senderOpenDingTalkId', '未知'))
+                      or m.get('senderOpenDingTalkId') or '未知')
             text = m.get('content') or m.get('text', '')
-            time_str = (m.get('createTime') or m.get('createAt')
-                        or m.get('time', ''))
+            time_str = (
+                m.get('createTime') or m.get('createAt')
+                or m.get('time', '')
+            )
             print(f"  [{time_str}] {sender}: {text[:80]}")
         print(f"\n合计: {len(all_messages)} 条消息 ({page} 页)")
 

@@ -1,8 +1,5 @@
 # doc media（附件 / 图片：download / insert）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-
 > ⚠️ **图片插入硬规则**：
 > - 图片来源如果是钉盘/文档空间中的文件，**必须先下载到本地**（`dws drive download --node <图片nodeId> --output /tmp/xxx.png`），再执行 `media insert`
 > - **禁止**把钉盘/文档节点 URL（如 `alidocs.dingtalk.com/i/nodes/...`）写进 Markdown `![](...)` 图片语法——这些是页面链接，不是可渲染的图片资源
@@ -92,7 +89,6 @@ dws doc media download --node <DOC_ID> --resource-id <RESOURCE_ID>
 
 ## 参考
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令族）
 - [`./doc-block.md`](./doc-block.md)（block list 取 attachment 的 resourceId）
-- [`../drive.md`](../drive.md)（独立文件上传：`dws drive upload`）
+- [`../drive.md`](../../../dingtalk-drive/references/drive.md)（独立文件上传：`dws drive upload`）
 - [`./style/doc-style-guideline.md` §4.9 附件与图片](./style/doc-style-guideline.md)（图示与附件使用规范）

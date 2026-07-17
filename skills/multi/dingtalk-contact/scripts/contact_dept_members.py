@@ -62,7 +62,7 @@ def main():
     if args.dry_run:
         run_dws([
             'contact', 'dept', 'list-members',
-            '--ids', '<DEPT_ID>', '--format', 'json',
+            '--depts', '<DEPT_ID>', '--format', 'json',
         ], dry_run=True)
         return
 
@@ -75,7 +75,6 @@ def main():
     elif isinstance(dept_data, dict):
         inner = dept_data.get('result', dept_data)
         if isinstance(inner, dict):
-            # dept search 返回顶层 deptList；兼容历史 items/depts 键。
             depts = (inner.get('deptList')
                      or inner.get('items')
                      or inner.get('depts')
@@ -103,7 +102,7 @@ def main():
 
         members_data = run_dws([
             'contact', 'dept', 'list-members',
-            '--ids', str(dept_id), '--format', 'json',
+            '--depts', str(dept_id), '--format', 'json',
         ])
         if not members_data:
             print('  无法获取成员列表')
@@ -114,7 +113,6 @@ def main():
         elif isinstance(members_data, dict):
             inner = members_data.get('result', members_data)
             if isinstance(inner, dict):
-                # list-members 返回 deptUserList；兼容历史 userlist/list 键。
                 members = (inner.get('deptUserList')
                            or inner.get('userlist')
                            or inner.get('list')
@@ -130,8 +128,6 @@ def main():
             continue
 
         for m in members:
-            # list-members 每项形如 {"userInfo": {"name":..., "userId":...}}，
-            # 成员字段嵌在 userInfo 下；兼容历史扁平结构。
             info = m.get('userInfo', m)
             name = info.get('name') or info.get('userName', '未知')
             title = info.get('title') or info.get('position', '')

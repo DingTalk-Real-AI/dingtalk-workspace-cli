@@ -52,7 +52,7 @@ def fmt_iso(dt: datetime) -> str:
 
 
 def _extract_time_str(value: Any) -> str:
-    """时间字段兼容字符串与 {dateTime, date} 对象两种形态"""
+    """时间字段兼容字符串与 {dateTime, date} 对象两种形态。"""
     if isinstance(value, dict):
         return value.get('dateTime') or value.get('date') or ''
     return value or ''
@@ -64,7 +64,6 @@ def parse_busy_intervals(
     intervals = []
     if not data:
         return intervals
-    # 兼容 {result: [...]} 包裹结构
     if isinstance(data, dict) and 'result' in data:
         data = data['result']
     rows = []
@@ -77,7 +76,6 @@ def parse_busy_intervals(
         if isinstance(row, list):
             items.extend(row)
         elif isinstance(row, dict):
-            # 新结构: {userId, scheduleItems: [{start, end, status}]}
             if isinstance(row.get('scheduleItems'), list):
                 items.extend(row['scheduleItems'])
             elif isinstance(row.get('busyTimes'), list):
@@ -87,7 +85,6 @@ def parse_busy_intervals(
     for item in items:
         if not isinstance(item, dict):
             continue
-        # FREE 时段不算忙
         if str(item.get('status') or '').upper() == 'FREE':
             continue
         start_str = _extract_time_str(
@@ -193,14 +190,13 @@ def main():
     if args.dry_run:
         return
 
-    # 查询失败必须中止, 否则会把"查不到"当成"全天空闲"给出危险结论
+    # 查询失败必须中止，否则会把“查不到”误判为“全天空闲”。
     if data is None:
         print('错误：忙闲查询失败，无法给出空闲时段结论', file=sys.stderr)
         sys.exit(2)
     if isinstance(data, dict) and data.get('success') is False:
-        print(f"错误：忙闲查询失败: "
-              f"{data.get('errorMsg') or data.get('errorCode') or data}",
-              file=sys.stderr)
+        error = data.get('errorMsg') or data.get('errorCode') or data
+        print(f"错误：忙闲查询失败: {error}", file=sys.stderr)
         sys.exit(2)
 
     busy = parse_busy_intervals(data)

@@ -3,7 +3,7 @@
 考勤报表导出 — 月度汇总粒度
 
 [AI Agent 强制门禁] 调用本脚本前必须先阅读：
-   dingtalk-workspace/references/products/attendance-report.md
+   references/attendance-report.md
 
   本脚本仅是"考勤报表导出工作流"的执行末端，工作流完整定义在 attendance-report.md，
   包含但不限于：
@@ -108,7 +108,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=(
             "导出考勤报表 — 月度汇总粒度。"
-            "[强制] AI Agent 必须先读 references/products/attendance-report.md 再调用本脚本，"
+            "[强制] AI Agent 必须先读 references/attendance-report.md 再调用本脚本，"
             "禁止凭 --help 或脚本路径自行拼命令。"
         ),
     )

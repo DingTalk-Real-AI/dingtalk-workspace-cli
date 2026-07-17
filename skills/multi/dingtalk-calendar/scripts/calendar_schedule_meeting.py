@@ -154,7 +154,6 @@ def main():
                 'calendar', 'room', 'search',
                 '--start', start_iso,
                 '--end', end_iso,
-                '--available',
                 '--format', 'json',
             ]
             if group_id:

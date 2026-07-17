@@ -1,8 +1,6 @@
 # doc read（读取文档内容）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — 仅当使用 `--content-format jsonml` 时必读
+> 仅当需要解释或编辑 JSONML 结构时，按需读取 [JSONML 范例](./format/doc-jsonml-cookbook.md)。
 >
 > **同任务常配合**：[`doc-info.md`](./doc-info.md)（先解析 URL，确认 contentType=ALIDOC、extension=adoc）/ [`doc-update.md`](./doc-update.md)（读后改写）/ [`doc-block.md`](./doc-block.md)（块级精修前先读结构）
 
@@ -77,7 +75,6 @@ dws doc read --node <DOC_ID> --content-format jsonml --output /tmp/doc.json
 
 ## 参考
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）
 - [`./doc-info.md`](./doc-info.md)（前置：判断 contentType / extension）
 - [`./doc-update.md`](./doc-update.md)（读后改写）
 - [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) / [`./format/doc-jsonml-schema.md`](./format/doc-jsonml-schema.md)（JSONML 节点结构）

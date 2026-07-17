@@ -1,10 +1,6 @@
 # doc update（更新文档内容）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md) — 改写流程（编辑形态优先级、分片 append、回读验收）
-> 3. [`./style/doc-style-guideline.md`](./style/doc-style-guideline.md) — 排版规范
-> 4. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — 仅当使用 `--content-format jsonml` 时必读
+> **按需参考**：复杂改写、分片或保真编辑见 [更新工作流](./style/doc-update-workflow.md)；用户要求统一排版时见 [样式规范](./style/doc-style-guideline.md)；仅在使用 `--content-format jsonml` 时读取 [JSONML 范例](./format/doc-jsonml-cookbook.md)。
 >
 > **同任务常配合**：[`doc-read.md`](./doc-read.md)（改写前必读，jsonml 模式拿当前结构；担心被并发覆盖时再取 revision）/ [`doc-block.md`](./doc-block.md)（单 block 改写优先；本命令更适合追加 / 整篇 overwrite）
 
@@ -170,7 +166,7 @@ dws doc update --node <DOC_ID> --content-file <tmp> --mode overwrite --content-f
 dws doc update --node <nodeId> --content-file <part> --mode append --content-format markdown
 ```
 
-> **注意**：分块 append 存在静默失败风险（部分片段返回 success 但实际未写入），执行前**必须**向用户发出截断风险提示并等待确认。完整规范见 [`../../best_practices/04-document.md` «分块 append 截断风险提示»](../../best_practices/04-document.md)。
+> **注意**：分块 append 存在静默失败风险（部分片段返回 success 但实际未写入），执行前**必须**向用户发出截断风险提示并等待确认。完整规范见 [`../../best_practices/04-document.md` «分块 append 截断风险提示»](../04-document.md)。
 
 ### stdin 变体
 
@@ -228,7 +224,6 @@ EOF
 
 ## 参考
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）
 - [`./doc-read.md`](./doc-read.md)（改写前必读；jsonml 模式拿当前结构，担心并发时再取 revision）
 - [`./doc-block.md`](./doc-block.md)（单 block 改写更精准）
 - [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md)（编辑形态优先级、分片 append 风险、回读验收）

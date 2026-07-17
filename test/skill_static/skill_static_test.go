@@ -3,17 +3,20 @@
 
 // Package skill_static_test verifies that every `dws ...` command example
 // referenced in skill documentation can actually be dispatched by the
-// open-source dws CLI binary (cobra Available Commands check).
+// open-source dws CLI command tree.
 //
-// Build tag rationale: this test depends on a real `dws` binary being
-// reachable via PATH, which the default `go test ./...` doesn't guarantee.
+// Build tag rationale: this is a repository-wide documentation audit and is
+// intentionally opt-in rather than part of every package's unit-test loop.
 // Run explicitly with: `go test -tags skill_verify ./test/skill_static/...`
 //
 // Layer A of the skill verification matrix:
 //  1. Every backtick `dws ...` command in skills/**/*.md is parsed.
 //  2. For each, the sub-command path (tokens before first --flag) is
-//     checked against `dws <parent> --help`'s "Available Commands" list.
-//  3. Every flag used must appear in the leaf command's help text.
+//     checked against the Cobra tree constructed from the current source.
+//  3. Registered aliases are accepted; unknown descendants are rejected.
+//  4. Flags in recursively discovered multi-skill docs are checked against
+//     the registered leaf command. Mono docs retain historical bad-case
+//     examples and are path-checked only.
 //
 // The test deliberately tolerates a small whitelist of intentional
 // anti-pattern references (e.g. "dws minutes detail" appearing in the
@@ -24,13 +27,16 @@ package skill_static_test
 import (
 	"bufio"
 	"fmt"
-	"os/exec"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -61,13 +67,25 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(here), "..", ".."))
 }
 
-func dwsBinary(t *testing.T) string {
-	t.Helper()
-	p, err := exec.LookPath("dws")
-	if err != nil {
-		t.Skipf("dws binary not on PATH; install dws (or run `go build -o /tmp/dws ./cmd` and PATH=/tmp:$PATH) to enable this test")
-	}
-	return p
+func appendMultiReferenceMarkdown(files []string, multiRoot string) ([]string, error) {
+	err := filepath.WalkDir(multiRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(multiRoot, path)
+		if err != nil {
+			return err
+		}
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		if len(parts) >= 3 && parts[1] == "references" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
 }
 
 type cmdRef struct {
@@ -94,8 +112,8 @@ func extractCommands(root string) ([]cmdRef, error) {
 	if more, err = filepath.Glob(skillsDir + "/multi/*/SKILL.md"); err == nil {
 		files = append(files, more...)
 	}
-	if more, err = filepath.Glob(skillsDir + "/multi/*/references/*.md"); err == nil {
-		files = append(files, more...)
+	if files, err = appendMultiReferenceMarkdown(files, filepath.Join(skillsDir, "multi")); err != nil {
+		return nil, err
 	}
 	for _, f := range files {
 		data, err := readFile(f)
@@ -121,7 +139,7 @@ func extractCommands(root string) ([]cmdRef, error) {
 }
 
 func readFile(p string) (string, error) {
-	b, err := exec.Command("cat", p).Output()
+	b, err := os.ReadFile(p)
 	if err != nil {
 		return "", err
 	}
@@ -226,69 +244,83 @@ func parseSubPath(cmd string) (subPath, leaf string, flags []string) {
 	return subPath, leaf, flags
 }
 
-// helpCache memoizes `dws <sub> --help` outputs.
-type helpCache struct {
-	mu  sync.Mutex
-	dws string
-	m   map[string]string
-}
-
-func newHelpCache(dws string) *helpCache {
-	return &helpCache{dws: dws, m: map[string]string{}}
-}
-
-func (c *helpCache) get(sub string) string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if v, ok := c.m[sub]; ok {
-		return v
-	}
-	args := append(strings.Fields(sub)[1:], "--help")
-	out, _ := exec.Command(c.dws, args...).CombinedOutput()
-	c.m[sub] = string(out)
-	return string(out)
-}
-
-var availableRe = regexp.MustCompile(`(?s)Available Commands:\n((?:\s+\S.*\n)+)`)
-
-// usagePathRe extracts the command path from cobra Usage line:
-//
-//	"Usage:\n  dws report inbox list [flags]" → "report inbox list"
-//
-// Used to detect top-level alias dispatch (envelope-declared cli.Aliases /
-// cli.Prefixes[1:]): if the actual Usage path has the same token count as
-// the documented sub but a different first token, sub is a registered alias.
-var usagePathRe = regexp.MustCompile(`(?m)^Usage:\s*\n\s+dws\s+(.+?)(?:\s+\[flags\]|\s+\[command\]|\s*$)`)
-
-func extractUsagePath(helpText string) string {
-	m := usagePathRe.FindStringSubmatch(helpText)
-	if len(m) < 2 {
-		return ""
-	}
-	return strings.TrimSpace(m[1])
-}
-
-func parseAvailable(helpText string) []string {
-	m := availableRe.FindStringSubmatch(helpText)
-	if m == nil {
-		return nil
-	}
-	var cmds []string
-	for _, line := range strings.Split(m[1], "\n") {
-		fields := strings.Fields(line)
-		if len(fields) > 0 && !strings.HasPrefix(fields[0], "-") {
-			cmds = append(cmds, fields[0])
+// exactCommand walks the current source tree's Cobra command graph without
+// executing a subprocess. Aliases are accepted because they dispatch to the
+// same registered command at runtime.
+func exactCommand(root *cobra.Command, sub string) *cobra.Command {
+	tokens := strings.Fields(strings.TrimPrefix(sub, "dws "))
+	current := root
+	for i, token := range tokens {
+		var next *cobra.Command
+		for _, child := range current.Commands() {
+			if child.Name() == token || child.HasAlias(token) {
+				next = child
+				break
+			}
 		}
+		if next == nil {
+			// Once a runnable command is reached, remaining non-flag tokens are
+			// positional arguments rather than descendants. Validate them with
+			// the command's Cobra Args contract when one is present.
+			if current.Runnable() {
+				args := tokens[i:]
+				if current.Args == nil || current.Args(current, args) == nil {
+					return current
+				}
+			}
+			return nil
+		}
+		current = next
 	}
-	return cmds
+	return current
+}
+
+func commandHasFlag(command *cobra.Command, flag string) bool {
+	flag = strings.TrimLeft(flag, "-")
+	if flag == "" {
+		return false
+	}
+	command.InitDefaultHelpFlag()
+	if command.Flags().Lookup(flag) != nil || command.PersistentFlags().Lookup(flag) != nil || command.InheritedFlags().Lookup(flag) != nil {
+		return true
+	}
+	if len(flag) == 1 {
+		return command.Flags().ShorthandLookup(flag) != nil || command.PersistentFlags().ShorthandLookup(flag) != nil || command.InheritedFlags().ShorthandLookup(flag) != nil
+	}
+	return false
+}
+
+func availableCommands(root *cobra.Command, sub string) []string {
+	tokens := strings.Fields(strings.TrimPrefix(sub, "dws "))
+	if len(tokens) > 0 {
+		tokens = tokens[:len(tokens)-1]
+	}
+	parent := root
+	for _, token := range tokens {
+		next := exactCommand(parent, "dws "+token)
+		if next == nil {
+			return nil
+		}
+		parent = next
+	}
+	var names []string
+	for _, child := range parent.Commands() {
+		names = append(names, child.Name())
+	}
+	return names
 }
 
 func TestSkillCommandsDispatch(t *testing.T) {
-	root := repoRoot(t)
-	dws := dwsBinary(t)
-	cache := newHelpCache(dws)
+	repo := repoRoot(t)
+	// Keep command-tree construction isolated from the developer's plugins and
+	// macOS Keychain while validating the open-source surface.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv("DWS_DISABLE_KEYCHAIN", "1")
+	t.Setenv("DWS_KEYCHAIN_DIR", t.TempDir())
+	commandRoot := app.NewRootCommand()
 
-	refs, err := extractCommands(root)
+	refs, err := extractCommands(repo)
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
@@ -299,73 +331,43 @@ func TestSkillCommandsDispatch(t *testing.T) {
 		reason string
 	}
 	var fails []failure
-	seen := map[string]bool{} // dedupe identical sub-paths
+	seen := map[string]bool{} // dedupe identical sub-path and flag sets
 
 	for _, r := range refs {
-		sub, _, _ := parseSubPath(r.Cmd)
+		sub, _, flags := parseSubPath(r.Cmd)
 		if sub == "" {
 			continue
 		}
 		if antiPatternAllowlist[sub] {
 			continue
 		}
-		if seen[sub+"|"+r.File] {
+		key := sub + "|" + strings.Join(flags, ",") + "|" + r.File
+		if seen[key] {
 			continue
 		}
-		seen[sub+"|"+r.File] = true
-
-		// Compute parent + leaf
+		seen[key] = true
+		if command := exactCommand(commandRoot, sub); command != nil {
+			var unknownFlags []string
+			if strings.Contains(filepath.ToSlash(r.File), "/skills/multi/") {
+				for _, flag := range flags {
+					if !commandHasFlag(command, flag) {
+						unknownFlags = append(unknownFlags, flag)
+					}
+				}
+			}
+			if len(unknownFlags) > 0 {
+				fails = append(fails, failure{ref: r, reason: fmt.Sprintf("unknown flags for `%s`: %v", sub, unknownFlags)})
+			}
+			continue
+		}
 		tokens := strings.Fields(sub)
 		if len(tokens) < 2 {
 			continue
 		}
 		parent := strings.Join(tokens[:len(tokens)-1], " ")
 		leaf := tokens[len(tokens)-1]
-
-		// Strategy: directly check sub's own help; if its Usage line starts
-		// with the sub-path, the sub-command is registered. Otherwise cobra
-		// fell back to a parent and the sub doesn't exist.
-		subHelp := cache.get(sub)
-		expectedUsage := "Usage:\n  " + sub
-		if strings.Contains(subHelp, expectedUsage) {
-			continue // sub-path exists, all good
-		}
-
-		// Sub may be a leaf with subcommands list — also valid (e.g. dws sheet)
-		// In that case Usage line is "Usage:\n  <sub> [flags]\n  <sub> [command]"
-		if strings.Contains(subHelp, "Usage:\n  "+sub+" [flags]\n  "+sub+" [command]") {
-			continue
-		}
-
-		// Top-level alias rewrite: envelope-declared aliases (e.g. report.aliases=["log"],
-		// im.prefixes=["chat","im"]) make `dws log inbox list` dispatch to `dws report
-		// inbox list`. Cobra prints the canonical path in Usage. If the Usage path has
-		// the same token count as sub (minus the "dws" prefix) but a different first
-		// token, sub is a registered alias path — treat as valid.
-		if actualPath := extractUsagePath(subHelp); actualPath != "" {
-			actualTokens := strings.Fields(actualPath)
-			subTokens := strings.Fields(sub)
-			if len(subTokens) > 0 && subTokens[0] == "dws" {
-				subTokens = subTokens[1:]
-			}
-			if len(actualTokens) == len(subTokens) && len(actualTokens) > 0 && actualTokens[0] != subTokens[0] {
-				continue // alias dispatched cleanly to canonical product
-			}
-		}
-
-		// Otherwise verify by looking at parent's Available Commands
-		parentHelp := cache.get(parent)
-		available := parseAvailable(parentHelp)
-		found := false
-		for _, c := range available {
-			if c == leaf {
-				found = true
-				break
-			}
-		}
-		if !found {
-			fails = append(fails, failure{ref: r, reason: fmt.Sprintf("`%s` not in Available Commands of `%s`: %v", leaf, parent, available)})
-		}
+		available := availableCommands(commandRoot, sub)
+		fails = append(fails, failure{ref: r, reason: fmt.Sprintf("`%s` not in Available Commands of `%s`: %v", leaf, parent, available)})
 	}
 
 	if len(fails) == 0 {
@@ -375,9 +377,9 @@ func TestSkillCommandsDispatch(t *testing.T) {
 
 	// Format failure report
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Found %d skill-doc commands that don't dispatch in open-source dws v1.0.30:\n\n", len(fails)))
+	sb.WriteString(fmt.Sprintf("Found %d skill-doc commands that don't dispatch in the current open-source dws command tree:\n\n", len(fails)))
 	for _, f := range fails {
-		rel, _ := filepath.Rel(root, f.ref.File)
+		rel, _ := filepath.Rel(repo, f.ref.File)
 		sb.WriteString(fmt.Sprintf("  ❌ %s:%d\n     cmd: %s\n     reason: %s\n\n", rel, f.ref.Line, f.ref.Cmd, f.reason))
 	}
 	t.Fatal(sb.String())

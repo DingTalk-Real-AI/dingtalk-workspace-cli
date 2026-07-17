@@ -47,16 +47,16 @@ Flags:
 - 第 21~30 次：每次间隔 15 秒
 - **硬上限：最多轮询 30 次（约 5 分钟）**，超时后命令返回错误
 
-**命令返回**（`--format json`，默认）：输出规整 JSON `{success, jobId, downloadUrl[, outputPath]}`。轮询进度以 `[INFO] [N/30] 状态: ...` 打到 stderr，不污染 stdout 的 JSON（可直接 `python3 -m json.tool` 解析 stdout）。
-- `--output` 未指定：JSON 含 `jobId` + `downloadUrl`（链接有时效性，请尽快下载）
-- `--output` 指定为文件路径：下载到该路径，JSON 额外含 `outputPath`
-- `--output` 指定为已存在目录：自动从 `downloadUrl` 推断文件名保存，JSON 含 `outputPath`
+**命令返回**：
+- `--output` 未指定：进度日志 + 末尾输出 `jobId` 和 `downloadUrl`（链接有时效性，请尽快下载）
+- `--output` 指定为文件路径：下载到该路径并输出 `导出完成: <path>`
+- `--output` 指定为已存在目录：自动从 `downloadUrl` 推断文件名并保存到该目录下
 
 **失败处理（命令内部已处理，Agent 仅需转述）**：
-- MCP 返回 `FAILED`：命令立即返回错误并附带失败原因，**禁止自动重试 `dws sheet export`**，告知用户稍后再试
+- 导出任务返回 `FAILED`：命令立即返回错误并附带失败原因，**禁止自动重试 `dws sheet export`**，告知用户稍后再试
 - 轮询 30 次仍 `PROCESSING`：命令返回超时错误，告知用户稍后再试
 
-**限制**：仅支持钉钉在线电子表格（axls）→ xlsx。导出钉钉文字文档请使用 `doc` 产品对应的导出工具。
+**限制**：仅支持钉钉在线电子表格（alxs）→ xlsx。导出钉钉文字文档请使用 `doc` 产品对应的导出工具。
 
 ## 核心工作流
 
@@ -82,11 +82,11 @@ dws sheet export --node <NODE_ID> --output ./
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `export` | `downloadUrl`（未指定 --output）/ `outputPath`（指定 --output） | 直接下发给用户或告知文件已保存到本地。命令内部已完成轮询，不要再调用其他 export 相关命令 |
+| `export` | `downloadUrl`（未指定 --output）/ `导出完成: <path>`（指定 --output） | 直接下发给用户或告知文件已保存到本地。命令内部已完成轮询，不要再调用其他 export 相关命令 |
 
 ## 注意事项
 
-- ★ `export` 仅支持钉钉在线电子表格（axls）→ xlsx；传入钉钉文字文档会报 `invalidRequest.document.typeIllegal`
+- ★ `export` 仅支持钉钉在线电子表格（alxs）→ xlsx；传入钉钉文字文档会报 `invalidRequest.document.typeIllegal`
 - ★ `export` 为单命令一站式，CLI 内部已自动完成「提交 → 渐进式退避轮询 → 可选下载」，**Agent 不得在外部实现轮询或重试**；命令返回成功后不再调用其他 export 相关命令
 - `export` 内置轮询策略：1~5 次间隔 2s、6~10 次间隔 5s、11~20 次间隔 10s、21~30 次间隔 15s，硬上限 30 次（约 5 分钟）；超时后命令返回错误，告知用户稍后再试即可
 - ★ `export` 命令返回失败或超时时，**禁止自动重调 `dws sheet export`**；直接告知用户导出失败并建议稍后再试

@@ -219,7 +219,6 @@ Flags:
 - **用途**：查看某个筛选视图的当前配置，包括已设置的所有筛选条件详情。
 - **场景**：在修改或删除筛选视图前，先确认其当前状态；或在 `update-criteria` 后验证条件是否生效。
 - **区分**：`info` 返回单个视图的完整信息（含 criteria）；`list` 返回所有视图的列表概要。`info` 需要指定 `--filter-view-id`，ID 可通过 `list` 获取。
-- **实现**：内部调用 `get_filter_views` 获取全部列表后按 ID 过滤。
 
 ### 列出筛选视图所有列条件
 ```
@@ -238,7 +237,6 @@ Flags:
 - **用途**：查看某个筛选视图当前设置了哪些列的筛选条件，包括每列的条件类型和具体规则。
 - **场景**：在管理筛选条件（修改/删除特定列条件）前，先了解当前视图有哪些条件；或排查筛选结果不符合预期时检查条件配置。
 - **区分**：`list-criteria` 返回所有列的条件（按列偏移量为 key 的对象）；`get-criteria` 只返回指定列的条件。如果没有设置任何条件，返回空对象 `{}`。
-- **实现**：内部调用 `get_filter_views` 获取视图详情后提取 `criteria` 字段。
 
 ### 获取单列筛选条件
 ```
@@ -261,7 +259,6 @@ Flags:
 - **用途**：查看某个筛选视图中指定列当前设置的筛选条件，包括条件类型、运算符和比较值。
 - **场景**：在修改某列条件前，先查看其当前配置；或验证 `update-criteria` 后该列条件是否正确。
 - **区分**：`get-criteria` 只返回指定列的条件；`list-criteria` 返回所有列的条件。`--column` 为列偏移量（从 0 开始），相对于筛选视图范围首列。
-- **实现**：内部调用 `get_filter_views` 获取视图详情后按列偏移量过滤 `criteria` 中的对应条件。
 
 ## 核心工作流
 
@@ -328,7 +325,7 @@ dws sheet filter-view create --node <NODE_ID> --sheet-id <SHEET_ID> \
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
 - ★ **全局筛选（filter）与筛选视图（filter-view）的区别**：全局筛选影响所有协作者看到的数据展示，每个工作表最多一个；筛选视图是个人化的，互不影响。用户只说"筛选"时默认走 `filter` 系列
 - `filter-view list` 获取指定工作表的所有筛选视图列表，返回的 `id` 可用于后续 info / update / delete / update-criteria / delete-criteria / list-criteria / get-criteria 的 `--filter-view-id`
-- `filter-view info` 获取单个筛选视图的完整信息（含 criteria），内部复用 `get_filter_views` MCP 按 ID 过滤
+- `filter-view info` 获取单个筛选视图的完整信息（含 criteria），按 `--filter-view-id` 返回对应视图
 - `filter-view list-criteria` 列出指定筛选视图已设置的所有列条件，返回按列偏移量为 key 的对象；无条件时返回空对象 `{}`
 - `filter-view get-criteria` 获取指定列的条件详情，`--column` 为列偏移量（从 0 开始）；该列无条件时返回错误提示
 - `filter-view create` 创建筛选视图时 `--range` 应包含表头行。`--criteria` 可选，不传则创建后无筛选条件，后续可通过 `filter-view update-criteria` 设置

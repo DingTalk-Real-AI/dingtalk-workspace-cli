@@ -1,6 +1,6 @@
 ---
 name: dingtalk-wiki
-description: 钉钉知识库（Wiki 空间）。Use when 用户说 知识库/wiki/创建知识库/搜索知识库空间/我的文档/知识库归档。Distinct from dingtalk-doc(单文档编辑)、dingtalk-drive(钉盘文件)。命令前缀：dws wiki。
+description: 钉钉知识库与空间管理。Use when 用户说 知识库/wiki/创建知识库/搜索知识库空间/我的文档/团队空间/空间成员/空间内节点创建/列出/搜索/复制/移动/删除。空间内单文档内容读写先用本 skill 定位再切到 dingtalk-doc；钉盘文件操作走 dingtalk-drive。命令前缀：dws wiki。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -14,12 +14,11 @@ metadata:
 
 > 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。全部 dingtalk-* skill 已通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
 
-> **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
+## 前置条件 — 执行操作前必读
+
+> **`use_skill(dws-shared)`** — 认证、全局参数（`--format json` / `--yes`）、错误码、URL 模板、跨产品消歧、安全规则与 capability 边界。**执行任何 `dws` 命令前先读；** 单产品的清晰命令可直接用本 skill。
 
 <!-- SAFETY_PREAMBLE_INJECT -->
-
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
-
 
 > 命令参考：[wiki.md](references/wiki.md)。
 
@@ -35,37 +34,71 @@ metadata:
 
 ## 意图表
 
-`dws wiki` 三个命令族：`space`（知识库容器）、`node`（库内节点：文档/文件夹/表格等）、`member`（容器级成员）。
-
 | 用户说 | 命令 |
 |--------|------|
 | "创建知识库" | `dws wiki space create --name "<名称>" [--desc "<描述>"]` |
-| "查看知识库详情" | `dws wiki space get --workspace <workspaceId>` |
-| "搜索知识库空间" | `dws wiki space search --query "<关键词>" [--limit <1-20>]` |
+| "搜索组织知识库空间" | `dws wiki space search --query "<关键词>"` |
 | "我的文档 / 个人知识库" | `dws wiki space list --type myWikiSpace` |
-| "列出组织知识库" | `dws wiki space list [--type orgWikiSpace] [--limit <1-50>]` |
-| "删除知识库" | `dws wiki space delete --workspace <workspaceId>`（不可逆，先确认）|
-| "知识库里有哪些文档/浏览内容" | `dws wiki node list --workspace <workspaceId> [--folder <nodeId>]` |
-| "在知识库里创建文档/文件夹" | `dws wiki node create --workspace <workspaceId> --name "<名>" [--type folder\|axls\|...]` |
-| "空间内搜文档" | `dws wiki node search --workspace <workspaceId> --query "<关键词>"` |
-| "复制 / 移动库内节点" | `dws wiki node copy` / `dws wiki node move --workspace <workspaceId> --node <nodeId> [--folder <targetId>]` |
-| "删除库内节点" | `dws wiki node delete --workspace <workspaceId> --node <nodeId>`（不可逆，先确认）|
-| "把知识库分享给某人 / 加成员" | `dws wiki member add --workspace <WS_ID> --users <UID> --role EDITOR` |
-| "改成员角色" | `dws wiki member update --workspace <WS_ID> --users <UID> --role <ROLE>` |
-| "移除知识库成员" | `dws wiki member remove --workspace <WS_ID> --users <UID>` |
-| "查看知识库成员" | `dws wiki member list --workspace <WS_ID>` |
+| "列出知识库" | `dws wiki space list` |
+| "列出我的文档空间" | `dws wiki space list --type myWikiSpace` |
+| "列出知识库里的文件/节点" | `dws wiki node list --workspace <WS_ID>` |
+| "在知识库里搜" | `dws wiki node search --workspace <WS_ID> --query "<关键词>"` |
+| "在知识库里创建文档节点" | `dws wiki node create --workspace <WS_ID> --type adoc --name "<名称>"` |
+| "复制 / 移动库内节点" | `dws wiki node copy` / `dws wiki node move` |
 
-## 评测高频硬约束
+## 标准 SOP（必遵流程）
 
-- `space search` / `node search` 关键词 flag 是 `--query`（`--keyword` 是遗留别名，仍可跑通，但优先用 `--query`）；`space create --desc`、`space list --cursor` 同理（`--description` / `--page-token` 为旧别名）。
-- 按类型列出空间优先走 `space list --type myWikiSpace/orgWikiSpace`；用户说"我的文档/个人空间"时用 `dws wiki space list --type myWikiSpace --format json`。
-- 用户给空关键词时，不要构造空 `--query ""`；若语义是我的文档则走 `space list --type myWikiSpace`，否则请用户补关键词。
-- `node create --type` 服务端支持 `adoc / axls / able / appt / adraw / amind / folder`；**`asheet` 不支持**，创建在线表格用 `axls`。
-- `member` 的 `--users` 是复数、逗号分隔；`--role` 大小写不敏感（`editor` 与 `EDITOR` 都行）。`member list` 只返回 `name/role/type`，**不含 userId**，拿不到 userId 去串联 update/remove，需用 `dws contact user search --query "<姓名>"` 反查。
-- 知识库内节点的**内容读写**（读取/编辑文档正文）切到 `dingtalk-doc`（先 `node list`/`node search` 拿 nodeId，再 `dws doc read --node <nodeId>`）；不要在 `wiki` 下编造 doc 子命令。
+> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 workspaceId/nodeId。每条命令必须带 `--format json`。`workspaceId`/`nodeId` 一律先查后用。
+
+### SOP-1 找知识库（find-space）
+
+**触发**：找知识库/列表空间/某知识库在哪。
+
+1. **执行（必须）**：`dws wiki space list --type orgWikiSpace --format json`；按名称找 `dws wiki space search --query "<名称>" --format json`。用户明确说“我的文档/个人空间”时改用 `dws wiki space list --type myWikiSpace --format json`。
+2. **解析（必须）**：取真实 `workspaceId`；多候选让用户确认，**禁止**默认取第一个。`hasMore=true` 时将返回的 `nextCursor` 传给 `--cursor` 翻页。
+
+**禁止**：编造 workspaceId、把空间名当 ID。
+
+### SOP-2 浏览 / 查节点（list-nodes）
+
+**触发**：知识库里有哪些文档/列节点/看某节点。
+
+1. **前置（必须）**：先按 SOP-1 拿 `workspaceId`。
+2. **执行（必须）**：`dws wiki node list --workspace <workspaceId> --format json`（按需 `--folder <nodeId>` 看子节点）；按内容找 `dws wiki node search --workspace <workspaceId> --query "<关键词>" --format json`。
+3. **解析（必须）**：取真实 `nodeId` + `nodeType`/`type`；锁定目标后按需切 `dingtalk-doc` 读写节点内容。
+
+**禁止**：跳过 SOP-1 直接猜 workspaceId、用 `node list` 替代 `node search` 做关键词查找。
+
+### SOP-3 建节点（create-node）
+
+**触发**：在知识库建文档/页面。
+
+1. **执行（必须）**：`dws wiki node create --workspace <workspaceId> --type adoc --name "<名称>" --format json`（按需 `--folder <父节点>`）；返回取 `nodeId`。
+2. **写内容（必须）**：节点内容编辑切 `dingtalk-doc`，用 `dws doc update --node <nodeId> --mode overwrite|append --content-file <tmp.md> --yes`；写后 `doc read` 回读。
+3. **验证（必须）**：`dws wiki node list --workspace <workspaceId> --format json` 复核节点已建。
+
+**禁止**：在 wiki 内直接拼内容（应切 doc 写）、建后不回读。
+
+### SOP-4 移动 / 复制 / 删节点（mutate-node）
+
+**触发**：移动节点/复制节点/删节点。
+
+1. **执行（必须）**：移动 `dws wiki node move --workspace <workspaceId> --node <nodeId> --folder <目标文件夹nodeId> --format json`；复制 `dws wiki node copy --workspace <workspaceId> --node <nodeId> --folder <目标文件夹nodeId> --format json`；删除 `dws wiki node delete --workspace <workspaceId> --node <nodeId> --yes --format json`（**必须**先与用户确认，确认后才能加 `--yes`）。
+
+**禁止**：未确认就删除/移动、编造 nodeId/targetParentId。
+
+## 高频硬约束
+
+- `space search` / `node search` 统一用 `--query`，不要生成遗留别名 `--keyword`；组织知识库搜索无需额外传 `--type`。
+- 用户说"我的文档/个人空间/my workspace"时必须用 `dws wiki space list --type myWikiSpace --format json`。
+- 用户给空关键词时，不要构造空 `--query ""`；若语义是我的文档则用 `space list --type myWikiSpace`，否则请用户补关键词。
+- 搜到空间后复用返回的 `workspaceId/id`；空间内节点创建/列表/搜索/复制/移动用 `wiki node`，具体文档内容读写切到 `dingtalk-doc`；钉盘文件的全局搜索、上传下载和移动复制走 `dingtalk-drive`。
 - 所有 `dws wiki` 命令加 `--format json`。
 
 ## 跨产品协作
 
-- 知识库内文档内容读写 → 切到 `dingtalk-doc`
-- 文件存储 / 全局搜索 → 切到 `dingtalk-drive`
+- 知识库内具体文档读写 → 切到 `dingtalk-doc`
+- 钉盘文件存储、上传下载与全局文件搜索 → 切到 `dingtalk-drive`
+## 局部意图与 Recipe
+
+- [局部意图消歧](references/intent-guide.md)；[Lite Recipe](references/lite-recipes.md)。

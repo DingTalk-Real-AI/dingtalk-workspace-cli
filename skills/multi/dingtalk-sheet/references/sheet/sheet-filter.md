@@ -32,7 +32,7 @@ Flags:
 - **用途**：查看当前工作表上是否存在全局筛选及其配置。
 - **场景**：在修改或删除筛选前，先读取当前筛选配置；创建筛选前先确认是否已存在（每个工作表只能有一个筛选）。
 - **区分**：全局筛选（filter）影响所有协作者看到的数据展示；筛选视图（filter-view）是个人化的。
-- **返回**：`range`（筛选范围，A1 表示法）、`id`（筛选 ID）和 `criteria`（各列条件对象，key 为列偏移量；无条件时为 `{}`）。如果未设置筛选，返回筛选信息为空。
+- **返回**：`range`（筛选范围，A1 表示法）和 `columnFilterCriteria`（各列条件，key 为列偏移量）。如果未设置筛选，返回筛选信息为空。
 
 ### 创建筛选
 ```
@@ -152,7 +152,7 @@ Flags:
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `filter get` | `range`（筛选范围）、`id`、`criteria`（各列条件对象，无条件为 `{}`） | 查看当前筛选配置，确认筛选是否存在 |
+| `filter get` | `range`（筛选范围）、`columnFilterCriteria`（各列条件） | 查看当前筛选配置，确认筛选是否存在 |
 | `filter create` | 筛选创建成功的确认 | 确认筛选已建立，后续可通过 `filter update` 设置条件 |
 | `filter delete` | 删除成功的确认 | 确认筛选已删除 |
 | `filter update` | 更新成功的确认 | 确认条件已设置 |
@@ -164,7 +164,7 @@ Flags:
 
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
 - ★ **全局筛选（filter）与筛选视图（filter-view）的区别**：全局筛选影响所有协作者看到的数据展示，每个工作表最多一个；筛选视图是个人化的，互不影响。用户只说"筛选"时默认走 `filter` 系列
-- `filter get` 获取工作表的全局筛选信息，返回 `range`（筛选范围）、`id` 和 `criteria`（各列条件对象，无条件时为 `{}`）。无筛选时返回空
+- `filter get` 获取工作表的全局筛选信息，返回 `range`（筛选范围）和 `columnFilterCriteria`（各列条件）。无筛选时返回空
 - `filter create` 创建全局筛选时 `--range` 必须包含表头行（如 `A1:E100`），不能只包含数据行。每个工作表只能有一个筛选，已存在时报错
 - `filter create` 的 `--criteria` 可选，不传则仅创建空筛选框架，后续通过 `filter update` 设置条件
 - `filter delete` 删除后所有筛选条件丢失且所有被隐藏行重新显示，不可恢复

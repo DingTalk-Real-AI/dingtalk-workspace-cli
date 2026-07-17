@@ -11,7 +11,7 @@
 
 用户说"写入图片/插入图片/加图片/放图片到单元格/嵌入图片到表格":
 - 写入图片 → `write-image`（需表格 ID + 工作表 ID + 单元格范围 + 本地图片路径）
-- 禁止使用 `range update` 写入图片，因为 `update_range` 的 MCP 工具不支持图片类型参数，调用必定失败。必须使用 `write-image` 命令
+- 禁止使用 `range update` 写入图片；图片对象必须使用 `write-image` 命令
 - 用户指定了图片尺寸 → `write-image --width N --height M`
 
 ### 浮动图片
@@ -47,8 +47,6 @@ Flags:
       --name string        附件显示名称 (默认使用文件名)
       --mime-type string   文件 MIME 类型 (默认根据扩展名推断)
 ```
-
-`--format json` 输出规整 JSON：`{success, resourceId, resourceUrl, fileName, fileSize}`。`resourceUrl` 可用于 `create-float-image` 的 `--src`。
 
 ### 上传图片并写入表格单元格
 ```
@@ -205,10 +203,13 @@ dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range C3:C3 --fil
 
 # 4. 完整流程: 创建表格 → 写表头 → 写入图片
 dws sheet create --name "产品目录" -f json
-# 提取 nodeId 后:
-dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A1:B1" --values '[[{"type":"text","text":"产品名称"},{"type":"text","text":"产品图片"}]]' -f json
-dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A2:A2" --values '[[{"type":"text","text":"MacBook Pro"}]]' -f json
-dws sheet write-image --node <NODE_ID> --sheet-id Sheet1 --range B2:B2 --file ./macbook.png --width 150 --height 100 -f json
+# 提取 nodeId 后，先用 list 获取真实 sheetId:
+dws sheet list --node <NODE_ID> -f json
+dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B1" \
+  --values '[[{"type":"text","text":"产品名称"},{"type":"text","text":"产品图片"}]]' -f json
+dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A2:A2" \
+  --values '[[{"type":"text","text":"MacBook Pro"}]]' -f json
+dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range B2:B2 --file ./macbook.png --width 150 --height 100 -f json
 ```
 
 ## 上下文传递
@@ -229,7 +230,7 @@ dws sheet write-image --node <NODE_ID> --sheet-id Sheet1 --range B2:B2 --file ./
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
 - `media-upload` 是两步自动完成的流程 (获取附件上传凭证 → OSS 上传)，无需手动分步操作
 - `write-image` 是三步自动完成的流程 (获取附件上传凭证 → OSS 上传 → 写入图片到单元格)，无需手动分步操作
-- ★ 向表格单元格中写入图片必须使用 `write-image`，禁止使用 `range update`。`range update` 底层调用的 `update_range` MCP 工具不支持图片类型参数，调用会失败
+- ★ 向表格单元格中写入图片必须使用 `write-image`，禁止使用 `range update`。`range update` 不支持图片对象
 - `write-image` 与 `media-upload` 的区别：`media-upload` 仅上传附件到表格获取 resourceId；`write-image` 在上传后还会将图片写入指定单元格
 - `create-float-image` 创建浮动图片前必须先通过 `media-upload` 上传图片获取 `resourceUrl`，再将其作为 `--src` 传入。`--src` 的格式为 `/core/api/resources/img/...`，不能直接传外部 URL
 - `create-float-image` 的 `--range` 使用 A1 表示法指定锚点单元格（如 `A1`、`B3`），支持带工作表前缀（如 `Sheet1!A1`）

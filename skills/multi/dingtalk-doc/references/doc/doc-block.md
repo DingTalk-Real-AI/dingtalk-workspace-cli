@@ -1,10 +1,6 @@
 # doc block（块级精细编辑：list / insert / update / delete）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md) — 改写流程（编辑形态优先级、JSONML validator 行为）
-> 3. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — JSONML 范例（含 callout / 分栏 / 表格 / 标题等节点的完整命令）
-> 4. [`./format/doc-jsonml-schema.md`](./format/doc-jsonml-schema.md) — JSONML 节点结构字段定义
+> **按需参考**：复杂或保真改写见 [更新工作流](./style/doc-update-workflow.md)；涉及 callout、分栏、复杂表格等 JSONML 节点时再读取 [范例](./format/doc-jsonml-cookbook.md) 与 [结构定义](./format/doc-jsonml-schema.md)。
 >
 > **同任务常配合**：[`doc-update.md`](./doc-update.md)（整篇 overwrite / 末尾追加纯文本）/ [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)（JSONML 复制范例）
 
@@ -260,7 +256,6 @@ dws doc block insert --node <DOC_ID> --content-format jsonml --parent-block <UUI
 
 ## 参考
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令族）
 - [`./doc-update.md`](./doc-update.md)（整篇改写 / 纯文本追加）
 - [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md)（编辑形态优先级、validator 行为）
 - [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)（所有节点的可复制 JSONML 范例）

@@ -1,13 +1,10 @@
-# doc export（在线文档导出为 docx）
-
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
+# doc export（在线文档导出为 docx/markdown/pdf）
 
 > **路由前置判断**：用户说「下载/导出」时**必须**先用 [`./doc-info.md`](./doc-info.md) `info --node <ID> --format json` 查 `contentType`：
 > - `contentType` 为 `ALIDOC`（在线文档）→ **必须用 `export`**，禁止用 `download`
-> - `contentType` 为 `DOCUMENT`/`IMAGE`/`VIDEO` 等（已有文件）→ 用 `dws drive download`（详见 [`../drive.md`](../drive.md)）
+> - `contentType` 为 `DOCUMENT`/`IMAGE`/`VIDEO` 等（已有文件）→ 用 `dws drive download`（详见 [`../drive.md`](../../../dingtalk-drive/references/drive.md)）
 >
-> `drive download` 只能下载**已有文件**（原样下载），`export` 是将**在线文档格式转换**后导出为 docx，两者完全不同。
+> `drive download` 只能下载**已有文件**（原样下载），`export` 是将**在线文档格式转换**后导出为 docx、markdown 或 pdf，两者完全不同。
 
 ---
 
@@ -19,10 +16,11 @@ Usage:
 Example:
   dws doc export --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
   dws doc export --node <DOC_ID> --output ~/downloads/
+  dws doc export --node <DOC_ID> --export-format markdown --output ./exported.md
 Flags:
-      --node string           要导出的文档标识，支持文档 URL 或 dentryUuid (必填)
-      --output string         本地保存路径，文件路径或目录 (必填)
-      --export-format string  导出格式，当前仅支持 docx (默认)
+      --node string     要导出的文档标识，支持文档 URL 或 dentryUuid (必填)
+      --output string   本地保存路径，文件路径或目录 (必填)
+      --export-format string   导出格式，支持 docx（默认）、markdown（或 md）和 pdf
 ```
 
 CLI 内部自动完成：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 成功后自动下载文件。
@@ -47,8 +45,9 @@ Flags:
 
 - `export` 是一体化命令，一条命令自动完成提交→轮询→下载，**无需手动编排轮询**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）。
 - `export` 超时或中断后，CLI 会输出 `jobId`，可用 `dws doc export get --job-id <jobId>` 手动查询任务状态。
-- `export` 当前仅支持钉钉在线文档（alidocs，`contentType=ALIDOC`）导出为 `docx`，**在线表格导出请使用其他命令**。
-- `--output` 既可以是文件完整路径，也可以是目录（CLI 自动按文档名生成 `.docx`）。
+- `export` 支持钉钉在线文档（alidocs，`contentType=ALIDOC`）导出为 `docx`、`markdown` 或 `pdf`，**在线表格导出请使用其他命令**。
+- `--export-format` 支持 `docx`（默认）、`markdown`（或 `md`）和 `pdf` 三种格式。
+- `--output` 既可以是文件完整路径，也可以是目录（CLI 自动按文档名生成 `.docx`、`.md` 或 `.pdf`）。
 
 ## 上下文传递
 
@@ -60,11 +59,23 @@ Flags:
 ## 常用模板
 
 ```bash
-# 一体化导出（最常用）
+# 一体化导出为 docx（最常用）
 dws doc export --node <DOC_ID> --output ./exported.docx
 
-# 输出到目录（自动按文档名命名）
+# 导出为 markdown
+dws doc export --node <DOC_ID> --export-format markdown --output ./exported.md
+
+# 使用 md 缩写导出为 markdown
+dws doc export --node <DOC_ID> --export-format md --output ./exported.md
+
+# 导出为 pdf
+dws doc export --node <DOC_ID> --export-format pdf --output ./exported.pdf
+
+# 输出到目录（自动按文档名命名，docx 格式）
 dws doc export --node <DOC_ID> --output ~/downloads/
+
+# 输出到目录（markdown 格式，自动生成 .md 扩展名）
+dws doc export --node <DOC_ID> --export-format markdown --output ~/downloads/
 
 # alidocs URL 直传
 dws doc export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ./exported.docx
@@ -73,8 +84,17 @@ dws doc export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output
 dws doc export get --job-id <JOB_ID> --format json
 ```
 
+## 输出规范
+
+导出完成后的输出必须遵循以下规则：
+
+- **仅返回本地文件路径**：导出成功后，直接告知用户文件已保存到本地的具体路径
+- **禁止上传 CDN**：不要在导出完成后调用已下线的 `chat file upload` 或其他上传命令将文件上传到钉钉 CDN
+- **禁止输出下载链接**：不得生成或展示 `down.dingtalk.com` 等 CDN 下载链接
+- 正确示例：`文档已导出到: ./文档名.docx`
+- 错误示例：上传文件并展示 CDN 下载链接
+
 ## 参考
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）
 - [`./doc-info.md`](./doc-info.md)（前置：判断 contentType=ALIDOC 才走 export）
-- [`../drive.md`](../drive.md)（非 ALIDOC 文件用 `dws drive download`）
+- [`../drive.md`](../../../dingtalk-drive/references/drive.md)（非 ALIDOC 文件用 `dws drive download`）

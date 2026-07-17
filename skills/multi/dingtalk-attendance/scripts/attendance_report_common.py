@@ -4,7 +4,7 @@
 
 [AI Agent 强制门禁] 本模块不可单独执行，且任何调用方脚本
    （attendance_report_detail/monthly/daily.py）执行前都必须先阅读：
-   dingtalk-workspace/references/products/attendance-report.md
+   references/attendance-report.md
 
    工作流细节、报表类型判断、人员获取、列选择、错误处理等约束
    全部在 attendance-report.md，禁止凭本脚本源码或 --help 自行组装命令。
@@ -192,6 +192,13 @@ def extract_records(payload: Any) -> list[dict]:
         for key in ("data", "records", "list", "items", "result"):
             if key in payload and isinstance(payload[key], list):
                 return [item for item in payload[key] if isinstance(item, dict)]
+        # CLI/接口常见双层包装：{"result": {"deptUserList": [...]}}。
+        # 先递归进入业务容器，再由下方的唯一 list 兜底识别具体记录键。
+        for key in ("result", "data"):
+            if key in payload and isinstance(payload[key], dict):
+                nested = extract_records(payload[key])
+                if nested:
+                    return nested
         # 兜底：dict 中只有一个 list 值
         list_values = [v for v in payload.values() if isinstance(v, list)]
         if len(list_values) == 1:
@@ -566,13 +573,16 @@ def resolve_users_from_input(raw_ids: list[str]) -> list[str]:
     try:
         result = run_dws([
             "contact", "dept", "list-members",
-            "--ids", ",".join(raw_ids),
+            "--depts", ",".join(raw_ids),
         ])
         members = extract_records(result)
         if members:
             # 成功获取到成员 → 输入是部门ID
             for member in members:
-                uid = _first_nonempty(member, ("userId", "userid", "id"))
+                info = member.get("userInfo", member)
+                if not isinstance(info, dict):
+                    continue
+                uid = _first_nonempty(info, ("userId", "userid", "id"))
                 if uid and str(uid) not in seen:
                     resolved.append(str(uid))
                     seen.add(str(uid))
@@ -589,12 +599,15 @@ def resolve_users_from_input(raw_ids: list[str]) -> list[str]:
         try:
             result = run_dws([
                 "contact", "dept", "list-members",
-                "--ids", raw_id,
+                "--depts", raw_id,
             ])
             members = extract_records(result)
             if members:
                 for member in members:
-                    uid = _first_nonempty(member, ("userId", "userid", "id"))
+                    info = member.get("userInfo", member)
+                    if not isinstance(info, dict):
+                        continue
+                    uid = _first_nonempty(info, ("userId", "userid", "id"))
                     if uid and str(uid) not in seen:
                         resolved.append(str(uid))
                         seen.add(str(uid))

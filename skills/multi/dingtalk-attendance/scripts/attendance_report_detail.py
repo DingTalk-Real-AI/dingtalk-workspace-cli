@@ -8,7 +8,7 @@
 
 
 [AI Agent 强制门禁] 调用本脚本前必须先阅读：
-   dingtalk-workspace/references/products/attendance-report.md
+   references/attendance-report.md
 
   本脚本仅是"考勤报表导出工作流"的执行末端，工作流完整定义在 attendance-report.md，
   包含但不限于：
@@ -88,7 +88,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=(
             "导出考勤报表 — 明细粒度（打卡记录）。"
-            "[强制] AI Agent 必须先读 references/products/attendance-report.md 再调用本脚本，"
+            "[强制] AI Agent 必须先读 references/attendance-report.md 再调用本脚本，"
             "禁止凭 --help 或脚本路径自行拼命令。"
         ),
     )
@@ -161,8 +161,8 @@ def query_check_results(
             payload = cmn.run_dws([
                 "attendance", "check", "result",
                 "--users", ",".join(user_batch),
-                "--from", from_date,
-                "--to", to_date,
+                "--start", from_date,
+                "--end", to_date,
                 "--offset", str(offset),
                 "--limit", str(CHECK_RESULT_PAGE_SIZE),
             ])
@@ -218,8 +218,8 @@ def query_check_records(
         payload = cmn.run_dws([
             "attendance", "check", "record",
             "--users", ",".join(user_batch),
-            "--from", from_date,
-            "--to", to_date,
+            "--start", from_date,
+            "--end", to_date,
         ])
         stats.total_dws_calls += 1
     except cmn.DwsCallError as exc:

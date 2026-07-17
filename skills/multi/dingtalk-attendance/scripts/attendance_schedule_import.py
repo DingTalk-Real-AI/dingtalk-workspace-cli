@@ -3,7 +3,7 @@
 考勤排班导入脚本
 
 [AI Agent 强制门禁] 本脚本执行前必须先阅读：
-   dingtalk-workspace/references/products/attendance-schedule.md
+   references/attendance-schedule.md
 
    排班工作流、参数校验、班次校验、回显确认等约束全部在
    attendance-schedule.md，禁止凭本脚本源码或 --help 自行组装命令。
@@ -214,8 +214,8 @@ def fetch_all_classes() -> dict[int, str]:
         try:
             result = run_dws([
                 "attendance", "class", "search",
-                "--page-index", str(page_index),
-                "--page-size", str(page_size),
+                "--page", str(page_index),
+                "--limit", str(page_size),
             ])
         except DwsCallError as exc:
             error(f"查询班次列表失败: {exc}")
@@ -367,7 +367,7 @@ def execute_schedule_import(group_id: int, schedules: list[dict]) -> None:
             "attendance", "schedule", "import",
             "--groupId", str(group_id),
             "--scheduleVOS", schedules_json,
-            "--yes",
+            "--user-say-yes",
         ])
     except DwsCallError as exc:
         error(f"排班导入失败: {exc}")

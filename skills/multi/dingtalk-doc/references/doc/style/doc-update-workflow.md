@@ -258,7 +258,7 @@ dws doc update --node <nodeId> --content-file /tmp/<name>-full.md --mode overwri
 
 当一次性追加内容 **超过 200KB** 时，必须拆分为多片 `--mode append`，并在执行第一片**之前**向用户发出截断风险提示等待确认。
 
-完整规范（提示话术模板、触发条件、失败处理）见 [04-document.md «分块 append 截断风险提示»](../../../best_practices/04-document.md)。
+完整规范（提示话术模板、触发条件、失败处理）见 [04-document.md «分块 append 截断风险提示»](../../04-document.md)。
 
 update 场景下的额外约束：
 

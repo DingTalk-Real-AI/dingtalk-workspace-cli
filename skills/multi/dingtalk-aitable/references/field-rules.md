@@ -83,7 +83,7 @@ dws aitable table create --base-id <BASE_ID> --name "产品图片" \
 
 ## 记录写入格式（record create / record update）
 
-> 各字段类型的完整写入/读取格式规范请参考：[aitable-cell-value.md](./products/aitable/aitable-cell-value.md)
+> 各字段类型的完整写入/读取格式规范请参考：[aitable-cell-value.md](./aitable/aitable-cell-value.md)
 >
 > 该文件是 cellValue 格式的 **source of truth**，包含所有字段类型的详细示例和注意事项。
 

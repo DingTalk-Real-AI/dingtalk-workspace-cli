@@ -1,6 +1,6 @@
 ---
 name: dingtalk-attendance
-description: 钉钉考勤。Use when 用户说 考勤/打卡记录/查打卡/查班次/考勤汇总/考勤规则/出勤情况/请假加班补卡/排班/考勤组/假期余额。命令前缀：dws attendance。支持查询与写操作（班次、排班、考勤组、个人规则设置、假期规则/余额等），写操作需二次确认后再加 --yes。
+description: 钉钉考勤、打卡、排班与考勤报表。Use when 用户说考勤/打卡记录/查打卡/排班/班次/考勤报表/导出考勤/出勤汇总/考勤明细/迟到早退统计/全员考勤数据/某月考勤统计/考勤表格/考勤Excel。不做日程会议（走 dingtalk-calendar）、日报周报（走 dingtalk-report）、审批请假流程（走 dingtalk-oa）。命令前缀：dws attendance。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -14,14 +14,15 @@ metadata:
 
 > 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。全部 dingtalk-* skill 已通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
 
-> **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
+## 前置条件 — 执行操作前必读
+
+> **`use_skill(dws-shared)`** — 认证、全局参数（`--format json` / `--yes`）、错误码、URL 模板、跨产品消歧、安全规则与 capability 边界。**执行任何 `dws` 命令前先读；** 单产品的清晰命令可直接用本 skill。
 
 <!-- SAFETY_PREAMBLE_INJECT -->
 
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+> 渐进式参考：[attendance-index.md](references/attendance-index.md)。日期范围或“签到”场景必须先读 [attendance-routing.md](references/attendance-routing.md)；报表导出再读 [attendance-report.md](references/attendance-report.md)。
 
-
-> 命令参考：[attendance.md](references/attendance.md)。
+> 旧路径兼容入口：[attendance.md](references/attendance.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
@@ -55,25 +56,26 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "查我 / 某人 某天的打卡" | `dws attendance record get --user <userId> --date <YYYY-MM-DD>` |
-| "查考勤组 / 考勤规则 / 打卡范围" | `dws attendance rules --date <YYYY-MM-DD>` |
-| "查班次 / 排班 / 谁今天上什么班" | `dws attendance shift list --users <userId1,userId2> --start <YYYY-MM-DD> --end <YYYY-MM-DD>` |
-| "考勤统计 / 周月汇总 / 出勤天数" | `dws attendance summary --user <userId> --date <YYYY-MM-DD> --stats-type week\|month` |
-| "请假 / 加班 / 补卡 / 出差 记录或提交链接" | `dws attendance approve list` / `dws attendance approve templates --type <类型>` |
-| "班次 / 补卡规则 / 加班规则 / 考勤组 查询与修改" | `class` / `adjustment` / `overtime` / `group` 子命令 |
-| "排班 / 假期规则 / 假期余额 / 签到 / 报表" | `schedule` / `vacation` / `checkin` / `report` 子命令 |
+| "查我自己的打卡 / 某天考勤" | `python scripts/attendance_my_record.py 2026-03-08` 或 `dws attendance record get --user <userId> --date <YYYY-MM-DD>` |
+| "查团队排班" | `python scripts/attendance_team_shift.py --users <userId1,userId2> --from <YYYY-MM-DD> --to <YYYY-MM-DD>` |
+| "导出考勤报表 / 月度汇总 / 考勤明细 / 每日统计" | **必须先读 [attendance-report.md](references/attendance-report.md)** 强制门禁后选择 `attendance_report_{detail,monthly,daily}.py` |
+| "创建班次 / 设置班次" | 先读 [attendance.md](references/attendance-commands.md) 的 `class create`，确认后执行 |
+| "导入排班 / 安排排班" | 先读 [attendance.md](references/attendance-commands.md) 的 `schedule import`，确认后执行 |
+| "加入/移出考勤组 / 更新考勤组成员" | `dws attendance group update-members ...`（需确认） |
 
-> 完整命令集（含写操作与参数）见 [references/attendance.md](references/attendance.md)。
+## 高频硬约束
 
-## 评测高频硬约束
-
-- 当前 dws 已注册全部考勤子命令组（`record` / `check` / `approve` / `shift` / `schedule` / `class` / `adjustment` / `overtime` / `group` / `summary` / `rules` / `selfsetting` / `globalsetting` / `vacation` / `checkin` / `report` / `boss-check`），查询与写操作大多可直接调用后端。**不要再以"开源版只读/不支持写操作"为由拒答。** 创建班次、导入排班、加人入考勤组、保存个人规则设置、设置假期余额等写操作可执行，但必须先展示参数摘要并二次确认，再追加 `--yes`（或 `--user-say-yes`）执行；不要在未确认时直接写、也不要伪装成功。个别命令受权限/数据影响返回空或权限错误（如 `report` 系列仅管理员），如实说明即可。
+- 不要在读完 [attendance.md](references/attendance-commands.md) 前判断"CLI 不支持"。`class create`、`schedule import`、`group update-members`、`group update` 都是已支持写操作，但必须先展示摘要并等用户确认。
 - 查询迟到/缺勤名单时，空打卡结果不等于"没人迟到"。必须结合排班、`NotSigned`、`Absenteeism`、无记录人员分别说明；数据缺失要标为"无记录/无法判断"，不要归为正常。
 - 做部门 Top N 排名时，用户要求前 N 名就必须输出 N 个部门；无打卡记录或无可计算数据的部门按 0 或"无数据"保留在排名中，不能只输出有数据的少数部门。
-- `summary` 必须同时传 `--user`、`--date`、`--stats-type`（week/month），缺一返回 C0002。
-- `shift list` 时间跨度不超过 7 天，最多 50 人；`record get` 一次只查一个用户一天。
-- 所有 dws 命令带 `--format json`，时间/日期按命令要求分别使用 `YYYY-MM-DD` 或 `yyyy-MM-dd HH:mm:ss`。
+- 处理请假/补卡/加班审批时，先用考勤审批模板或 OA 查询确认可操作范围；没有直接提交接口时返回可点击提交链接并说明无法代填提交，不要假装已提交。
+- 更新考勤组成员固定按 `aisearch/contact` 解析 userId → `group search` 解析 groupId → 展示变更摘要并确认 → `group update-members` → `group filtered-get --member` 回查。
+- 所有 dws 命令带 `--format json`，时间/日期按命令要求分别使用 `YYYY-MM-DD` 或 reference 指定格式。
 
 ## 跨产品协作
 
 - 拿到 userId 前先用 `dingtalk-aisearch` 解析人名
+- 报表导出涉及多人 / 多月 → 脚本内部自动分批 + 切片，输出 xlsx
+## 局部意图与 Recipe
+
+- [局部意图消歧](references/intent-guide.md)。

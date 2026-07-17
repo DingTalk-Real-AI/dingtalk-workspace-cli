@@ -1,8 +1,5 @@
 # doc 文件操作（upload / download / copy / move / rename / delete + folder create）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-
 > **弃用提示（文件管理命令正在迁移到 drive / wiki）**：本文所列 `doc` 文件管理命令虽仍能跑，但执行时会打印弃用警告，请优先改用 `drive` / `wiki` 对应命令：
 > - `doc download` → **`dws drive download`**（下载已有文件；在线文档导出 docx 仍走 `doc export`）
 > - `doc folder create` → **`dws drive mkdir`**（个人空间/钉盘）或 **`dws wiki node create --workspace <id> --type folder`**（知识库内）
@@ -222,7 +219,6 @@ dws doc folder create --name "项目资料" --workspace <WS_ID> --format json
 
 ## 参考
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令族）
 - [`./doc-info.md`](./doc-info.md)（前置：判断 contentType 决定 download / export）
 - [`./doc-export.md`](./doc-export.md)（在线文档格式转换导出 docx）
 - [`./doc-media.md`](./doc-media.md)（文件作为附件块插入文档正文，与 upload 区分）

@@ -3,7 +3,7 @@
 考勤排班查询导出脚本
 
 [AI Agent 强制门禁] 本脚本执行前必须先阅读：
-   dingtalk-workspace/references/products/attendance-schedule.md
+   references/attendance-schedule.md
 
 职责：
   1. 分批查询排班记录（支持大量用户自动分批）
@@ -123,7 +123,7 @@ def build_class_name_map(records: list[dict]) -> dict[int, str]:
     if missing_ids:
         log(f"🔍 {len(missing_ids)} 个班次缺名称，从 class search 补全 ...")
         try:
-            result = run_dws(["attendance", "class", "search", "--page-size", "200"])
+            result = run_dws(["attendance", "class", "search", "--limit", "200"])
             for cls in (extract_records(result) if result else []):
                 cid_raw = cls.get("id") or cls.get("classId")
                 cname = cls.get("name") or cls.get("className")

@@ -26,7 +26,7 @@
 | 全量拉取/统计 | `record query --all` | 不要手动循环 cursor |
 | 全量导出为文件 | `export data` | 不要 `--all` 拉全量再写文件 |
 | 批量写入 | `record create`（分批 100 条） | 不要一次传超过 100 条 |
-| 附件上传 | `attachment upload` + `record update` | 不要在 cells 里伪造附件值 |
+| 附件/图片上传 | `attachment upload` 获取 fileToken → `record create/update` 用 fileToken 写入 | **严禁直接传图片 URL 到附件字段**（服务端同步下载会超时） |
 | 文件级导入 | `import upload` + `import data` | 不要手动解析 xlsx 再逐条写入 |
 
 ## 4. 创建/修改后回读确认

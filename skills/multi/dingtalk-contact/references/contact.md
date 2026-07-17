@@ -41,16 +41,15 @@ Example:
   dws contact user search --query "张三"
 Flags:
       --query string   搜索关键词 (必填)
-Returns: (顶层 `result` 为列表，每项包含以下字段)
+Returns: (列表，每项包含以下字段)
   name             string   成员姓名
   nick             string   成员昵称
-  flowerName       string   花名（无花名时为 null）
   userId           string   成员 ID（仅同事关系时返回）
   title            string   员工职位（仅同事关系时返回）
   openDingTalkId   string   当前用户视角下的目标用户唯一标识，不可跨用户共享；可用于发消息等好友关系场景的操作
 ```
 
-> **CAUTION:** 多人同名时禁止默认选第一个 — `user search` 不返回部门信息，须追加 `contact user get --ids userId1,userId2,...` 获取部门/职位后请用户确认。详见 [08-directory.md](./08-directory.md)「多命中」。
+> **CAUTION:** 多人同名时禁止默认选第一个 — `user search` 不返回部门信息，须追加 `contact user get --ids userId1,userId2,...` 获取部门/职位后请用户确认。详见 [08-directory.md](08-directory.md)「多命中」。
 
 #### 按手机号搜索用户
 ```
@@ -103,8 +102,6 @@ Flags:
 
 查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列表。认证信息（corpId、optUserId）由系统自动注入，无需手动传入。
 
-> **前置条件：需操作人具备花名册管理权限。** 无权限时返回业务错误 `操作人无花名册管理权限`（非命令写法问题，不要改参数）。
-
 #### 查询员工花名册字段信息（个人档案）
 ```
 Usage:
@@ -121,8 +118,6 @@ Flags:
 花名册字段包含：试用/转正信息、个人/家庭信息、学历信息、银行卡/合同信息、紧急联系人和其他企业自定义信息。
 
 > **与 `contact user get` 的区别**：`user get` 返回组织管理信息（部门、主管、管理员权限），`user profile get` 返回个人档案信息（学历、家庭、银行卡等）。
->
-> **前置条件：需操作人具备花名册管理权限。** 无权限时返回业务错误 `操作人无花名册管理权限`（非命令写法问题，不要改参数）。
 
 ### dismission (离职员工)
 
@@ -149,8 +144,6 @@ Flags:
 查询离职员工列表，支持按员工姓名、离职日期范围、部门进行过滤。认证信息（corpId、optUserId）由系统自动注入，无需手动传入。
 `--start` 和 `--end` 必须同时设置或同时不设置，不允许只传其中一个。
 
-> **前置条件：需操作人具备已离职人员花名册管理权限。** 无权限时返回业务错误 `操作人无已离职人员花名册管理权限`（非命令写法问题，不要改参数）。
-
 ### dept (部门查询)
 
 #### 搜索部门
@@ -161,9 +154,6 @@ Example:
   dws contact dept search --query "技术部"
 Flags:
       --query string   搜索关键词 (必填)
-Returns: (顶层 key 为 `deptList`，非 `result`，为列表，每项包含以下字段)
-  deptId           int      部门 ID
-  deptName         string   部门名称（命中关键词会用 <red>…</red> 高亮包裹，需自行去标签）
 ```
 
 #### 获取部门详情
@@ -208,14 +198,11 @@ Example:
   dws contact dept list-members --depts 1              # 根部门
 Flags:
       --depts string   部门 ID 列表，逗号分隔 (必填)
-Returns: (顶层 key 为 `deptUserList`，非 `result`，为列表，每项形如 { "userInfo": { "name": ..., "userId": ... } })
-  userInfo.name    string   成员姓名
-  userInfo.userId  string   成员 ID
 Notes:
   - **钉钉根部门 `deptId=1`**；查根部门直属成员用 `--depts 1`
   - 仅返回**本部门**直接成员，**不含下级部门**成员；需含下级请先 `dept list-children` 枚举子部门，再对子 deptId 分别/合并调用 `list-members`
   - 受组织架构可见性控制；`--depts` 支持逗号分隔批量查询多个部门
-  - 跨层级成员展开见 [08-directory.md](./08-directory.md) 的 `cross-level-dept-members` recipe
+  - 跨层级成员展开见 [08-directory.md](08-directory.md) 的 `cross-level-dept-members` recipe
 ```
 
 ### label (角色查询)
@@ -231,7 +218,7 @@ Example:
 Flags:
   无
 Notes:
-  - 无需参数，返回当前企业全部角色，按 `groupName` 分组，每组 `labels[]` 里每个角色是 `{labelId, name}`（字段名是 `name`，不是 `labelName`）
+  - 无需参数，返回当前企业全部角色列表（labelId、labelName等）
   - 用于不知道准确角色名称时先浏览全部角色
   - 典型场景：用户说“企业所有主管/查所有管理员/财务人员有哪些”→ 先 label list 浏览全部角色，匹配目标角色后 label list-members 获取成员
 ```
@@ -349,7 +336,7 @@ Notes:
 > [!IMPORTANT]
 > **易混淆硬规则**：`relation list-my-followings` **只**返回"我特别关注的人员列表"（一组 openDingTalkId），**不**返回任何消息内容。
 >
-> **禁止路由到本命令的场景**（query 中同时包含『关注/特别关注/星标』和以下任一消息域动词/名词时，必须路由到 [`chat message list-focused`](../../dingtalk-chat/references/chat.md)）：
+> **禁止路由到本命令的场景**（query 中同时包含『关注/特别关注/星标』和以下任一消息域动词/名词时，必须路由到 [`chat message list-focused`](../../dingtalk-chat/references/chat-commands.md)）：
 > - 动词类：**发**了什么、**说**了什么/啥、**聊**了什么、**讲**了什么
 > - 名词类：**消息**、**聊天**、**动态**、**最新内容**
 >
@@ -360,7 +347,7 @@ Notes:
 > - "我特别关注的人**最近发了什么消息**" → `chat message list-focused`（含"发""消息"）
 > - "我关注的人**最近都说了啥**" → `chat message list-focused`（含"说"）
 
-组合场景（多子部门、跨层级成员、强消歧）见 [08-directory.md](./08-directory.md)。
+组合场景（多子部门、跨层级成员、强消歧）见 [08-directory.md](08-directory.md)。
 
 ## 核心工作流
 
@@ -427,7 +414,7 @@ dws contact user invite --org-user-name "张三" --org-user-mobile "13800138000"
 | `user get-self/search` | `orgAuthEmail` | mail message send 的 --to/--cc (跨产品) |
 | `user get-self/search` | `userId` | profile get 的 --staff-id |
 | `user profile fields` | `fieldCode` | profile get 的 --fields |
-| `label list` | `labelId` / `name` | `label get --names` 或 `label list-members --id` |
+| `label list` | `labelId` / `labelName` | `label get --names` 或 `label list-members --id` |
 | `label get` | `labelId` | `label list-members` 的 --id |
 | `dept search/list-children` | `deptId` | dept get-info/list-children/list-members 的 --dept/--depts |
 | `dept search/list-children` | `deptId` | dismission search 的 --depts |

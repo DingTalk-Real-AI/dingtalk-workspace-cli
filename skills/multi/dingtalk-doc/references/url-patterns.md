@@ -19,6 +19,8 @@
 | 产品 | 用途 | URL 格式 | ID 来源 |
 |------|------|----------|---------|
 | `aitable` | AI表格 Base 链接 | `https://alidocs.dingtalk.com/i/nodes/{baseId}` | `base list/search/create/get` 返回的 `baseId` |
+| `aitable` | AI表格指定数据表链接 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}` | `baseId` + `table create/get` 或 `base get` 返回的 `tableId` |
+| `aitable` | AI表格指定数据表+视图链接 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}%26viewId%3D{viewId}` | `baseId` + `tableId` + `view create/get` 返回的 `viewId` |
 | `aitable` | AI表格模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` | `template search` 返回的 `templateId` |
 | `doc` | 文档链接 | `https://alidocs.dingtalk.com/i/nodes/{dentryUuid}` | `doc` 命令返回的 `dentryUuid` |
 | `sheet` | 电子表格链接 | `https://alidocs.dingtalk.com/i/nodes/{dentryUuid}` | `sheet create` 返回的 `dentryUuid` |
@@ -67,7 +69,7 @@ dws doc read --node "https://alidocs.dingtalk.com/i/p/Y7kmbokZp3pgGLq2/docs/AY39
 >
 > 你可以：
 > 1. 在钉钉客户端中打开该文档，将正文内容复制粘贴给我
-> 2. 如果文档已保存在你的文档空间中，可以告诉我文档名称，我通过 `dws doc search` 搜索后再读取
+> 2. 如果文档已保存在你的文档空间中，可以告诉我文档名称，我通过 `dws drive search` 搜索后再读取
 
 ---
 
@@ -87,18 +89,18 @@ Step 3 → 按下方路由规则映射到对应产品
 
 | 条件 | 路由到产品 | 后续操作 |
 |------|-----------|---------|
-| `contentType=ALIDOC`, `extension=adoc` | `doc` | 按 [doc.md](./products/doc.md) 操作 |
-| `contentType=ALIDOC`, `extension=axls` | `sheet` | 按 [sheet.md](./products/sheet.md) 操作（仅 `axls` 在线电子表格） |
-| `contentType=ALIDOC`, `extension=able` | `aitable` | 将 nodeId 作为 baseId，按 [aitable.md](./products/aitable.md) 操作 |
-| `contentType=DOCUMENT`, `extension=xlsx` / `xls` / `xlsm` / `csv` | `doc` | 必须用 `dws drive download` 下载到本地处理，禁止走 `sheet`（非在线表格，sheet 命令无法操作） |
-| `contentType≠ALIDOC`, `nodeType=file` | `doc` | 调用 `dws drive download` 下载，返回文件下载链接 |
-| `nodeType=folder` | `doc` | 调用 `dws doc list --folder <ID>` 列出指定文件夹直接子节点列表 |
+| `contentType=ALIDOC`, `extension=adoc` | `doc` | 加载 `dingtalk-doc` 操作内容 |
+| `contentType=ALIDOC`, `extension=axls` | `sheet` | 加载 `dingtalk-sheet` 操作（仅 `axls` 在线电子表格） |
+| `contentType=ALIDOC`, `extension=able` | `aitable` | 将 nodeId 作为 baseId，加载 `dingtalk-aitable` 操作 |
+| `contentType=DOCUMENT`, `extension=xlsx` / `xls` / `xlsm` / `csv` | `drive` | 必须用 `dws drive download` 下载到本地处理，禁止走 `sheet`（非在线表格，sheet 命令无法操作） |
+| `contentType≠ALIDOC`, `nodeType=file` | `drive` | 调用 `dws drive download` 下载，返回文件下载链接 |
+| `nodeType=folder` | `drive` / `wiki` | 调用 `dws drive list --workspace <WS_ID>` 或 `dws wiki node list` 列出子节点 |
 | 以上均不匹配 | — | 告知用户当前暂不支持该类型 |
 
 > axls vs xlsx 关键区分：
 > - `axls`（钉钉在线电子表格，`contentType=ALIDOC`）→ 走 `sheet` 产品线（读/写/筛选/导出等服务端原子操作）
 > - `xlsx` / `xls` / `xlsm` / `csv`（上传到文档空间的本地表格文件，`contentType=DOCUMENT`）→ 必须走 `dws drive download` 下载到本地后再解析处理，严禁错误路由到 `sheet` 产品线（sheet 命令只支持在线表格，调用 xlsx 节点会直接报错）
-> - 用户想把在线表格导出为 xlsx 文件 → 用 `dws sheet export --node <表格ID或URL>`（单命令一站式：提交导出任务→轮询→取 downloadUrl，加 `--output ./x.xlsx` 可直接落盘）
+> - 用户想把在线表格导出为 xlsx 文件 → 用 `dws sheet export`（输入是 `axls`，输出是 xlsx，这是 axls → xlsx 的格式转换，不属于 xlsx 读取场景）
 
 ### 示例
 
@@ -116,7 +118,7 @@ dws drive download --node "https://alidocs.dingtalk.com/i/nodes/xlsx456"
 dws drive download --node "https://alidocs.dingtalk.com/i/nodes/def456"
 
 # 返回 nodeType=folder → 文件夹，列出子节点
-dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/ghi789" --format json
+dws drive list --workspace <WS_ID> --format json
 ```
 
 ### 何时可跳过探测
@@ -157,7 +159,7 @@ Agent 流程：
 
 | 用户说 | 路由 | 不要混淆 |
 |--------|------|---------|
-| "把这个文档/表格/多维表分享给张三" | **节点级**：`doc permission add --node <URL> --user <UID> --role EDITOR` | 不是 `wiki member add` |
+| "把这个文档/表格/多维表分享给张三" | **节点级**：`doc permission add --node <URL> --users <UID> --role EDITOR` | 不是 `wiki member add` |
 | "把张三加到这个知识库" | **容器级**：`wiki member add --workspace <WS> --user <UID> --role <ROLE>` | 不是 `doc permission add` |
 
 > 区分依据：**doc permission 作用于单个 node（document / file / folder）；wiki member 作用于整个 workspace 容器**。同一用户在 workspace 是 EDITOR、在某个 node 上仍可被单独提升为 MANAGER（节点级覆盖容器级）。

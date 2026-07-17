@@ -1,81 +1,30 @@
 # 文档知识
 
-> 通用规范见 [_common/conventions.md](_common/conventions.md)。
+## 模板保形生成
+
+已有 alidocs 文档需要“按模板生成、复刻或生成同形态变体”时，优先在原生文档层复制，避免 `doc read` 转成 Markdown 后重建导致样式丢失：
+
+1. `dws drive copy --node <SOURCE_NODE_ID> --folder <FOLDER_NODE_ID> --format json` 复制原文档。
+2. 从返回中取得副本 `nodeId`，再用 `dws drive rename --node <COPY_NODE_ID> --name "<新名称>" --format json` 重命名。
+3. 用 `dws doc block list --node <COPY_NODE_ID> --format json` 定位需要替换的块，仅在副本上执行 `doc block update`。
+4. 回读副本的关键块，确认文字已替换且原布局、表格与样式仍保留。
+
+不要用 `doc read + doc create` 重建要求保形的模板文档。
+
+> lite recipe 见 [SKILL.md 速查表](../SKILL.md)。
 
 | Recipe | 行动指南（固定路线） |
 |--------|-------------------|
-| write-doc | 1. 按[「多源并行采集」](_common/conventions.md#多源并行采集公共模式)执行<br>2. **先把内容写入临时文件**（Linux/Mac `/tmp/<name>.md`，Windows `%TEMP%\<name>.md`）—— 含多行/表格/长文本必须走文件，不要把 markdown 直接作为命令行字符串<br>3. **单步创建**（< 200KB）：`doc create --name "<文档名>" --content-file <tmp> [--folder <DOC_FOLDER_NODE_ID>] [--workspace <WS_ID>]`（`--folder` 只传文档文件夹 nodeId / alidocs 文件夹 URL，不传数字 dentryId）<br>4. **超长兜底**（> 200KB）：**必须先向用户提示截断风险**（详见下方「分块 append 截断风险提示」），用户确认后再执行：`doc create --name "<文档名>" [--folder/--workspace]` → `nodeId` → 按段落切 ≤200KB 片段（不断表格） → 每片 `doc update --node <nodeId> --content-file <part> --mode append`<br>5. **回读校验**（必须）：所有写入完成后，执行 `doc read --node <nodeId>` 回读文档，校验关键标题/段落是否完整写入（详见下方「doc update 回读校验规范」）<br>备选（仅短内容 <2KB 且无换行/表格）：`doc create --name "..." --content "..."` |
-| search-docs-and-share | 1. `doc search --query "<关键词>"` → 取 `nodeId` + 标题建索引（不读全文）<br>2. `doc read --node <nodeId>`（追问按需，最多 2 篇） |
-| create-knowledge-base | 1. 创建知识库空间取 `WS_ID`<br>2. `doc create --name "<文档名>" --workspace <WS_ID>` → 取 `nodeId`<br>3. `doc list --workspace <WS_ID>` 确认 |
+| import-file | 1. **直接执行** `dws doc import --file <本地文件路径> --format json`（一条命令完成上传+转换+创建）<br>2. 从返回中提取 `documentUrl` 并告知用户<br>3. **禁止先 Read 文件内容再 `doc create` + `doc update`**——`doc import` 是服务端格式转换，客户端无需解析文件内容<br>4. 可选参数：`--folder <文件夹ID>` 指定目标文件夹、`--workspace <知识库ID>` 指定目标知识库、`--name "文档名"` 自定义名称<br>5. 格式映射：docx/doc→文档, xlsx/xls→表格, xmind/mark→脑图, md/txt→文档<br>6. 超时或中断时 CLI 返回 `taskId`，用 `dws doc import get --task-id <taskId>` 手动查询<br>详见 [doc-import.md](./doc/doc-import.md) |
+| write-doc | 0. 阅读 [doc-create-workflow.md](./doc/style/doc-create-workflow.md) 的 §前置必读 + §关键词速查表，锁定文档类型和起稿路径：**决策型/含对比的知识沉淀型/用户要求美观 → JSONML 起稿**（`.json`）；执行型/说明型 → Markdown 起稿（`.md`）<br>1. 按选定路径执行 doc-create-workflow.md（JSONML 路径有骨架范例可直接复制修改）<br>2. `doc create --content-file /tmp/<name>.json --content-format jsonml`（或 `.md` + `--content-format markdown`）<br>3. 大内容默认依赖 DWS 自动分片；只有 `CONTENT_TRUNCATED`、部分写入失败或回读发现缺失时，才按 workflow 的恢复流程手工补片<br>4. **回读校验（必须）**：所有写入完成后，执行 `doc read --node <nodeId>`，校验关键标题/段落/表格是否完整写入 |
+| search-docs-and-share | 1. `drive search --query "<关键词>"` → 取 `nodeId` + 标题建索引（不读全文）<br>2. `doc read --node <nodeId>`（追问按需，最多 2 篇） |
+| create-knowledge-base | 1. 创建知识库空间取 `WS_ID`<br>2. `wiki node create --workspace <WS_ID> --name "<文档名>"` → 取 `nodeId`<br>3. `wiki node list --workspace <WS_ID>` 确认 |
 | migrate-doc | 1. `doc read --node <源nodeId>` → 取正文并写入临时文件 `<tmp>.md`<br>2. `doc create --name "<文档名>" --folder <DOC_FOLDER_NODE_ID> --content-file <tmp>.md` → 取新 `nodeId`（`--folder` 只传文档文件夹 nodeId / alidocs 文件夹 URL，不传数字 dentryId；正文 <200KB 单步到位）<br>2a. 若正文 >200KB：**必须先向用户提示截断风险**（详见下方「分块 append 截断风险提示」），用户确认后再执行：`doc create --name "<文档名>" --folder <DOC_FOLDER_NODE_ID>` → `nodeId` → 按段落切片 → 每片 `doc update --node <nodeId> --content-file <part> --mode append`<br>3. **回读校验**：`doc read --node <nodeId>` 校验内容完整性 |
-| update-doc-section | **优先块级精修（保形）**：1. `doc search --query "<关键词>"` → 取 `nodeId`<br>2. `doc block list --node <nodeId> --format json` 定位目标块取 `blockId`<br>3. `doc block update --node <nodeId> --block-id <blockId> --text "<替换内容>" --format json` 局部修改（不破坏富格式）<br>4. **回读校验**：`doc read --node <nodeId>` 确认目标章节已更新<br>**兜底**：仅当无法定位块且用户确认整篇替换时，先 `doc update --node <nodeId> --content-file <tmp>.md --mode overwrite --dry-run` 预览，再加 `--yes` 执行；overwrite 会丢富格式（颜色/字号/合并单元格等），详见下方 template-based-generation §"为什么避免 overwrite" |
-| template-based-generation | **触发**：用户给已有 alidocs URL + "参照/按模板/复刻/同样模板生成 X 月份的" → **保形复制，禁止重写**。固定走下方 [template-based-generation](#template-based-generation) 章节：`doc copy` 保形复制 → `doc rename` → `doc block list/update` 局部改副本。禁止 `doc read + doc create` 重写链。 |
+| update-doc-section | 1. `drive search --query "<关键词>"` → 取 `nodeId`<br>2. **形态选择（按 [doc-update-workflow.md §1.3](./doc/style/doc-update-workflow.md) 优先级）**：目标段落含 callout / 分栏 / 颜色 / @人 / 附件 / 嵌套结构 → 走 `jsonml-node-edit`；纯文本替换且确认无富结构 → 继续本 recipe<br>3. `doc read --node <nodeId>` 定位目标章节<br>4. `doc update --node <nodeId> --content "<替换内容>" --mode overwrite`<br>5. **回读校验**：`doc read --node <nodeId>` 确认 overwrite 未被降级为 append、内容完整无截断<br>**overwrite 须用户确认**；完整改写流程见 [doc-update-workflow.md](./doc/style/doc-update-workflow.md) |
+| rewrite-doc | 1. 阅读并执行 [doc-update-workflow.md](./doc/style/doc-update-workflow.md)：先看 §1.3 编辑形态优先级（**JSONML 首选**），再按 §3 速查表选路径，跳 §4 对应小节执行<br>2. 单块改写 / 含富结构 → §4.4 路径 B；多处保真改写或改 root → §4.4 路径 A；纯文本骨架重写 → §4.5 markdown<br>3. 整篇 overwrite 前必须按 workflow §4.5 向用户提示风险并等待确认<br>4. **回读校验（必须）**：按 workflow §6 的校验要点逐项核查；@人、附件、图片等保真要素必须原样保留<br>**适用场景**：用户提供已有 nodeId/链接，需要改写、润色、章节补充、段落形态转换、整篇重写 |
 | doc-to-message | 1. `doc read --node <nodeId>` → 取正文（大文档只摘要+链接）<br>2. `contact user search --query "<姓名>"` → 取 `openDingTalkId`（推荐）；或 `chat search --query "<群名>"` → 取 `openConversationId`<br>3. `chat message send --open-dingtalk-id <openDingTalkId> --text "<内容>"`（推荐）或 `--group <openConversationId> --text "<内容>"` 发送。仅当无法获取 openDingTalkId 时才用 `--user <userId>`（备选） |
-| delete-old-doc | 1. `doc search --query "<关键词>"` 或 `doc list --folder <FOLDER>` 取 `nodeId`<br>2. **必须先向用户展示要删除的文档标题/路径**，等用户确认<br>3. `doc delete --node <nodeId> --yes`（注意：是 `doc delete`，不是 `doc block delete`；前者删整篇，后者删块）<br>4. 验证：`doc info --node <nodeId>` 应返回 not-found |
-| export-doc-as-docx | 1. `doc search --query "<关键词>"` → 取 `nodeId`<br>2. `doc export --node <nodeId> --output /tmp/<name>.docx --timeout-sec 600`（CLI 内置渐进式退避轮询，**不要自己拼 GET downloadUrl**）<br>3. 落盘失败兜底：`doc export get --job-id <ID> --output /tmp/<name>.docx` 续等<br>4. （可选）`doc-to-message` 把 docx 路径作为附件发给用户 |
-| grant-doc-access | 1. `doc search --query "<关键词>"` → 取 `nodeId`<br>2. `contact user search --query "<姓名>"` → 取 `userId`（**注意**: doc permission 用 `userId`，不是 `openDingTalkId`）<br>3. **节点级**授权：`doc permission add --node <nodeId> --user <UID1,UID2> --role EDITOR`<br>　　role 取值: MANAGER / EDITOR / DOWNLOADER / READER（**不要传 OWNER**）<br>　　单次最多 30 个 userId<br>4. 查权限：`doc permission list --node <nodeId>` 确认<br>5. **不要混淆**: 给"知识库"加成员用 `wiki member add --workspace`（容器级）；给"单个文档"加权限用 `doc permission add --node`（节点级）|
-| insert-image-to-doc | 1. `doc search --query "<关键词>"` → 取 `nodeId`<br>2. `doc media insert --node <nodeId> --file ./image.png`（3 步一体化：获取凭证 → PUT OSS → 插入块；图片 ≤20MB 自动作为内联图片，其他作为附件块）<br>3. （可选）`doc read --node <nodeId>` 回读确认<br>**禁止**: 自己拿 uploadUrl 写 PUT —— 90%+ 会因 Content-Type 未清空触发 SignatureDoesNotMatch |
-| download-doc-attachment | 1. `doc block list --node <nodeId>` → 找到 `blockType=attachment` 的块取 `resourceId`<br>2. `doc media download --node <nodeId> --resource-id <RID>` → 返回 OSS 临时 URL（**注意 expirationSeconds**）<br>3. 调用方自行 GET 该 URL 落盘 |
-
----
-
-## template-based-generation
-
-### 触发条件
-
-用户给已有 alidocs URL，并要求：
-- "参照这个生成同样的"
-- "按模板生成"
-- "复刻这个"
-- "同样的模板，X 月份的"
-- "仿照这个文档"
-
-### 核心原则
-
-**保形优于重写**。adoc 富格式（行高、单元格背景色、字号、渐变文字色、表格列宽、合并单元格）在 markdown 层无表达，`doc read → create_file → doc create` 会做两次 lossy projection（先 adoc→markdown，再 markdown→adoc），必然丢失这些属性。
-
-正确做法：**在 adoc 层保形复制（`doc copy`）**，再局部改写需要替换的块（`doc block update`），保留所有富格式。
-
-### 固定路线
-
-```bash
-# 1. probe 模板节点，确认是 ALIDOC（adoc 富文档）
-dws doc info --node <模板NODE或URL> --format json
-
-# 2. 在 adoc 层保形复制（不经过 markdown 投影）
-dws doc copy --node <模板NODE或URL> --folder <目标文件夹NODE或URL> --format json
-# → 取返回的副本 nodeId
-
-# 3. 重命名副本
-dws doc rename --node <副本nodeId> --name "<新文档名>" --format json
-
-# 4. 列出所有块定位要改的内容
-dws doc block list --node <副本nodeId> --format json
-# → 记录 blockId 和现有文本
-
-# 5. 逐块局部改写（只改月份/日期/姓名/指标等局部变量，不动结构）
-dws doc block update --node <副本nodeId> --block-id <blockId> --text "<新内容>" --format json
-
-# 6. 回读确认
-dws doc read --node <副本nodeId>
-```
-
-### 为什么避免 overwrite
-
-| 场景 | overwrite 后果 |
-|------|---------------|
-| 模板带表格背景色 | 全部变白 |
-| 标题字号 24pt 加粗渐变 | 退化为普通 H1 |
-| 合并单元格的表格 | 拆成独立单元格 |
-| 嵌入图片 | 链接保留但样式重置 |
-
-**用 copy+block update 全部可保留**。
-
-### 禁止反模式
-
-- ❌ doc read + doc create 重写模板文档（两次 lossy projection）
-- ❌ 先 `dws doc copy`，再删除副本退回 create 重写链路
-- ❌ 用 `dws doc update --mode overwrite --yes` 把含富格式的 adoc 整篇覆盖成 markdown
+| lossless-doc-edit | 1. `doc read --node <nodeId> --content-format jsonml --output /tmp/doc.json` → 获取完整 JSONML 结构（输出含 `revision`，并发敏感时记下来；默认改写不需要）<br>2. 解析 JSON 文件，修改 `jsonml` 数组中的目标节点（节点结构参见 [doc-jsonml-schema.md](./doc/format/doc-jsonml-schema.md)）<br>3. 将修改后的内容写回临时文件 `/tmp/doc_modified.json`，格式为 `{"jsonml": [...]}`<br>4. `doc update --node <nodeId> --content-file /tmp/doc_modified.json --content-format jsonml --mode overwrite`（默认不做并发检查；担心多 agent 同时改时加 `--revision <第 1 步拿到的 N>` 触发并发检查，版本不一致返回 `VersionConflict` 时回到第 1 步重读重写）<br>5. **回读校验**：`doc read --node <nodeId> --content-format jsonml` 确认写入成功<br>**适用场景**：保留样式、精准插入特定节点类型、改属性不动文本；普通文本编辑仍优先用 markdown 模式。完整 JSONML 改写流程见 [doc-update-workflow.md §4.4](./doc/style/doc-update-workflow.md) |
+| jsonml-node-edit | 1. `doc block list --node <nodeId> --content-format jsonml` → 获取 JSONML 节点列表（含 uuid）<br>2. 根据 uuid 定位目标节点<br>3. `doc block list --node <nodeId> --content-format jsonml --block-id <uuid>` → 读取完整子树<br>4. 修改 JSONML 节点内容（节点结构参见 [doc-jsonml-schema.md](./doc/format/doc-jsonml-schema.md)，可复制范例见 [doc-jsonml-cookbook.md](./doc/format/doc-jsonml-cookbook.md)）<br>5. `doc block update --node <nodeId> --block-id <uuid> --content-format jsonml --element '<修改后的 JSONML>'` → 写回<br>**适用场景**：只改一个 block 的结构/样式，无需全文回写；写入端默认 normalize（自动补 uuid、裸字符串包成 canonical 文本），可用 `--no-fix-jsonml` 关闭全部修复；`--fix-jsonml` 额外启用 JSON 语法修复（推荐 agent 调用） |
 
 ---
 
@@ -106,32 +55,15 @@ dws doc read --node <副本nodeId>
 
 ## doc update 回读校验规范
 
-### 为什么需要回读校验
+**所有 `doc update`（含 overwrite 和 append）执行后都必须回读校验**——返回 `success=true` 不等于内容真的写入完整。
 
-`doc update` 在以下场景可能产生**静默失败**，返回 `success=true` 但实际写入不完整：
+完整规范（静默失败场景、校验流程、异常处理路径、"先清空再重建"命令样板）见 [doc-update-workflow.md §6「回读验收」](./doc/style/doc-update-workflow.md)。
 
-- **overwrite 降级为 append**：大文档 overwrite 模式被后端静默降级，导致旧内容未清除、新内容追加在末尾
-- **分块 append 内容截断**：超长文档分片写入时，部分片段丢失或顺序错乱
-- **编码/通道问题**：PowerShell 等特殊终端下 UTF-8 内容传输乱码
+最小流程：
 
-### 校验流程
-
-在 **每次 `doc update` 完成后**（无论 overwrite 还是 append 模式），必须执行以下步骤：
-
-1. **回读文档**：`doc read --node <nodeId>`
-2. **关键内容校验**：检查回读结果是否包含预期的关键标题、段落首句、表格标记等
-3. **异常处理**：
-   - 若内容缺失或截断 → 向用户报告具体差异，建议重试或手动修复
-   - 若 overwrite 后仍残留旧内容 → 提示用户 overwrite 可能被降级，建议先清空再 append
-   - **禁止**在未回读的情况下直接向用户报告"已完成"
-
-### 示例
-
+```bash
+dws doc update --node <nodeId> --content-file /tmp/new-content.md --mode overwrite
+dws doc read --node <nodeId>   # 校验关键标题、段落首句、表格、@人、附件
 ```
-# 更新文档
-doc update --node abc123 --content-file /tmp/new-content.md --mode overwrite
 
-# 回读校验
-doc read --node abc123
-# → 检查输出是否包含预期内容的关键标题和段落
-```
+**禁止**在未回读的情况下向用户报告「已完成」。

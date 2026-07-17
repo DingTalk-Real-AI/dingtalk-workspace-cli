@@ -1,0 +1,67 @@
+# 注意事项
+
+## 注意事项
+
+- **发消息前参数审查（必须执行）**：
+  - 发消息（`chat message send`、`send-by-bot`、`send-by-webhook`、`send-card`、`reply`、`forward`）是严肃操作，一旦发错人/发错群会导致严重问题，因此在执行发送之前，agent 必须对所有参数进行内部审查
+  - 审查方式：将即将发送的**全部参数**（收件人/群、消息内容、@对象、消息类型等）与用户的**原始需求**逐一对比，确认每个参数都能从原始需求中找到明确依据
+  - 如果存在任何不明确、有歧义或原始需求中未提及的参数（例如：用户没说发给谁、没说发到哪个群、消息内容与用户意图有出入、不确定是否需要 @某人等），**必须先向用户确认**，严禁自行假设或补全
+  - 典型需要确认的场景：用户只说了"发个消息"但没指定群/人；用户的描述可匹配多个群或多个联系人；消息文本由 agent 组织而非用户原文提供时需确认措辞
+- uuid 幂等参数（发消息最佳实践）：
+  - 发消息时建议始终带上 `--uuid` 参数，传入用户自行生成的唯一标识（如 UUID v4），用于幂等控制
+  - 如果发送失败需要重试，重试时 `--uuid` 必须与首次发送保持一致，服务端据此去重，避免重复发消息
+  - 如果不传 `--uuid`，每次调用都视为新消息，重试可能导致消息重复发送
+  - 此参数适用于 `chat message send`（群聊和单聊均支持）
+- `--group` 为群聊会话 ID (openconversation_id)，可从群搜索或群聊信息中获取
+- `chat message send` 的 text 是位置参数（恰好 1 个），非 flag；群聊用 `--group`，单聊用 `--user`（userId）或 `--open-dingtalk-id`（openDingTalkId），三者互斥；纯文本/Markdown 单聊传 `--user` 时直接走 userId 发送能力；`--at-all`、`--at-open-dingtalk-ids` 仅在 `--group` 群聊时生效；**发图片/本地文件统一 `--msg-type file --file-path <本地路径>`**（任意扩展名 png/jpg/pdf/mp4/zip… 一条命令直发，CLI 内部完成上传）；`--msg-type image --media-id` 仅作旧链路兼容
+- `chat message list-all` 的四个参数（--start、--end、--limit、--cursor）每次请求都必须传递；翻页时用响应中的 nextCursor 值作为下次 --cursor
+- `chat message list` 的 `--group`、`--user`、`--open-dingtalk-id` 三者互斥，必须且只能指定其一
+- `chat message list-by-sender` 不需要指定单聊/群聊，返回结果自带会话类型标识；`--sender-user-id`（userId）与 `--sender-open-dingtalk-id`（openDingTalkId）二选一；时间用 `--start`/`--end`（ISO-8601），分页用 `--limit`/`--cursor`
+- `chat message list-mentions` 可选 `--group` 指定群聊，不传则查全部；时间用 `--start`/`--end`（ISO-8601），分页用 `--limit`/`--cursor`
+- `chat message list-unread-conversations` 获取当前用户未读会话列表，可选 `--count` 指定返回条数
+- `chat message search` 按关键词搜索消息内容，`--query` 必填，可选 `--group` 限定搜索某个会话；时间用 `--start`/`--end`（ISO-8601），分页用 `--limit`（默认 100）/`--cursor`
+- `chat message read-status` 查询指定消息的已读/未读状态，仅消息发送者可查询自己发出的消息；`--group`、`--message-id` 必填；目标用户 userId 用 `--user`/`--users`，openDingTalkId 用 `--target-open-dingtalk-ids`，不传则查所有接收者
+- `chat search-common` 搜索共同群，`--nicks` 传人员昵称（逗号分隔），`--match-mode` AND/OR 控制匹配逻辑，分页用 `--limit`（默认 20）/`--cursor`
+- `chat list-top-conversations` 拉取置顶会话列表，分页用 `--limit`（默认 1000）/`--cursor`；用户询问"置顶会话"时路由到此命令
+- `--user` 和 `--open-dingtalk-id` 本质上都是发起单聊操作，只是用户标识格式不同：userId 为企业内部应用常用标识，openDingTalkId 为三方应用或跨组织场景下的用户标识，服务端对两种 ID 的解析逻辑不同
+- `--time` 格式: `yyyy-MM-dd HH:mm:ss`，为拉取消息的起始时间点；拉取方向优先使用 `--direction newer|older`：`newer` 从给定时间往现在拉，`older` 从给定时间往以前拉；`--forward` 为旧兼容参数，`true` 等价 `newer`，`false` 等价 `older`；`--limit` 控制数量
+- `chat search` 挂在 `chat` 下（非 `chat group` 下），路径为 `dws chat search`
+- `send-by-bot` 群聊传 `--group`，单聊传 `--users` 或 `--open-dingtalk-ids`，与 `--group` 互斥且必选其一；群聊时可选 `--at-user-ids` @指定成员（传 userId 列表）或 `--at-open-dingtalk-ids` @指定成员（传 openDingtalkId 列表），content 中需包含对应 @标识；`--at-all` @所有人；群聊场景如果返回"机器人不存在"错误，需先通过 `chat group members add-bot --id <openConversationId> --robot-code <robot-code>` 将机器人邀请进群后再发送
+- `recall-by-bot` 群聊传 `--group` + `--keys`，单聊仅传 `--keys`（不传 `--group` 即为单聊撤回）
+- `send-by-webhook` 支持 `--at-all`、`--at-mobiles`、`--at-users` 进行 @ 操作，但需在 `--text` 中包含 `@userId` 或 `@手机号` 才能生效；`--at-all` @所有人时需在 `--text` 中包含 `@10`
+- `chat group-role` 系列命令用于管理群的自定义身份标签：`list` 查列表，`add` 创建，`update` 改名，`remove` 删除；`set-user` 覆盖某人全部身份（传空 --role-ids 则清除），`remove-user` 仅移除指定身份，`query-user` 查询某人当前身份；用户用 `--user <userId>`
+- 消息**换行符**（`send` / `send-by-bot` / `send-by-webhook` 的 `--text`）有两层要求：(1) 必须是**真实换行符** `U+000A`，不是字面量 `\n`；(2) Markdown 规范下单换行不生效，需用空行 `\n\n`（段落分隔）或行尾两空格 + 换行 / `<br>`（硬换行）
+- `chat group transfer-owner` 转让群主，需传 --group（openConversationId）；新群主 userId 用 `--user`，openDingTalkId 用 `--new-owner`
+- `chat group invite-url` 获取群邀请链接，需传 --group（openConversationId），可选 --expires-seconds 指定有效期（秒，0=永久）
+- `chat group share-invite` 分享群聊链接到会话，需传 --source（被分享群 openConversationId），--target（目标会话）和 --receiver（单聊用户）二选一，可选 --expires-seconds 和 --uuid
+- `chat category create-smart` 创建智能会话分组，需传 --name（分组名称），可选 --keywords（群名称关键词）和 --members（群内成员 openDingTalkId）
+- `chat group quit` 退出群聊，需传 --group（openConversationId）
+- `chat group update-icon` 更新群头像，需传 --group（openConversationId）和 --icon-media-id（mediaId）
+- `chat group update-settings` 更新群设置，需传 --group（openConversationId）、--setting-key（设置项 key）、--status（0=关闭 1=开启）
+- `chat message send-card` 创建并推送流式卡片，群聊传 --group，单聊传 --receiver，二者互斥；不传 content，后续通过 update-card 更新内容
+- `chat message update-card` 流式更新卡片内容，需传 --biz-id（创建卡片返回的业务 ID）、--content、--flow-status
+- `chat message list-by-ids` 根据消息 ID 批量查询，--msg-ids 逗号分隔，最多 50 条
+- `chat message add-emoji` / `remove-emoji` 需传 --group（openConversationId）、--msg-id（openMsgId）、--emoji（表情名称）
+- `chat message add-text-emotion` / `remove-text-emotion` 需传 --group、--msg-id、--emotion-id、--emotion-name、--text、--background-id，六个参数全部必填
+- `chat message create-text-emotion` 创建文字表情模板，返回 emotionId；--background-id 可选，不传由服务端默认分配
+- `chat category list` 无需参数；`category list-conversations` 需传 --category-id（通过 category list 获取）
+- `chat mute` 默认开启免打扰，传 --off 关闭；--conversation-id / --id / --chat 三个别名均可用于传入会话 ID
+- `chat message reply` 引用回复消息（**单聊/群聊均可**），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段）、--ref-msg-id（被引用消息 openMessageId）、--ref-sender（被引用消息发送者 openDingTalkId）、--text（回复内容）；目前回复类型仅支持 text
+- `chat message forward` 转发单条消息（**源/目标会话均支持单聊/群聊**，常见组合：群→群、群→单、单→群、单→单），需传 --src-conversation-id（源会话 openConversationId）、--msg-id（源消息 openMessageId）、--dest-conversation-id（目标会话 openConversationId）
+- `chat message forward-topic` 转发话题消息，需传 --src-msg-id（源消息 openMessageId）、--src-conversation-id（源会话 openConversationId）、--src-thread-id（话题 ID，格式: convThread + 加密后的convThreadId）、--dest-conversation-id（目标会话 openConversationId）
+- `chat set-top` 设置/取消会话置顶（单聊/群聊均可），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段），默认置顶，传 --off 取消
+- `chat message set-top-msg` 置顶会话内某条消息，需传 --open-conversation-id（openConversationId）、--msg-id（openMessageId）；与 chat set-top 区别：后者是会话列表置顶，前者是消息置顶
+- `chat message unset-top-msg` 取消置顶会话内某条消息，需传 --open-conversation-id（openConversationId）、--msg-id（openMessageId）
+- `chat message reply` 以当前用户身份引用回复，与 `chat message send` 的用户身份发送语义一致
+- **如何获取 openConversationId**（如果上层已有则直接使用，不必再查）：
+  - 群聊：`dws chat search --query "群名"`
+  - 单聊：`dws chat conversation-info --user <userId>` 或 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>`（人员信息可通过 `dws contact user search --query "姓名" --format json` 获取）
+- `chat group-mute` 全员禁言/取消全员禁言，需传 --group（openConversationId），默认禁言，传 --off 取消
+- `chat group-mute-member` 指定群成员禁言，需传 --group、--user/--users（userId，逗号分隔）、--mute-time（毫秒，仅禁言时必填，支持 300000/3600000/86400000/604800000/2592000000），传 --off 解除禁言
+- `chat group set-admin` 设置/取消群管理员，需传 --group（openConversationId）、--user/--users（userId，逗号分隔），默认设为管理员，传 --off 取消
+- `chat group update-nick` 设置用户在群内的群昵称，需传 --group（openConversationId）、--nick（群昵称）
+- `chat group update-alias` 设置群备注，需传 --group（openConversationId）、--alias-title（备注名称），仅自己可见
+- `chat hide` 隐藏会话，需传 --conversation-id（openConversationId，支持单聊/群聊），隐藏后不显示在列表中，收到新消息时重新出现
+- `chat mute-at-all` 关闭/开启 @所有人消息提醒，需传 --conversation-id（openConversationId），默认关闭通知，传 --off 恢复接收
+- `chat mute-red-envelope` 关闭/开启红包消息提醒，需传 --conversation-id（openConversationId），默认关闭通知，传 --off 恢复接收
+- `chat group members list-by-ids` 根据成员 openDingTalkId 批量查询群成员详情，需传 --id（openConversationId）、--users（openDingTalkId 列表，逗号分隔）

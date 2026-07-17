@@ -2,31 +2,35 @@
 // +build skill_verify
 
 // Package skill_e2e_test runs every backtick `dws ...` command from skill
-// docs through the real cobra binary in --mock mode, then asserts the
-// returned envelope is well-formed and success=true.
+// docs through a real Cobra binary in --mock mode and rejects unknown-command
+// and unknown-flag dispatch failures. Mock JSON envelopes and help-like
+// non-JSON output are both accepted because some documented entries
+// intentionally name a command group rather than a leaf operation.
 //
-// Build tag rationale: this test depends on a real `dws` binary on PATH
-// and invokes ~220 subprocesses (slow). Default `go test ./...` skips it.
-// Run explicitly: `go test -tags skill_verify ./test/skill_e2e/...`
+// Build tag rationale: this test depends on a real `dws` binary built from the
+// current checkout and invokes hundreds of subprocesses. Default `go test
+// ./...` skips it. Build with `go build -o dws ./cmd`, then run explicitly
+// with: `go test -tags skill_verify ./test/skill_e2e/...`
 //
 // This is Layer B of the skill verification matrix — pure open-source,
-// no real tenant required. Layer A (test/skill_static) checks help-text
-// dispatch; this layer actually invokes each command end-to-end and
-// validates the envelope/JSON response.
+// no real tenant required. Layer A (test/skill_static) checks the current
+// source command tree and multi-skill flags; this layer actually invokes each
+// supported command end-to-end.
 //
 // Why --mock instead of real calls: open-source CI has no real DingTalk
 // tenant, and depending on one would either (a) leak credentials or
 // (b) make the test flaky on tenant drift. --mock returns a deterministic
 // shape (`{"_mock": true, "_tool": "<canonical>", "result": [], "success": true}`)
-// for every cobra command that resolves cleanly. Any real dispatch
-// failure (unknown flag, unknown command, broken envelope) surfaces
-// here exactly as it would on a real tenant.
+// for Cobra commands that resolve through the MCP path. Unknown command/flag
+// failures surface here exactly as they would on a real tenant.
 package skill_e2e_test
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -63,13 +67,6 @@ var (
 		"参数名是", "参数错", "应该用", "废弃", "已下线",
 	}
 
-	// Per-file line ranges considered intentional anti-pattern blocks.
-	antiPatternRanges = map[string][][2]int{
-		"skills/multi/dingtalk-minutes/references/minutes.md": {
-			{40, 130}, {1280, 1320}, {1700, 1900},
-		},
-	}
-
 	// Verbs that imply writes; auto-append --dry-run.
 	writeVerbs = map[string]bool{
 		"create": true, "update": true, "delete": true, "send": true,
@@ -81,6 +78,16 @@ var (
 		"replace": true, "mute": true, "cancel": true, "install": true,
 		"publish": true, "forward": true, "reply": true,
 	}
+
+	// Utility commands do not participate in the MCP --mock envelope path;
+	// Layer A still validates their Cobra registration. Executing them here can
+	// trigger local setup, authentication, upgrades, or long-running consumers.
+	mockUnsupportedRoots = map[string]bool{
+		"api": true, "auth": true, "cache": true, "catalog": true,
+		"completion": true, "config": true, "doctor": true, "event": true,
+		"mcp": true, "plugin": true, "profile": true, "recovery": true,
+		"schema": true, "skill": true, "upgrade": true, "version": true,
+	}
 )
 
 func repoRoot(t *testing.T) string {
@@ -89,13 +96,49 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(here), "..", ".."))
 }
 
-func dwsBinary(t *testing.T) string {
+func dwsBinary(t *testing.T, root string) string {
 	t.Helper()
-	p, err := exec.LookPath("dws")
-	if err != nil {
-		t.Skipf("dws binary not on PATH; build it (go build -o /tmp/dws ./cmd && PATH=/tmp:$PATH) to enable this layer-B test")
+	if configured := os.Getenv("DWS_TEST_BINARY"); configured != "" {
+		p, err := filepath.Abs(configured)
+		if err != nil {
+			t.Fatalf("resolve DWS_TEST_BINARY: %v", err)
+		}
+		if info, err := os.Stat(p); err != nil || info.IsDir() {
+			t.Fatalf("DWS_TEST_BINARY must name an executable file: %s", p)
+		}
+		return p
 	}
-	return p
+	name := "dws"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	p := filepath.Join(root, name)
+	if info, err := os.Stat(p); err == nil && !info.IsDir() {
+		return p
+	}
+	t.Skipf("current-checkout dws binary not found; run `go build -o %s ./cmd` or set DWS_TEST_BINARY", name)
+	return ""
+}
+
+func appendMultiReferenceMarkdown(files []string, multiRoot string) ([]string, error) {
+	err := filepath.WalkDir(multiRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(multiRoot, path)
+		if err != nil {
+			return err
+		}
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		if len(parts) >= 3 && parts[1] == "references" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
 }
 
 type cmdRef struct {
@@ -111,7 +154,6 @@ func extract(root string) ([]cmdRef, error) {
 		dir + "/mono/SKILL.md",
 		dir + "/mono/references/products/*.md",
 		dir + "/multi/*/SKILL.md",
-		dir + "/multi/*/references/*.md",
 	} {
 		m, err := filepath.Glob(pat)
 		if err != nil {
@@ -119,10 +161,15 @@ func extract(root string) ([]cmdRef, error) {
 		}
 		files = append(files, m...)
 	}
+	var err error
+	files, err = appendMultiReferenceMarkdown(files, filepath.Join(dir, "multi"))
+	if err != nil {
+		return nil, err
+	}
 
 	var refs []cmdRef
 	for _, f := range files {
-		out, err := exec.Command("cat", f).Output()
+		out, err := os.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +180,7 @@ func extract(root string) ([]cmdRef, error) {
 		for scanner.Scan() {
 			lineNo++
 			line := scanner.Text()
-			if isAntiLine(line) || inAntiRange(root, f, lineNo) {
+			if isAntiLine(line) {
 				continue
 			}
 			for _, m := range backtickRe.FindAllStringSubmatch(line, -1) {
@@ -157,21 +204,17 @@ func isAntiLine(line string) bool {
 	return false
 }
 
-func inAntiRange(root, file string, ln int) bool {
-	rel, _ := filepath.Rel(root, file)
-	ranges, ok := antiPatternRanges[rel]
-	if !ok {
-		return false
-	}
-	for _, r := range ranges {
-		if ln >= r[0] && ln <= r[1] {
-			return true
-		}
-	}
-	return false
-}
-
 func shouldSkip(cmd string) bool {
+	tokens := strings.Fields(cmd)
+	if len(tokens) >= 2 && mockUnsupportedRoots[tokens[1]] {
+		return true
+	}
+	if cmd == "dws sheet export" || strings.HasPrefix(cmd, "dws sheet export ") {
+		// The export helper performs its asynchronous polling loop even under
+		// --mock; Layer A validates its command path without making this audit
+		// wait for the production export timeout.
+		return true
+	}
 	if strings.HasPrefix(cmd, "dws dev ") || cmd == "dws dev" {
 		// dev (product id: devapp) is a target MCP-discovered command tree. Until the MCP product
 		// is published into the open-source registry, validate its Agent routing
@@ -278,7 +321,11 @@ func substitute(cmd string) string {
 
 func TestSkillCommandsMockDispatch(t *testing.T) {
 	root := repoRoot(t)
-	dws := dwsBinary(t)
+	dws := dwsBinary(t, root)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv("DWS_DISABLE_KEYCHAIN", "1")
+	t.Setenv("DWS_KEYCHAIN_DIR", t.TempDir())
 
 	refs, err := extract(root)
 	if err != nil {
@@ -325,12 +372,10 @@ func TestSkillCommandsMockDispatch(t *testing.T) {
 			if isWrite(subPath(r.Cmd)) && !strings.Contains(actual, " --dry-run") {
 				actual += " --dry-run"
 			}
-			argv := strings.Fields(actual)
-			// shlex-light: rejoin quoted segments
-			argv = rejoinQuoted(actual)
+			argv := rejoinQuoted(actual)
 			out, _ := exec.Command(dws, argv[1:]...).CombinedOutput()
 			s := string(out)
-			if strings.Contains(s, "unknown flag") || strings.Contains(s, "unknown command") {
+			if strings.Contains(s, "unknown flag") || strings.Contains(s, "unknown command") || strings.Contains(s, "unknown subcommand") {
 				mu.Lock()
 				fails = append(fails, failure{ref: r, actual: actual, reason: firstLine(s, 200)})
 				mu.Unlock()
@@ -352,7 +397,7 @@ func TestSkillCommandsMockDispatch(t *testing.T) {
 			}
 			if errBlock, ok := j["error"].(map[string]any); ok {
 				msg, _ := errBlock["message"].(string)
-				if strings.Contains(msg, "unknown flag") || strings.Contains(msg, "unknown command") {
+				if strings.Contains(msg, "unknown flag") || strings.Contains(msg, "unknown command") || strings.Contains(msg, "unknown subcommand") {
 					mu.Lock()
 					fails = append(fails, failure{ref: r, actual: actual, reason: msg})
 					mu.Unlock()

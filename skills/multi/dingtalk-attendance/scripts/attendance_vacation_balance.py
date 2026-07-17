@@ -3,7 +3,7 @@
 假期余额 Excel 导出脚本。
 
 [AI Agent 强制门禁] 调用本脚本前必须先阅读：
-  dingtalk-workspace/references/products/attendance-vacation.md
+  references/attendance-vacation.md
 
 本脚本负责：
   1. 通过 dws attendance vacation types 获取假期规则列表，用于确定列顺序
@@ -86,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "导出假期余额 Excel。AI Agent 必须先读 "
-            "references/products/attendance-vacation.md 再调用本脚本。"
+            "references/attendance-vacation.md 再调用本脚本。"
         ),
     )
     parser.add_argument("--users", required=True, help="userId 或 deptId 列表，逗号分隔")

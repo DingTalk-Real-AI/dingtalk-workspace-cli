@@ -24,19 +24,19 @@ Usage:
   dws sheet find [flags]
 Example:
   # 基本搜索
-  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "销售额"
+  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "销售额"
 
   # 在指定范围内搜索
-  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "合计" --range "A1:D100"
+  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "合计" --range "A1:D100"
 
   # 正则表达式搜索（不区分大小写）
-  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "^total" --use-regexp --match-case=false
+  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "^total" --use-regexp --match-case=false
 
   # 精确匹配整个单元格内容
-  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "完成" --match-entire-cell
+  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "完成" --match-entire-cell
 
   # 搜索公式文本
-  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "SUM" --match-formula
+  dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "SUM" --match-formula
 Flags:
       --node string         表格文档 ID 或 URL (必填)
       --sheet-id string     工作表 ID 或名称 (必填)
@@ -82,19 +82,19 @@ Flags:
 dws sheet list --node <NODE_ID> --format json
 
 # 2. 基本搜索 — 在指定工作表中查找文本
-dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "销售额" --format json
+dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "销售额" --format json
 
 # 3. 在指定范围内搜索
-dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "合计" --range "A1:D100" --format json
+dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "合计" --range "A1:D100" --format json
 
 # 4. 正则搜索（不区分大小写）
-dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "^total" --use-regexp --match-case=false --format json
+dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "^total" --use-regexp --match-case=false --format json
 
 # 5. 精确匹配整个单元格
-dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "完成" --match-entire-cell --format json
+dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "完成" --match-entire-cell --format json
 
 # 6. 搜索公式文本
-dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --find "SUM" --match-formula --format json
+dws sheet find --node <NODE_ID> --sheet-id <SHEET_ID> --query "SUM" --match-formula --format json
 ```
 
 ## 上下文传递

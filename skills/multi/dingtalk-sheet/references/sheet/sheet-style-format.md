@@ -26,7 +26,7 @@
 
 用户说"设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号":
 - 仅设样式不改值 → `range set-style`
-- 批量设置不同 range 的样式 → `range batch-set-style --batch ./styles.json`（内部顺序循环调 `update_range`）
+- 批量设置不同 range 的样式 → `range batch-set-style --batch ./styles.json`（按配置顺序执行多条样式更新）
 - 写值同时附带样式 → `range update --values` 中使用 `cellStyles` 字段（参见 sheet-write-data.md）
 - 请勿用 `range update --values` 写空/重写来模拟纯样式变更
 
@@ -121,7 +121,7 @@ Flags:
 ```
 
 **特性说明**：
-- CLI 侧顺序循环逐条调用 `update_range`（非服务端批量），运行时输出 `[N/M]` 进度
+- CLI 按配置顺序逐条执行样式更新（非原子事务），运行时输出 `[N/M]` 进度
 - 每条记录执行与 `set-style` 一致的校验：至少一项样式字段 + rows ≤ 1000 + rows×cols ≤ 30000 + 枚举合法
 - 默认遇错即停（返回非 0），`--continue-on-error` 时所有条目跑完再返回首个错误
 
@@ -219,7 +219,7 @@ Flags:
 ```bash
 # ── 工作流 4: 写入数据并设置样式 ──
 
-# 1. 写入数据（每个单元格必须是 object；数字也写成字符串）
+# 1. 写入数据
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C3" \
   --values '[[{"type":"text","text":"商品"},{"type":"text","text":"单价"},{"type":"text","text":"数量"}],[{"type":"text","text":"苹果"},{"type":"text","text":"5.5"},{"type":"text","text":"100"}],[{"type":"text","text":"香蕉"},{"type":"text","text":"3.2"},{"type":"text","text":"200"}]]' --format json
 

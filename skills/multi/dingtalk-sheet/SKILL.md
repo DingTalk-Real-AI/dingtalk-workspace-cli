@@ -14,18 +14,14 @@ metadata:
 
 > 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。全部 dingtalk-* skill 已通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
 
-> **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
+## 前置条件 — 执行操作前必读
+
+> **`use_skill(dws-shared)`** — 认证、全局参数（`--format json` / `--yes`）、错误码、URL 模板、跨产品消歧、安全规则与 capability 边界。**执行任何 `dws` 命令前先读；** 单产品的清晰命令可直接用本 skill。
 
 <!-- SAFETY_PREAMBLE_INJECT -->
 
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
-
-
-> 命令参考：[sheet.md](references/sheet.md)；URL 识别与类型探测：[url-patterns.md](references/url-patterns.md)。
-
-## URL 预检（含 alidocs URL 时必读）
-
-输入含 `alidocs.dingtalk.com` URL 时，该域名下存在多种路径格式：`/i/p/...`（分享短链）、`/i/nodes/...`（节点链接，类型需探测）、`/spreadsheetv2/...`（电子表格直链，直接路由到 `sheet`）、`/document/edit|preview?dentryKey=...`（文档链接，路由到 `dingtalk-doc`）等。**必须先读 [url-patterns.md](references/url-patterns.md) 中的「alidocs URL 分流决策」**，按规则识别 URL 类型；仅当确认是在线电子表格（`/spreadsheetv2/...` 或 `i/nodes/` 且 probe 出 `contentType=ALIDOC` + `extension=axls`）时，才继续走本 skill 的命令。
+> 命令参考：[sheet.md](references/sheet.md)。
+> 高频模块：[触发门禁](references/sheet/sheet-triggers.md) · [读取](references/sheet/sheet-read-index.md) · [写入](references/sheet/sheet-write-index.md) · [格式](references/sheet/sheet-format-index.md) · [查询](references/sheet/sheet-query-index.md) · [可视化](references/sheet/sheet-visual-index.md) · [导入](references/sheet/sheet-import.md) · [导出](references/sheet/sheet-export-index.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
@@ -52,9 +48,14 @@ metadata:
 | "创建透视表 / 数据透视" | `dws sheet pivot-table create --node <nodeId或URL> --source "'Sheet1'!A1:D100" --properties '<JSON>'` |
 | "查看透视表" | `dws sheet pivot-table list --node <nodeId或URL> --sheet-id <sheetId>` |
 | "显示 / 隐藏网格线" | `dws sheet show-gridline|hide-gridline --node <nodeId或URL> --sheet-id <sheetId>` |
+| "写入超链接" | `dws sheet range update --node <nodeId或URL> --sheet-id <sheetId> --range A1 --values '[[{"type":"text","text":"显示文本","hyperlink":{"type":"path","link":"https://..."}}]]'` |
 | "追加一行" | `dws sheet append --node <nodeId或URL> --sheet-id <sheetId> --values '[[..]]'` |
-| "查找 / 替换" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --find "<关键词>"` / `dws sheet replace --node <nodeId或URL> --sheet-id <sheetId> --find "<旧值>" --replacement "<新值>"` |
-| "插入图片到单元格" | `dws sheet write-image --node <nodeId或URL> --sheet-id <sheetId> --range A1:A1 --file <本地图片路径>`（CLI 自动上传本地图片并写入单元格；没有 --resource-id/--resource-url 这两个 flag） |
+| "查找 / 替换" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --query "<关键词>"` / `dws sheet replace --node <nodeId或URL> --sheet-id <sheetId> --find "<旧值>" --replacement "<新值>"` |
+| "精确匹配搜索 / 完全等于" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --query "<关键词>" --match-entire-cell` |
+| "搜索公式文本" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --query "<公式片段>" --match-formula` |
+| "正则搜索 / 不区分大小写" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --query "<regexp>" --use-regexp --match-case=false` |
+| "插入图片到单元格" | `dws sheet write-image --node <nodeId或URL> --sheet-id <sheetId> --range A1 --file <图片路径>` |
+| "创建浮动图片" | 先 `dws sheet media-upload --node <nodeId或URL> --file <图片路径>` 获取 `resourceUrl`，再 `dws sheet create-float-image --node <nodeId或URL> --sheet-id <sheetId> --src "<resourceUrl>" --range A1 --width <宽> --height <高>` |
 
 ## URL 与 ID 前置
 
@@ -63,14 +64,19 @@ metadata:
 - 写入类命令必须先用 `dws sheet list --node <nodeId或URL> --format json` 取得真实 `sheetId`；不要猜 `Sheet1`、`sheet1`、`0`。
 - 所有 sheet 子命令使用 `--node` 参数；不要写 `--node-id`、`--file-id` 或把 JSON 字段名 `id` 当成节点值传入。
 
-## 评测高频硬约束
+## 高频硬约束
 
 - `sheet create` 后必须从返回结果提取真实 `nodeId` 或文档 URL，后续 `range update/read` 原样传给 `--node`；如果返回里同时有 `nodeId` 和 `url`，优先用 `nodeId`。
-- 写入区域前先 `sheet list --node <nodeId> --format json` 获取真实 `sheetId`；写入后立即 `range read` 同一区域验证。
+- 写入区域前先 `sheet list --node <nodeId> --format json` 获取真实 `sheetId`。`range update` 返回的 `success` / `updatedRows` / `updatedCells` / `message` 可作为写入确认；仅在任务需要内容校验且用户未禁止额外读取时调用 `range read`。
 - `range update` 的 `--values` 必须是二维 JSON，行列数量与 `--range` 完全一致；批量样式用 `range batch-set-style --batch <json文件>`。
-- 同一参数错误最多纠正 2 次；若持续 `nodeId 格式不合法`，回到 `doc info --node <URL>` 或 `sheet create` 返回重新取 ID，不要无意义重试。
+- 整格超链接只能用 `range update` 的 cell-level `hyperlink` 字段：`{"type":"text","text":"显示文本","hyperlink":{"type":"path","link":"https://..."}}`。不要走 `doc`，不要用 `--hyperlinks`，不要把整格链接写成 richText 片段链接。
+- 搜索必须用 `sheet find`，不要用 `range read` 后本地过滤；“精确/完全匹配/等于”必须加 `--match-entire-cell`，“搜公式”必须加 `--match-formula`，“正则且不区分大小写”必须同时加 `--use-regexp --match-case=false`。
+- 出现 `nodeId 格式不合法` 时，回到 `doc info --node <URL>` 或 `sheet create` 的返回重新提取真实 ID，禁止复用无效值重试。
 
 ## 跨产品协作
 
 - 多维表 / 字段类型 → 切到 `dingtalk-aitable`
 - 把表数据写进文档 → 切到 `dingtalk-doc`
+## 局部意图与 Recipe
+
+- [局部意图消歧](references/intent-guide.md)。

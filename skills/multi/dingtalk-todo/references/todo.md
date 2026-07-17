@@ -38,12 +38,27 @@ Flags:
 Usage:
   dws todo task list [flags]
 Example:
+  dws todo task list --page 1 --size 20
   dws todo task list --page 1 --size 20 --status false
+  dws todo task list --page 1 --size 20 --status false --priority 40,30,10 --role-types creator,executor,participant --plan-finish-date-start "2026-03-01T00:00:00+08:00" --plan-finish-date-end "2026-03-10T18:00:00+08:00"
 Flags:
-      --page string     页码 (默认 1)
-      --size string     每页数量 (默认 20)
-      --status string   true=已完成, false=未完成
+      --page string                     页码 (默认 1)
+      --plan-finish-date-end string     截止时间范围查询结束 ISO-8601 (如 2026-03-10T18:00:00+08:00)
+      --plan-finish-date-start string   截止时间范围查询开始 ISO-8601 (如 2026-03-01T00:00:00+08:00)
+      --priority string                 优先级: 10低/20普通/30较高/40紧急，支持逗号分隔多个值 (如 40,30,10)
+      --role-types string               角色类型: creator/executor/participant，可同时传入多个值用逗号分隔（如 creator,executor），默认 executor
+      --size string                     每页数量 (默认 20)
+      --status string                   true=已完成, false=未完成
 ```
+
+参数说明：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `--priority` | string | 优先级筛选，支持逗号分隔多个值，如 `40,30,10` 表示同时筛选紧急、较高、低优先级 |
+| `--role-types` | string | 按角色筛选，支持 `creator`（创建者）、`executor`（执行者）、`participant`（参与人）；可同时传入多个角色用逗号分隔（如 `creator,executor`），一次查询即可覆盖多个角色，无需分多次调用；默认为 `executor` |
+| `--plan-finish-date-start` | string | 截止时间范围查询开始，ISO-8601 格式，需与 `--plan-finish-date-end` 成对使用 |
+| `--plan-finish-date-end` | string | 截止时间范围查询结束，ISO-8601 格式，需与 `--plan-finish-date-start` 成对使用 |
 
 ### 修改待办任务
 ```
@@ -188,11 +203,9 @@ Flags:
       --task-id string   待办任务 ID (必填)
 ```
 
-返回结构：子待办在**顶层** `subTasks[]` 数组里（不在 `result` 下），每个元素含 `taskId`（子待办 ID）、`subject`、`priority` 等。取子待办的 `taskId` 用于后续操作。`task get` 的 `result.todoDetailModel.subTodos[]` 没有 taskId 字段，取子待办 ID 必须用本命令。
-
 ### 上传待办附件
 
-> ⚠️ 重要：该接口会真实上传文件到附件，不可用于测试或试探性调用。调用前必须确认待办存在。
+> ⚠️ 重要：该接口会上传文件到附件，不可用于测试或试探性调用。调用前必须确认待办存在。
 
 ```
 Usage:
@@ -204,10 +217,7 @@ Flags:
       --task-id string     待办任务 ID (必填)
 ```
 
-返回 `result.attachmentIds`（数组，如 `["6a4cffb79e2b520ed3600960"]`）。
-
 ### 查询待办附件列表
-
 ```
 Usage:
   dws todo task list-attachment [flags]
@@ -216,8 +226,6 @@ Example:
 Flags:
       --task-id string   待办任务 ID (必填)
 ```
-
-返回顶层 `attachments[]`，每个元素含 `attachmentId`、`fileName`、`fileSize`；无附件时为空数组。
 
 ### 删除待办附件
 
@@ -233,7 +241,7 @@ Flags:
       --attachment-id string   待办附件 ID (必填)
       --task-id string         待办任务 ID (必填)
 ```
-附件 attachmentId 使用 `dws todo task list-attachment` 命令获取（顶层 `attachments[].attachmentId`）。删除后可再 `list-attachment` 复查，返回空数组即成功。
+附件 attachmentId 使用 `dws todo task list-attachment` 命令获取。
 
 ### 添加待办提醒
 ```
@@ -307,13 +315,17 @@ JSON 数组，每个元素为一条提醒规则，支持两种 `baseTime` 模式
 用户说"移除参与人/删除参与者" → `task remove-participant`
 用户说"给待办加个提醒/设置提醒" → `task add-reminder`
 用户说"重置提醒/清除提醒/修改提醒规则" → `task reset-reminder`
+用户说"查看子待办/子任务列表" → `task list-sub`
+用户说"给待办加个附件/上传附件" → `task add-attachment`
+用户说"查看待办附件/附件列表" → `task list-attachment`
+用户说"删除附件/移除附件" → `task remove-attachment`
 
 关键区分: todo(个人待办)
 
 ## 核心工作流
 
 ```bash
-# 1. 创建待办 — 从返回 result.taskId 提取任务 ID
+# 1. 创建待办 — 提取 todoTaskId
 dws todo task create --title "修复线上Bug" --executors userId1,userId2 \
   --priority 40 --due "2026-03-10T18:00:00+08:00" --format json
 
@@ -368,26 +380,27 @@ dws todo task reset-reminder --task-id <taskId> --format json
 # 17. 重置待办提醒（指定新规则）
 dws todo task reset-reminder --task-id <taskId> --reminder-rules '<reminderRules>' --format json
 
-# 18. 上传附件（真实上传，先确认待办存在）— 从返回 result.attachmentIds 取 attachmentId
-dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json
-# 19. 查询附件列表 — 从顶层 attachments[].attachmentId 取 ID
-dws todo task list-attachment --task-id <taskId> --format json
-# 20. 删除附件（用户确认后加 --yes；删完可 list-attachment 复查为空）
-dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --yes --format json
-# 21. 查询子待办 — 从顶层 subTasks[].taskId 取子待办 ID
+# 18. 查询子待办列表
 dws todo task list-sub --task-id <taskId> --format json
+# 19. 上传待办附件
+dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json
+# 20. 查询待办附件列表
+dws todo task list-attachment --task-id <taskId> --format json
+# 21. 删除待办附件
+dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --yes --format json
 ```
 
 ## 上下文传递表
 
 | 操作 | 从返回中提取 | 用于                                          |
 |------|-------------|---------------------------------------------|
-| `task create` / `task create-sub` | `result.taskId` | update/done/get/delete/comment 的 --task-id  |
-| `task list` | `result.todoCards[].taskId` | update/done/get/delete/comment/add-executor/remove-executor/add-participant/remove-participant 的 --task-id |
-| `task list-sub` | `subTasks[].taskId`（顶层数组，不在 `result` 下） | 子待办的后续操作 --task-id |
-| `add-attachment` | `result.attachmentIds[]` | 新上传附件的 attachmentId |
-| `list-attachment` | `attachments[].attachmentId`（顶层数组） | `remove-attachment` 的 --attachment-id |
-| `comment list` | `result.comments[].id` | `comment delete` 的 --comment-id             |
+| `task create` | `todoTaskId` | update/done/get/delete 的 --task-id          |
+| `task list` | `result[].id` | update/done/get/delete 的 --task-id          |
+| `task create` | `todoTaskId` | update/done/get/delete/comment 的 --task-id  |
+| `task list` | `result[].id` | update/done/get/delete/comment/add-executor/remove-executor/add-participant/remove-participant 的 --task-id |
+| `task get` | `result.todoDetailModel.subTodos[]` | 获取子待办列表，提取子待办的 `taskId` 用于后续操作              |
+| `comment list` | `result[].commentId` | `comment delete` 的 --comment-id             |
+| `task list-attachment` | `result[].attachmentId` | `task remove-attachment` 的 --attachment-id |
 
 ## 注意事项
 
@@ -397,6 +410,9 @@ dws todo task list-sub --task-id <taskId> --format json
 - `--recurrence`：仅在与 `--due` 同时设置时有效；当前仅支持按天循环。字符串内需含换行，示例：`DTSTART:20260320T020000Z\nRRULE:FREQ=DAILY;INTERVAL=1`（DTSTART 表示首次截止时间，需与业务约定一致）
 - 若用户的真实诉求是“到点提醒我”，需要先说明能力边界；当前 CLI 只能表达 deadline / recurrence，不能表达独立 reminder schedule
 - `task list` 的 `--status` 对应 MCP `get_user_todos_in_current_org` 的 `todoStatus` 参数
+- `task list` 的 `--priority` 支持逗号分隔多个优先级值（如 `40,30,10`），用于同时筛选多个优先级
+- `task list` 的 `--role-types` 支持 `creator`/`executor`/`participant`，可在一次调用中同时传入多个角色用逗号分隔（如 `--role-types creator,executor`），无需分多次查询；不传时默认按 `executor` 查询
+- `task list` 的 `--plan-finish-date-start` 与 `--plan-finish-date-end` 用于按截止时间范围筛选，需成对使用，格式为 ISO-8601
 - todo 是个人待办管理产品
 - `task update` 可同时修改标题/优先级/截止时间/完成状态
 - `task done` 专用于修改执行者的完成状态，与 `task update --done` 作用不同
@@ -407,9 +423,10 @@ dws todo task list-sub --task-id <taskId> --format json
 - 执行人 (executor) 与参与人 (participant) 的区别：执行人负责完成待办，参与人仅关注待办进度
 - `task add-reminder` 用于为待办添加提醒，`--base-time` 支持 `dueTime`（基于截止时间偏移，待办必须有截止时间）和 `customTime`（自定义时间戳）两种模式
 - `task reset-reminder` 用于重置待办提醒规则，不传 `--reminder-rules` 则清除所有提醒
-- `task add-attachment` / `list-attachment` / `remove-attachment` 三条附件命令均可用；`add-attachment` 会真实上传文件，勿用于试探性调用，先确认待办存在
-- 附件 ID 的取法：`add-attachment` 从 `result.attachmentIds[]` 取，`list-attachment` 从顶层 `attachments[].attachmentId` 取；`remove-attachment` 用 `--attachment-id` + `--yes`
-- 子待办 ID 只能从 `task list-sub` 的顶层 `subTasks[].taskId` 取；`task get` 的 `result.todoDetailModel.subTodos[]` 没有 taskId 字段
+- `task list-sub` 用于查询指定待办的子待办列表，需通过 `task list` 或 `task create` 获取父待办 ID
+- `task add-attachment` 用于上传本地文件作为待办附件，`--file-path` 为本地文件绝对路径；该操作不可逆，调用前必须确认待办存在
+- `task list-attachment` 用于查询指定待办的附件列表
+- `task remove-attachment` 用于删除待办附件，为不可逆操作，执行前需用户确认；`--attachment-id` 可通过 `task list-attachment` 获取
 
 
 ## 自动化脚本

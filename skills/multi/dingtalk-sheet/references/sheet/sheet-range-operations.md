@@ -22,6 +22,11 @@
 - 自动填充 → `range fill`
 - 请勿用 `range read` 读取源数据后手动计算规律再 `range update` 写入，`range fill` 支持服务端智能填充
 
+用户说"批量清除/批量操作/一次执行多个写操作/原子批量/先清除再写入":
+- 批量清除多个区域 → `range batch-clear`
+- 组合多个不同写操作 → `batch-update`
+- 详见 [sheet-batch-operations](./sheet-batch-operations.md)
+
 用户说"复制区域/把这块数据复制到/复制到另一个工作表":
 - 复制区域 → `range copy-to`
 - 跨工作表 → `range copy-to --target-sheet-id Sheet2` 或 `--target-range "Sheet2!A1"`
@@ -82,10 +87,8 @@ Flags:
       --sheet-id string        工作表 ID 或名称 (必填)
       --source-range string    源数据范围，A1 表示法 (必填)
       --target-range string      目标填充范围，A1 表示法 (必填)
-      --fill-type string       填充类型: 不传则自动检测 / copy(复制) / onlystyle(仅格式) / withoutstyle(仅值)
+      --fill-type string       填充类型: series(序列,默认) / copy(复制) / onlystyle(仅格式) / withoutstyle(仅值)
 ```
-
-`--fill-type` **不传时自动检测**（根据源数据智能判断：数值序列递增、日期递增、文本复制等），这是填序列的默认行为，无需显式传值。`--help` 枚举的可选值只有 `copy` / `onlystyle` / `withoutstyle`；服务端另外也接受 `series`（强制按序列填充），但它不在 `--help` 列表里，一般用不到——要序列递增直接不传 `--fill-type` 即可。
 
 目标范围须与源范围在行或列维度对齐（不支持对角填充）。
 
@@ -144,6 +147,8 @@ Flags:
 |------|-------------|------|
 | `list` | 工作表的 `sheetId` | range clear / range sort / range fill / range copy-to / range move-to 的 --sheet-id |
 
+> **批量操作**（`range batch-clear` / `batch-update`）已拆分至 [sheet-batch-operations](./sheet-batch-operations.md)，含写入边界 + 回读校验规范、典型组合场景示例等。
+
 ## 注意事项
 
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询真实的 `sheetId` / 工作表名称后再调用，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）；用户仅给出工作表名称时，也应通过 `list` 校验该名称是否存在，避免名称大小写或拼写不一致导致失败
@@ -153,3 +158,4 @@ Flags:
 - ★ **排序用 `range sort` 不用 `range read` + 客户端排序 + `range update`**：服务端原子操作，支持多级排序
 - ★ **排序前必须 `range read` 前几行判断表头**：读取排序范围前 3-5 行，对比首行与后续行的数据模式（类型、语义）来判断是否有表头。禁止不读就排，表头被排入数据不可撤销
 - ★ **填充用 `range fill` 不用 `range read` + 手动计算 + `range update`**：服务端智能填充，支持序列递增、公式扩展等
+- ★ **批量操作详见 [sheet-batch-operations](./sheet-batch-operations.md)**：`range batch-clear` 多区域清除、`batch-update` 组合写操作，均原子事务

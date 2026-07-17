@@ -1,6 +1,6 @@
 # 日志 (report) 命令参考
 
-> **注意**：钉钉日志 = 「OA 周报应用」（按模版填报 / 收件箱 / 已发列表 / 统计），不是通用日志或记录系统。`dws report` 与其别名 `dws log` 自动由 envelope 注册——`dws report --help` 输出会列出全部别名，文档不再单独声明。
+> 命令别名: `dws log` 等价于 `dws report`（注意：此处 `log` 特指 OA 周报应用，不是通用日志/记录）
 
 ## 载体辨义（首屏必读）
 
@@ -22,8 +22,8 @@
 
 - `dws report inbox list` = 列出**我收到**的日报（别人发给我的）。
 - `dws report outbox list` = 列出**我发出**的日报（我创建或提交的）。
-- `dws report entry get --report-id <reportId>` = 读取单份日报正文 + 钉钉跳转链接。
-- `dws report entry stats --report-id <reportId>` = 读取单份日报的已读统计。
+- `dws report entry get --report-id <reportId> --format json` = 读取单份日报正文 + 钉钉跳转链接。
+- `dws report entry stats --report-id <reportId> --format json` = 读取单份日报的已读统计。
 - `dws report entry submit --template-id ... --contents-file ...` = 按模版提交一份新日报。
 - `dws report template list` = 列出可用日报模版。
 - `dws report template get --name "<模版名>"` = 读取单个模版的字段定义（contents 拼装来源）。
@@ -31,29 +31,46 @@
 | 用户意图 | 第一条有效指令 | 后续动作 |
 |----------|----------------|----------|
 | 查我发过的日志 / 我创建的日志 | `dws report outbox list --cursor 0 --size 20 --format json` | 从返回里取 `reportId`，再执行 `dws report entry get --report-id <reportId> --format json` |
-| 查我收到的日志 / 别人发给我的日志 | `dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json` | 必须先按用户时间词补齐完整 ISO 起止时间；取 `reportId` 后调用 `entry get` |
+| 查我收到的日志 / 别人发给我的日志 | `dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json` | 必须先按用户时间词补齐完整 ISO 起止时间；用户只说“最近/近期/最近收到”时默认最近 7 天；取 `reportId` 后调用 `entry get` |
+| 按发件人查收到的日志 | 先 `dws aisearch person --keyword "<姓名>" --dimension name --format json`，再 `dws report inbox list ... --sender-user-ids <userId/staffId> --format json` | 只能在收件箱中过滤发件人；没有匹配时说明未找到，不得改选其他发件人 |
 | 查看某条日志正文 / 日志详情 | `dws report entry get --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
+| 总结最近收到的日志 / 汇总多篇日志内容 | 先 `dws report inbox list ... --size 20 --format json`，选前 5 篇或实际返回数量，再对每个 `reportId` 逐条执行 `dws report entry get --report-id <reportId> --format json` | 不得只调用一次 list 后直接总结；不得把多篇合并成一次 detail 调用 |
 | 查某条日志统计 / 已读统计 | `dws report entry stats --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
 | 查日志模版 / 有哪些周报模板 | `dws report template list --format json` | 需要字段定义时继续 `dws report template get --name "<模版名>" --format json` |
 | 提交 / 填写 / 创建钉钉日志 | `dws report template list --format json` | 再 `template get` 取字段定义，最后 `entry submit`；禁止直接编 contents |
+
+### 句式映射补充（Agent 必须遵守）
+
+| 用户说法 | 必须执行 | 禁止行为 |
+|----------|---------|----------|
+| "有哪些日志模板 / 日报模板 / 模板列表 / 有什么模板可以用" | `dws report template list --format json` | 禁止 ai-seek / enterprise_search 等通用搜索代理绕行 |
+| "日报模板 / 周报模板"（指定类型） | 先 `dws report template list --format json`，再从返回结果中按名称包含「日报」或「周报」筛选 | 不得虚构模板；不得跳过 `template list` 直接编造模板名 |
+| "今天收到的日志 / 最近收到的日志 / 别人发我的日志" | `dws report inbox list --start ... --end ... --cursor 0 --size 20 --format json`；“最近/近期/最近收到”默认最近 7 天 | 禁止 grep_search / session_search / ai-seek 替代 |
+| "过山发给我的日志 / 按发件人查收件箱" | 先 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 ID，再 `dws report inbox list ... --sender-user-ids <id> --format json` | 禁止用 `outbox list --user-id` 查他人已发日志；禁止返回其他发件人的日志 |
+| "总结最近收到的 5 篇日志 / 合并多篇日志内容" | 先 `inbox list` 获取候选，再对选中的每个 `reportId` 逐条 `dws report entry get --report-id <ID> --format json` | 禁止停在 skill 激活或反问时间范围；不足 5 篇按实际数量总结并说明 |
+| "日志模板详情 / 模板具体结构 / 模板有哪些字段" | 两步：① `dws report template list --format json` 获取模板名 → ② `dws report template get --name "<模版名>" --format json` | 禁止跳过第①步直接猜模板名调 `template get` |
+| "日志ID xxx 详情 / 查一下日志编号 xxx" | 直接 `dws report entry get --report-id <ID> --format json` | 禁止反问用户确认 ID 是否正确；返回不存在则如实告知，不得虚构 |
+| "我创建的 / 我发过的 / 已发的日志" | `dws report outbox list --cursor 0 --size 20 --format json` | 禁止用 `dws report inbox list` 替代 |
 
 效率约束：
 
 - 不要先调用 `dws report --help` / `dws report inbox list --help`。本页已经给出可执行命令。
 - 查询收到的日志统一使用 `dws report inbox list`；查询发出的日志统一使用 `dws report outbox list`。
 - 不要为了格式化结果创建脚本。直接从 JSON 里抽取关键字段，返回用户可读列表。
-- 对"最近一周"这类常用查询，直接把当前日期换算成 7 天窗口后执行一次 `inbox list`；如返回分页标记再继续翻页。
+- 对"最近 / 近期 / 最近收到 / 最近一周"这类常用查询，直接把当前日期换算成最近 7 天窗口后执行一次 `inbox list`；如返回分页标记再继续翻页。
+- `--size` 最大只能传 20；需要更多结果时按 `cursor` 分页，禁止传 50/100。
 
 时间窗口默认规则：
 
 - `outbox list` 不传 `--start` / `--end` 时 CLI 默认最近 20 天，适合"我发过的日志 / 最近日志"。
-- `inbox list` 必须传 `--start` / `--end`；用户说"最近一周/今天/本周/昨天"时，Agent 必须先转成 `YYYY-MM-DDT00:00:00+08:00` 到 `YYYY-MM-DDT23:59:59+08:00`。
+- `inbox list` 必须传 `--start` / `--end`；用户说"最近/近期/最近收到/最近一周/今天/本周/昨天"时，Agent 必须先转成 `YYYY-MM-DDT00:00:00+08:00` 到 `YYYY-MM-DDT23:59:59+08:00`，其中“最近/近期/最近收到”默认最近 7 天。
 - 查更早日志时每次窗口不要超过 20 天，按窗口滚动查询。
 
 时间参数硬约束：
 
 - 只允许使用 `--start` 和 `--end` 两个 flag；禁止写 `--start-date`、`--end-date`、`--date`、`startDate`、`endDate`。
 - 时间值推荐使用完整 ISO-8601 + 时区格式：`YYYY-MM-DDTHH:mm:ss+08:00`。
+- 必须使用 Asia/Shanghai 的 `+08:00` 时区；禁止用 UTC `Z`、`date -u` 或无时区裸时间。
 - Agent 不要只传裸日期；即使 CLI 能兼容 `YYYY-MM-DD`，生成命令时也必须展开成当天起止时间，避免工具层把日期误解析成普通字符串。
 - "最近一周"固定展开为：起始日 `T00:00:00+08:00`，结束日 `T23:59:59+08:00`。
 
@@ -81,6 +98,15 @@ dws report entry get --report-id <reportId> --format json
 dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json
 dws report entry get --report-id <reportId> --format json
 
+# 按发件人过滤收件箱
+dws aisearch person --keyword "<姓名>" --dimension name --format json
+dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --sender-user-ids <userId或staffId> --cursor 0 --size 20 --format json
+
+# 总结最近收到的多篇日志
+dws report inbox list --start "<最近7天起点+08:00>" --end "<当天终点+08:00>" --cursor 0 --size 20 --format json
+dws report entry get --report-id <第1篇reportId> --format json
+dws report entry get --report-id <第2篇reportId> --format json
+
 # 已知 reportId
 dws report entry get --report-id <reportId> --format json
 ```
@@ -101,7 +127,7 @@ dws report entry get --report-id <reportId> --format json
 | 查看详情 | 从 `_internalDetailCommands[].command` 取内部详情命令；面向用户展示为“查看详情”，不要展示命令本身 |
 | 钉钉链接 | 详情接口返回 `dingtalkOpenMarkdownLink` / `dingtalkOpenUrl` / `result.url` 后，展示成 markdown 链接 |
 
-CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本直接输出。`report inbox list` / `report outbox list` 会对当前页 `result[]` 中所有带 `reportId` 的日志逐条调用 `dws report entry get --report-id <reportId> --format json` 补齐展示字段；返回 JSON 会携带 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdown`、`agentDisplayMarkdownHeader` 等字段，这些是面向 Agent 的强制展示合同，不是可选建议。Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出带可点击 `钉钉链接` 列的表格；不要自行重组列，不要改表头。
+CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本直接输出。`report inbox list` / `report outbox list` 用于定位候选日志和展示列表；返回 JSON 可能携带 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdown`、`agentDisplayMarkdownHeader` 等字段，这些是面向 Agent 的强制展示合同，不是可选建议。用户只要列表时，Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出带可点击 `钉钉链接` 列的表格；不要自行重组列，不要改表头。用户要正文、详情、统计、汇总或总结多篇日志时，列表只负责提供 `reportId`，必须再显式逐条调用 `dws report entry get` 或 `dws report entry stats`。
 
 展示列按方向区分：`inbox list` 是收件箱，只展示 `日期 | 标题 | 发送人 | 状态 | 钉钉链接`，**禁止返回或展示日志正文、完整内容或日志内容摘要**；`outbox list` 是发件箱，可展示 `日期 | 标题 | 发送人 | 状态 | 日志内容 | 钉钉链接`，其中 `日志内容` 来自详情补齐，方便用户快速确认自己发出的内容。凡用户说"列出 / 找到 / 查询 / 搜索 / 看看日志"，默认都要在 final reply 渲染 Markdown 表；只有用户明确表示"不关心列表内容 / 只要原始 JSON / 只要数量 / 只要 ID"时，才可以不渲染表。推荐用户可读输出：
 
@@ -116,8 +142,8 @@ CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本
 - 详情阶段：`entry get` 返回里如果有 `dingtalkOpenMarkdownLink`，优先把操作列替换为该 markdown 链接；否则用 `dingtalkOpenUrl` 或 `result.url` 包成 `[在钉钉中查看日志](url)`。
 - `钉钉链接` 是强制列：禁止省略、改名、合并到标题里，也禁止改成不含链接列的摘要表。
 - 不要在用户表格里展示 `_internalDetailCommands`、raw `reportId`、raw `dingtalk://...`。链接必须是 markdown 可点击文本。
-- `dws report inbox list` 默认会对当前页所有可查看日志自动补 `entry get`，但只返回日期、标题、发送人、状态与可点击钉钉链接；需要正文时必须显式调用 `dws report entry get --report-id ... --format json`。
-- `dws report outbox list` 默认会对当前页所有可查看日志自动补 `entry get`，并可把 `日志内容` 纳入发件箱表格展示。
+- `dws report inbox list` 列表阶段只用于展示和定位；需要正文、详情、汇总或总结时必须显式调用 `dws report entry get --report-id ... --format json`。
+- `dws report outbox list` 列表阶段只用于展示和定位；即使返回中带摘要或部分内容，用户要求正文、详情或统计时仍必须继续调用 `entry get` / `entry stats`。
 
 只有在用户明确要求"给我日志 ID / 方便我后续查询"时，才额外展示 `reportId`。否则 final reply 应保留可读信息，并说明"需要看正文或打开钉钉，我可以继续打开某一条"。
 
@@ -206,7 +232,7 @@ Usage:
   dws report entry get [flags]
 Example:
   # 先通过 report inbox list / outbox list / entry submit 取得 reportId，再查正文与跳转链接
-  dws report entry get --report-id <reportId>
+  dws report entry get --report-id <reportId> --format json
 Flags:
       --report-id string   日志 ID (必填)
 ```
@@ -225,11 +251,11 @@ Flags:
 Usage:
   dws report inbox list [flags]
 Example:
-  dws report inbox list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20
-  dws report inbox list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --sender-user-ids staffId1,staffId2
+  dws report inbox list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20 --format json
+  dws report inbox list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --sender-user-ids staffId1,staffId2 --format json
   # 禁止：--start-date / --end-date / --date
   # 从列表结果提取 reportId 后，再查正文
-  dws report entry get --report-id <reportId>
+  dws report entry get --report-id <reportId> --format json
 Flags:
       --cursor int                分页游标，首次传 0 (默认 0)
       --end string                结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
@@ -239,14 +265,14 @@ Flags:
 ```
 
 
-`inbox list` 默认返回 JSON-first 结构：不会把 Markdown 表作为裸文本直接输出，但 JSON 里会返回 `agentDisplayMarkdown`。Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出表格；不要基于个人偏好重新摘要。表头固定且必须逐字为 `| 日期 | 标题 | 发送人 | 状态 | 钉钉链接 |`，并按返回顺序展示（CLI 已按创建时间从近到远排序）。返回 JSON 中的 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdownHeader` 都是强制展示合同。凡用户说"列出 / 找到 / 查询 / 搜索 / 看看日志"，final reply 默认必须渲染这张 Markdown 表；只有用户明确表示"不关心列表内容 / 只要原始 JSON / 只要数量 / 只要 ID"时，才可以不渲染表。`result[]` 每项都包含且只展示这五个字段：`日期`、`标题`、`发送人`、`状态`、`钉钉链接`。`钉钉链接` 是强制可点击 markdown 链接列，禁止省略、改名、合并到标题里；`inbox list` 禁止返回或展示 `日志内容` / `日志内容摘要`。`reportId` 不在主结果里，只通过 `_internalDetailCommands` 保留给 Agent 后续调用 `entry get` / `entry stats`；final reply 禁止展示 `_internalDetailCommands`、毫秒时间戳、raw ID 或日志正文。
+`inbox list` 默认返回 JSON-first 结构：不会把 Markdown 表作为裸文本直接输出，但 JSON 里会返回 `agentDisplayMarkdown`。Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出表格；不要基于个人偏好重新摘要。表头固定且必须逐字为 `| 日期 | 标题 | 发送人 | 状态 | 钉钉链接 |`，并按返回顺序展示（CLI 已按创建时间从近到远排序）。返回 JSON 中的 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdownHeader` 都是强制展示合同。凡用户说"列出 / 找到 / 查询 / 搜索 / 看看日志"，final reply 默认必须渲染这张 Markdown 表；只有用户明确表示"不关心列表内容 / 只要原始 JSON / 只要数量 / 只要 ID"时，才可以不渲染表。`result[]` 每项都包含且只展示这五个字段：`日期`、`标题`、`发送人`、`状态`、`钉钉链接`。`钉钉链接` 是强制可点击 markdown 链接列，禁止省略、改名、合并到标题里；`inbox list` 禁止返回或展示 `日志内容` / `日志内容摘要`。Agent 必须从 `result[]` 或 `_internalDetailCommands` 保留每条日志的 `reportId` 和时间字段，用于后续 `entry get` / `entry stats`；final reply 禁止展示 `_internalDetailCommands`、毫秒时间戳、raw ID 或日志正文。
 
 ### 读取单份日报的已读统计
 ```
 Usage:
   dws report entry stats [flags]
 Example:
-  dws report entry stats --report-id <reportId>
+  dws report entry stats --report-id <reportId> --format json
 Flags:
       --report-id string   日志 ID (必填)
 ```
@@ -257,11 +283,11 @@ Flags:
 Usage:
   dws report outbox list [flags]
 Example:
-  dws report outbox list --cursor 0 --size 20
-  dws report outbox list --cursor 0 --size 20 --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00"
-  dws report outbox list --cursor 0 --size 20 --template-name "日报"
+  dws report outbox list --cursor 0 --size 20 --format json
+  dws report outbox list --cursor 0 --size 20 --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --format json
+  dws report outbox list --cursor 0 --size 20 --template-name "日报" --format json
   # 从列表结果提取 reportId 后，再查正文
-  dws report entry get --report-id <reportId>
+  dws report entry get --report-id <reportId> --format json
 Flags:
       --cursor int            分页游标，首次传 0 (默认 0)
       --size int              每页条数，最大 20 (默认 20)，别名: --limit
@@ -288,7 +314,7 @@ Flags:
 读取已有日志内容时，统一按下面两步走，不要把列表接口当正文接口：
 
 1. `dws report inbox list ...` 或 `dws report outbox list ...`，先拿到目标日志的 `reportId`
-2. `dws report entry get --report-id <reportId>`，再读取正文和字段明细
+2. `dws report entry get --report-id <reportId> --format json`，再读取正文和字段明细
 
 适用场景：
 
@@ -343,8 +369,8 @@ dws report outbox list --cursor 0 --size 20 --format json
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `template list` | template 名称（`items[].report_template_name`；顶层键只有 `items` 和 `success`，**无 `result` 包裹**） | `template get` 的 --name |
-| `template list` | `items[].report_template_id` | `entry submit` 的 --template-id |
+| `template list` | template 名称（result.items[].report_template_name） | `template get` 的 --name |
+| `template list` | `report_template_id` | `entry submit` 的 --template-id |
 | `template get` | `result.report_template_fields[].field_name` / `field_sort` / `field_type` | 拼 `entry submit` 的 --contents JSON（按下表映射）|
 | `entry submit` | `reportId`、`dingtalkOpenMarkdownLink`、`dingtalkOpenUrl`（CLI 自动反查详情后追加）| final reply 优先直接使用 `dingtalkOpenMarkdownLink`；需要结构化展示时用 `dingtalkOpenLink.title` + `dingtalkOpenLink.url` |
 | `inbox list` / `outbox list` | `reportId` | `entry get` / `entry stats` 的 --report-id |
@@ -376,11 +402,11 @@ dws report outbox list --cursor 0 --size 20 --format json
 | Code | ExitCode | 真实含义 | 建议动作 |
 |------|---------|---------|---------|
 | `INPUT_INVALID_JSON` | 3 | `--contents` 或 `--contents-file` 内容非合法 JSON | 检查 JSON 数组结构，每项必须是 object，含 `key`/`sort`/`content`/`contentType`/`type` 五个字段 |
-| `INPUT_FILE_NOT_FOUND` | 3 | `--contents-file` 指向的文件不存在（路径必须在当前工作目录 CWD 之下）| 确认文件存在且位于 CWD 内；把 contents JSON 写到 CWD 下的相对路径再传 |
-| `INPUT_INVALID_PATH` | 3 | `--contents-file` 路径越出当前工作目录（如 `/tmp`、`os.tmpdir()`、`../` 或指向目录外的符号链接）| **不要**用 `/tmp` / `os.tmpdir()` / `../`；把 contents JSON 写到当前工作目录之下再传 |
+| `INPUT_FILE_NOT_FOUND` | 3 | `--contents-file` 路径不存在 / sandbox OS 风格不匹配（macOS 路径在 Windows 沙箱）| 先确认 sandbox OS 与路径风格；改写到 `os.tmpdir()` 等可移植目录 |
 | `INPUT_MISSING_PARAM` | 3 | `--template-id` / `--contents` 必填缺失 | 显式传值；从 `template list` 取合法 templateId |
 | `INPUT_TOO_LARGE` | 3 | contents JSON 超过 10MB 限制 | **不支持分批次提交**。需精简内容或拆分为多个独立日志分别提交 |
-| `MCP_TOOL_ERROR` / `[UNCLASSIFIED] business error` | 1 | 服务端业务错，`success=false`、`code=1`。覆盖：submit 时 templateId 错 / 字段名错 / 字段值错 / contents 空（`server_error_code: PARAM_ERROR`）；`entry get` / `entry stats` 传了不存在的 reportId（`server_error_code: BUSINESS_ERROR`，technical_detail 含 `report not exist`）；`template get` 传了不存在的模版名（`server_error_code: PARAM_ERROR`）| 查看 `server_error_code` / `technical_detail`；reportId / 模版名找不到时先用 `inbox list` / `outbox list` / `template list` 重新取合法值，不要猜；submit 类错误按链路重走 `template list → template get → entry submit`，连续 ≥ 2 次仍失败必须停止重试，降级 final_reply |
+| `MCP_TOOL_ERROR` | 1 | 服务端业务错（含 `server_error_code: PARAM_ERROR`，覆盖 templateId 错 / 字段名错 / 字段值错 / contents 空等多种形态）| 查看 `server_error_code` / `technical_detail`；服务端不区分具体子错因，按提交链路重新走 `template list → template get → entry submit`；连续 ≥ 2 次仍失败必须停止重试，降级 final_reply |
+| `RESOURCE_NOT_FOUND` | 1 | reportId / templateId 在服务端找不到 | 用 `list` 或 `template list` 重新获取 |
 
 ## 何时停止重试
 

@@ -5,6 +5,7 @@
 用户说"写数据/填表/更新单元格/写入公式":
 - 从 DataFrame/结构化对象一次写入一个或多个工作表 → `table-put`
 - 更新数据 → `range update`
+- 写入公式前先读 [sheet-formula](./sheet-formula.md)；写完必须回读公式文本和计算结果，不能只看写入返回成功
 - 【强制】`--sheet-id` 必填：即使是单工作表也不能省略，不要参照 `range read` 的默认行为；未知时先执行 `dws sheet list --node <NODE_ID> --format json` 获取 `sheetId`，禁止凭空臆测为 `Sheet1`、`sheet1`、`0`、`default` 等
 - 注意：如果用户的目的是替换文本、移动行列、追加空行空列、清空区域、排序、填充、复制区域或移动区域，请勿使用 `range update`，必须使用对应的专用命令（`replace`/`move-dimension`/`add-dimension`/`range clear`/`range sort`/`range fill`/`range copy-to`/`range move-to`）
 - **批量纯值写入优先用 `csv-put`**：当写入场景同时满足以下条件时，必须优先使用 `csv-put` 而非 `range update`：(1) 写入的是纯值（不含公式、超链接、dataValidation、cellStyles、richText）；(2) 数据量较大（超过 5 行或超过 20 个单元格）；(3) 数据来源为表格/CSV 文本/结构化文本。`csv-put` 无需手动构造二维 JSON 数组，直接传 CSV 文本即可，更简洁高效且支持自动扩容
@@ -29,6 +30,8 @@
 | 原始值（纯数字/字符串） | 支持 | 支持 | 支持 | 支持 |
 | 自动定位末尾 | mode=append | 不支持 | 支持 | 不支持 |
 | 自动扩容行列 | 支持 | 不支持 | 支持 | 支持 |
+
+`range update` 用于公式、超链接、dataValidation、richText 和少量 cellStyles 等精确单元格写入；`append` 只做末尾追加；`csv-put` 面向大批量纯值；`table-put` 面向多工作表结构化数据。公式写入流程见 [sheet-formula](./sheet-formula.md)；写入后至少回读 `formula` 模式确认公式文本，再回读 `raw_value` 或展示值检查计算结果。
 
 ## 命令详细参考
 
@@ -80,7 +83,7 @@ Flags:
       --values string     单元格内容，二维 JSON 数组 (必填)；每个元素必须是 object：{type:text,text:...}、{type:richText,texts:[...]}、{dataValidation:...}、{cellStyles:...}、{hyperlink:...} 或 {}（详见下文 values 参数格式说明）
 ```
 
-**合并单元格注意（`range update`）**：这里说的是 `range update` 写入单元格对象这一路径，不是所有写入命令的统一行为。目标范围与已有合并区域冲突时，MCP 服务端会拦截并返回 `MERGED_CELLS_CONFLICT` 错误，错误消息中通常会列出具体冲突的合并区域地址。收到此错误时按以下流程处理：
+**合并单元格注意（`range update`）**：这里说的是 `range update` 写入单元格对象这一路径，不是所有写入命令的统一行为。目标范围与已有合并区域冲突时，服务端会拦截并返回 `MERGED_CELLS_CONFLICT` 错误，错误消息中通常会列出具体冲突的合并区域地址。收到此错误时按以下流程处理：
 1. 从错误消息中获取冲突的合并区域地址（如 `A1:B2, C3:D4`），或通过 `dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json` 查询完整的合并区域列表（`mergedRanges` 数组）
 2. 用 `dws sheet unmerge-cells --range <冲突区域>` 取消这些合并
 3. 执行 `range update` 写入数据
@@ -93,6 +96,8 @@ Flags:
 **何时该用 `csv-put` 替代**：如果你准备用 `range update` 写入纯值（不含公式、超链接、富文本对象），且数据量超过 5 行或 20 个单元格，应改用 `csv-put`——它接受 CSV 文本直接写入，无需手动拼装二维 JSON 数组，且支持自动扩容行列。仅在需要写入公式（`=SUM(...)`）、单元格级超链接、富文本对象或修改少量单元格时才使用 `range update`。
 
 **范围职责**：`range update` 负责写入单元格内容（原始值/公式/富文本对象），并支持通过 `cellStyles` 附带 per-cell 样式。如需批量设置整片区域的样式（不写值），请使用 `dws sheet range set-style`。
+
+**公式回读要求**：公式用 `{"type":"text","text":"=..."}` 写入。写完后先执行 `range read --value-render-option formula` 确认公式文本，再执行 `range read --value-render-option raw_value` 检查计算结果和错误值。详见 [sheet-formula](./sheet-formula.md)。
 
 ### 在工作表末尾追加数据
 ```
@@ -116,11 +121,9 @@ Flags:
 Usage:
   dws sheet csv-put [flags]
 Example:
-  # 内联多行 CSV：必须用 $'...' 让 \n 变成真换行；普通单引号 '...\n...' 里的 \n 是字面量，会写成一行含字面 \n 的错误数据
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 \
-    --csv $'name,score\nAlice,95\nBob,87'
+    --csv 'name,score\nAlice,95\nBob,87'
 
-  # 多行数据推荐用 @文件，最稳妥
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell B2 \
     --csv @data.csv --allow-overwrite
 
@@ -140,7 +143,7 @@ Flags:
 将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。
 - **分隔符必须是英文逗号 `,`**（ASCII 0x2C），禁止使用中文逗号 `，`（U+FF0C）。中文逗号不会被识别为分隔符，会导致整行被写入同一个单元格。生成 CSV 内容时务必检查分隔符
 - 只写纯值，不支持公式/样式/批注。`=` 开头的内容当文本处理，不会被解析为公式
-- 数字/日期/百分数由表格引擎自动识别类型（如 `95` 存为数字，`2025-03-01` 存为日期）
+- 数字/日期/百分数由表格系统自动识别类型（如 `95` 存为数字，`2025-03-01` 存为日期）
 - 自动扩容行列：CSV 数据超出当前工作表维度时自动追加行/列
 - 与 `range update` 不同，目标区域如含合并单元格，`csv-put` 会打散合并并写入纯值
 - 若需要保留原有合并结构，写入前先用 `sheet info` 记录 `mergedRanges`，写入后用 `merge-cells` 恢复对应区域
@@ -184,7 +187,7 @@ Flags:
 `hyperlink` 作用于整个单元格，适合“这个单元格整体可点击跳转”的场景。它和 richText 的片段级 `link` 不同。
 
 > **hyperlink 三种语义**：
-> - **不传 `hyperlink` 字段** → 保留原超链接（引擎自动 readback 回写）
+> - **不传 `hyperlink` 字段** → 保留原超链接（系统自动保留）
 > - **`hyperlink: {"type":"none"}`** → 显式清除单元格超链接
 > - **`hyperlink: {"type":"path"/"sheet"/"range", link, text?}`** → 写新超链接（覆盖）
 >
@@ -205,7 +208,7 @@ Flags:
 
 注意：
 - 不传 `hyperlink` 字段同于 “保留原超链接”，无需先 read 再回传
-- Agent 调用统一使用 `hyperlink: {type:"none"}` 清除超链接；底层 REST 兼容 `hyperlink:null`，但 MCP schema / 网关可能过滤 null 字段，不要把 null 当默认写法
+- Agent 调用统一使用 `hyperlink: {type:"none"}` 清除超链接；不要把 `hyperlink:null` 当默认写法，避免空字段在调用链路中被过滤后语义不清
 - `hyperlink` 可以不带 `type/text` cell 单独出现，用于只设置或清理链接并保留原值
 - 不要把 `hyperlink` 和 `type:"richText"` 混用；整格链接用 `hyperlink`，片段链接用 richText 子项 `type:"link"`
 
@@ -338,7 +341,7 @@ dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range "A1:C1" \
 
 ### 重要约束
 
-- 不再支持 `{type:"number"}` / `{type:"boolean"}` / `{type:"null"}` —— MCP `complexValues` 仅接受 `text` / `richText` 两种 type，或 `{}` 跳过。数字 / 布尔走 `{type:"text","text":"<字符串形式>"}`
+- 不再支持 `{type:"number"}` / `{type:"boolean"}` / `{type:"null"}` —— 当前单元格对象协议仅接受 `text` / `richText` 两种 type，或 `{}` 跳过。数字 / 布尔走 `{type:"text","text":"<字符串形式>"}`
 - 不支持直接传入原始值（字符串、数字、布尔、null、空字符串）；`null` 不等同于 `{}`，`null` 会报错
 - 维度必须与 `--range` 范围完全一致，例如 `--range "A1:B3"` 需要 3 行 2 列的数组
 - 清理整格超链接使用 `{"hyperlink":{"type":"none"}}`；不要使用 `{"hyperlink":null}` 作为 agent 默认调用形态
@@ -420,14 +423,16 @@ dws sheet append --node <NODE_ID> --sheet-id <SHEET_ID> \
   - 维度不足请按行 / 列补齐为同等大小；不需要修改的位置用 `{}` 跳过（保留原值），需要清空的位置用 `{"type":"text","text":""}`；禁止出现各行列数不一致或与 `--range` 不匹配的情况，否则调用会直接报错
   - 如需写整格超链接，把 `{"type":"text","text":"...","hyperlink":{"type":"path","link":"..."}}` 放进 `--values` 二维数组对应的单元格里；富文本片段链接才使用 richText 子项 `type:"link"`
 - ★ **清空区域优先用 `range clear`（强制）**：需要清空整片区域时必须使用 `range clear`，禁止用 `range update` 模拟。仅在 `range update` 写入混合数据时个别 cell 需要清空，才在 `--values` 中用 `{"type":"text","text":""}`
-- ★ **不再支持 `{type:"number"}` / `{type:"boolean"}` / `{type:"null"}`（强制）**：MCP `complexValues` 仅接受 `type:"text"` 与 `type:"richText"` 两种，CLI 会在本地直接拦截非法 type 并报错。写数字 / 布尔请用 `{"type":"text","text":"<字符串形式>"}`（服务端按内容自动识别），不要再用旧的 `value` 字段
-- **dataValidation 三语义**：不传字段=保留；`{type:"none"}`=清除；`{type:"dropdown"/"checkbox",...}`=覆盖。无需先 read 再回传，引擎自动保留原 DV
+- ★ **不再支持 `{type:"number"}` / `{type:"boolean"}` / `{type:"null"}`（强制）**：当前单元格对象协议仅接受 `type:"text"` 与 `type:"richText"` 两种，CLI 会在本地直接拦截非法 type 并报错。写数字 / 布尔请用 `{"type":"text","text":"<字符串形式>"}`（服务端按内容自动识别），不要再用旧的 `value` 字段
+- **dataValidation 三语义**：不传字段=保留；`{type:"none"}`=清除；`{type:"dropdown"/"checkbox",...}`=覆盖。无需先 read 再回传，系统会保留原 DV
 - **hyperlink 三语义**：不传字段=保留；`{type:"none"}`=清除；`{type:"path"/"sheet"/"range",...}`=覆盖。Agent 调用不要使用 `hyperlink:null`
 - ★ **单次调用上限（强制）**：`range update` / `set-style` 行数 ≤ 1000，单元格总数建议 ≤ 5000（硬限 30000）
 - ★ **大批量纯值写入用 `csv-put` 不用 `range update`**：当写入纯值（无公式、无超链接、无富文本对象）且数据量较大时（>5 行或 >20 单元格），必须使用 `csv-put`。`csv-put` 接受 CSV 文本直接写入，无需构造二维 JSON 数组，支持自动扩容，更简洁高效。仅在需要写入公式、单元格级超链接、富文本对象，或仅更新少量单元格时才使用 `range update`
+- ★ **公式写完必须回读校验**：先用 `range read --value-render-option formula` 确认公式文本，再用 `range read --value-render-option raw_value` 检查计算结果和明显错误值；当前没有聚合式公式校验工具
+- ★ **大整数/长数字 ID 必须按文本写（强制）**：超过 `9007199254740991` 的整数、订单号、手机号、SKU 等需要逐位精确的值，使用字符串写入；需要固定文本格式时用 `range update` 的 `cellStyles.numberFormat: "@"`，并以 `range read --value-render-option raw_value` 回读确认
 - `range update` 必填 `--values`；单元格级超链接通过 cell 的 `hyperlink` 字段表达，附件 / 图片 / 带样式片段通过 `--values` 内的 richText 富格式表达，CLI 不再有 `--hyperlinks` 参数
 - `range update` 职责边界：`range update` 写入单元格内容（文本 / 公式 / 富文本对象），支持通过 `cellStyles` 附带 per-cell 样式（背景色 / 字号 / 对齐等）。但批量刷整片区域的统一样式时，应使用 `dws sheet range set-style`（如 "给表头加粗居中"）或 `dws sheet range batch-set-style --batch <config.json>`。两种方式各有适用场景：少量 cell 写值 + 样式一步到位用 `cellStyles`；大面积统一样式用 `set-style`
 - `append` 自动定位到最后一行有数据的位置下方插入，无需手动计算行号
 - `append` 的 `--values` 二维数组中每行的列数必须一致，否则会报错。如果用户提供的数据中各行长度不同，必须先将短行用空字符串 `""` 补齐到与最长行相同的列数后再调用。追加的数据列数也应与工作表已有数据列数保持一致
 - `append` vs `range update`：追加新行用 `append`，修改已有单元格用 `range update`
-- ★ **`append` / `csv-put` 不支持 `{}` skip、`dataValidation`、富文本、公式**：这些能力仅限 `range update`。`append` 和 `csv-put` 只接受原始值（字符串/数字/布尔），走的是不同的 MCP tool（`append_rows` / `set_range_from_csv`）。需要写入公式、超链接、下拉列表或跳过部分单元格时，必须使用 `range update`
+- ★ **`append` / `csv-put` 不支持 `{}` skip、dataValidation、富文本、超链接**：这些能力仅限 `range update`；需要公式、超链接、下拉列表或跳过部分单元格时，使用 `range update`

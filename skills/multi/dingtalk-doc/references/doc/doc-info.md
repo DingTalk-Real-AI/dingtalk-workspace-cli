@@ -1,8 +1,6 @@
 # doc info（获取文档元信息 + URL 解析）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`../../url-patterns.md`](../../url-patterns.md) — 仅当用户原始 `alidocs` URL 需要 probe 时
+> 用户给出原始 `alidocs` URL 且需要 probe 时，按需读取 [URL 规则](../url-patterns.md)。
 >
 > **同任务常配合**：`dws drive search` / `dws wiki node search`（先定位 nodeId）/ [`doc-read.md`](./doc-read.md)（确认是 ALIDOC 后读正文）
 
@@ -27,8 +25,8 @@ Flags:
 | contentType | extension | 操作 | 命令 |
 |-------------|-----------|------|------|
 | ALIDOC | adoc | 在线获取 Markdown 内容 | `dws doc read --node <ID>` |
-| ALIDOC | axls | 在线读取表格数据 | `dws sheet list` → `dws sheet range read` |
-| ALIDOC | able | 在线查询多维表格记录 | `dws aitable table list` → `dws aitable record query` |
+| ALIDOC | axls | 在线读取表格数据 | `dws sheet list --node <nodeId>` → `dws sheet range read --node <nodeId> --sheet-id <sheetId>` |
+| ALIDOC | able | 在线查询多维表格记录 | `dws aitable table list --base-id <baseId>` → `dws aitable record query --base-id <baseId> --table-id <tableId>` |
 | 非 ALIDOC | — | **不支持在线分析** | 告知用户需下载到本地后查看 |
 
 **关键规则**：非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
@@ -37,7 +35,7 @@ Flags:
 
 当用户输入包含钉钉文档 URL 时，**必须先识别并提取 DOC_ID**，再判断意图。
 
-补充：如果这是用户直接提供的原始 `alidocs` URL，必须先按 [链接规范](../../url-patterns.md#alidocs-url-类型探测流程) probe 一次确认真实类型，再判断是否继续走 `doc`。
+补充：如果这是用户直接提供的原始 `alidocs` URL，必须先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe 一次确认真实类型，再判断是否继续走 `doc`。
 
 ### 支持的 URL 格式
 
@@ -51,7 +49,7 @@ Flags:
 1. 匹配 URL 中 `alidocs.dingtalk.com` 域名
 2. 取 URL path 的最后一段作为 DOC_ID（去掉 query string 和 fragment）
 3. 提取出的 DOC_ID 可直接用于所有 `--node` 参数，也可将完整 URL 传给 `--node`（CLI 会自动解析）
-4. 对用户直接提供的原始 `alidocs` URL，先按 [链接规范](../../url-patterns.md#alidocs-url-类型探测流程) 执行 probe；只有 probe 确认是 `adoc` / `file` / `folder` 时，才继续走 `doc`
+4. 对用户直接提供的原始 `alidocs` URL，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) 执行 probe；只有 probe 确认是 `adoc` / `file` / `folder` 时，才继续走 `doc`
 
 ## ID 边界与参数映射
 
@@ -78,7 +76,7 @@ Flags:
 | 方式 | 触发条件 | 操作 |
 |------|----------|------|
 | **A** | 用户**直接提供文档 URL 或 nodeId** | **直接传给 `--node`**，无需额外查询；优先使用此方式 |
-| **B** | 用户给出关键字 / 文档名 | `dws drive search --query "<关键字>" --format json` 或 `dws wiki node search --workspace <WS_ID> --keyword "<关键字>"` 从返回中提取 nodeId |
+| **B** | 用户给出关键字 / 文档名 | `dws drive search --query "<关键字>" --format json` 或 `dws wiki node search --workspace <WS_ID> --query "<关键字>"` 从返回中提取 nodeId |
 | **C** | 用户指向某个文件夹下的文档 | `dws drive list --workspace <WS_ID> --format json` 或 `dws wiki node list --workspace <WS_ID>` 从返回中提取 |
 
 > **关键节省**：方式 A 命中时，禁止再调 search/list "确认一下" —— 用户提供的 URL/nodeId 本身就是权威输入。同理，`--folder` 也支持 alidocs 文件夹 URL 直传，不要先 search 把 URL 解析成纯数字 ID 再传。
@@ -144,7 +142,6 @@ dws doc info --node <WS_ID>   # 错误
 
 ## 参考
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）
-- `dws drive search` / `dws wiki node search`（前置：定位 nodeId 的搜索入口，详见 [`../drive.md`](../drive.md) / [`../wiki.md`](../wiki.md)）
+- `dws drive search` / `dws wiki node search`（前置：定位 nodeId 的搜索入口，详见 [`../drive.md`](../../../dingtalk-drive/references/drive.md) / [`../wiki.md`](../../../dingtalk-wiki/references/wiki.md)）
 - [`./doc-read.md`](./doc-read.md)（contentType=ALIDOC + extension=adoc 的后续命令）
-- [`../../url-patterns.md`](../../url-patterns.md)（用户原始 alidocs URL 的 probe 流程）
+- [`../../url-patterns.md`](../url-patterns.md)（用户原始 alidocs URL 的 probe 流程）

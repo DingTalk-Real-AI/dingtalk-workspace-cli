@@ -3,9 +3,9 @@
 递归列出钉盘目录树结构（可指定深度）
 
 用法:
-    python drive_tree_list.py                # 列出根目录
-    python drive_tree_list.py --depth 2      # 递归 2 层
-    python drive_tree_list.py --folder <id>  # 指定目录 (传 drive list 返回的 fileId)
+    python drive_tree_list.py                   # 列出根目录
+    python drive_tree_list.py --depth 2         # 递归 2 层
+    python drive_tree_list.py --folder <id>     # 指定目录（使用 fileId）
     python drive_tree_list.py --dry-run
 
 说明:
@@ -75,7 +75,7 @@ def print_tree(
         name = item.get('name') or item.get('fileName', '?')
         item_type = item.get('type') or item.get('dentryType', '')
         is_dir = str(item_type).lower() in (
-            'folder', 'directory', '1',
+            'folder', 'directory', '1', 'FOLDER'
         )
         icon = '📁' if is_dir else '📄'
         size_str = ''
@@ -93,7 +93,7 @@ def print_tree(
 
         if is_dir and depth < max_depth:
             child_prefix = prefix + ('    ' if is_last else '│   ')
-            # `--folder` 只认 fileId (dentryUuid)，不认纯数字 dentryId
+            # `--folder` 只认 fileId (dentryUuid)，不认纯数字 dentryId。
             folder_id = item.get('fileId', '')
             if folder_id:
                 children = list_dir(folder_id, dry_run=dry_run)
@@ -108,8 +108,7 @@ def main():
         description='递归列出钉盘目录树'
     )
     parser.add_argument(
-        '--folder', default='',
-        help='起始目录 ID (传 drive list 返回的 fileId)',
+        '--folder', default='', help='起始目录 ID（drive list 返回的 fileId）'
     )
     parser.add_argument(
         '--depth', type=int, default=1,

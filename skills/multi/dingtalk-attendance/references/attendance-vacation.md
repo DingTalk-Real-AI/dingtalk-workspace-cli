@@ -64,7 +64,7 @@ Agent 只负责解析人员范围并获取 userId 列表；假期规则查询、
 
 1. 识别人员范围：
    - 指定员工姓名：用 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 获取 userId
-   - 指定部门：用 `dws contact dept search --query "<部门名>" --format json`，再用 `dws contact dept list-members --ids <deptId> --format json` 获取成员
+   - 指定部门：用 `dws contact dept search --query "<部门名>" --format json`，再用 `dws contact dept list-members --depts <deptId> --format json` 获取成员
    - 已提供 userId：直接使用
 2. 识别假期列范围：
    - 未指定假期类型：导出所有假期规则余额，不传 `--leave-keywords`
@@ -80,7 +80,7 @@ dws aisearch person --keyword "<员工姓名>" --dimension name --format json
 **场景 B — 按部门查询**:
 ```bash
 dws contact dept search --query "<部门名>" --format json
-dws contact dept list-members --ids <deptId> --format json
+dws contact dept list-members --depts <deptId> --format json
 ```
 
 **场景 C — 多个部门**: 对每个部门分别执行 B，汇总去重。
@@ -137,4 +137,4 @@ python scripts/attendance_vacation_balance.py \
 
 | 脚本 | 场景 | CLI 参数 |
 |------|------|---------|
-| [attendance_vacation_balance.py](../../scripts/attendance_vacation_balance.py) | 假期余额列表 Excel 导出；脚本按假期名称关键词筛选规则，并逐个 `leaveCode` 调用余额查询 | `--users [--leave-keywords] [--out] [--inspect]` |
+| [attendance_vacation_balance.py](../scripts/attendance_vacation_balance.py) | 假期余额列表 Excel 导出；脚本按假期名称关键词筛选规则，并逐个 `leaveCode` 调用余额查询 | `--users [--leave-keywords] [--out] [--inspect]` |

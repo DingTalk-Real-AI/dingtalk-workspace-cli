@@ -78,10 +78,11 @@ def get_my_email(dry_run: bool = False) -> Optional[str]:
     data = unwrap_result(data)
     if isinstance(data, dict) and isinstance(data.get('emailAccounts'), list):
         accounts = data['emailAccounts']
-        # 优先企业邮箱(type=ORG)，否则取第一个
-        for acc in accounts:
-            if isinstance(acc, dict) and acc.get('type') == 'ORG' and acc.get('email'):
-                return acc['email']
+        for account in accounts:
+            if (isinstance(account, dict)
+                    and account.get('type') == 'ORG'
+                    and account.get('email')):
+                return account['email']
         if accounts and isinstance(accounts[0], dict):
             return accounts[0].get('email')
         return None

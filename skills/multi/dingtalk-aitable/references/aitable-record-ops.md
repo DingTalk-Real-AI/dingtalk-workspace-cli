@@ -27,7 +27,7 @@ dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> \
   --format json
 
 # 关键词搜索
-dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --keyword "设计" --format json
+dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --query "设计" --format json
 
 # 按 ID 查询
 dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids rec001,rec002 --format json

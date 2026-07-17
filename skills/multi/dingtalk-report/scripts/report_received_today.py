@@ -3,13 +3,13 @@
 查看今天收到的日志列表及详情
 
 基于 `dws report inbox list` + `dws report entry get`（旧的 report list / report detail
-已废弃）。inbox list 返回的 result[] 使用中文展示键：日期 / 标题 / 发送人 / 状态 / 钉钉链接；
-reportId 不在 result[] 里，只在 _internalDetailCommands[].command 中，按页与 result[] 同序对应。
+已废弃）。列表返回的 result[] 使用中文展示键；reportId 位于
+_internalDetailCommands[].command，并与 result[] 按页同序对应。
 
 用法:
     python report_received_today.py
     python report_received_today.py --days 3     # 最近 3 天
-    python report_received_today.py --detail     # 额外拉取每条正文 (entry get)
+    python report_received_today.py --detail     # 额外拉取每条正文
     python report_received_today.py --dry-run
 """
 
@@ -50,19 +50,19 @@ def iso_end(dt: datetime) -> str:
     return dt.strftime('%Y-%m-%dT23:59:59+08:00')
 
 
-def report_id_from_command(cmd: str) -> str:
-    parts = cmd.split()
+def report_id_from_command(command: str) -> str:
+    parts = command.split()
     if '--report-id' in parts:
-        i = parts.index('--report-id')
-        if i + 1 < len(parts):
-            return parts[i + 1]
+        index = parts.index('--report-id')
+        if index + 1 < len(parts):
+            return parts[index + 1]
     return ''
 
 
 def fetch_inbox(
     start: str, end: str, dry_run: bool,
 ) -> List[Tuple[dict, str]]:
-    """按 cursor 翻页拉全 inbox；返回 (result_item, reportId) 列表。"""
+    """按 cursor 拉取全部日志，返回 (展示项, reportId)。"""
     pairs: List[Tuple[dict, str]] = []
     cursor = 0
     while True:
@@ -77,14 +77,16 @@ def fetch_inbox(
         if dry_run or not isinstance(data, dict):
             return pairs
         items = data.get('result') or []
-        cmds = data.get('_internalDetailCommands') or []
-        for idx, item in enumerate(items):
-            rid = ''
-            if idx < len(cmds):
-                rid = report_id_from_command(
-                    cmds[idx].get('command', '')
+        commands = data.get('_internalDetailCommands') or []
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            report_id = ''
+            if index < len(commands) and isinstance(commands[index], dict):
+                report_id = report_id_from_command(
+                    commands[index].get('command', '')
                 )
-            pairs.append((item, rid))
+            pairs.append((item, report_id))
         if data.get('hasMore') and data.get('nextCursor') is not None:
             cursor = data['nextCursor']
         else:
@@ -92,21 +94,25 @@ def fetch_inbox(
     return pairs
 
 
-def print_detail(rid: str) -> None:
+def print_detail(report_id: str) -> None:
     detail = run_dws([
         'report', 'entry', 'get',
-        '--report-id', rid, '--format', 'json',
+        '--report-id', report_id, '--format', 'json',
     ])
     if not isinstance(detail, dict):
         return
     result = detail.get('result')
     if not isinstance(result, dict):
         return
-    for c in (result.get('report_content') or [])[:3]:
-        key = c.get('key', '')
-        val = c.get('value', '')
-        if key and val:
-            print(f"     {key}: {str(val).strip()[:60]}")
+    contents = (result.get('report_content') or result.get('contents') or [])
+    for content in contents[:3]:
+        if not isinstance(content, dict):
+            continue
+        key = content.get('key') or content.get('title') or ''
+        value = (content.get('value') or content.get('content')
+                 or content.get('text') or '')
+        if key and value:
+            print(f"     {key}: {str(value).strip()[:60]}")
 
 
 def main():
@@ -119,9 +125,11 @@ def main():
     )
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
+    if args.days < 1:
+        parser.error('--days must be >= 1')
 
     now = datetime.now()
-    start_dt = now - timedelta(days=max(args.days - 1, 0))
+    start_dt = now - timedelta(days=args.days - 1)
     start = iso_start(start_dt)
     end = iso_end(now)
 
@@ -138,7 +146,7 @@ def main():
     print(f"{label}日志 ({len(pairs)} 条)")
     print('=' * 50)
 
-    for item, rid in pairs:
+    for item, report_id in pairs:
         title = item.get('标题') or '日志'
         sender = item.get('发送人') or '未知'
         date = item.get('日期') or ''
@@ -151,9 +159,8 @@ def main():
             print(f"     状态: {status}")
         if link:
             print(f"     链接: {link}")
-
-        if args.detail and rid:
-            print_detail(rid)
+        if args.detail and report_id:
+            print_detail(report_id)
 
 
 if __name__ == '__main__':
