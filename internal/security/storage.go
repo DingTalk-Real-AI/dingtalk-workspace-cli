@@ -48,6 +48,26 @@ type SecureTokenStorage struct {
 	macAddr     string
 }
 
+type tokenTempFile interface {
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+var (
+	mkdirTokenDir     = os.MkdirAll
+	marshalTokenData  = json.Marshal
+	encryptTokenData  = Encrypt
+	openTokenTempFile = func(path string, flag int, perm os.FileMode) (tokenTempFile, error) {
+		return os.OpenFile(path, flag, perm)
+	}
+	removeTokenFile    = os.Remove
+	renameTokenFile    = os.Rename
+	readTokenFile      = os.ReadFile
+	decryptTokenData   = Decrypt
+	unmarshalTokenData = json.Unmarshal
+)
+
 // NewSecureTokenStorage creates a new secure storage instance.
 // fallbackDir may be empty.
 func NewSecureTokenStorage(configDir, fallbackDir, macAddr string) *SecureTokenStorage {
@@ -106,14 +126,14 @@ func DataFileExistsInAny(dirs ...string) bool {
 
 // SaveToken encrypts and persists token data using atomic write with fsync.
 func (s *SecureTokenStorage) SaveToken(data *TokenData) error {
-	if err := os.MkdirAll(s.configDir, config.DirPerm); err != nil {
+	if err := mkdirTokenDir(s.configDir, config.DirPerm); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
-	b, err := json.Marshal(data)
+	b, err := marshalTokenData(data)
 	if err != nil {
 		return fmt.Errorf("marshaling token: %w", err)
 	}
-	enc, err := Encrypt(b, s.password())
+	enc, err := encryptTokenData(b, s.password())
 	if err != nil {
 		return fmt.Errorf("encrypting token: %w", err)
 	}
@@ -121,7 +141,7 @@ func (s *SecureTokenStorage) SaveToken(data *TokenData) error {
 	tmpPath := finalPath + ".tmp"
 
 	// Atomic write with fsync to ensure data durability
-	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, config.FilePerm)
+	tmpFile, err := openTokenTempFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, config.FilePerm)
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
@@ -130,7 +150,7 @@ func (s *SecureTokenStorage) SaveToken(data *TokenData) error {
 	defer func() {
 		if !writeSuccess {
 			tmpFile.Close()
-			_ = os.Remove(tmpPath)
+			_ = removeTokenFile(tmpPath)
 		}
 	}()
 
@@ -143,8 +163,8 @@ func (s *SecureTokenStorage) SaveToken(data *TokenData) error {
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("closing temp file: %w", err)
 	}
-	if err := os.Rename(tmpPath, finalPath); err != nil {
-		_ = os.Remove(tmpPath)
+	if err := renameTokenFile(tmpPath, finalPath); err != nil {
+		_ = removeTokenFile(tmpPath)
 		return fmt.Errorf("renaming to final: %w", err)
 	}
 	writeSuccess = true
@@ -155,19 +175,19 @@ func (s *SecureTokenStorage) SaveToken(data *TokenData) error {
 func (s *SecureTokenStorage) LoadToken() (*TokenData, error) {
 	var raw []byte
 	var err error
-	raw, err = os.ReadFile(dataPath(s.configDir))
+	raw, err = readTokenFile(dataPath(s.configDir))
 	if err != nil && s.fallbackDir != "" {
-		raw, err = os.ReadFile(dataPath(s.fallbackDir))
+		raw, err = readTokenFile(dataPath(s.fallbackDir))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading encrypted file: %w", err)
 	}
-	plain, err := Decrypt(raw, s.password())
+	plain, err := decryptTokenData(raw, s.password())
 	if err != nil {
 		return nil, err
 	}
 	var data TokenData
-	if err := json.Unmarshal(plain, &data); err != nil {
+	if err := unmarshalTokenData(plain, &data); err != nil {
 		return nil, fmt.Errorf("parsing token JSON: %w", err)
 	}
 	return &data, nil
@@ -181,10 +201,10 @@ func (s *SecureTokenStorage) DeleteToken() error {
 			continue
 		}
 		p := dataPath(dir)
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) && firstErr == nil {
+		if err := removeTokenFile(p); err != nil && !os.IsNotExist(err) && firstErr == nil {
 			firstErr = fmt.Errorf("deleting %s: %w", p, err)
 		}
-		_ = os.Remove(p + ".tmp")
+		_ = removeTokenFile(p + ".tmp")
 	}
 	return firstErr
 }
@@ -198,10 +218,10 @@ func DeleteEncryptedData(configDir string, fallbackDirs ...string) error {
 			continue
 		}
 		p := dataPath(dir)
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) && firstErr == nil {
+		if err := removeTokenFile(p); err != nil && !os.IsNotExist(err) && firstErr == nil {
 			firstErr = fmt.Errorf("deleting %s: %w", p, err)
 		}
-		_ = os.Remove(p + ".tmp")
+		_ = removeTokenFile(p + ".tmp")
 	}
 	return firstErr
 }

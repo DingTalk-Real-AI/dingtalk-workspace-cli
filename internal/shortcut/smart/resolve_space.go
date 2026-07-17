@@ -50,9 +50,6 @@ var ResolveSpace = shortcut.Shortcut{
 	Tips: []string{
 		`dws wiki +resolve-space --name 产品文档`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("name")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Search spaces by name. tool "search_wikiSpaces" + arg "keyword" are
 		// taken verbatim from helpers wiki space search (callMCPTool → server

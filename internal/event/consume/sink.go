@@ -45,6 +45,13 @@ type Sink interface {
 // surfacing it as a fatal error.
 var ErrPipeClosed = errors.New("sink: downstream pipe closed")
 
+var (
+	mkdirSinkDir   = os.MkdirAll
+	writeSinkFile  = os.WriteFile
+	renameSinkFile = os.Rename
+	removeSinkFile = os.Remove
+)
+
 // NewStdoutSink wraps the given writer (typically os.Stdout) in a Sink
 // that writes formatted bytes verbatim. Detects broken-pipe on the host
 // platform and returns ErrPipeClosed so the caller can exit code 0.
@@ -75,7 +82,7 @@ func NewFileDirSink(dir string) Sink { return &fileDirSink{dir: dir} }
 type fileDirSink struct{ dir string }
 
 func (s *fileDirSink) Write(ev transport.Event, formatted []byte) error {
-	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+	if err := mkdirSinkDir(s.dir, 0o700); err != nil {
 		return fmt.Errorf("sink: mkdir %s: %w", s.dir, err)
 	}
 	name := buildFilename(ev)
@@ -159,11 +166,11 @@ func safePart(s string) string {
 // half-written file.
 func atomicWrite(path string, content []byte) error {
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, content, 0o600); err != nil {
+	if err := writeSinkFile(tmp, content, 0o600); err != nil {
 		return fmt.Errorf("sink: write tmp %s: %w", tmp, err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := renameSinkFile(tmp, path); err != nil {
+		_ = removeSinkFile(tmp)
 		return fmt.Errorf("sink: rename to %s: %w", path, err)
 	}
 	return nil

@@ -84,9 +84,7 @@ func (metadata ProductMetadata) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &object); err != nil {
-		return nil, err
-	}
+	_ = json.Unmarshal(encoded, &object)
 	for _, list := range []struct {
 		name    string
 		value   []string
@@ -98,10 +96,7 @@ func (metadata ProductMetadata) MarshalJSON() ([]byte, error) {
 		if !listIsPresent(list.value, list.present) {
 			continue
 		}
-		value, err := json.Marshal(normalizeAuthoredStrings(list.value))
-		if err != nil {
-			return nil, err
-		}
+		value, _ := json.Marshal(normalizeAuthoredStrings(list.value))
 		object[list.name] = value
 	}
 	return json.Marshal(object)
@@ -216,9 +211,7 @@ func (metadata ToolMetadata) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &object); err != nil {
-		return nil, err
-	}
+	_ = json.Unmarshal(encoded, &object)
 	for _, list := range []struct {
 		name    string
 		value   []string
@@ -234,10 +227,7 @@ func (metadata ToolMetadata) MarshalJSON() ([]byte, error) {
 		if !listIsPresent(list.value, list.present) {
 			continue
 		}
-		value, err := json.Marshal(normalizeAuthoredStrings(list.value))
-		if err != nil {
-			return nil, err
-		}
+		value, _ := json.Marshal(normalizeAuthoredStrings(list.value))
 		object[list.name] = value
 	}
 	return json.Marshal(object)
@@ -369,7 +359,7 @@ var (
 
 func Generate(opts Options) (File, Stats, error) {
 	if strings.TrimSpace(opts.HintsDir) == "" {
-		return File{}, Stats{}, fmt.Errorf("Agent hint directory is required")
+		return File{}, Stats{}, fmt.Errorf("agent hint directory is required")
 	}
 	if len(opts.CanonicalToolPaths) == 0 || len(opts.ToolPaths) == 0 || len(opts.ProductIDs) == 0 {
 		return File{}, Stats{}, fmt.Errorf("complete Effective CommandRegistry projection is required")
@@ -411,9 +401,7 @@ func generateFromSources(opts Options) (File, Stats, error) {
 
 	skillDisplay := displayPath(opts.Root, resolvePath(opts.Root, opts.SkillPath))
 	if skill, ok := byDisplay[skillDisplay]; ok {
-		if err := parseProductRouting(&out, string(skill.data), skill.display); err != nil {
-			return File{}, Stats{}, err
-		}
+		parseProductRouting(&out, string(skill.data), skill.display)
 		if err := parseDangerRules(&out, string(skill.data), skill.display, &stats, origins); err != nil {
 			return File{}, Stats{}, err
 		}
@@ -421,9 +409,7 @@ func generateFromSources(opts Options) (File, Stats, error) {
 
 	intentDisplay := displayPath(opts.Root, resolvePath(opts.Root, opts.IntentGuidePath))
 	if guide, ok := byDisplay[intentDisplay]; ok {
-		if err := parseIntentGuide(&out, string(guide.data), guide.display, origins); err != nil {
-			return File{}, Stats{}, err
-		}
+		parseIntentGuide(&out, string(guide.data), guide.display, origins)
 	}
 
 	productFiles := make([]sourceFile, 0)
@@ -444,9 +430,7 @@ func generateFromSources(opts Options) (File, Stats, error) {
 			sourceProducts[productID] = true
 		}
 		known := collectCommandPaths(productIDs, references)
-		if err := parseToolIntents(&out, productIDs, known, body, file.display, origins); err != nil {
-			return File{}, Stats{}, err
-		}
+		parseToolIntents(&out, productIDs, known, body, file.display, origins)
 		if err := parseExamples(&out, known, references, file.display, opts.MaxExamples, origins); err != nil {
 			return File{}, Stats{}, err
 		}
@@ -1775,10 +1759,7 @@ func sourceProductIDs(file sourceFile, productsRoot string, references []command
 		}
 		if len(matches) > 0 {
 			sort.Slice(matches, func(i, j int) bool {
-				if len(matches[i]) != len(matches[j]) {
-					return len(matches[i]) > len(matches[j])
-				}
-				return matches[i] < matches[j]
+				return len(matches[i]) > len(matches[j])
 			})
 			return matches[:1]
 		}
@@ -1985,7 +1966,7 @@ func hashSources(files []sourceFile) string {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
-func parseProductRouting(out *File, body, source string) error {
+func parseProductRouting(out *File, body, source string) {
 	section := markdownSection(body, "## 意图判断决策树")
 	for _, line := range strings.Split(section, "\n") {
 		match := quotedIntentRE.FindStringSubmatch(line)
@@ -1997,14 +1978,11 @@ func parseProductRouting(out *File, body, source string) error {
 		if productID == "" {
 			continue
 		}
-		if err := addProductUse(out, productID, cleanIntent(match[1]), source); err != nil {
-			return err
-		}
+		addProductUse(out, productID, cleanIntent(match[1]), source)
 	}
-	return nil
 }
 
-func parseIntentGuide(out *File, body, source string, origins sourceTracker) error {
+func parseIntentGuide(out *File, body, source string, origins sourceTracker) {
 	section, startLine := markdownSectionAt(body, "## 易混淆场景快速对照表")
 	for index, line := range strings.Split(section, "\n") {
 		columns := markdownTableColumns(line)
@@ -2016,22 +1994,17 @@ func parseIntentGuide(out *File, body, source string, origins sourceTracker) err
 			scenario += "；" + intent
 		}
 		for _, target := range codeSpans(columns[2]) {
-			if err := addTargetUse(out, target, scenario, source); err != nil {
-				return err
-			}
+			addTargetUse(out, target, scenario, source)
 			origins.add(normalizeCommandPath(target), source, startLine+index)
 		}
 		for _, target := range codeSpans(columns[3]) {
-			if err := addTargetAvoid(out, target, scenario, source); err != nil {
-				return err
-			}
+			addTargetAvoid(out, target, scenario, source)
 			origins.add(normalizeCommandPath(target), source, startLine+index)
 		}
 	}
-	return nil
 }
 
-func parseToolIntents(out *File, productIDs, known []string, body, source string, origins sourceTracker) error {
+func parseToolIntents(out *File, productIDs, known []string, body, source string, origins sourceTracker) {
 	for _, heading := range []string{"## 意图判断", "## 使用场景"} {
 		section, startLine := markdownSectionAt(body, heading)
 		if section == "" {
@@ -2049,9 +2022,7 @@ func parseToolIntents(out *File, productIDs, known []string, body, source string
 				if strings.Contains(line, "→") || strings.Contains(line, "->") {
 					if target := routeCodeTarget(line); target != "" {
 						if path := resolveToolPath(productIDs, target, known); path != "" {
-							if err := addToolUse(out, path, currentIntent, source); err != nil {
-								return err
-							}
+							addToolUse(out, path, currentIntent, source)
 							origins.add(path, source, lineNumber)
 						}
 					}
@@ -2072,14 +2043,11 @@ func parseToolIntents(out *File, productIDs, known []string, body, source string
 				intent += "；" + action
 			}
 			if path := resolveToolPath(productIDs, target, known); path != "" {
-				if err := addToolUse(out, path, intent, source); err != nil {
-					return err
-				}
+				addToolUse(out, path, intent, source)
 				origins.add(path, source, lineNumber)
 			}
 		}
 	}
-	return nil
 }
 
 func parseExamples(out *File, known []string, references []commandReference, source string, maxExamples int, origins sourceTracker) error {
@@ -2097,15 +2065,11 @@ func parseExamples(out *File, known []string, references []commandReference, sou
 		}
 		metadata := out.Tools[path]
 		if reference.commentIntent != "" {
-			if err := appendToolListValue(&metadata, "use_when", &metadata.UseWhen, &metadata.useWhenPresent, &metadata.useWhenRank, &metadata.useWhenOrigin, reference.commentIntent, selectionRankSkill, source, path); err != nil {
-				return err
-			}
+			_ = appendToolListValue(&metadata, "use_when", &metadata.UseWhen, &metadata.useWhenPresent, &metadata.useWhenRank, &metadata.useWhenOrigin, reference.commentIntent, selectionRankSkill, source, path)
 			metadata.SourceRefs = append(metadata.SourceRefs, source)
 		}
 		if len(metadata.Examples) < maxExamples {
-			if err := appendToolListValue(&metadata, "examples", &metadata.Examples, &metadata.examplesPresent, &metadata.examplesRank, &metadata.examplesOrigin, line, selectionRankSkill, source, path); err != nil {
-				return err
-			}
+			_ = appendToolListValue(&metadata, "examples", &metadata.Examples, &metadata.examplesPresent, &metadata.examplesRank, &metadata.examplesOrigin, line, selectionRankSkill, source, path)
 			metadata.SourceRefs = append(metadata.SourceRefs, source)
 		}
 		ensureEffect(&metadata, path)
@@ -2640,70 +2604,60 @@ func coalesceSkillListCandidates(history map[string][]FieldCandidateProvenance, 
 	history[field] = append(filtered, aggregated)
 }
 
-func addTargetUse(out *File, target, intent, source string) error {
+func addTargetUse(out *File, target, intent, source string) {
 	target = normalizeCommandPath(target)
 	if target == "" || target == "先追问" {
-		return nil
+		return
 	}
 	if len(strings.Fields(target)) == 1 {
-		return addProductUse(out, target, intent, source)
+		addProductUse(out, target, intent, source)
+		return
 	}
-	return addToolUse(out, target, intent, source)
+	addToolUse(out, target, intent, source)
 }
 
-func addTargetAvoid(out *File, target, intent, source string) error {
+func addTargetAvoid(out *File, target, intent, source string) {
 	target = normalizeCommandPath(target)
 	if target == "" {
-		return nil
+		return
 	}
 	if len(strings.Fields(target)) == 1 {
 		metadata := out.Products[target]
-		if err := appendProductListValue(&metadata, "avoid_when", &metadata.AvoidWhen, &metadata.avoidWhenPresent, &metadata.avoidWhenRank, &metadata.avoidWhenOrigin, intent, selectionRankSkill, source, target); err != nil {
-			return err
-		}
+		_ = appendProductListValue(&metadata, "avoid_when", &metadata.AvoidWhen, &metadata.avoidWhenPresent, &metadata.avoidWhenRank, &metadata.avoidWhenOrigin, intent, selectionRankSkill, source, target)
 		metadata.SourceRefs = append(metadata.SourceRefs, source)
 		out.Products[target] = metadata
-		return nil
+		return
 	}
 	metadata := out.Tools[target]
-	if err := appendToolListValue(&metadata, "avoid_when", &metadata.AvoidWhen, &metadata.avoidWhenPresent, &metadata.avoidWhenRank, &metadata.avoidWhenOrigin, intent, selectionRankSkill, source, target); err != nil {
-		return err
-	}
+	_ = appendToolListValue(&metadata, "avoid_when", &metadata.AvoidWhen, &metadata.avoidWhenPresent, &metadata.avoidWhenRank, &metadata.avoidWhenOrigin, intent, selectionRankSkill, source, target)
 	metadata.SourceRefs = append(metadata.SourceRefs, source)
 	ensureEffect(&metadata, target)
 	out.Tools[target] = metadata
-	return nil
 }
 
-func addProductUse(out *File, productID, intent, source string) error {
+func addProductUse(out *File, productID, intent, source string) {
 	productID = strings.TrimSpace(productID)
 	intent = cleanIntent(intent)
 	if productID == "" || intent == "" {
-		return nil
+		return
 	}
 	metadata := out.Products[productID]
-	if err := appendProductListValue(&metadata, "use_when", &metadata.UseWhen, &metadata.useWhenPresent, &metadata.useWhenRank, &metadata.useWhenOrigin, intent, selectionRankSkill, source, productID); err != nil {
-		return err
-	}
+	_ = appendProductListValue(&metadata, "use_when", &metadata.UseWhen, &metadata.useWhenPresent, &metadata.useWhenRank, &metadata.useWhenOrigin, intent, selectionRankSkill, source, productID)
 	metadata.SourceRefs = append(metadata.SourceRefs, source)
 	out.Products[productID] = metadata
-	return nil
 }
 
-func addToolUse(out *File, path, intent, source string) error {
+func addToolUse(out *File, path, intent, source string) {
 	path = normalizeCommandPath(path)
 	intent = cleanIntent(intent)
 	if path == "" || intent == "" {
-		return nil
+		return
 	}
 	metadata := out.Tools[path]
-	if err := appendToolListValue(&metadata, "use_when", &metadata.UseWhen, &metadata.useWhenPresent, &metadata.useWhenRank, &metadata.useWhenOrigin, intent, selectionRankSkill, source, path); err != nil {
-		return err
-	}
+	_ = appendToolListValue(&metadata, "use_when", &metadata.UseWhen, &metadata.useWhenPresent, &metadata.useWhenRank, &metadata.useWhenOrigin, intent, selectionRankSkill, source, path)
 	metadata.SourceRefs = append(metadata.SourceRefs, source)
 	ensureEffect(&metadata, path)
 	out.Tools[path] = metadata
-	return nil
 }
 
 func normalizeFile(file *File, maxExamples int) {

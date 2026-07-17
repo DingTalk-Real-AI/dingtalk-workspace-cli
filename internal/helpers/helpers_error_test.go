@@ -1,12 +1,17 @@
 package helpers
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
-func TestIsBusinessErrorRecognizesRealErrorEnvelopes(t *testing.T) {
+func TestCrossPlatformCoverageIsBusinessErrorRecognizesRealErrorEnvelopes(t *testing.T) {
 	cases := []map[string]any{
 		{"status": "error", "success": true, "error": map[string]any{"code": "INVALID_BASE_ID"}},
+		{"status": " error ", "success": true},
 		{"success": true, "errorCode": "1001"},
 		{"success": true, "error": []any{"failed"}},
+		{"success": true, "error": true},
 		{"success": false},
 	}
 	for _, tc := range cases {
@@ -16,7 +21,18 @@ func TestIsBusinessErrorRecognizesRealErrorEnvelopes(t *testing.T) {
 	}
 }
 
-func TestIsBusinessErrorAllowsSuccessEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageErrorCodeValueShapes(t *testing.T) {
+	for _, value := range []any{float64(1), int(1), int64(1), json.Number("1")} {
+		if !isErrorCodeValue(value) {
+			t.Fatalf("isErrorCodeValue(%T(%v)) = false, want true", value, value)
+		}
+	}
+	if isErrorCodeValue(" ") {
+		t.Fatal("blank error code should not be classified as an error")
+	}
+}
+
+func TestCrossPlatformCoverageIsBusinessErrorAllowsSuccessEnvelope(t *testing.T) {
 	body := map[string]any{
 		"success":   true,
 		"errorCode": nil,
@@ -28,7 +44,7 @@ func TestIsBusinessErrorAllowsSuccessEnvelope(t *testing.T) {
 	}
 }
 
-func TestIsBusinessErrorAllowsCodeZeroSuccessEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageIsBusinessErrorAllowsCodeZeroSuccessEnvelope(t *testing.T) {
 	body := map[string]any{
 		"success": true,
 		"code":    "0",

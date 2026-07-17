@@ -21,6 +21,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
+var counterRowMissHook = func() {}
+
 // PerTypeCounters is bus-wide and tracks how many events of each event_type
 // the bus delivered (or dropped due to backpressure) since startup. Surfaced
 // via `dws event status`. Concurrent-safe.
@@ -108,6 +110,7 @@ func (c *PerTypeCounters) row(eventType string) *typeRow {
 	if ok {
 		return row
 	}
+	counterRowMissHook()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// double-check after acquiring write lock

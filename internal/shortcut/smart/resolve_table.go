@@ -58,9 +58,6 @@ var ResolveTable = shortcut.Shortcut{
 	Tips: []string{
 		`dws aitable +resolve-table --base B --name 任务`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("base", "name")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// baseId mirrors list_tables / helpers tableGetCmd (get_tables). Omitting
 		// tableIds asks the server for every table in the base.

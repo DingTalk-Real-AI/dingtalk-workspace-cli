@@ -23,6 +23,20 @@ import (
 	dwsroot "github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
 )
 
+var (
+	embeddedSkillStat = func(name string) (fs.FileInfo, error) {
+		return fs.Stat(dwsroot.EmbeddedSkills, name)
+	}
+	embeddedSkillMkdirTemp = os.MkdirTemp
+	embeddedSkillRemoveAll = os.RemoveAll
+	embeddedSkillWalkDir   = func(root string, fn fs.WalkDirFunc) error {
+		return fs.WalkDir(dwsroot.EmbeddedSkills, root, fn)
+	}
+	embeddedSkillReadFile  = dwsroot.EmbeddedSkills.ReadFile
+	embeddedSkillMkdirAll  = os.MkdirAll
+	embeddedSkillWriteFile = os.WriteFile
+)
+
 // resolveSkillSetupSourceOrEmbedded resolves the skill source for `skill
 // setup`. An explicit --source or DWS_SKILL_SOURCE is honored as a developer
 // override (validated as an on-disk dir). Otherwise it falls back to the skill
@@ -50,33 +64,33 @@ func resolveSkillSetupSourceOrEmbedded(explicit, mode string) (string, func(), e
 func materializeEmbeddedSkillSource(mode string) (string, func(), error) {
 	noop := func() {}
 	sub := "skills/" + mode // embed.FS always uses forward slashes
-	if _, err := fs.Stat(dwsroot.EmbeddedSkills, sub); err != nil {
+	if _, err := embeddedSkillStat(sub); err != nil {
 		return "", noop, fmt.Errorf("内嵌 skill 不含 %q（二进制可能未随 skills/ 重新构建）: %w", sub, err)
 	}
 
-	tmp, err := os.MkdirTemp("", "dws-skill-"+mode+"-")
+	tmp, err := embeddedSkillMkdirTemp("", "dws-skill-"+mode+"-")
 	if err != nil {
 		return "", noop, fmt.Errorf("创建临时 skill 目录失败: %w", err)
 	}
-	cleanup := func() { _ = os.RemoveAll(tmp) }
+	cleanup := func() { _ = embeddedSkillRemoveAll(tmp) }
 
-	walkErr := fs.WalkDir(dwsroot.EmbeddedSkills, sub, func(p string, d fs.DirEntry, err error) error {
+	walkErr := embeddedSkillWalkDir(sub, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		rel := strings.TrimPrefix(strings.TrimPrefix(p, sub), "/")
 		dst := filepath.Join(tmp, filepath.FromSlash(rel))
 		if d.IsDir() {
-			return os.MkdirAll(dst, 0o755)
+			return embeddedSkillMkdirAll(dst, 0o755)
 		}
-		data, readErr := dwsroot.EmbeddedSkills.ReadFile(p)
+		data, readErr := embeddedSkillReadFile(p)
 		if readErr != nil {
 			return readErr
 		}
-		if mkErr := os.MkdirAll(filepath.Dir(dst), 0o755); mkErr != nil {
+		if mkErr := embeddedSkillMkdirAll(filepath.Dir(dst), 0o755); mkErr != nil {
 			return mkErr
 		}
-		return os.WriteFile(dst, data, 0o644)
+		return embeddedSkillWriteFile(dst, data, 0o644)
 	})
 	if walkErr != nil {
 		cleanup()

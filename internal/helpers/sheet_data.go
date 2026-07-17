@@ -10,6 +10,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	sheetCSVReadAll  = io.ReadAll
+	sheetCSVReadFile = os.ReadFile
+)
+
 func newDataCmds() []*cobra.Command {
 	findCmd := &cobra.Command{
 		Use:   "find",
@@ -205,13 +210,13 @@ range update 与合并区域冲突时返回 MERGED_CELLS_CONFLICT 的行为。
 			csvContent := mustGetFlag(cmd, "csv")
 			switch {
 			case csvContent == "-":
-				data, err := io.ReadAll(os.Stdin)
+				data, err := sheetCSVReadAll(os.Stdin)
 				if err != nil {
 					return fmt.Errorf("读取 stdin 失败: %w", err)
 				}
 				csvContent = string(data)
 			case strings.HasPrefix(csvContent, "@"):
-				data, err := os.ReadFile(strings.TrimPrefix(csvContent, "@"))
+				data, err := sheetCSVReadFile(strings.TrimPrefix(csvContent, "@"))
 				if err != nil {
 					return fmt.Errorf("读取 CSV 文件失败: %w", err)
 				}

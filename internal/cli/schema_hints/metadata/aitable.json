@@ -959,6 +959,33 @@
       "availability": "available",
       "reviewed": true
     },
+    "aitable.workflow_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "base-id": {
+          "property": "baseId",
+          "required": true
+        },
+        "dsl": {
+          "property": "dsl",
+          "required": true,
+          "interface_type": "object"
+        },
+        "locale": {
+          "property": "locale"
+        }
+      },
+      "review_reason": "The command maps --base-id and a decoded workflow-dsl/v1 --dsl object to aitable/create_workflow. The call intentionally bypasses retries because creation is non-idempotent; locale remains optional.",
+      "cli_path": "aitable workflow create",
+      "runtime_gate": "none"
+    },
     "aitable.workflow_disable": {
       "effect": "write",
       "risk": "high",
@@ -998,6 +1025,37 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "aitable.workflow_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "parameters": {
+        "base-id": {
+          "property": "baseId",
+          "required": true
+        },
+        "workflow-id": {
+          "property": "workflowId",
+          "required": true
+        },
+        "dsl": {
+          "property": "dsl",
+          "required": true,
+          "interface_type": "object"
+        },
+        "locale": {
+          "property": "locale"
+        }
+      },
+      "review_reason": "The command maps --base-id, --workflow-id and a decoded complete workflow-dsl/v1 --dsl object to aitable/update_workflow. This is full replacement rather than a partial patch; locale remains optional.",
+      "cli_path": "aitable workflow update",
+      "runtime_gate": "none"
     }
   }
 }

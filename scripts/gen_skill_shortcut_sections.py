@@ -2,8 +2,8 @@
 """Generate shortcut sections for DWS skills.
 
 The skill should teach agents which high-level shortcut entries are available
-in the public catalog, while `dws <service> --help` remains the source of truth
-for flags.
+in the public catalog. `dws shortcut list` publishes their machine-readable
+contract, while leaf `--help` remains the source of truth for accepted flags.
 """
 
 from __future__ import annotations
@@ -89,12 +89,12 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
     for service, count in sorted(counts.items()):
         path = SERVICE_TO_SKILL.get(service)
         skill = path.parent.name if path else "—"
-        rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws {md_escape(service)} --help` / `dws shortcut list --service {md_escape(service)} --format json` |")
+        rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws shortcut list --service {md_escape(service)} --format json` |")
     body = "\n".join(rows)
     return f"""{MONO_START}
 ## Shortcut 总览
 
-下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws <service> --help` 查看 flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
+下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws shortcut list --service <service> --format json` 读取参数、约束、风险和示例，最后用 `dws <service> +<shortcut> --help` 核对当前 Cobra flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
 
 | 服务 | shortcut 数 | multi skill | 发现命令 |
 |---|---:|---|---|
@@ -110,9 +110,9 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
             f"{md_escape(item['risk'])} | {md_escape(item['desc'])} |"
         )
     return f"""{PRODUCT_START}
-## Shortcuts（优先使用）
+## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 来自当前公开 catalog，并可通过 `dws {service} --help` / `dws shortcut list --service {service}` 发现。用户意图命中时优先使用 shortcut；具体 flags 以 `dws {service} <shortcut> --help` 为准。
+以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service {service} --format json` 读取参数、约束、风险和示例，并以 `dws {service} <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

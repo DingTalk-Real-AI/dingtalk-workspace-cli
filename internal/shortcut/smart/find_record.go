@@ -50,9 +50,6 @@ var FindRecord = shortcut.Shortcut{
 		`dws aitable +find-record --base B --table T`,
 		`dws aitable +find-record --base B --table T --query 张三`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("base", "table")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// baseId / tableId / keyword mirror helpers RecordQuery (query_records).
 		params := map[string]any{

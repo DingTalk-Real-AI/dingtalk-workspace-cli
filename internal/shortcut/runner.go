@@ -212,7 +212,7 @@ func mount(s Shortcut) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    s.Command,
 		Short:  s.Description,
-		Long:   s.Intent,
+		Long:   shortcutLongHelp(s),
 		Hidden: s.Hidden,
 	}
 	if len(s.Tips) > 0 {
@@ -223,6 +223,9 @@ func mount(s Shortcut) *cobra.Command {
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		rt := &RuntimeContext{cmd: c, shortcut: s}
 		if err := validateFlags(rt, s); err != nil {
+			return err
+		}
+		if err := validateConstraints(rt, s); err != nil {
 			return err
 		}
 		if s.Validate != nil {
@@ -244,19 +247,68 @@ func mount(s Shortcut) *cobra.Command {
 // registerFlags declares each Flag on the command with its type/default/desc.
 func registerFlags(cmd *cobra.Command, flags []Flag) {
 	for _, f := range flags {
+		desc := flagHelp(f)
 		switch f.Type {
 		case FlagBool:
-			cmd.Flags().Bool(f.Name, f.Default == "true", f.Desc)
+			cmd.Flags().Bool(f.Name, f.Default == "true", desc)
 		case FlagInt:
-			cmd.Flags().Int(f.Name, atoiDefault(f.Default), f.Desc)
+			cmd.Flags().Int(f.Name, atoiDefault(f.Default), desc)
 		case FlagStringSlice:
-			cmd.Flags().StringSlice(f.Name, nil, f.Desc)
+			cmd.Flags().StringSlice(f.Name, nil, desc)
 		default: // FlagString and empty
-			cmd.Flags().String(f.Name, f.Default, f.Desc)
+			cmd.Flags().String(f.Name, f.Default, desc)
 		}
 		if f.Hidden {
 			_ = cmd.Flags().MarkHidden(f.Name)
 		}
+	}
+}
+
+func flagHelp(f Flag) string {
+	parts := make([]string, 0, 2)
+	if f.Required && !strings.Contains(f.Desc, "必填") {
+		parts = append(parts, "必填")
+	}
+	if len(f.Enum) > 0 {
+		parts = append(parts, "可选值: "+strings.Join(f.Enum, ", "))
+	}
+	if len(parts) == 0 {
+		return f.Desc
+	}
+	if strings.TrimSpace(f.Desc) == "" {
+		return strings.Join(parts, "；")
+	}
+	return f.Desc + "（" + strings.Join(parts, "；") + "）"
+}
+
+func shortcutLongHelp(s Shortcut) string {
+	long := strings.TrimSpace(s.Intent)
+	if long == "" {
+		long = strings.TrimSpace(s.Description)
+	}
+	if len(s.Constraints) == 0 {
+		return long
+	}
+	lines := make([]string, 0, len(s.Constraints))
+	for _, constraint := range s.Constraints {
+		lines = append(lines, "  - "+constraintHelp(constraint))
+	}
+	return long + "\n\n参数约束：\n" + strings.Join(lines, "\n")
+}
+
+func constraintHelp(constraint Constraint) string {
+	if strings.TrimSpace(constraint.Description) != "" {
+		return constraint.Description
+	}
+	switch constraint.Kind {
+	case ConstraintAtLeastOne:
+		return fmt.Sprintf("%s 至少指定一个", dashed(constraint.Flags))
+	case ConstraintExactlyOne:
+		return fmt.Sprintf("%s 必须且只能指定一个", dashed(constraint.Flags))
+	case ConstraintMutuallyExclusive:
+		return fmt.Sprintf("%s 互斥，最多指定一个", dashed(constraint.Flags))
+	default:
+		return fmt.Sprintf("%s 使用未识别的约束类型 %q", dashed(constraint.Flags), constraint.Kind)
 	}
 }
 
@@ -266,12 +318,71 @@ func validateFlags(rt *RuntimeContext, s Shortcut) error {
 		if f.Required && !rt.Changed(f.Name) {
 			return apperrors.NewValidation(fmt.Sprintf("缺少必填参数 --%s：%s", f.Name, f.Desc))
 		}
-		if len(f.Enum) > 0 && rt.Changed(f.Name) {
-			val := rt.Str(f.Name)
-			if !contains(f.Enum, val) {
-				return apperrors.NewValidation(fmt.Sprintf(
-					"参数 --%s 取值 %q 不合法，允许值：%s", f.Name, val, strings.Join(f.Enum, ", ")))
+		if f.Required && rt.Changed(f.Name) {
+			switch f.Type {
+			case FlagStringSlice:
+				if !hasNonEmptyString(rt.StrSlice(f.Name)) {
+					return apperrors.NewValidation(fmt.Sprintf("必填参数 --%s 不能为空", f.Name))
+				}
+			case FlagString, "":
+				if rt.Str(f.Name) == "" {
+					return apperrors.NewValidation(fmt.Sprintf("必填参数 --%s 不能为空", f.Name))
+				}
 			}
+		}
+		if len(f.Enum) > 0 && rt.Changed(f.Name) {
+			values := []string{rt.Str(f.Name)}
+			if f.Type == FlagStringSlice {
+				values = rt.StrSlice(f.Name)
+			}
+			for _, val := range values {
+				val = strings.TrimSpace(val)
+				if !contains(f.Enum, val) {
+					return apperrors.NewValidation(fmt.Sprintf(
+						"参数 --%s 取值 %q 不合法，允许值：%s", f.Name, val, strings.Join(f.Enum, ", ")))
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func hasNonEmptyString(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func validateConstraints(rt *RuntimeContext, s Shortcut) error {
+	for _, constraint := range s.Constraints {
+		if len(constraint.Flags) == 0 {
+			return apperrors.NewInternal(fmt.Sprintf(
+				"shortcut %s %s 的约束 %q 未声明参数", s.Service, s.Command, constraint.Kind))
+		}
+		switch constraint.Kind {
+		case ConstraintAtLeastOne:
+			if err := rt.AtLeastOne(constraint.Flags...); err != nil {
+				return err
+			}
+		case ConstraintExactlyOne:
+			if err := rt.ExactlyOne(constraint.Flags...); err != nil {
+				return err
+			}
+		case ConstraintMutuallyExclusive:
+			if err := rt.MutuallyExclusive(constraint.Flags...); err != nil {
+				return err
+			}
+		case ConstraintCustom:
+			if strings.TrimSpace(constraint.Description) == "" {
+				return apperrors.NewInternal(fmt.Sprintf(
+					"shortcut %s %s 的 custom 约束缺少描述", s.Service, s.Command))
+			}
+		default:
+			return apperrors.NewInternal(fmt.Sprintf(
+				"shortcut %s %s 使用未知约束类型 %q", s.Service, s.Command, constraint.Kind))
 		}
 	}
 	return nil

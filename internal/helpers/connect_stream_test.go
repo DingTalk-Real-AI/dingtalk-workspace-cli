@@ -40,13 +40,10 @@ func TestForwardConnectTurnPreservesAttachmentsForCapableAgent(t *testing.T) {
 }
 
 func TestExecForwarderAllowsOnlyAttachmentDirectory(t *testing.T) {
+	requirePOSIXShell(t)
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "args.log")
-	stub := filepath.Join(dir, "agent")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$DWS_ARGS_LOG\"\nprintf 'ok\\n'\n"
-	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	stub := writeShellExecutable(t, dir, "agent", "printf '%s\\n' \"$@\" > \"$DWS_ARGS_LOG\"\nprintf 'ok\\n'\n")
 	attachmentDir := t.TempDir()
 	attachmentPath := filepath.Join(attachmentDir, "report.md")
 	if err := os.WriteFile(attachmentPath, []byte("body"), 0o600); err != nil {

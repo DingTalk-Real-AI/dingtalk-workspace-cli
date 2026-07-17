@@ -62,9 +62,6 @@ var Approve = shortcut.Shortcut{
 		`dws oa +approve-by --keyword 报销`,
 		`dws oa +approve-by --keyword 出差单 --comment "同意"`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("keyword")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		keyword := strings.TrimSpace(rt.Str("keyword"))
 		if keyword == "" {

@@ -14,6 +14,7 @@
 package logging
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,5 +120,41 @@ func TestCloseOnNilLogger(t *testing.T) {
 	var fl *FileLogger
 	if err := fl.Close(); err != nil {
 		t.Errorf("Close on nil should not error: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageFileLoggerCloseIsTerminal(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	fl := Setup(dir)
+	logPath := filepath.Join(dir, logSubDir, logFileName)
+	fl.Logger.Info("before close")
+	if err := fl.Close(); err != nil {
+		t.Fatalf("close logger: %v", err)
+	}
+	if err := os.Remove(logPath); err != nil {
+		t.Fatalf("remove closed log file: %v", err)
+	}
+	if err := fl.writer.open(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("open after close = %v, want os.ErrClosed", err)
+	}
+	fl.writer.mu.Lock()
+	err := fl.writer.reopenLocked()
+	fl.writer.mu.Unlock()
+	if !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("reopen after close = %v, want os.ErrClosed", err)
+	}
+
+	n, err := fl.Writer().Write([]byte("late write"))
+	if n != 0 || !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("write after close = (%d, %v), want (0, os.ErrClosed)", n, err)
+	}
+	fl.Logger.Info("late structured write")
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("closed logger recreated log file: %v", err)
+	}
+	if err := fl.Close(); err != nil {
+		t.Fatalf("second close: %v", err)
 	}
 }

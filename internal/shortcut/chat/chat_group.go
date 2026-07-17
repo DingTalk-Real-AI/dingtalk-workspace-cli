@@ -35,10 +35,10 @@ var ChatSearch = shortcut.Shortcut{
 		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "分页游标，翻页传 nextCursor"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已设置免打扰的群聊"},
 	},
-	Tips: []string{`dws chat +chat-search --query "项目冲刺"`},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.AtLeastOne("query", "keyword")
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"query", "keyword"}},
 	},
+	Tips: []string{`dws chat +chat-search --query "项目冲刺"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		query := rt.Str("query")
 		if query == "" {

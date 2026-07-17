@@ -26,6 +26,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	pluginInstallFromGit = (*plugin.Loader).InstallFromGit
+	pluginStat           = os.Stat
+	pluginMkdirAll       = os.MkdirAll
+	pluginWriteFile      = os.WriteFile
+	pluginAbs            = filepath.Abs
+	pluginRegisterDev    = (*plugin.Loader).RegisterDevPlugin
+	pluginListInstalled  = (*plugin.Loader).ListInstalled
+	pluginParseManifest  = plugin.ParseManifest
+	pluginBuild          = plugin.BuildPlugin
+)
+
 func newPluginCommand() *cobra.Command {
 	pluginCmd := newPlaceholderParent("plugin", i18n.T("插件管理"))
 
@@ -98,7 +110,7 @@ func newPluginInstallCommand() *cobra.Command {
 			loader := plugin.NewLoader(RawVersion())
 
 			if gitURL != "" {
-				p, err := loader.InstallFromGit(gitURL)
+				p, err := pluginInstallFromGit(loader, gitURL)
 				if err != nil {
 					return apperrors.NewInternal(fmt.Sprintf("install failed: %v", err))
 				}
@@ -247,7 +259,7 @@ func newPluginCreateCommand() *cobra.Command {
 			}
 
 			dir := filepath.Join(".", name)
-			if _, err := os.Stat(dir); err == nil {
+			if _, err := pluginStat(dir); err == nil {
 				return apperrors.NewValidation(fmt.Sprintf("directory %q already exists", dir))
 			}
 
@@ -258,7 +270,7 @@ func newPluginCreateCommand() *cobra.Command {
 				filepath.Join(dir, "hooks"),
 			}
 			for _, d := range dirs {
-				if err := os.MkdirAll(d, 0o755); err != nil {
+				if err := pluginMkdirAll(d, 0o755); err != nil {
 					return apperrors.NewInternal(fmt.Sprintf("failed to create directory: %v", err))
 				}
 			}
@@ -286,7 +298,7 @@ func newPluginCreateCommand() *cobra.Command {
 }
 `, name, desc, pluginType, RawVersion(), name)
 
-			if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(pluginJSON), 0o644); err != nil {
+			if err := pluginWriteFile(filepath.Join(dir, "plugin.json"), []byte(pluginJSON), 0o644); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to write plugin.json: %v", err))
 			}
 
@@ -317,7 +329,7 @@ Use this skill when the user mentions:
 - Conversion rules
 `, name, desc, RawVersion(), name, name)
 
-			if err := os.WriteFile(filepath.Join(dir, "skills", name, "SKILL.md"), []byte(skillMD), 0o644); err != nil {
+			if err := pluginWriteFile(filepath.Join(dir, "skills", name, "SKILL.md"), []byte(skillMD), 0o644); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to write SKILL.md: %v", err))
 			}
 
@@ -326,7 +338,7 @@ Use this skill when the user mentions:
   "hooks": []
 }
 `
-			if err := os.WriteFile(filepath.Join(dir, "hooks", "hooks.json"), []byte(hooksJSON), 0o644); err != nil {
+			if err := pluginWriteFile(filepath.Join(dir, "hooks", "hooks.json"), []byte(hooksJSON), 0o644); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to write hooks.json: %v", err))
 			}
 
@@ -377,7 +389,7 @@ to unregister.`,
 
 			// Register dev plugin
 			dir := args[0]
-			absDir, err := filepath.Abs(dir)
+			absDir, err := pluginAbs(dir)
 			if err != nil {
 				return apperrors.NewValidation(fmt.Sprintf("invalid path: %v", err))
 			}
@@ -391,7 +403,7 @@ to unregister.`,
 				return apperrors.NewValidation(fmt.Sprintf("validation failed: %v", err))
 			}
 
-			if err := loader.RegisterDevPlugin(m.Name, absDir); err != nil {
+			if err := pluginRegisterDev(loader, m.Name, absDir); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to register: %v", err))
 			}
 
@@ -582,10 +594,10 @@ func newPluginConfigUnsetCommand() *cobra.Command {
 
 // loadDeclaredUserConfig loads the userConfig section from a plugin's manifest.
 func loadDeclaredUserConfig(loader *plugin.Loader, pluginName string) map[string]plugin.ConfigItem {
-	plugins := loader.ListInstalled()
+	plugins := pluginListInstalled(loader)
 	for _, p := range plugins {
 		if p.Name == pluginName {
-			m, err := plugin.ParseManifest(filepath.Join(p.Path, "plugin.json"))
+			m, err := pluginParseManifest(filepath.Join(p.Path, "plugin.json"))
 			if err != nil {
 				return nil
 			}
@@ -626,7 +638,7 @@ The build configuration is read from the "build" field in plugin.json:
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := args[0]
-			absDir, err := filepath.Abs(dir)
+			absDir, err := pluginAbs(dir)
 			if err != nil {
 				return apperrors.NewValidation(fmt.Sprintf("invalid path: %v", err))
 			}
@@ -646,7 +658,7 @@ The build configuration is read from the "build" field in plugin.json:
 						"  }", m.Name))
 			}
 
-			if err := plugin.BuildPlugin(absDir); err != nil {
+			if err := pluginBuild(absDir); err != nil {
 				return apperrors.NewInternal(err.Error())
 			}
 

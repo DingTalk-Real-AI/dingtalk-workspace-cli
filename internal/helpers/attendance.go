@@ -475,10 +475,7 @@ func collectGlobalSettingSaveRequest(cmd *cobra.Command, settingScene string) (m
 			continue
 		}
 
-		value, err := readGlobalSettingSaveFlagValue(cmd, spec)
-		if err != nil {
-			return nil, err
-		}
+		value, _ := readGlobalSettingSaveFlagValue(cmd, spec)
 		request[spec.requestField] = value
 		validSceneFieldCount++
 	}
@@ -1557,14 +1554,6 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 			if cmd.Flags().Changed("owner") {
 				v, _ := cmd.Flags().GetString("owner")
 				groupVO["owner"] = v
-			}
-
-			// 确保必填字段已填入 groupVO
-			if groupVO["name"] == nil || groupVO["name"] == "" {
-				return fmt.Errorf("考勤组名称(name)是必填项")
-			}
-			if groupVO["type"] == nil || groupVO["type"] == "" {
-				return fmt.Errorf("考勤组类型(type)是必填项")
 			}
 
 			// type=FIXED 时校验条件必填字段

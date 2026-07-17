@@ -323,6 +323,9 @@ dws auth status   # confirm "Refresh Token: valid"
 ```
 
 The bundle includes the encrypted keychain under `~/.local/share/dws-cli` (with `auth-token.enc` and `dek`) plus required `~/.dws` config files.
+Windows export and import are intentionally rejected before credentials or
+bundles are read: Windows stores credentials as DPAPI-protected HKCU Registry
+values, and the current file-DEK bundle has no safe DPAPI-to-portable conversion.
 
 </details>
 
@@ -655,7 +658,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 
 | Service | Command | Capabilities |
 |---------|---------|--------------|
-| Contact | `contact` | Look up users by name / mobile / job-number, departments, labels & roles, roster profiles & dismissals |
+| Contact | `contact` | Look up users, departments, labels, roster profiles and dismissals; create enterprises and enterprise accounts; invite employees |
 | Chat / IM | `chat` (`im`) | Send / reply / search messages, group & member management, bot & webhook messaging, reactions, recall |
 | Calendar | `calendar` | Events CRUD, attendees, meeting rooms, free/busy & time suggestions |
 | Todo | `todo` | Create / list / update / complete tasks and comments |

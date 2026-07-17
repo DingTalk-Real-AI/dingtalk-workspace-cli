@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -81,6 +82,44 @@ func resolveRecordsFlag(cmd *cobra.Command) (string, error) {
 	return "", fmt.Errorf("missing required flag(s): --records (example: --records '[{\"cells\":{\"fldTextId\":\"文本内容\"}}]')\n  hint: for large payloads or Windows, use --records-file ./path/to/records.json")
 }
 
+// resolveWorkflowDSL reads --dsl from inline JSON, @file, or stdin (-), then
+// decodes the MCP-facing workflow-dsl/v1 object. Detailed DSL validation stays
+// on the workflow service so callers receive its structured issues response.
+func resolveWorkflowDSL(cmd *cobra.Command) (map[string]any, error) {
+	raw := mustGetFlag(cmd, "dsl")
+	switch {
+	case raw == "-":
+		data, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return nil, fmt.Errorf("--dsl stdin read failed: %w", err)
+		}
+		raw = string(data)
+	case strings.HasPrefix(raw, "@"):
+		path := strings.TrimSpace(strings.TrimPrefix(raw, "@"))
+		if path == "" {
+			return nil, fmt.Errorf("--dsl file path must not be empty\n  hint: use --dsl @workflow.json")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("--dsl file read failed: %w\n  hint: ensure the file exists and contains a workflow-dsl/v1 JSON object", err)
+		}
+		raw = string(data)
+	}
+
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("--dsl must not be empty\n  hint: pass inline JSON, @workflow.json, or - for stdin")
+	}
+
+	var dsl map[string]any
+	if err := json.Unmarshal([]byte(raw), &dsl); err != nil {
+		return nil, fmt.Errorf("--dsl JSON parse failed: %w\n  hint: --dsl must be a workflow-dsl/v1 JSON object", err)
+	}
+	if dsl == nil {
+		return nil, fmt.Errorf("--dsl must be a JSON object, got null")
+	}
+	return dsl, nil
+}
+
 // recordQueryFetchAll implements --all auto-pagination for record query.
 //   - pageLimit controls max pages (default 50, 0 = unlimited)
 //   - Mid-loop errors break gracefully, outputting already-fetched data
@@ -98,7 +137,7 @@ func recordQueryFetchAll(toolArgs map[string]any, pageLimit int) error {
 		page++
 
 		if page > 1 {
-			time.Sleep(time.Duration(pageDelayMs) * time.Millisecond)
+			helperSleep(time.Duration(pageDelayMs) * time.Millisecond)
 		}
 
 		fmt.Fprintf(os.Stderr, "[page %d] fetching...\n", page)
@@ -509,7 +548,7 @@ func callAitableTool(toolName string, args map[string]any) error {
 		if attempt > 0 {
 			backoff := time.Duration(1<<(attempt-1)) * time.Second // 1s, 2s, 4s
 			fmt.Fprintf(os.Stderr, "[aitable retry %d/%d] %s after %v...\n", attempt, aitableMaxRetries, toolName, backoff)
-			time.Sleep(backoff)
+			helperSleep(backoff)
 		}
 
 		err := callMCPTool(toolName, args)
@@ -533,7 +572,7 @@ func callAitableHelperTool(toolName string, args map[string]any) error {
 		if attempt > 0 {
 			backoff := time.Duration(1<<(attempt-1)) * time.Second
 			fmt.Fprintf(os.Stderr, "[aitable-helper retry %d/%d] %s after %v...\n", attempt, aitableMaxRetries, toolName, backoff)
-			time.Sleep(backoff)
+			helperSleep(backoff)
 		}
 
 		err := callMCPToolOnServer("aitable-helper", toolName, args)
@@ -843,10 +882,7 @@ func newAitableCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "base-id", "table-id", "record-id"); err != nil {
 				return err
 			}
-			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
-			if err != nil {
-				return err
-			}
+			baseID, _ := mustFlagOrFallback(cmd, "base-id", "base")
 			return callAitableTool("get_base_primary_doc_id", map[string]any{
 				"baseId":   baseID,
 				"tableId":  mustGetFlag(cmd, "table-id"),
@@ -1013,10 +1049,7 @@ MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID := mustGetFlag(cmd, "base-id")
 			targetFolderID := mustGetFlag(cmd, "target-folder-id")
-			onlyCopyMeta, err := cmd.Flags().GetBool("only-struct")
-			if err != nil {
-				return err
-			}
+			onlyCopyMeta, _ := cmd.Flags().GetBool("only-struct")
 			toolArgs := map[string]any{
 				"baseId":         baseID,
 				"targetFolderId": targetFolderID,
@@ -1125,10 +1158,7 @@ config 结构参考：
 			if err != nil {
 				return err
 			}
-			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
-			if err != nil {
-				return err
-			}
+			baseID, _ := mustFlagOrFallback(cmd, "base-id", "base")
 			return callMCPTool("create_table", map[string]any{
 				"baseId":    baseID,
 				"tableName": flagOrFallback(cmd, "name", "table-name"),
@@ -1515,9 +1545,6 @@ newFieldName、config、aiConfig 至少传入一项。
 				return err
 			}
 			tableID := mustGetFlag(cmd, "table-id")
-			if tableID == "" {
-				return fmt.Errorf("--table-id must not be empty\n  hint: first run: dws aitable table get --base-id <baseId> to find the tableId")
-			}
 			if v, _ := cmd.Flags().GetString("view-id"); v != "" {
 				fmt.Fprintf(os.Stderr, "warning: --view-id is not supported by record query; records are queried by table, not by view. The --view-id flag has been ignored.\n")
 			}
@@ -1577,14 +1604,8 @@ newFieldName、config、aiConfig 至少传入一项。
 			if !fetchAll {
 				return callAitableTool("query_records", toolArgs)
 			}
+			// The flag default is already 50; an explicit zero means unlimited.
 			pageLimit, _ := cmd.Flags().GetInt("page-limit")
-			if pageLimit == 0 {
-				// 用户未显式传 --page-limit 时，检查是否有默认值
-				if !cmd.Flags().Changed("page-limit") {
-					pageLimit = 50 // 默认最多 50 页
-				}
-				// 显式传 --page-limit 0 表示无限制，保持 0
-			}
 			return recordQueryFetchAll(toolArgs, pageLimit)
 		},
 	}
@@ -2108,10 +2129,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 				return fmt.Errorf("missing required flag --size")
 			}
 
-			size, err := cmd.Flags().GetInt64("size")
-			if err != nil {
-				return fmt.Errorf("invalid --size value: %w", err)
-			}
+			size, _ := cmd.Flags().GetInt64("size")
 
 			toolArgs := map[string]any{
 				"baseId":   mustGetFlag(cmd, "base-id"),
@@ -2386,10 +2404,10 @@ fieldWidths 仅支持 Grid 视图。
   - Kanban → kanbanCard {coverFieldId, coverResizeMode, hiddenFieldTitle}
   - Gallery → galleryCard {coverMode, coverFieldId, coverResizeMode, displayFieldName}
 typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cover-field-id 互斥。`,
-		Example: `  dws aitable view update card --view-id VIEW_ID --cover-field-id fldXXX --cover-resize-mode contain
-  dws aitable view update card --view-id VIEW_ID --no-cover
-  dws aitable view update card --view-id VIEW_ID --cover-mode auto       # Gallery
-  dws aitable view update card --view-id VIEW_ID --json '{"hiddenFieldTitle":true}'`,
+		Example: `  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --cover-field-id fldXXX --cover-resize-mode contain
+  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --no-cover
+  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --cover-mode auto       # Gallery
+  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --json '{"hiddenFieldTitle":true}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// flag 级互斥先校验，避免无效请求触发 preflight GET
 			noCover, _ := cmd.Flags().GetBool("no-cover")
@@ -2427,8 +2445,8 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 		Long: `按属性局部更新 Gantt 视图的 ganttTimebar 配置。
 子字段：startField / endField (date 字段) / displayFieldId / timelineScale (year|quarter|month|weeks) /
 colorConfigs (JSON 数组) / officialHoliday (bool)。`,
-		Example: `  dws aitable view update timebar --view-id VIEW_ID --start-field fldStart --end-field fldEnd --timeline-scale month
-  dws aitable view update timebar --view-id VIEW_ID --json '{"colorConfigs":[]}'`,
+		Example: `  dws aitable view update timebar --table-id TABLE_ID --view-id VIEW_ID --start-field fldStart --end-field fldEnd --timeline-scale month
+  dws aitable view update timebar --table-id TABLE_ID --view-id VIEW_ID --json '{"colorConfigs":[]}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "ganttTimebar", []string{"Gantt"}, false)
 			if err != nil {
@@ -2441,12 +2459,11 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 			collectStringFlag(cmd, "timeline-scale", "timelineScale", typed)
 			collectBoolFlag(cmd, "official-holiday", "officialHoliday", typed)
 			if v, _ := cmd.Flags().GetString("color-configs"); v != "" {
-				parsed := jsonStringToMap(v)
-				if arr, ok := parsed.([]any); ok {
-					typed["colorConfigs"] = arr
-				} else {
-					return fmt.Errorf("--color-configs 必须是 JSON 数组，got %T", parsed)
+				var arr []any
+				if err := json.Unmarshal([]byte(v), &arr); err != nil {
+					return fmt.Errorf("--color-configs 必须是 JSON 数组: %w", err)
 				}
+				typed["colorConfigs"] = arr
 			}
 			jsonStr, _ := cmd.Flags().GetString("json")
 			block, err := mergeUpdateBlock(jsonStr, typed)
@@ -2462,9 +2479,9 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Short: "更新视图字段聚合统计（仅 Grid）",
 		Long: `更新 Grid 视图的 aggregate 配置。value 为 map[fieldId]→AggregateAction string，
 传 null 清除单个字段聚合。便捷 flag：--field-id / --action 单字段写入；--clear-field-id 单/多清除。`,
-		Example: `  dws aitable view update aggregate --view-id VIEW_ID --field-id fldX --action SUM
-  dws aitable view update aggregate --view-id VIEW_ID --clear-field-id fldX,fldY
-  dws aitable view update aggregate --view-id VIEW_ID --json '{"fldA":"AVG","fldB":"MAX"}'`,
+		Example: `  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --action SUM
+  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --clear-field-id fldX,fldY
+  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":"AVG","fldB":"MAX"}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "aggregate", []string{"Grid"}, false)
 			if err != nil {
@@ -2497,8 +2514,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Use:   "field-widths",
 		Short: "更新视图字段列宽（仅 Grid）",
 		Long:  `更新 Grid 视图的字段列宽。value 为 map[fieldId]→width(int)，可单字段或批量。`,
-		Example: `  dws aitable view update field-widths --view-id VIEW_ID --field-id fldX --width 200
-  dws aitable view update field-widths --view-id VIEW_ID --json '{"fldA":120,"fldB":200}'`,
+		Example: `  dws aitable view update field-widths --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --width 200
+  dws aitable view update field-widths --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":120,"fldB":200}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "fieldWidths", []string{"Grid"}, false)
 			if err != nil {
@@ -2527,8 +2544,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Short: "更新视图可见字段列表",
 		Long: `按属性更新视图的 visibleFieldIds（即列顺序）。传入的字段 ID 列表
 完全替换原有顺序；首列字段不可隐藏。所有视图类型都支持。`,
-		Example: `  dws aitable view update visible-fields --view-id VIEW_ID --field-ids fld1,fld2,fld3
-  dws aitable view update visible-fields --view-id VIEW_ID --json '["fld1","fld2"]'`,
+		Example: `  dws aitable view update visible-fields --table-id TABLE_ID --view-id VIEW_ID --field-ids fld1,fld2,fld3
+  dws aitable view update visible-fields --table-id TABLE_ID --view-id VIEW_ID --json '["fld1","fld2"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, _, err := viewUpdateCommonPreflight(cmd, "visibleFieldIds", nil, false)
 			if err != nil {
@@ -2539,10 +2556,9 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				fieldIDs = parseCSVValues(v)
 			}
 			if jsonStr, _ := cmd.Flags().GetString("json"); jsonStr != "" {
-				parsed := jsonStringToMap(jsonStr)
-				arr, ok := parsed.([]any)
-				if !ok {
-					return fmt.Errorf("--json 必须是字符串数组，got %T", parsed)
+				var arr []any
+				if err := json.Unmarshal([]byte(jsonStr), &arr); err != nil {
+					return fmt.Errorf("--json 必须是字符串数组: %w", err)
 				}
 				// --json 优先（与其他 update 子命令"typed 优先"相反，因为 visible-fields
 				// 不存在 key-level 合并；只能整组替换）。若同时设置则提示。
@@ -2611,7 +2627,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Use:     "name",
 		Short:   "重命名视图（= view update --name 的便捷子命令）",
 		Long:    `重命名指定视图，等价于 dws aitable view update --name X。无 config 参数。`,
-		Example: `  dws aitable view update name --view-id VIEW_ID --name "新视图名"`,
+		Example: `  dws aitable view update name --table-id TABLE_ID --view-id VIEW_ID --name "新视图名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id", "name"); err != nil {
 				return err
@@ -2711,8 +2727,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "更新视图冻结列数",
 		Long: `设置视图冻结列数。--count N 表示从首列起冻结 N 列；--count 0 表示取消冻结。
 返回 {baseId, tableId, viewId, count}。`,
-		Example: `  dws aitable view update frozen-cols --view-id VIEW_ID --count 1
-  dws aitable view update frozen-cols --view-id VIEW_ID --count 0`,
+		Example: `  dws aitable view update frozen-cols --table-id TABLE_ID --view-id VIEW_ID --count 1
+  dws aitable view update frozen-cols --table-id TABLE_ID --view-id VIEW_ID --count 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -2755,8 +2771,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "更新视图行高（单元格高度）",
 		Long: `设置视图单元格高度，单位为像素。--cell-height 必填，合法档位 32 / 56 / 88 / 128，默认 32。
 返回 {baseId, tableId, viewId, cellHeight}。`,
-		Example: `  dws aitable view update row-height --view-id VIEW_ID --cell-height 32
-  dws aitable view update row-height --view-id VIEW_ID --cell-height 56`,
+		Example: `  dws aitable view update row-height --table-id TABLE_ID --view-id VIEW_ID --cell-height 32
+  dws aitable view update row-height --table-id TABLE_ID --view-id VIEW_ID --cell-height 56`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -3204,8 +3220,79 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	workflowCmd := &cobra.Command{
 		Use:   "workflow",
-		Short: "自动化工作流管理（启停 / 查看 / 列表）",
+		Short: "自动化工作流管理（创建 / 更新 / 启停 / 查看 / 列表）",
 		RunE:  groupRunE,
+	}
+
+	workflowCreateCmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建并发布自动化工作流",
+		Long: `在指定 Base 中创建并发布自动化工作流。
+--dsl 必须是完整的 workflow-dsl/v1 JSON 对象；涉及数据表、字段或视图的节点应使用真实的 sheetId / fieldId / viewId。
+
+--dsl 支持内联 JSON、@文件路径，或 - 从 stdin 读取。创建属于非幂等操作，CLI 不会自动重试。
+返回 data.valid、flowId、flowSchema、stepNodeIds、referenceMap、issues；即使 status=success，
+valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正后再调用。`,
+		Example: `  dws aitable workflow create --base-id BASE_ID --dsl @workflow.json --locale zh-CN
+  cat workflow.json | dws aitable workflow create --base-id BASE_ID --dsl -`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "dsl"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			dsl, err := resolveWorkflowDSL(cmd)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId": baseID,
+				"dsl":    dsl,
+			}
+			if locale, _ := cmd.Flags().GetString("locale"); strings.TrimSpace(locale) != "" {
+				toolArgs["locale"] = locale
+			}
+			// create_workflow is non-idempotent. Bypass the retry wrapper to
+			// prevent an uncertain first response from creating a duplicate.
+			return callMCPToolOnServer("aitable", "create_workflow", toolArgs)
+		},
+	}
+
+	workflowUpdateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "更新并发布已有自动化工作流",
+		Long: `在指定 Base 中更新并发布已有自动化工作流。
+建议先用 workflow get 留底当前详情；--dsl 必须是完整的 workflow-dsl/v1 JSON 对象，而不是局部 patch。
+
+--dsl 支持内联 JSON、@文件路径，或 - 从 stdin 读取。更新会发布传入的目标 DSL；请提供完整、可独立校验的 workflow-dsl/v1 对象。
+返回 data.valid、flowId、flowSchema、stepNodeIds、referenceMap、issues；即使 status=success，
+valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正后再调用。`,
+		Example: `  dws aitable workflow update --base-id BASE_ID --workflow-id WORKFLOW_ID --dsl @workflow.json --locale zh-CN
+  cat workflow.json | dws aitable workflow update --base-id BASE_ID --workflow-id WORKFLOW_ID --dsl -`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "workflow-id", "dsl"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			dsl, err := resolveWorkflowDSL(cmd)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId":     baseID,
+				"workflowId": mustGetFlag(cmd, "workflow-id"),
+				"dsl":        dsl,
+			}
+			if locale, _ := cmd.Flags().GetString("locale"); strings.TrimSpace(locale) != "" {
+				toolArgs["locale"] = locale
+			}
+			return callAitableTool("update_workflow", toolArgs)
+		},
 	}
 
 	workflowEnableCmd := &cobra.Command{
@@ -3213,7 +3300,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "启用指定工作流",
 		Long: `启用指定 Base 中的自动化工作流。启用后工作流将按配置的触发条件自动执行。
 返回 {workflowId, enabled} 用于确认操作结果（enabled 为动作确认而非状态查询）。
-当前不支持通过 CLI 新建工作流，请在 AI 表格 Web 端配置好后用 workflow list 拿到 workflowId 再启停。`,
+可用 workflow create 创建工作流，或用 workflow list 获取已有 workflowId。`,
 		Example: `  dws aitable workflow enable --base-id BASE_ID --workflow-id WORKFLOW_ID
   # 查询 workflowId: dws aitable workflow list --base-id <baseId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -4750,6 +4837,13 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	formCmd.AddCommand(formListCmd, formGetCmd, formCreateCmd, formDeleteCmd, formUpdateCmd, formFieldCmd, formShareCmd, formQuestionsCmd)
 
 	// workflow
+	workflowCreateCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
+	workflowCreateCmd.Flags().String("dsl", "", "workflow-dsl/v1 JSON 对象；支持内联 JSON、@文件路径或 - 从 stdin 读取 (必填)")
+	workflowCreateCmd.Flags().String("locale", "", "请求语言，例如 zh-CN 或 zh_CN (可选)")
+	workflowUpdateCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
+	workflowUpdateCmd.Flags().String("workflow-id", "", "目标工作流 ID (必填)")
+	workflowUpdateCmd.Flags().String("dsl", "", "workflow-dsl/v1 JSON 对象；支持内联 JSON、@文件路径或 - 从 stdin 读取 (必填)")
+	workflowUpdateCmd.Flags().String("locale", "", "请求语言，例如 zh-CN 或 zh_CN (可选)")
 	workflowEnableCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
 	workflowEnableCmd.Flags().String("workflow-id", "", "目标工作流 ID (必填)")
 	workflowDisableCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
@@ -4759,7 +4853,11 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	workflowListCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
 	workflowListCmd.Flags().Int("limit", 0, "分页大小 [1, 100]，不传走服务端默认 20")
 	workflowListCmd.Flags().Int("offset", 0, "分页偏移量，>= 0，不传走服务端默认 0")
-	workflowCmd.AddCommand(workflowEnableCmd, workflowDisableCmd, workflowGetCmd, workflowListCmd)
+	workflowCmd.AddCommand(
+		workflowCreateCmd, workflowUpdateCmd,
+		workflowEnableCmd, workflowDisableCmd,
+		workflowGetCmd, workflowListCmd,
+	)
 
 	// dashboard
 	dashboardGetCmd.Flags().String("base-id", "", "所属 Base ID (必填)")

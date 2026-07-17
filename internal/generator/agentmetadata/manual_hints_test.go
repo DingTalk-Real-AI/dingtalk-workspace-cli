@@ -101,7 +101,7 @@ func TestGenerateRejectsIncompleteSelectionCoverage(t *testing.T) {
 
 func TestGenerateRequiresAgentHintDirectory(t *testing.T) {
 	_, _, err := Generate(Options{})
-	if err == nil || !strings.Contains(err.Error(), "Agent hint directory is required") {
+	if err == nil || !strings.Contains(err.Error(), "agent hint directory is required") {
 		t.Fatalf("Generate() error = %v", err)
 	}
 }

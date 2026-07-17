@@ -2,12 +2,13 @@
 
 ## 适用范围（重要）
 
-`sheet` 产品线仅支持钉钉在线电子表格（`contentType=ALIDOC`、`extension=axls`），不支持上传的 `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件。
+`sheet` 的单元格与工作表操作仅支持钉钉在线电子表格（`contentType=ALIDOC`、`extension=axls`）。`sheet import create` 是 Agent 可发现的文件入口：它接收本地 `xlsx` / `xls`，转换并新建在线电子表格；不能把已上传的 xlsx 节点直接当作 axls 操作。
 
 | 文件类型 | 处理方式 |
 |---------|---------|
 | 在线电子表格（`axls`） | 走 `sheet` 全部命令（读/写/筛选/合并/导出等服务端原子操作） |
-| `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件 | 必须用 `dws doc download --node <ID> --output <路径>` 先下载到本地再解析处理，禁止调用任何 `sheet` 子命令（sheet 底层 MCP 工具仅认 `axls`，传入 xlsx 节点会直接报错） |
+| 本地路径上的 `xlsx` / `xls` | 用 `dws sheet import create --file <路径> --folder-token <ID>` 或 `--workspace <ID>` 转换为新的在线电子表格 |
+| 钉盘/文档中已有的 `xlsx` / `xls` / `xlsm` / `csv` 节点 | 不能直接调用工作表/单元格命令；先用 `dws doc download --node <ID> --output <路径>` 下载。若用户要转为在线表格，再对下载文件执行 `sheet import` |
 | 想把在线表格导出为 xlsx | 用 `dws sheet export` ——输入是 `axls`，输出是 xlsx（axls → xlsx 的格式转换） |
 
 > 用户直接粘贴原始 `alidocs` URL 时必须先 probe：先执行 `dws doc info --node <URL> --format json`，按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) 校验 `contentType` 和 `extension`：
@@ -125,6 +126,7 @@ dws sheet filter-view --help
 | `sheet list-float-images` | 列出工作表所有浮动图片 |
 | `sheet update-float-image` | 更新浮动图片属性 |
 | `sheet delete-float-image` | 删除浮动图片 |
+| `sheet import create` | 导入本地 xlsx/xls 为新的在线电子表格（`sheet import` 保留兼容） |
 | `sheet export` | 导出表格为 xlsx |
 | `sheet filter get` | 获取全局筛选信息 |
 | `sheet filter create` | 创建全局筛选 |
@@ -176,6 +178,7 @@ dws sheet filter-view --help
 | 查找替换 | [sheet/sheet-search-replace.md](./sheet/sheet-search-replace.md) | find / replace |
 | 全局筛选 | [sheet/sheet-filter.md](./sheet/sheet-filter.md) | filter get / create / delete / update / clear-criteria / sort |
 | 筛选视图 | [sheet/sheet-filter-view.md](./sheet/sheet-filter-view.md) | filter-view 全系列 |
+| 导入 | [sheet/sheet-import.md](./sheet/sheet-import.md) | import / import get |
 | 导出 | [sheet/sheet-export.md](./sheet/sheet-export.md) | export |
 
 > `template list/search/apply` 无独立子文档，直接执行 `dws sheet template <子命令> --help` 查看用法。
@@ -368,6 +371,15 @@ dws sheet filter-view --help
 用户说"清除筛选条件/移除筛选条件/取消筛选条件":
 - 清除筛选视图列条件 → `filter-view delete-criteria`
 - 注意与 `filter-view delete`（删除整个筛选视图）区分：`delete-criteria` 仅清除指定列的条件，不删除筛选视图本身
+
+### 导入
+
+用户说"导入Excel/把xlsx转为在线表格/上传本地表格并在线编辑":
+- 使用 `sheet import`，本地文件仅支持 `xlsx` / `xls`
+- `--folder-token` 与 `--workspace` 至少提供一个；不指定 `--name` 时使用文件名
+- CLI 内部完成上传、转换和轮询，Agent 不要自行拆分流程或重复提交
+- 若返回 `timed_out:true`，执行返回的 `next_command` 续查，不要重新执行 import
+- 详见 [sheet/sheet-import.md](./sheet/sheet-import.md)
 
 ### 导出
 
@@ -2139,7 +2151,7 @@ dws sheet export --node <NODE_ID> --output ./
 - `copy` 当指定名称与已有工作表重复时，系统会自动重命名为合法值
 - `copy` 的 `--index` 可选，不传时副本将放置在源工作表之后的默认位置
 - ★ 关键区分: sheet(电子表格/单元格读写) vs aitable(AI多维表/结构化记录/字段定义) vs doc(文档编辑/阅读)
-- sheet 产品线仅支持 `axls`（在线电子表格，`contentType=ALIDOC`），不支持 `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件
+- 工作表与单元格命令仅支持 `axls`；本地 `xlsx` / `xls` 可通过 `sheet import` 转换为新的在线电子表格
 - 遇到未知 `alidocs` URL 时，必须先 probe（`dws doc info --node <URL> --format json`）确认 `contentType` 和 `extension`，才能决定是否走 sheet
 - 当节点 `extension=xlsx` / `xls` / `xlsm` / `csv`（`contentType≠ALIDOC`）时，必须用 `dws doc download --node <ID> --output <路径>` 先下载到本地再处理，禁止调用任何 sheet 子命令（sheet 底层 MCP 工具只识别 axls，调用 xlsx 节点必失败）
-- 要把在线表格导出为 xlsx 文件——走 `dws sheet export`（axls → xlsx 的格式转换）；要读已有的 xlsx 文件——走 `dws doc download` 后在本地解析，两者方向相反
+- 要把在线表格导出为 xlsx 文件，走 `dws sheet export`；要把本地 xlsx/xls 转为在线表格，走 `dws sheet import`；要读取已上传但未转换的 xlsx 节点，先走 `dws doc download`

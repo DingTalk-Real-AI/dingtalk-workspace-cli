@@ -22,6 +22,8 @@ import (
 	"strings"
 )
 
+var marshalManualAgentSelectionFixture = json.Marshal
+
 const manualAgentSelectionFixtureVersion = 1
 
 // ManualAgentSelectionCase is one reproducible model-evaluation assertion
@@ -193,7 +195,7 @@ func normalizeManualAgentSelectionScenario(value string) string {
 }
 
 func manualAgentSelectionFixtureDigest(fixture ManualAgentSelectionFixture) (string, error) {
-	data, err := json.Marshal(fixture)
+	data, err := marshalManualAgentSelectionFixture(fixture)
 	if err != nil {
 		return "", fmt.Errorf("marshal Manual Agent selection fixture: %w", err)
 	}

@@ -8,9 +8,11 @@ import (
 	"syscall"
 )
 
+var connectGetrlimit = syscall.Getrlimit
+
 func checkFDLimit() {
 	var rlim syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+	if err := connectGetrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
 		return
 	}
 	if rlim.Cur < 512 {

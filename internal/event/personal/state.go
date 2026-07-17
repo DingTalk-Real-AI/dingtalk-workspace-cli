@@ -33,6 +33,17 @@ const (
 	stateLockRetryDelay  = 25 * time.Millisecond
 )
 
+var (
+	runStateReadFile      = os.ReadFile
+	runStateMkdirAll      = os.MkdirAll
+	runStateTryAcquire    = eventlock.TryAcquire
+	runStateRemove        = os.Remove
+	runStateMarshalIndent = json.MarshalIndent
+	runStateWriteFile     = os.WriteFile
+	runStateRename        = os.Rename
+	runStateSleep         = time.Sleep
+)
+
 type RunState struct {
 	SubscribeID  string    `json:"subscribe_id"`
 	EventKey     string    `json:"event_key,omitempty"`
@@ -45,7 +56,7 @@ type RunState struct {
 
 func LoadRunStates(workDir string) ([]RunState, error) {
 	path := filepath.Join(workDir, StateFileName)
-	b, err := os.ReadFile(path)
+	b, err := runStateReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -115,13 +126,13 @@ func RemoveRunStates(workDir string, subscribeIDs []string) error {
 }
 
 func withRunStateLock(workDir string, wait time.Duration, fn func() error) error {
-	if err := os.MkdirAll(workDir, config.DirPerm); err != nil {
+	if err := runStateMkdirAll(workDir, config.DirPerm); err != nil {
 		return err
 	}
 	lockPath := filepath.Join(workDir, StateLockFileName)
 	deadline := time.Now().Add(wait)
 	for {
-		held, err := eventlock.TryAcquire(lockPath)
+		held, err := runStateTryAcquire(lockPath)
 		if err == nil {
 			defer held.Close()
 			return fn()
@@ -137,12 +148,12 @@ func withRunStateLock(workDir string, wait time.Duration, fn func() error) error
 		if remaining < delay {
 			delay = remaining
 		}
-		time.Sleep(delay)
+		runStateSleep(delay)
 	}
 }
 
 func writeRunStates(workDir string, states []RunState) error {
-	if err := os.MkdirAll(workDir, config.DirPerm); err != nil {
+	if err := runStateMkdirAll(workDir, config.DirPerm); err != nil {
 		return err
 	}
 	sort.Slice(states, func(i, j int) bool {
@@ -150,22 +161,22 @@ func writeRunStates(workDir string, states []RunState) error {
 	})
 	path := filepath.Join(workDir, StateFileName)
 	if len(states) == 0 {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		if err := runStateRemove(path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	}
-	b, err := json.MarshalIndent(states, "", "  ")
+	b, err := runStateMarshalIndent(states, "", "  ")
 	if err != nil {
 		return err
 	}
 	b = append(b, '\n')
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, config.FilePerm); err != nil {
+	if err := runStateWriteFile(tmp, b, config.FilePerm); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := runStateRename(tmp, path); err != nil {
+		_ = runStateRemove(tmp)
 		return err
 	}
 	return nil

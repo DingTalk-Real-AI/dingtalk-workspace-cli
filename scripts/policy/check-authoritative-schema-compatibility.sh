@@ -35,6 +35,9 @@ done
 [ -n "$BASE_REF" ] || { usage; exit 2; }
 
 cd "$ROOT"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
+
 git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null || {
 	printf 'error: Schema authority is not available locally: %s\n' "$BASE_REF" >&2
 	exit 2
@@ -44,7 +47,7 @@ if [ ! -x "$BIN" ]; then
 	exit 2
 fi
 
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dws-schema-authority.XXXXXX")"
+TMP_ROOT="$(policy_runtime_mktemp_dir dws-schema-authority)"
 BASE_WORKTREE="$TMP_ROOT/base-worktree"
 BASE_BIN="$TMP_ROOT/base-dws"
 BASE_RAW="$TMP_ROOT/base-schema.json"

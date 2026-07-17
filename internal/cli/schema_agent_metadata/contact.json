@@ -1,6 +1,290 @@
 {
   "product_id": "contact",
   "tools": {
+    "contact account create": {
+      "agent_summary": "为当前企业创建专属登录账号",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "创建企业组织本身应使用 contact org create；仅邀请已有手机号员工入企应使用 contact user invite"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact account create --org-user-name \"张三\" --login-id \"zhangsan001\" --org-user-mobile \"13800138000\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "为当前企业创建专属登录账号",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": "为当前企业创建专属登录账号",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "创建企业组织本身应使用 contact org create；仅邀请已有手机号员工入企应使用 contact user invite"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "创建企业组织本身应使用 contact org create；仅邀请已有手机号员工入企应使用 contact user invite"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact account create --org-user-name \"张三\" --login-id \"zhangsan001\" --org-user-mobile \"13800138000\""
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact account create --org-user-name \"张三\" --login-id \"zhangsan001\" --org-user-mobile \"13800138000\""
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account flags to contact/exclusive_account_create, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account flags to contact/exclusive_account_create, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires enterprise display name and login ID, maps optional contact fields and department IDs, and calls exclusive_account_create without a runtime confirmation gate."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求创建企业账号、专属账号或企业登录账号，并已提供员工名称和登录号"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求创建企业账号、专属账号或企业登录账号，并已提供员工名称和登录号"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业账号创建的长模式消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account flags to contact/exclusive_account_create, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.exclusive_account_create",
+        "Skill:skills/mono/references/products/contact.md",
+        "cobra-help:dws contact account create",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.exclusive_account_create#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求创建企业账号、专属账号或企业登录账号，并已提供员工名称和登录号"
+      ]
+    },
     "contact dept get-info": {
       "agent_summary": "获取指定部门详情",
       "agent_summary_source": "dws-agent-selection/contact",
@@ -1019,6 +1303,290 @@
       ],
       "use_when": [
         "只知道部门名称或关键词，需要定位 deptId 时"
+      ]
+    },
+    "contact org create": {
+      "agent_summary": "创建一个新的钉钉企业组织",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "请求中包含企业账号、专属账号或登录账号时改用 contact account create；邀请员工时改用 contact user invite"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact org create --org-name \"我的企业\" --creator-username \"张三\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "创建一个新的钉钉企业组织",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": "创建一个新的钉钉企业组织",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "请求中包含企业账号、专属账号或登录账号时改用 contact account create；邀请员工时改用 contact user invite"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "请求中包含企业账号、专属账号或登录账号时改用 contact account create；邀请员工时改用 contact user invite"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact org create --org-name \"我的企业\" --creator-username \"张三\""
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact org create --org-name \"我的企业\" --creator-username \"张三\""
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps organization and creator names to contact/org_create, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps organization and creator names to contact/org_create, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires an organization name and creator display name and calls org_create without a runtime confirmation gate."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求创建、新建、开通或初始化企业组织，并已提供企业名称和创建者企业内名称"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求创建、新建、开通或初始化企业组织，并已提供企业名称和创建者企业内名称"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅企业组织创建的意图边界和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps organization and creator names to contact/org_create, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.org_create",
+        "Skill:skills/mono/references/products/contact.md",
+        "cobra-help:dws contact org create",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.org_create#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求创建、新建、开通或初始化企业组织，并已提供企业名称和创建者企业内名称"
       ]
     },
     "contact relation list-my-followings": {
@@ -2047,6 +2615,266 @@
       ],
       "use_when": [
         "用户问我是谁/我的 userId/当前账号信息"
+      ]
+    },
+    "contact user invite": {
+      "agent_summary": "按手机号邀请一名员工加入当前企业",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "需要创建企业专属登录账号时使用 contact account create；需要创建企业组织本身时使用 contact org create"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact user invite --org-user-name \"张三\" --org-user-mobile \"13800138000\" --depts '[{\"deptId\":1}]'"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按手机号邀请一名员工加入当前企业",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": "按手机号邀请一名员工加入当前企业",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要创建企业专属登录账号时使用 contact account create；需要创建企业组织本身时使用 contact org create"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "需要创建企业专属登录账号时使用 contact account create；需要创建企业组织本身时使用 contact org create"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact user invite --org-user-name \"张三\" --org-user-mobile \"13800138000\" --depts '[{\"deptId\":1}]'"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact user invite --org-user-name \"张三\" --org-user-mobile \"13800138000\" --depts '[{\"deptId\":1}]'"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps employee identity and decoded department JSON to contact/add_employee, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps employee identity and decoded department JSON to contact/add_employee, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed Wukong-compatible handler requires employee name and mobile, decodes optional --depts JSON to an array, and calls add_employee without a runtime confirmation gate."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求邀请或添加员工到当前企业，且已提供企业内姓名和手机号"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求邀请或添加员工到当前企业，且已提供企业内姓名和手机号"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据真实 Cobra leaf、Wukong-compatible handler 与产品 Skill 审阅邀请员工的正向意图、兄弟命令消歧和可执行示例；不改变命令身份、安全或接口事实。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps employee identity and decoded department JSON to contact/add_employee, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.add_employee",
+        "Skill:skills/mono/references/products/contact.md",
+        "cobra-help:dws contact user invite",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.add_employee#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求邀请或添加员工到当前企业，且已提供企业内姓名和手机号"
       ]
     },
     "contact user profile fields": {

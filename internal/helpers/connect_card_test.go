@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
 )
@@ -295,4 +296,46 @@ func TestAICardCustomTemplate(t *testing.T) {
 	if rec.bodies[0]["cardTemplateId"] != "my-own-template.schema" {
 		t.Fatalf("cardTemplateId = %v, want custom template", rec.bodies[0]["cardTemplateId"])
 	}
+}
+
+func TestAICardOTOAndRepairCoverage(t *testing.T) {
+	rec, srv := newCardAPIServer(t)
+	withCardAPIBase(t, srv.URL)
+	c := newAICardClient("ding-client", "ding-secret", defaultAICardTemplateID)
+	if err := c.sendOTOText(context.Background(), nil, "ignored"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.sendOTOText(context.Background(), []string{"u1", "u2"}, "hello"); err != nil {
+		t.Fatal(err)
+	}
+	c.repair(context.Background(), &aiCardInstance{outTrackID: "track"}, "fixed")
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	oldDelay := aiCardRepairDelay
+	aiCardRepairDelay = time.Hour
+	c.repair(cancelled, &aiCardInstance{outTrackID: "track"}, "ignored")
+	aiCardRepairDelay = oldDelay
+	if len(rec.calls) < 2 || rec.calls[0] != "POST /v1.0/robot/oToMessages/batchSend" {
+		t.Fatalf("OTO/repair calls = %#v", rec.calls)
+	}
+}
+
+func TestAtMentionSendGroupReplyCoverage(t *testing.T) {
+	_, srv := newCardAPIServer(t)
+	withCardAPIBase(t, srv.URL)
+	poller := &atMentionPoller{
+		clientID:  "ding-client",
+		channel:   "test",
+		botClient: newAICardClient("ding-client", "ding-secret", ""),
+	}
+	if err := poller.sendGroupReply(context.Background(), "conversation", "reply"); err != nil {
+		t.Fatal(err)
+	}
+
+	oldBase := dingtalkCardAPIBase
+	dingtalkCardAPIBase = "%"
+	if err := poller.sendGroupReply(context.Background(), "conversation", "reply"); err == nil {
+		t.Fatal("invalid group reply URL succeeded")
+	}
+	dingtalkCardAPIBase = oldBase
 }

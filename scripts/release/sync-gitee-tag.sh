@@ -49,11 +49,13 @@ case "$VERSION" in
   *) err "VERSION must be a v-prefixed release tag: ${VERSION}" ;;
 esac
 
+gitee_askpass_required=0
 if [ -z "${GITEE_GIT_REMOTE:-}" ]; then
   [ -n "${GITEE_USER:-}" ] || err "GITEE_USER is required"
   [ -n "${GITEE_TOKEN:-}" ] || err "GITEE_TOKEN is required"
   [ -n "$GITEE_REPO" ] || err "GITEE_REPO is required"
-  GITEE_GIT_REMOTE="https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
+  GITEE_GIT_REMOTE="https://gitee.com/${GITEE_REPO}.git"
+  gitee_askpass_required=1
 fi
 if [ -z "${GITEE_PUBLIC_GIT_REMOTE:-}" ]; then
   [ -n "$GITEE_REPO" ] || err "GITEE_REPO is required"
@@ -153,6 +155,22 @@ fi
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
+
+if [ "$gitee_askpass_required" -eq 1 ]; then
+  askpass="$tmp_dir/git-askpass.sh"
+  cat >"$askpass" <<'EOF'
+#!/bin/sh
+case "$1" in
+  *Username*) printf '%s\n' "$DWS_GITEE_USER" ;;
+  *) printf '%s\n' "$DWS_GITEE_TOKEN" ;;
+esac
+EOF
+  chmod 700 "$askpass"
+  export DWS_GITEE_USER="$GITEE_USER"
+  export DWS_GITEE_TOKEN="$GITEE_TOKEN"
+  export GIT_ASKPASS="$askpass"
+  export GIT_TERMINAL_PROMPT=0
+fi
 
 remote_tag_commit() {
   local refs_file="${tmp_dir}/remote-refs"

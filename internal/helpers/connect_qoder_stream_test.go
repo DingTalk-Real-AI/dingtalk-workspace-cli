@@ -24,11 +24,11 @@ import (
 	"time"
 )
 
-func writeQoderStreamStub(t *testing.T, dir string) string {
+func writeQoderStreamStub(t *testing.T, dir string) (string, string) {
 	t.Helper()
+	requirePOSIXShell(t)
 	logPath := filepath.Join(dir, "qoder-starts.log")
-	script := `#!/usr/bin/env python3
-import json
+	script := `import json
 import os
 import sys
 
@@ -67,24 +67,26 @@ else:
     prompt = sys.argv[-1] if len(sys.argv) > 1 else ""
     print("one-shot " + prompt)
 `
-	path := filepath.Join(dir, "qodercli")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	pythonPath := filepath.Join(dir, "qoder-stub.py")
+	if err := os.WriteFile(pythonPath, []byte(script), 0o600); err != nil {
 		t.Fatalf("write qoder stub: %v", err)
 	}
-	return logPath
+	t.Setenv("DWS_QODER_PY_STUB", filepath.ToSlash(pythonPath))
+	bin := writeShellExecutable(t, dir, "qodercli", `exec python3 "$DWS_QODER_PY_STUB" "$@"`+"\n")
+	return bin, logPath
 }
 
 func TestQoderForwarderUsesNativeAttachmentFlag(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	stubDir := t.TempDir()
-	logPath := writeQoderStreamStub(t, stubDir)
+	bin, logPath := writeQoderStreamStub(t, stubDir)
 	t.Setenv("DWS_QODER_STUB_LOG", logPath)
 	attachmentPath := filepath.Join(t.TempDir(), "forwarded.mov")
 	if err := os.WriteFile(attachmentPath, []byte("video-bytes"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	f := &qoderStreamForwarder{
-		name: "qoderwork", bin: filepath.Join(stubDir, "qodercli"),
+		name: "qoderwork", bin: bin,
 		timeout: 5 * time.Second, sessions: newConvSessions(""),
 	}
 	reply, err := f.forwardWithAttachments(context.Background(), "conv", "分析视频", []connectMediaAttachment{{LocalPath: attachmentPath, FileName: "forwarded.mov", MediaType: "video"}})
@@ -98,7 +100,11 @@ func TestQoderForwarderUsesNativeAttachmentFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `"--attachment", "`+attachmentPath+`"`) || !strings.Contains(string(raw), `"-p", "分析视频"`) {
+	encodedAttachmentPath, err := json.Marshal(attachmentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"--attachment", `+string(encodedAttachmentPath)) || !strings.Contains(string(raw), `"-p", "分析视频"`) {
 		t.Fatalf("qoder args missing attachment: %s", raw)
 	}
 }
@@ -109,7 +115,7 @@ func TestQoderForwarderKeepsStreamJSONProcessAlive(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv("DWS_AGENT_TIMEOUT_MS", "3000")
 	stubDir := t.TempDir()
-	logPath := writeQoderStreamStub(t, stubDir)
+	_, logPath := writeQoderStreamStub(t, stubDir)
 	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("DWS_QODER_STUB_LOG", logPath)
 

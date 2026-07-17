@@ -202,23 +202,15 @@ func normaliseDate(value any, schemaFormat string) (any, bool) {
 	}
 
 	// Try parsing as millisecond timestamp.
-	if ms, err := strconv.ParseInt(str, 10, 64); err == nil && len(str) >= 10 {
+	if ms, err := strconv.ParseInt(str, 10, 64); err == nil && len(str) >= 13 {
 		t := time.UnixMilli(ms).UTC()
-		formatted := formatDate(t, schemaFormat)
-		if formatted != str {
-			return formatted, true
-		}
-		return value, false
+		return formatDate(t, schemaFormat), true
 	}
 
 	// Try parsing as second timestamp.
 	if sec, err := strconv.ParseInt(str, 10, 64); err == nil && len(str) >= 10 {
 		t := time.Unix(sec, 0).UTC()
-		formatted := formatDate(t, schemaFormat)
-		if formatted != str {
-			return formatted, true
-		}
-		return value, false
+		return formatDate(t, schemaFormat), true
 	}
 
 	// Try known date formats.

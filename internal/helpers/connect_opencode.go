@@ -39,7 +39,6 @@ const (
 	opencodeServerUsername     = "opencode"
 	opencodeServerHealthPath   = "/global/health"
 	opencodeNoTextReply        = "（本地 agent 无文本输出）"
-	opencodeServerStartupWait  = 20 * time.Second
 	opencodeServerPollInterval = 150 * time.Millisecond
 	opencodeConfigContentEnv   = "OPENCODE_CONFIG_CONTENT"
 	opencodePermissionEnv      = "OPENCODE_PERMISSION"
@@ -50,6 +49,18 @@ const (
 )
 
 var errOpencodeSessionMissing = errors.New("opencode session missing")
+
+var (
+	opencodeServerStartupWait = 20 * time.Second
+	opencodeAbsPath           = filepath.Abs
+	opencodeFreeLocalPort     = freeLocalPort
+	opencodeExecCommand       = exec.Command
+	opencodeRandRead          = rand.Read
+	opencodeWaitHealthy       = func(s *opencodeServer, ctx context.Context, client *opencodeHTTPClient) error {
+		return s.waitHealthy(ctx, client)
+	}
+	freeLocalPortListen = net.Listen
+)
 
 // opencodeForwarder forwards DingTalk messages to a local `opencode serve`
 // instance. DWS owns the local server process and keeps a per-conversation
@@ -158,7 +169,7 @@ func (f *opencodeForwarder) cwd() string {
 	if f.workDir == "" {
 		return connectWorkDir()
 	}
-	if abs, err := filepath.Abs(f.workDir); err == nil {
+	if abs, err := opencodeAbsPath(f.workDir); err == nil {
 		return abs
 	}
 	return f.workDir
@@ -241,13 +252,13 @@ func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error
 		_ = s.closeLocked()
 	}
 
-	port, err := freeLocalPort()
+	port, err := opencodeFreeLocalPort()
 	if err != nil {
 		return nil, err
 	}
 	password := randomHex(24)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	cmd := exec.Command(s.bin, "serve", "--pure", "--hostname", "127.0.0.1", "--port", fmt.Sprint(port))
+	cmd := opencodeExecCommand(s.bin, "serve", "--pure", "--hostname", "127.0.0.1", "--port", fmt.Sprint(port))
 	if s.workDir != "" {
 		cmd.Dir = s.workDir
 	}
@@ -266,7 +277,7 @@ func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error
 		s.done <- cmd.Wait()
 	}()
 	client = &opencodeHTTPClient{baseURL: s.baseURL, username: opencodeServerUsername, password: s.password, httpClient: s.httpClient}
-	if err := s.waitHealthy(ctx, client); err != nil {
+	if err := opencodeWaitHealthy(s, ctx, client); err != nil {
 		_ = s.closeLocked()
 		return nil, err
 	}
@@ -305,18 +316,12 @@ func opencodeNonInteractiveConfig(existing string) string {
 	}
 	cfg["permission"] = permission
 
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		return `{"tools":{"question":false},"permission":{"*":"allow","read":"allow","edit":"allow","write":"allow","patch":"allow","apply_patch":"allow","glob":"allow","grep":"allow","bash":"allow","task":"allow","skill":"allow","lsp":"allow","webfetch":"allow","websearch":"allow","question":"deny","external_directory":"allow","doom_loop":"allow"}}`
-	}
+	data, _ := json.Marshal(cfg)
 	return string(data)
 }
 
 func opencodeNonInteractivePermission() string {
-	data, err := json.Marshal(opencodeNonInteractivePermissionMap())
-	if err != nil {
-		return `{"*":"allow","read":"allow","edit":"allow","write":"allow","patch":"allow","apply_patch":"allow","glob":"allow","grep":"allow","bash":"allow","task":"allow","skill":"allow","lsp":"allow","webfetch":"allow","websearch":"allow","question":"deny","external_directory":"allow","doom_loop":"allow"}`
-	}
+	data, _ := json.Marshal(opencodeNonInteractivePermissionMap())
 	return string(data)
 }
 
@@ -387,7 +392,7 @@ func (s *opencodeServer) waitHealthy(ctx context.Context, client *opencodeHTTPCl
 		} else {
 			lastErr = err
 		}
-		time.Sleep(opencodeServerPollInterval)
+		helperSleep(opencodeServerPollInterval)
 	}
 	if lastErr != nil {
 		return fmt.Errorf("等待 opencode serve 就绪超时：%w", lastErr)
@@ -497,9 +502,6 @@ func (c *opencodeHTTPClient) sendMessageWithAttachments(ctx context.Context, ses
 		Parts []opencodePart `json:"parts"`
 	}
 	if err := c.doJSON(ctx, http.MethodPost, "/session/"+sessionID+"/message", body, &out); err != nil {
-		if errors.Is(err, errOpencodeSessionMissing) {
-			return "", err
-		}
 		return "", err
 	}
 	return strings.TrimSpace(opencodePartsText(out.Parts)), nil
@@ -607,7 +609,7 @@ func opencodeModelRef(model string) map[string]string {
 }
 
 func freeLocalPort() (int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := freeLocalPortListen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, err
 	}
@@ -617,7 +619,7 @@ func freeLocalPort() (int, error) {
 
 func randomHex(bytesLen int) string {
 	buf := make([]byte, bytesLen)
-	if _, err := rand.Read(buf); err != nil {
+	if _, err := opencodeRandRead(buf); err != nil {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(buf)

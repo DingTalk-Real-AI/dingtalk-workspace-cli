@@ -8,6 +8,8 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
 . "$ROOT/scripts/policy/search.sh"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
 
 if [ -e internal/cli/schema_native_contracts.go ] ||
 	[ -e internal/cli/schema_native_contracts_generated.go ] ||

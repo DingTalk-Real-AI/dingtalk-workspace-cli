@@ -62,15 +62,13 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "days", Type: shortcut.FlagInt, Desc: "回溯天数（可选，默认 7）", Default: "7", Required: false},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id"}},
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"query", "keyword"}},
+	},
 	Tips: []string{
 		`dws chat +search-msg --group <openConversationId> --query "changefree"`,
 		`dws chat +search-msg --group <openConversationId> --query "周报" --days 3`,
-	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if err := rt.ExactlyOne("group", "conversation-id", "id"); err != nil {
-			return err
-		}
-		return rt.AtLeastOne("query", "keyword")
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		group := rt.StrFirst("group", "conversation-id", "id")

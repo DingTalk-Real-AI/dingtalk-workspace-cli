@@ -55,9 +55,6 @@ var ResolveDept = shortcut.Shortcut{
 	Tips: []string{
 		`dws contact +resolve-dept --name 技术部`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("name")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Search departments by name. tool "search_dept_by_keyword" + arg
 		// "query" are taken verbatim from helpers contact dept search

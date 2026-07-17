@@ -15,10 +15,12 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +28,17 @@ import (
 
 func writeShellExecutable(t *testing.T, dir, name, body string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		path := testExecutablePath(dir, name)
+		if err := copyCurrentHelpersTestBinary(path); err != nil {
+			t.Fatalf("write Windows stub %s: %v", name, err)
+		}
+		if err := os.WriteFile(path+helpersShellStubBodySuffix, []byte(body), 0o600); err != nil {
+			t.Fatalf("write Windows stub body %s: %v", name, err)
+		}
+		t.Setenv(helpersShellStubEnv, "1")
+		return path
+	}
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatalf("write stub %s: %v", name, err)
@@ -37,7 +50,9 @@ func TestForwarderForChannelCodexPrefersAppServer(t *testing.T) {
 	clearChannelEnv(t)
 	t.Setenv("DWS_CONNECT_NO_INSTALL", "1")
 	stub := t.TempDir()
-	writeShellExecutable(t, stub, "codex", "exit 0\n")
+	if err := writeExecStub(stub, "codex"); err != nil {
+		t.Fatalf("write codex stub: %v", err)
+	}
 	t.Setenv("PATH", stub)
 
 	fwd, err := forwarderForChannel("codex", "", connectAgentOptions{Memory: true})
@@ -155,7 +170,11 @@ while IFS= read -r line; do
 	if strings.Count(log, `"method":"thread/resume"`) != 1 {
 		t.Fatalf("expected one thread/resume, log:\n%s", log)
 	}
-	if !strings.Contains(log, `"type":"localImage"`) || !strings.Contains(log, imagePath) {
+	encodedImagePath, err := json.Marshal(imagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(log, `"type":"localImage"`) || !strings.Contains(log, string(encodedImagePath)) {
 		t.Fatalf("turn/start missing native localImage input, log:\n%s", log)
 	}
 }

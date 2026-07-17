@@ -17,11 +17,7 @@
 // declared in internal/helpers/mail.go.
 package mail
 
-import (
-	"fmt"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
-)
+import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 
 // ── mailbox ────────────────────────────────────────────────
 
@@ -368,15 +364,12 @@ var UserSearch = shortcut.Shortcut{
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，取自响应中的 nextCursor"},
 		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量"},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"keyword", "employee-no"}},
+	},
 	Tips: []string{
 		`dws mail +user-search --keyword "张三"`,
 		`dws mail +user-search --email user@company.com --employee-no "E123456"`,
-	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if rt.Str("keyword") == "" && rt.Str("employee-no") == "" {
-			return fmt.Errorf("--keyword 与 --employee-no 至少需要提供一个")
-		}
-		return nil
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}

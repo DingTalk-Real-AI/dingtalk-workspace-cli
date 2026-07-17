@@ -26,6 +26,7 @@ const stdioEndpointScheme = "stdio://"
 var (
 	stdioMu      sync.RWMutex
 	stdioClients = make(map[string]*transport.StdioClient)
+	stopStdio    = func(client *transport.StdioClient) error { return client.Stop() }
 )
 
 // RegisterStdioClient stores a StdioClient keyed by its canonical product ID
@@ -75,7 +76,7 @@ func StopAllStdioClients() {
 	stdioMu.Lock()
 	defer stdioMu.Unlock()
 	for id, client := range stdioClients {
-		if err := client.Stop(); err != nil {
+		if err := stopStdio(client); err != nil {
 			slog.Warn("failed to stop stdio client", "id", id, "error", err)
 		}
 	}
@@ -91,7 +92,7 @@ func StopStdioClient(productID string) bool {
 	if !ok {
 		return false
 	}
-	if err := client.Stop(); err != nil {
+	if err := stopStdio(client); err != nil {
 		slog.Warn("failed to stop stdio client", "id", productID, "error", err)
 	}
 	delete(stdioClients, productID)
@@ -108,7 +109,7 @@ func StopStdioClientsByPlugin(pluginName string) int {
 	count := 0
 	for id, client := range stdioClients {
 		if len(id) > len(prefix) && id[:len(prefix)] == prefix {
-			if err := client.Stop(); err != nil {
+			if err := stopStdio(client); err != nil {
 				slog.Warn("failed to stop stdio client", "id", id, "error", err)
 			}
 			delete(stdioClients, id)

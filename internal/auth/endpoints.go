@@ -137,6 +137,9 @@ func GetMCPBaseURL() string {
 // Runtime overrides set via CLI flags (--client-id, --client-secret).
 // These take highest priority over environment variables and defaults.
 var (
+	authUserHomeDir     = os.UserHomeDir
+	defaultAuthClientID = DefaultClientID
+	defaultAuthSecret   = DefaultClientSecret
 	clientMu            sync.RWMutex
 	runtimeClientID     string
 	runtimeClientSecret string
@@ -247,8 +250,8 @@ func ClientID() string {
 		return v
 	}
 	// Only return default if it's not a placeholder
-	if !strings.HasPrefix(DefaultClientID, "<") {
-		return DefaultClientID
+	if !strings.HasPrefix(defaultAuthClientID, "<") {
+		return defaultAuthClientID
 	}
 	return ""
 }
@@ -272,7 +275,7 @@ func ClientSecret() string {
 	if v := os.Getenv("DWS_CLIENT_SECRET"); v != "" {
 		return v
 	}
-	return DefaultClientSecret
+	return defaultAuthSecret
 }
 
 // HasValidClientSecret returns true if a valid client secret is available.
@@ -301,7 +304,7 @@ func getDefaultConfigDir() string {
 	if envDir := os.Getenv("DWS_CONFIG_DIR"); envDir != "" {
 		return envDir
 	}
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := authUserHomeDir()
 	if err != nil {
 		return ".dws"
 	}

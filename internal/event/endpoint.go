@@ -24,7 +24,11 @@ import (
 // the syscall). sockaddr_un.sun_path is 104 bytes on darwin and the
 // BSDs and 108 on Linux; the usable budget is one less.
 func MaxUnixSocketPath() int {
-	if runtime.GOOS == "linux" {
+	return maxUnixSocketPath(runtime.GOOS)
+}
+
+func maxUnixSocketPath(goos string) int {
+	if goos == "linux" {
 		return 107
 	}
 	return 103
@@ -46,14 +50,18 @@ func MaxUnixSocketPath() int {
 // This is the single source of truth for endpoint derivation; the cobra
 // layer and busctl must not re-implement the shape.
 func IPCEndpoint(workDir, editionName string, sourceKind SourceKind, identityHash string) string {
+	return ipcEndpointForOS(runtime.GOOS, workDir, editionName, sourceKind, identityHash)
+}
+
+func ipcEndpointForOS(goos, workDir, editionName string, sourceKind SourceKind, identityHash string) string {
 	if sourceKind == "" {
 		sourceKind = SourceKindAppStream
 	}
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		return `\\.\pipe\dws-event-` + editionName + "-" + string(sourceKind) + "-" + identityHash
 	}
 	sock := filepath.Join(workDir, "bus.sock")
-	if len(sock) <= MaxUnixSocketPath() {
+	if len(sock) <= maxUnixSocketPath(goos) {
 		return sock
 	}
 	return filepath.Join(os.TempDir(), "dws-evt-"+IdentityHash(workDir)+".sock")

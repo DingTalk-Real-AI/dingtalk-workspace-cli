@@ -2211,6 +2211,25 @@
         "dws-schema-live:aitable.update_view"
       ]
     },
+    "aitable.workflow_create": {
+      "agent_summary": "创建并发布 AI 表格自动化工作流。",
+      "use_when": [
+        "用户明确要求在已知 Base 中创建自动化，且已准备完整 workflow-dsl/v1 定义时"
+      ],
+      "avoid_when": [
+        "已有工作流要修改时用 workflow update；仅启停已有工作流用 enable/disable；请求结果不确定时先 list 核对，避免非幂等重复创建"
+      ],
+      "examples": [
+        "dws aitable workflow create --base-id <BASE_ID> --dsl @workflow.json --locale zh-CN"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅创建语义，强调完整 DSL、结果 valid/issues 校验及非幂等边界。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#aitable.workflow_create",
+        "cobra-help:dws aitable workflow create --help",
+        "skills/mono/references/products/aitable/aitable-workflow.md"
+      ]
+    },
     "aitable.workflow_disable": {
       "agent_summary": "禁用工作流（高危，需确认；status 变 STOP）。",
       "use_when": [
@@ -2289,6 +2308,25 @@
         "cobra-help:dws aitable workflow list --help",
         "skills/mono/references/products/aitable.md",
         "dws-schema-live:none (helper/composite; Skill+Cobra)"
+      ]
+    },
+    "aitable.workflow_update": {
+      "agent_summary": "用完整 DSL 更新并发布已有 AI 表格自动化工作流。",
+      "use_when": [
+        "用户明确要求修改已知工作流，且已先留底当前详情并准备完整 workflow-dsl/v1 目标定义时"
+      ],
+      "avoid_when": [
+        "新建工作流用 create；只改变运行状态用 enable/disable；不要把局部 patch 或 workflow get 返回的 flowSchema 直接当作 DSL"
+      ],
+      "examples": [
+        "dws aitable workflow update --base-id <BASE_ID> --workflow-id <FLOW_ID> --dsl @workflow.json --locale zh-CN"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 Cobra leaf、Wukong 同步契约和 Aitable workflow Skill 审阅更新语义，强调全量替换、事前备份和 valid/issues 结果校验。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#aitable.workflow_update",
+        "cobra-help:dws aitable workflow update --help",
+        "skills/mono/references/products/aitable/aitable-workflow.md"
       ]
     }
   },

@@ -50,9 +50,6 @@ var ResolveBase = shortcut.Shortcut{
 	Tips: []string{
 		`dws aitable +resolve-base --name 项目管理`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("name")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Search Bases by name. tool "search_bases" + arg "query" are taken
 		// verbatim from helpers base search (callAitableTool → server aitable).

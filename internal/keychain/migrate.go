@@ -27,6 +27,13 @@ const (
 	legacyBackupFile = ".data.migrated.bak"
 )
 
+var (
+	migrateGetMACAddress = security.GetMACAddress
+	migrateDecrypt       = security.Decrypt
+	migrateExists        = Exists
+	migrateSet           = Set
+)
+
 // MigrationResult contains the result of a migration attempt.
 type MigrationResult struct {
 	Migrated    bool   // true if migration was performed
@@ -50,13 +57,13 @@ func MigrateFromLegacy(configDir string) *MigrationResult {
 	result := &MigrationResult{}
 
 	// Check if keychain already has data - skip migration
-	if Exists(Service, AccountToken) {
+	if migrateExists(Service, AccountToken) {
 		return result // Already migrated or fresh install
 	}
 
 	// Check if legacy .data file exists
 	legacyPath := filepath.Join(configDir, legacyDataFile)
-	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+	if _, err := keychainStat(legacyPath); os.IsNotExist(err) {
 		return result // No legacy data to migrate
 	}
 
@@ -72,22 +79,18 @@ func MigrateFromLegacy(configDir string) *MigrationResult {
 	}
 
 	// Store in new keychain
-	jsonData, err := json.Marshal(legacyData)
-	if err != nil {
-		result.Error = fmt.Errorf("marshal token data: %w", err)
-		return result
-	}
+	jsonData, _ := json.Marshal(legacyData)
 
-	if err := Set(Service, AccountToken, string(jsonData)); err != nil {
+	if err := migrateSet(Service, AccountToken, string(jsonData)); err != nil {
 		result.Error = fmt.Errorf("store in keychain: %w", err)
 		return result
 	}
 
 	// Backup old file instead of deleting
 	backupPath := filepath.Join(configDir, legacyBackupFile)
-	if err := os.Rename(legacyPath, backupPath); err != nil {
+	if err := keychainRename(legacyPath, backupPath); err != nil {
 		// Non-fatal - data is already migrated
-		_ = os.Remove(legacyPath)
+		_ = keychainRemove(legacyPath)
 	} else {
 		result.BackupPath = backupPath
 	}
@@ -99,20 +102,20 @@ func MigrateFromLegacy(configDir string) *MigrationResult {
 // loadLegacyData loads and decrypts the legacy .data file using MAC address.
 func loadLegacyData(configDir string) (map[string]interface{}, error) {
 	// Get MAC address for decryption
-	mac, err := security.GetMACAddress()
+	mac, err := migrateGetMACAddress()
 	if err != nil {
 		return nil, fmt.Errorf("get MAC address: %w", err)
 	}
 
 	// Read encrypted file
 	path := filepath.Join(configDir, legacyDataFile)
-	ciphertext, err := os.ReadFile(path)
+	ciphertext, err := keychainReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read legacy file: %w", err)
 	}
 
 	// Decrypt using legacy method
-	plaintext, err := security.Decrypt(ciphertext, []byte(mac))
+	plaintext, err := migrateDecrypt(ciphertext, []byte(mac))
 	if err != nil {
 		return nil, fmt.Errorf("decrypt legacy data: %w", err)
 	}
@@ -130,7 +133,7 @@ func loadLegacyData(configDir string) (map[string]interface{}, error) {
 // Call this after confirming the new keychain storage works correctly.
 func CleanupLegacyBackup(configDir string) error {
 	backupPath := filepath.Join(configDir, legacyBackupFile)
-	if err := os.Remove(backupPath); err != nil && !os.IsNotExist(err) {
+	if err := keychainRemove(backupPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
@@ -139,6 +142,6 @@ func CleanupLegacyBackup(configDir string) error {
 // HasLegacyData checks if legacy .data file exists.
 func HasLegacyData(configDir string) bool {
 	legacyPath := filepath.Join(configDir, legacyDataFile)
-	_, err := os.Stat(legacyPath)
+	_, err := keychainStat(legacyPath)
 	return err == nil
 }

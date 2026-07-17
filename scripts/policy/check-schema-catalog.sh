@@ -4,6 +4,8 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
 . "$ROOT/scripts/policy/search.sh"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
 
 if [ -e internal/cli/schema_native_contracts.go ] ||
 	[ -e internal/cli/schema_native_contracts_generated.go ] ||
@@ -194,6 +196,10 @@ fi
 binding_count="$(jq '[.bindings[] | length] | add' internal/cli/schema_parameter_bindings.json)"
 if ! jq -e --slurpfile bindings internal/cli/schema_parameter_bindings.json '
   . as $catalog |
+  ([$bindings[0].bindings | to_entries[] |
+    .key as $tool | .value | to_entries[] |
+    {tool: $tool, flag: .key, property: .value}
+  ]) as $expected |
   $bindings[0].version == 3 and
   $bindings[0].baseline.manifest == "schema-parameter-bindings-v3" and
   ($bindings[0].baseline.sha256 | test("^sha256:[0-9a-f]{64}$")) and
@@ -216,10 +222,6 @@ if ! jq -e --slurpfile bindings internal/cli/schema_parameter_bindings.json '
   all(($bindings[0].mapping_exclusions // {} | to_entries)[];
     (.key | length) > 0 and (.value | length) > 0
   ) and
-  ([$bindings[0].bindings | to_entries[] |
-    .key as $tool | .value | to_entries[] |
-    {tool: $tool, flag: .key, property: .value}
-  ]) as $expected |
   all($expected[];
     . as $binding |
     $catalog.tools[$binding.tool].parameters[$binding.flag].property == $binding.property

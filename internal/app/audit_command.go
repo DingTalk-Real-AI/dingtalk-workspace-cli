@@ -16,6 +16,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	auditCSVWrite = func(writer *csv.Writer, record []string) error { return writer.Write(record) }
+	auditCSVFlush = func(writer *csv.Writer) { writer.Flush() }
+	auditCSVError = func(writer *csv.Writer) error { return writer.Error() }
+	auditExit     = os.Exit
+	auditVerify   = audit.VerifyFile
+)
+
 func newAuditCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "audit",
@@ -109,7 +117,7 @@ func newAuditVerifyCommand() *cobra.Command {
 				}
 			}
 
-			valid, brokenAt, err := audit.VerifyFile(target)
+			valid, brokenAt, err := auditVerify(target)
 			if err != nil {
 				return fmt.Errorf("校验失败: %w", err)
 			}
@@ -117,7 +125,7 @@ func newAuditVerifyCommand() *cobra.Command {
 				fmt.Printf("✓ %s 哈希链完整（全部通过）\n", filepath.Base(target))
 			} else {
 				fmt.Printf("✗ %s 哈希链在第 %d 行断裂\n", filepath.Base(target), brokenAt)
-				os.Exit(1)
+				auditExit(1)
 			}
 			return nil
 		},
@@ -179,7 +187,7 @@ func exportCSV(files []string) error {
 	w := csv.NewWriter(os.Stdout)
 
 	header := []string{"timestamp", "execution_id", "user_id", "corp_id", "product", "command", "result", "duration_ms", "error_category"}
-	if err := w.Write(header); err != nil {
+	if err := auditCSVWrite(w, header); err != nil {
 		return fmt.Errorf("写入 CSV 表头失败: %w", err)
 	}
 
@@ -213,7 +221,7 @@ func exportCSV(files []string) error {
 				strconv.FormatInt(evt.DurationMs, 10),
 				evt.ErrCategory,
 			}
-			if err := w.Write(row); err != nil {
+			if err := auditCSVWrite(w, row); err != nil {
 				f.Close()
 				return fmt.Errorf("写入 CSV 记录失败: %w", err)
 			}
@@ -225,8 +233,8 @@ func exportCSV(files []string) error {
 		f.Close()
 	}
 
-	w.Flush()
-	if err := w.Error(); err != nil {
+	auditCSVFlush(w)
+	if err := auditCSVError(w); err != nil {
 		return fmt.Errorf("刷新 CSV 输出失败: %w", err)
 	}
 	return nil

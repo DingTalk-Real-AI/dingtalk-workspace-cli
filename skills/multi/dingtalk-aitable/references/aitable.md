@@ -105,12 +105,14 @@
 
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
+| `workflow create` | 创建并发布工作流 | `--base-id` `--dsl` | `--dsl` 为完整 workflow-dsl/v1；非幂等，不自动重试 |
+| `workflow update` | 更新并发布工作流 | `--base-id` `--workflow-id` `--dsl` | 全量替换，先 get 留底；检查 `data.valid/issues` |
 | `workflow list` | 列出 Base 下所有工作流 | `--base-id` | 支持 `--limit [1,100]` / `--offset >=0`；list 出参字段叫 `flowId` |
 | `workflow get` | 获取单个工作流详情（含 flowSchema） | `--base-id` `--workflow-id` | `--workflow-id` 接受 list 里的 `flowId`（同值） |
 | `workflow enable` | 启用工作流 | `--base-id` `--workflow-id` | 返回 `{enabled: true}` 是动作确认；要确认真启用看 list 的 `status` |
 | `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` `--yes` | 影响业务自动化，建议二次确认；status 变 STOP |
 
-> **当前不支持通过 CLI 新建/修改/删除工作流**，请去 AI 表格 Web 端（数据表页面 → 自动化）配置。
+> 当前支持创建、更新、查询和启停；删除、运行历史及手动触发仍未开放。
 
 ### dashboard & chart → 详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 

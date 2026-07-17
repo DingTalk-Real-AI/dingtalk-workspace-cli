@@ -26,13 +26,29 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
+type legacyTokenGetter interface {
+	GetToken() (string, string, error)
+}
+
+var (
+	newAccessTokenProvider = func(configDir string) accessTokenGetter {
+		disc := slog.New(slog.NewTextHandler(io.Discard, nil))
+		provider := authpkg.NewOAuthProvider(configDir, disc)
+		configureOAuthProviderCompatibility(provider, configDir)
+		return provider
+	}
+	newLegacyTokenManager = func(configDir string) legacyTokenGetter {
+		manager := authpkg.NewManager(configDir, nil)
+		configureLegacyAuthManagerCompatibility(manager)
+		return manager
+	}
+)
+
 // resolveAccessTokenFromDir loads OAuth then legacy token from configDir, applying
 // the same host compatibility hooks as MCP. It mirrors the former body of
 // getCachedRuntimeToken (excluding process-level cache and timing).
 func resolveAccessTokenFromDir(ctx context.Context, configDir string) (string, error) {
-	disc := slog.New(slog.NewTextHandler(io.Discard, nil))
-	provider := authpkg.NewOAuthProvider(configDir, disc)
-	configureOAuthProviderCompatibility(provider, configDir)
+	provider := newAccessTokenProvider(configDir)
 	token, tokenErr := provider.GetAccessToken(ctx)
 	if tokenErr == nil && strings.TrimSpace(token) != "" {
 		return strings.TrimSpace(token), nil
@@ -40,8 +56,7 @@ func resolveAccessTokenFromDir(ctx context.Context, configDir string) (string, e
 	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
 		return "", tokenErr
 	}
-	manager := authpkg.NewManager(configDir, nil)
-	configureLegacyAuthManagerCompatibility(manager)
+	manager := newLegacyTokenManager(configDir)
 	if leg, _, err := manager.GetToken(); err == nil && strings.TrimSpace(leg) != "" {
 		return strings.TrimSpace(leg), nil
 	}

@@ -214,10 +214,10 @@ var MessagesList = shortcut.Shortcut{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量"},
 		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 	},
-	Tips: []string{`dws chat +messages-list --group <openConversationId> --time "2025-03-01 00:00:00"`},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.ExactlyOne("group", "conversation-id", "id")
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id"}},
 	},
+	Tips: []string{`dws chat +messages-list --group <openConversationId> --time "2025-03-01 00:00:00"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		group := rt.StrFirst("group", "conversation-id", "id")
 		params := map[string]any{
@@ -494,10 +494,10 @@ var MessagesReadStatus = shortcut.Shortcut{
 		{Name: "message-id", Type: shortcut.FlagString, Desc: "消息 openMessageId（当前用户发送的消息）", Required: true},
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "目标 userId 或 openDingTalkId 列表（不传返回全部接收者）"},
 	},
-	Tips: []string{`dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>`},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.ExactlyOne("conversation-id", "group", "id")
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"conversation-id", "group", "id"}},
 	},
+	Tips: []string{`dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"openConversationId": rt.StrFirst("conversation-id", "group", "id"),
@@ -657,6 +657,9 @@ var MessagesSendCard = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（与 --receiver 互斥）"},
 		{Name: "receiver", Type: shortcut.FlagString, Desc: "单聊接收者 userId（与 --group 互斥）"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "receiver"}},
 	},
 	Tips: []string{`dws chat +messages-send-card --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {

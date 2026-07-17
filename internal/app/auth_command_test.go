@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -36,29 +37,33 @@ import (
 )
 
 func TestAuthExportImportBase64RoundTrip(t *testing.T) {
-	t.Setenv(keychain.DisableKeychainEnv, "1")
-	sourceKeychain := filepath.Join(t.TempDir(), "source-keychain")
-	sourceConfig := filepath.Join(t.TempDir(), ".dws")
-	t.Setenv(keychain.StorageDirEnv, sourceKeychain)
-	t.Setenv("DWS_CONFIG_DIR", sourceConfig)
+	originalSupported := authPortableExportSupported
+	originalReady := authPortableSourceReady
+	originalExport := authExportPortableBundle
+	originalTarget := authPortableTargetPopulated
+	originalImport := authImportPortableBundle
+	t.Cleanup(func() {
+		authPortableExportSupported = originalSupported
+		authPortableSourceReady = originalReady
+		authExportPortableBundle = originalExport
+		authPortableTargetPopulated = originalTarget
+		authImportPortableBundle = originalImport
+	})
 
-	original := &authpkg.TokenData{
-		AccessToken:  "access-cli",
-		RefreshToken: "refresh-cli",
-		ExpiresAt:    time.Now().Add(-time.Hour),
-		RefreshExpAt: time.Now().Add(24 * time.Hour),
-		ClientID:     "client-cli",
-		Source:       "mcp",
-	}
-	if err := authpkg.SaveTokenData(sourceConfig, original); err != nil {
-		t.Fatalf("SaveTokenData() error = %v", err)
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	bundle := []byte("portable-auth-bundle")
+	authPortableExportSupported = func() bool { return true }
+	authPortableSourceReady = func() bool { return true }
+	authExportPortableBundle = func(_ string, w io.Writer) error {
+		_, err := w.Write(bundle)
+		return err
 	}
 
-	exportCmd := NewRootCommand()
+	exportCmd := newAuthExportCommandWithSupport(func() error { return nil })
 	var exported bytes.Buffer
 	exportCmd.SetOut(&exported)
 	exportCmd.SetErr(&bytes.Buffer{})
-	exportCmd.SetArgs([]string{"auth", "export", "--base64"})
+	exportCmd.SetArgs([]string{"--base64"})
 	if err := exportCmd.Execute(); err != nil {
 		t.Fatalf("auth export --base64 error = %v", err)
 	}
@@ -72,34 +77,245 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 		t.Fatalf("write input bundle error = %v", err)
 	}
 
-	targetKeychain := filepath.Join(targetRoot, "target-keychain")
-	targetConfig := filepath.Join(targetRoot, ".dws")
-	t.Setenv(keychain.StorageDirEnv, targetKeychain)
-	t.Setenv("DWS_CONFIG_DIR", targetConfig)
+	authPortableTargetPopulated = func(string) bool { return false }
+	var imported []byte
+	authImportPortableBundle = func(_ string, r io.Reader) (authpkg.PortableImportReport, error) {
+		var err error
+		imported, err = io.ReadAll(r)
+		return authpkg.PortableImportReport{}, err
+	}
+
+	importCmd := newAuthImportCommandWithSupport(func() error { return nil })
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"--input", inputPath, "--base64"})
+	if err := importCmd.Execute(); err != nil {
+		t.Fatalf("auth import --base64 error = %v", err)
+	}
+	if !bytes.Equal(imported, bundle) {
+		t.Fatalf("imported bundle = %q, want %q", imported, bundle)
+	}
+}
+
+func TestCrossPlatformCoverageAuthExportUnsupportedBackendIsValidationError(t *testing.T) {
+	exportCmd := newAuthExportCommandWithSupport(func() error {
+		return errors.New("portable auth export is unavailable for the test backend")
+	})
+	exportCmd.SetOut(&bytes.Buffer{})
+	exportCmd.SetErr(&bytes.Buffer{})
+	exportCmd.SetArgs([]string{"--base64"})
+
+	err := exportCmd.Execute()
+	if err == nil {
+		t.Fatal("auth export should reject an unsupported credential backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "test backend") {
+		t.Fatalf("error = %v, want backend-specific reason", err)
+	}
+}
+
+func TestCrossPlatformCoverageAuthExportRejectsWindowsDPAPIBackend(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows DPAPI contract requires a native Windows runner")
+	}
+	t.Cleanup(CloseFileLogger)
+
+	exportCmd := NewRootCommand()
+	exportCmd.SetOut(&bytes.Buffer{})
+	exportCmd.SetErr(&bytes.Buffer{})
+	exportCmd.SetArgs([]string{"auth", "export", "--base64"})
+
+	err := exportCmd.Execute()
+	if err == nil {
+		t.Fatal("auth export should reject the Windows DPAPI backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	for _, want := range []string{"Windows", "DPAPI", "HKCU"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want substring %q", err, want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAuthImportUnsupportedBackendIsValidationErrorBeforeReadingInput(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, ".dws")
+	keychainDir := filepath.Join(root, "keychain")
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	t.Setenv(keychain.StorageDirEnv, keychainDir)
+
+	importCmd := newAuthImportCommandWithSupport(func() error {
+		return errors.New("portable auth import is unavailable for the test backend")
+	})
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"--input", filepath.Join(root, "missing-bundle.tar.gz")})
+
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import should reject an unsupported credential backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "test backend") {
+		t.Fatalf("error = %v, want backend-specific reason", err)
+	}
+	for _, path := range []string{configDir, keychainDir} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("unsupported import touched %s: stat error = %v", path, statErr)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackend(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows DPAPI contract requires a native Windows runner")
+	}
+
+	root := t.TempDir()
+	// NewRootCommand initializes the normal CLI file logger below configDir.
+	// Register its cleanup after TempDir so the Windows handle is closed before
+	// testing removes the temporary directory.
+	t.Cleanup(CloseFileLogger)
+	configDir := filepath.Join(root, ".dws")
+	keychainDir := filepath.Join(root, "keychain")
+	inputPath := filepath.Join(root, "bundle.tar.gz")
+	if err := os.WriteFile(inputPath, []byte("the capability guard must run before this input is read"), 0o600); err != nil {
+		t.Fatalf("write input sentinel error = %v", err)
+	}
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	t.Setenv(keychain.StorageDirEnv, keychainDir)
 
 	importCmd := NewRootCommand()
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&bytes.Buffer{})
-	importCmd.SetArgs([]string{"auth", "import", "--input", inputPath, "--base64"})
-	if err := importCmd.Execute(); err != nil {
-		t.Fatalf("auth import --base64 error = %v", err)
-	}
+	importCmd.SetArgs([]string{"auth", "import", "--input", inputPath})
 
-	loaded, err := authpkg.LoadTokenData(targetConfig)
-	if err != nil {
-		t.Fatalf("LoadTokenData() after CLI import error = %v", err)
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import should reject the Windows DPAPI backend")
 	}
-	if loaded.RefreshToken != original.RefreshToken {
-		t.Fatalf("refresh token = %q, want %q", loaded.RefreshToken, original.RefreshToken)
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
 	}
-	if !loaded.IsRefreshTokenValid() {
-		t.Fatal("refresh token should remain valid after CLI import")
+	for _, want := range []string{"Windows", "DPAPI", "HKCU"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want substring %q", err, want)
+		}
+	}
+	// The root command may create configDir/logs as part of normal CLI startup.
+	// The capability guard must still run before any auth state is imported.
+	for _, path := range []string{
+		keychainDir,
+		authpkg.ProfilesPath(configDir),
+		filepath.Join(configDir, "app.json"),
+		filepath.Join(configDir, "token.json"),
+	} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("unsupported Windows import touched %s: stat error = %v", path, statErr)
+		}
 	}
 }
 
-func TestAuthImportRequiresForceWhenPopulated(t *testing.T) {
+func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackendWithPopulatedCredentialBeforeRead(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows DPAPI contract requires a native Windows runner")
+	}
+
+	previous, previousErr := authpkg.LoadTokenDataKeychain()
+	if previousErr != nil && !errors.Is(previousErr, authpkg.ErrTokenDataNotFound) {
+		t.Fatalf("capture existing Windows credential: %v", previousErr)
+	}
+	hadPrevious := previousErr == nil
+	t.Cleanup(func() {
+		if hadPrevious {
+			_ = authpkg.SaveTokenDataKeychain(previous)
+		} else {
+			_ = authpkg.DeleteTokenDataKeychain()
+		}
+	})
+
+	want := &authpkg.TokenData{
+		AccessToken:  "windows-existing-access",
+		RefreshToken: "windows-existing-refresh",
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "windows-existing-corp",
+	}
+	if err := authpkg.SaveTokenDataKeychain(want); err != nil {
+		t.Fatalf("seed cleanup-scoped Windows DPAPI credential: %v", err)
+	}
+
+	originalTarget := authPortableTargetPopulated
+	originalRead := authReadFile
+	targetChecks := 0
+	bundleReads := 0
+	authPortableTargetPopulated = func(configDir string) bool {
+		targetChecks++
+		return originalTarget(configDir)
+	}
+	authReadFile = func(path string) ([]byte, error) {
+		bundleReads++
+		return originalRead(path)
+	}
+	t.Cleanup(func() {
+		authPortableTargetPopulated = originalTarget
+		authReadFile = originalRead
+	})
+
+	root := t.TempDir()
+	inputPath := filepath.Join(root, "bundle.tar.gz")
+	if err := os.WriteFile(inputPath, []byte("unsupported Windows import must not read this bundle"), 0o600); err != nil {
+		t.Fatalf("write bundle sentinel: %v", err)
+	}
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(root, ".dws"))
+
+	importCmd := newAuthImportCommand()
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"--input", inputPath})
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import should reject a populated Windows DPAPI backend")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	for _, required := range []string{"Windows", "DPAPI", "HKCU"} {
+		if !strings.Contains(err.Error(), required) {
+			t.Fatalf("error = %v, want substring %q", err, required)
+		}
+	}
+	if strings.Contains(err.Error(), "--force") {
+		t.Fatalf("unsupported Windows import suggested impossible --force remediation: %v", err)
+	}
+	if targetChecks != 0 || bundleReads != 0 {
+		t.Fatalf("unsupported Windows import inspected credentials/bundle: target_checks=%d bundle_reads=%d", targetChecks, bundleReads)
+	}
+
+	got, err := authpkg.LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("reload Windows DPAPI credential after rejection: %v", err)
+	}
+	if got.AccessToken != want.AccessToken || got.RefreshToken != want.RefreshToken || got.CorpID != want.CorpID {
+		t.Fatalf("Windows auth state changed after rejected import: got=%#v want=%#v", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageAuthImportRequiresForceWhenPopulated(t *testing.T) {
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	root := t.TempDir()
+	t.Cleanup(CloseFileLogger)
 	configDir := filepath.Join(root, ".dws")
 	t.Setenv(keychain.StorageDirEnv, filepath.Join(root, "keychain"))
 	t.Setenv("DWS_CONFIG_DIR", configDir)
@@ -117,11 +333,42 @@ func TestAuthImportRequiresForceWhenPopulated(t *testing.T) {
 		t.Fatalf("write bundle stub error = %v", err)
 	}
 
-	importCmd := NewRootCommand()
+	importCmd := newAuthImportCommandWithSupport(func() error { return nil })
 	var stderr bytes.Buffer
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&stderr)
-	importCmd.SetArgs([]string{"auth", "import", "--input", bundlePath})
+	importCmd.SetArgs([]string{"--input", bundlePath})
+	err := importCmd.Execute()
+	if err == nil {
+		t.Fatal("auth import without --force should fail when auth exists")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("expected validation error, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("error = %v, want --force hint", err)
+	}
+}
+
+func TestAuthImportRequiresForceWhenPopulated(t *testing.T) {
+	originalTarget := authPortableTargetPopulated
+	authPortableTargetPopulated = func(string) bool { return true }
+	t.Cleanup(func() { authPortableTargetPopulated = originalTarget })
+
+	root := t.TempDir()
+	configDir := filepath.Join(root, ".dws")
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	bundlePath := filepath.Join(root, "bundle.tar.gz")
+	if err := os.WriteFile(bundlePath, []byte("not-a-real-bundle"), 0o600); err != nil {
+		t.Fatalf("write bundle stub error = %v", err)
+	}
+
+	importCmd := newAuthImportCommandWithSupport(func() error { return nil })
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"--input", bundlePath})
 	err := importCmd.Execute()
 	if err == nil {
 		t.Fatal("auth import without --force should fail when auth exists")
@@ -1073,9 +1320,11 @@ func setupAuthLogoutProfiles(t *testing.T, tokens ...*authpkg.TokenData) string 
 	ResetRuntimeTokenCache()
 	clearCompatCache()
 	t.Cleanup(func() {
+		_ = authpkg.DeleteAllTokenData(configDir)
 		authpkg.SetRuntimeProfile("")
 		ResetRuntimeTokenCache()
 		clearCompatCache()
+		CloseFileLogger()
 	})
 
 	for _, token := range tokens {

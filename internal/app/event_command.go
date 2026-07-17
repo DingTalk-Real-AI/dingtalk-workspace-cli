@@ -44,6 +44,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	eventRunPersonalConsume    = runPersonalEventConsume
+	eventRunPersonalList       = runPersonalEventList
+	eventRunPersonalStatus     = runPersonalEventStatus
+	eventRunPersonalStop       = runPersonalEventStop
+	eventNormalizeAs           = normalizeEventAs
+	eventResolveCredentials    = resolveEventCredentials
+	eventConsumeRun            = consume.Run
+	eventRunForeground         = runForegroundBus
+	eventNewEventSource        = newEventSource
+	eventNewDingtalkSource     = source.New
+	eventResolveAccessToken    = ResolveAuxiliaryAccessToken
+	eventBusRun                = bus.Run
+	eventReadyFDFromEnv        = busctl.ReadyFDFromEnv
+	eventResolvePersonal       = resolvePersonalEventIdentity
+	eventNewPersonalSource     = newPersonalStreamSource
+	eventMkdirAll              = os.MkdirAll
+	eventOpenFile              = os.OpenFile
+	eventEnumerateBuses        = busctl.EnumerateBuses
+	eventFindBus               = busctl.FindBusByClientID
+	eventQueryEntry            = busctl.QueryEntry
+	eventStopBus               = busctl.Stop
+	eventResolveAppCredentials = authpkg.ResolveAppCredentialsStrict
+)
+
 // newEventCommand returns the `event` parent command and all its subcommands.
 // Wired into root.go's utilityCommands list.
 func newEventCommand() *cobra.Command {
@@ -112,7 +137,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			as, err := normalizeEventAs(asIdentity)
+			as, err := eventNormalizeAs(asIdentity)
 			if err != nil {
 				return err
 			}
@@ -135,7 +160,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 				personalOpts.StreamTicketMode = streamOpts.Mode
 				personalOpts.StreamTicketURL = streamOpts.TicketURL
 				personalOpts.StreamSourceID = streamOpts.SourceID
-				return runPersonalEventConsume(c, personalOpts)
+				return eventRunPersonalConsume(c, personalOpts)
 			}
 			if personalOpts.DebugRawEvents {
 				return fmt.Errorf("event consume: --debug-raw-events is only supported with --as user")
@@ -164,7 +189,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 			// Portal ticket normal mode uses portal-managed app credentials, so
 			// local ClientSecret is intentionally not required there.
 			configDir := defaultConfigDir()
-			clientID, clientSecret, err := resolveEventCredentials(configDir, streamOpts)
+			clientID, clientSecret, err := eventResolveCredentials(configDir, streamOpts)
 			if err != nil {
 				return fmt.Errorf("event consume: %w", err)
 			}
@@ -221,9 +246,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 			}
 			// Arm the stdin-EOF shutdown watcher only for a pipe-style,
 			// unbounded run (see shouldWatchStdinEOF).
-			if shouldWatchStdinEOF(maxEvents, duration) {
-				cfg.Stdin = c.InOrStdin()
-			}
+			applyEventConsumeStdin(&cfg, maxEvents, duration, c.InOrStdin())
 
 			// Step 5: validation (flag-only rules).
 			if err := consume.ValidateConfig(cfg); err != nil {
@@ -239,9 +262,9 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 			// Step 6: foreground mode runs the bus in-process. Otherwise
 			// consume.Run discovers / forks the bus and dials it.
 			if foreground {
-				return runForegroundBus(ctx, cfg, configDir, clientSecret, streamOpts)
+				return eventRunForeground(ctx, cfg, configDir, clientSecret, streamOpts)
 			}
-			return consume.Run(ctx, cfg)
+			return eventConsumeRun(ctx, cfg)
 		},
 	}
 
@@ -324,7 +347,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 // can run `dws event consume` from another shell to consume the events.
 // v2 may add a "foreground + in-process consumer" combined mode.
 func runForegroundBus(ctx context.Context, cfg consume.Config, configDir, clientSecret string, streamOpts eventStreamTicketOptions) error {
-	src, err := newEventSource(ctx, configDir, cfg.ClientID, clientSecret, streamOpts)
+	src, err := eventNewEventSource(ctx, configDir, cfg.ClientID, clientSecret, streamOpts)
 	if err != nil {
 		return err
 	}
@@ -339,7 +362,7 @@ func runForegroundBus(ctx context.Context, cfg consume.Config, configDir, client
 		Logger:       slog.Default(),
 	}
 	bus.ApplyEnvTuning(&busCfg)
-	return bus.Run(ctx, busCfg)
+	return eventBusRun(ctx, busCfg)
 }
 
 type eventStreamTicketOptions struct {
@@ -389,13 +412,13 @@ func eventStreamBusID(streamOpts eventStreamTicketOptions) string {
 
 func newEventSource(ctx context.Context, configDir, clientID, clientSecret string, streamOpts eventStreamTicketOptions) (*source.DingtalkSource, error) {
 	if !streamOpts.enabled() {
-		return source.New(source.Config{
+		return eventNewDingtalkSource(source.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 		})
 	}
 
-	token, err := ResolveAuxiliaryAccessToken(ctx, configDir, "")
+	token, err := eventResolveAccessToken(ctx, configDir, "")
 	if err != nil {
 		return nil, fmt.Errorf("event stream ticket: resolve user token: %w", err)
 	}
@@ -410,7 +433,7 @@ func newEventSource(ctx context.Context, configDir, clientID, clientSecret strin
 		portalClientSecret = ""
 	}
 
-	return source.New(source.Config{
+	return eventNewDingtalkSource(source.Config{
 		ClientID:     portalClientID,
 		ClientSecret: portalClientSecret,
 		PortalTicket: &source.PortalTicketConfig{
@@ -474,7 +497,7 @@ func newEventBusCommand() *cobra.Command {
 
 			// Acquire ReadyPipe early so pre-bus.Run failures can signal
 			// 'E' to the parent process instead of silently dying.
-			readyPipe := busctl.ReadyFDFromEnv()
+			readyPipe := eventReadyFDFromEnv()
 			failEarly := func(err error) error {
 				if readyPipe != nil {
 					// 'E' signals failure; the trailing text lets the parent
@@ -495,7 +518,7 @@ func newEventBusCommand() *cobra.Command {
 				sourceKind = dwsevent.SourceKindAppStream
 			}
 			if sourceKind == dwsevent.SourceKindPersonalStream {
-				identity, err := resolvePersonalEventIdentity(ctx, configDir, streamOpts.SourceID)
+				identity, err := eventResolvePersonal(ctx, configDir, streamOpts.SourceID)
 				if err != nil {
 					return failEarly(fmt.Errorf("event _bus: %w", err))
 				}
@@ -506,7 +529,7 @@ func newEventBusCommand() *cobra.Command {
 				editionName := editionNameOrDefault()
 				workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
 				endpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
-				src, err := newPersonalStreamSource(ctx, personalStreamSourceOptions{
+				src, err := eventNewPersonalSource(ctx, personalStreamSourceOptions{
 					ConfigDir:        configDir,
 					Identity:         identity,
 					TicketMode:       streamOpts.Mode,
@@ -516,8 +539,8 @@ func newEventBusCommand() *cobra.Command {
 				if err != nil {
 					return failEarly(err)
 				}
-				if err := os.MkdirAll(workDir, config.DirPerm); err == nil {
-					if lf, ferr := os.OpenFile(filepath.Join(workDir, "bus.log"),
+				if err := eventMkdirAll(workDir, config.DirPerm); err == nil {
+					if lf, ferr := eventOpenFile(filepath.Join(workDir, "bus.log"),
 						os.O_CREATE|os.O_WRONLY|os.O_APPEND, config.FilePerm); ferr == nil {
 						defer lf.Close()
 						slog.SetDefault(slog.New(slog.NewTextHandler(lf, &slog.HandlerOptions{Level: slog.LevelInfo})))
@@ -537,10 +560,10 @@ func newEventBusCommand() *cobra.Command {
 					Logger:       slog.Default(),
 				}
 				bus.ApplyEnvTuning(&busCfg)
-				return bus.Run(ctx, busCfg)
+				return eventBusRun(ctx, busCfg)
 			}
 
-			resolvedID, secret, err := resolveEventCredentials(configDir, streamOpts)
+			resolvedID, secret, err := eventResolveCredentials(configDir, streamOpts)
 			if err != nil {
 				return failEarly(fmt.Errorf("event _bus: %w", err))
 			}
@@ -553,7 +576,7 @@ func newEventBusCommand() *cobra.Command {
 			workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
 			endpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
 
-			src, err := newEventSource(ctx, configDir, clientID, secret, streamOpts)
+			src, err := eventNewEventSource(ctx, configDir, clientID, secret, streamOpts)
 			if err != nil {
 				return failEarly(err)
 			}
@@ -562,8 +585,8 @@ func newEventBusCommand() *cobra.Command {
 			// own log lines never pollute stdout/stderr (which busctl/Spawn
 			// detached). Best-effort: if mkdir / open fails we fall back
 			// to slog.Default (stderr) so we at least see startup errors.
-			if err := os.MkdirAll(workDir, config.DirPerm); err == nil {
-				if lf, ferr := os.OpenFile(filepath.Join(workDir, "bus.log"),
+			if err := eventMkdirAll(workDir, config.DirPerm); err == nil {
+				if lf, ferr := eventOpenFile(filepath.Join(workDir, "bus.log"),
 					os.O_CREATE|os.O_WRONLY|os.O_APPEND, config.FilePerm); ferr == nil {
 					defer lf.Close()
 					slog.SetDefault(slog.New(slog.NewTextHandler(lf, &slog.HandlerOptions{Level: slog.LevelInfo})))
@@ -585,7 +608,7 @@ func newEventBusCommand() *cobra.Command {
 			// env-var tuning (only fills in fields left at zero; explicit
 			// flags above keep precedence).
 			bus.ApplyEnvTuning(&busCfg)
-			return bus.Run(ctx, busCfg)
+			return eventBusRun(ctx, busCfg)
 		},
 	}
 	cmd.Flags().StringVar(&clientIDOverride, "client-id", "",
@@ -642,7 +665,7 @@ func newEventListCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
-			as, err := normalizeEventAs(asIdentity)
+			as, err := eventNormalizeAs(asIdentity)
 			if err != nil {
 				return err
 			}
@@ -650,7 +673,7 @@ func newEventListCommand() *cobra.Command {
 				if err := rejectPersonalEventUnsupportedFlags(c, "all", "all-editions", "client-id"); err != nil {
 					return fmt.Errorf("event list: %w", err)
 				}
-				return runPersonalEventList(c, personalListOptions{
+				return eventRunPersonalList(c, personalListOptions{
 					Category:       category,
 					EnabledOnly:    enabledOnly,
 					IncludePending: includePending,
@@ -704,7 +727,7 @@ func newEventStatusCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
-			as, err := normalizeEventAs(asIdentity)
+			as, err := eventNormalizeAs(asIdentity)
 			if err != nil {
 				return err
 			}
@@ -713,7 +736,7 @@ func newEventStatusCommand() *cobra.Command {
 					return fmt.Errorf("event status: %w", err)
 				}
 				personalOpts.Format = formatRaw
-				return runPersonalEventStatus(c, personalOpts)
+				return eventRunPersonalStatus(c, personalOpts)
 			}
 			if err := rejectChangedFlags(c, "user", "event", "status", "subscribe-id", "personal-event-base-url", "stream-source-id"); err != nil {
 				return fmt.Errorf("event status: %w", err)
@@ -764,14 +787,14 @@ func collectEntries(c *cobra.Command, clientIDOver string, all, allEditions bool
 
 	// --all-editions trumps --all (scan whole tree)
 	if allEditions {
-		entries, err := busctl.EnumerateBuses(configDir, "")
+		entries, err := eventEnumerateBuses(configDir, "")
 		if err != nil {
 			return nil, err
 		}
 		return queryAll(entries), nil
 	}
 	if all {
-		entries, err := busctl.EnumerateBuses(configDir, editionName)
+		entries, err := eventEnumerateBuses(configDir, editionName)
 		if err != nil {
 			return nil, err
 		}
@@ -782,14 +805,14 @@ func collectEntries(c *cobra.Command, clientIDOver string, all, allEditions bool
 	// otherwise resolve via strict resolver.
 	clientID := clientIDOver
 	if clientID == "" {
-		resolved, _, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
+		resolved, _, _, _, err := eventResolveAppCredentials(configDir)
 		if err != nil {
 			return nil, fmt.Errorf("event status: resolve credentials: %w (or pass --client-id)", err)
 		}
 		clientID = resolved
 	}
 	hash := dwsevent.ClientIDHash(clientID)
-	entry := busctl.FindBusByClientID(configDir, editionName, hash)
+	entry := eventFindBus(configDir, editionName, hash)
 	if entry == nil {
 		// No directory at all — render an empty "not running" so the user
 		// sees a useful answer instead of an error.
@@ -813,13 +836,13 @@ func collectEntries(c *cobra.Command, clientIDOver string, all, allEditions bool
 	if entry.Meta == nil {
 		entry.Meta = &bus.Meta{ClientID: clientID, Edition: editionName}
 	}
-	return []busctl.EntryStatus{busctl.QueryEntry(*entry)}, nil
+	return []busctl.EntryStatus{eventQueryEntry(*entry)}, nil
 }
 
 func queryAll(entries []busctl.BusEntry) []busctl.EntryStatus {
 	out := make([]busctl.EntryStatus, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, busctl.QueryEntry(e))
+		out = append(out, eventQueryEntry(e))
 	}
 	return out
 }
@@ -989,7 +1012,7 @@ func newEventStopCommand() *cobra.Command {
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			as, err := normalizeEventAs(asIdentity)
+			as, err := eventNormalizeAs(asIdentity)
 			if err != nil {
 				return err
 			}
@@ -1008,7 +1031,7 @@ func newEventStopCommand() *cobra.Command {
 				if !eventStopConfirmed(c) {
 					return eventStopConfirmationRequired("event stop 会取消个人事件订阅并停止本地消费")
 				}
-				return runPersonalEventStop(c, opts)
+				return eventRunPersonalStop(c, opts)
 			}
 			if err := rejectChangedFlags(c, "user", "all", "personal-event-base-url", "stream-source-id"); err != nil {
 				return fmt.Errorf("event stop: %w", err)
@@ -1023,14 +1046,14 @@ func newEventStopCommand() *cobra.Command {
 				return eventStopConfirmationRequired("event stop 会停止事件消费")
 			}
 			configDir := defaultConfigDir()
-			clientID, _, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
+			clientID, _, _, _, err := eventResolveAppCredentials(configDir)
 			if err != nil {
 				return fmt.Errorf("event stop: %w", err)
 			}
 			editionName := editionNameOrDefault()
 			clientIDHash := dwsevent.ClientIDHash(clientID)
 			workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
-			if err := busctl.Stop(busctl.StopConfig{WorkDir: workDir}); err != nil {
+			if err := eventStopBus(busctl.StopConfig{WorkDir: workDir}); err != nil {
 				if errors.Is(err, busctl.ErrNotRunning) {
 					fmt.Fprintln(c.OutOrStdout(), "bus is not running")
 					return nil
@@ -1197,6 +1220,12 @@ func shouldWatchStdinEOF(maxEvents int, duration time.Duration) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice == 0
+}
+
+func applyEventConsumeStdin(cfg *consume.Config, maxEvents int, duration time.Duration, stdin io.Reader) {
+	if cfg != nil && shouldWatchStdinEOF(maxEvents, duration) {
+		cfg.Stdin = stdin
+	}
 }
 
 // eventTypesWithDefault picks the catch-all list from registry when the

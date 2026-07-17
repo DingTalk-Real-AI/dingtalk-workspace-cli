@@ -229,6 +229,91 @@ func TestSchemaCompatibilityAllowsAdditionsAndLooserInputs(t *testing.T) {
 	}
 }
 
+func TestSchemaCompatibilityAllowsLooserAndAppendedOptionalPositionals(t *testing.T) {
+	baseline := baselineContract()
+	mutateTool(&baseline, func(tool *toolSchema) {
+		tool.Positionals[0].Required = true
+	})
+	current := cloneContract(baseline)
+	mutateTool(&current, func(tool *toolSchema) {
+		tool.Positionals[0].Required = false
+		tool.Positionals = append(tool.Positionals, positionalSchema{
+			Name:  "template",
+			Index: 1,
+			Type:  "string",
+		})
+	})
+
+	if failures := checkCompatibility(baseline, current); len(failures) != 0 {
+		t.Fatalf("looser and appended optional positionals should pass: %v", failures)
+	}
+}
+
+func TestCompatiblePositionals(t *testing.T) {
+	baseline := []positionalSchema{
+		{Name: "content", Index: 0, Type: "string", Required: true},
+		{Name: "format", Index: 1, Type: "string"},
+	}
+	tests := []struct {
+		name       string
+		old        []positionalSchema
+		current    []positionalSchema
+		compatible bool
+	}{
+		{name: "unchanged", old: baseline, current: clonePositionals(baseline), compatible: true},
+		{name: "required becomes optional", old: baseline, current: []positionalSchema{
+			{Name: "content", Index: 0, Type: "string"},
+			{Name: "format", Index: 1, Type: "string"},
+		}, compatible: true},
+		{name: "append optional", old: baseline, current: append(clonePositionals(baseline), positionalSchema{
+			Name: "template", Index: 2, Type: "string",
+		}), compatible: true},
+		{name: "last positional becomes variadic", old: baseline, current: []positionalSchema{
+			{Name: "content", Index: 0, Type: "string", Required: true},
+			{Name: "format", Index: 1, Type: "string", Variadic: true},
+		}, compatible: true},
+		{name: "removed", old: baseline, current: clonePositionals(baseline[:1])},
+		{name: "renamed", old: baseline, current: []positionalSchema{
+			{Name: "body", Index: 0, Type: "string", Required: true},
+			{Name: "format", Index: 1, Type: "string"},
+		}},
+		{name: "reindexed", old: baseline, current: []positionalSchema{
+			{Name: "content", Index: 1, Type: "string", Required: true},
+			{Name: "format", Index: 2, Type: "string"},
+		}},
+		{name: "retyped", old: baseline, current: []positionalSchema{
+			{Name: "content", Index: 0, Type: "number", Required: true},
+			{Name: "format", Index: 1, Type: "string"},
+		}},
+		{name: "optional becomes required", old: baseline, current: []positionalSchema{
+			{Name: "content", Index: 0, Type: "string", Required: true},
+			{Name: "format", Index: 1, Type: "string", Required: true},
+		}},
+		{name: "append required", old: baseline, current: append(clonePositionals(baseline), positionalSchema{
+			Name: "template", Index: 2, Type: "string", Required: true,
+		})},
+		{name: "variadic becomes fixed", old: []positionalSchema{
+			{Name: "content", Index: 0, Type: "string", Variadic: true},
+		}, current: []positionalSchema{
+			{Name: "content", Index: 0, Type: "string"},
+		}},
+		{name: "append after variadic", old: []positionalSchema{
+			{Name: "content", Index: 0, Type: "string", Variadic: true},
+		}, current: []positionalSchema{
+			{Name: "content", Index: 0, Type: "string", Variadic: true},
+			{Name: "format", Index: 1, Type: "string"},
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := compatiblePositionals(test.old, test.current); got != test.compatible {
+				t.Fatalf("compatiblePositionals() = %t, want %t", got, test.compatible)
+			}
+		})
+	}
+}
+
 func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -384,6 +469,10 @@ func mutateParameter(contract *schemaContract, mutate func(*parameterSchema)) {
 		mutate(&parameter)
 		tool.Parameters["format"] = parameter
 	})
+}
+
+func clonePositionals(source []positionalSchema) []positionalSchema {
+	return append([]positionalSchema(nil), source...)
 }
 
 func writeTestFile(t *testing.T, path, body string) {

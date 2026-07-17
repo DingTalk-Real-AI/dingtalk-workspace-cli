@@ -38,6 +38,19 @@ type apiFlags struct {
 	baseURL   string
 }
 
+type appTokenGetter interface {
+	GetToken(context.Context) (string, error)
+}
+
+var newAppTokenProvider = func(configDir, appKey, appSecret string) appTokenGetter {
+	return &authpkg.AppTokenProvider{ConfigDir: configDir, AppKey: appKey, AppSecret: appSecret}
+}
+
+var (
+	apiClientID     = authpkg.ClientID
+	apiClientSecret = authpkg.ClientSecret
+)
+
 // newAPICommand creates the `dws api` subcommand for raw DingTalk OpenAPI calls.
 func newAPICommand(flags *GlobalFlags) *cobra.Command {
 	af := &apiFlags{}
@@ -271,10 +284,7 @@ func parseQueryStringToJSON(rawQuery string) string {
 		return "{}"
 	}
 
-	data, err := json.Marshal(paramsMap)
-	if err != nil {
-		return "{}"
-	}
+	data, _ := json.Marshal(paramsMap)
 	return string(data)
 }
 
@@ -289,8 +299,8 @@ func resolveRawAPIToken(ctx context.Context, explicitToken string) (string, erro
 	}
 
 	// Resolve app credentials (clientID/clientSecret).
-	appKey := authpkg.ClientID()
-	appSecret := authpkg.ClientSecret()
+	appKey := apiClientID()
+	appSecret := apiClientSecret()
 
 	if appKey == "" || appSecret == "" || strings.HasPrefix(appKey, "<") || strings.HasPrefix(appSecret, "<") {
 		return "", apperrors.NewAuth(
@@ -308,11 +318,7 @@ func resolveRawAPIToken(ctx context.Context, explicitToken string) (string, erro
 
 	// Use AppTokenProvider for automatic caching and refresh.
 	configDir := defaultConfigDir()
-	provider := &authpkg.AppTokenProvider{
-		ConfigDir: configDir,
-		AppKey:    appKey,
-		AppSecret: appSecret,
-	}
+	provider := newAppTokenProvider(configDir, appKey, appSecret)
 	token, err := provider.GetToken(ctx)
 	if err != nil {
 		return "", apperrors.NewAuth(fmt.Sprintf("获取应用级访问令牌失败: %v", err))

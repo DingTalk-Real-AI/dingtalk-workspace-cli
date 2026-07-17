@@ -47,6 +47,25 @@ func TestRootHelpHidesCompatibilityOnlyCommands(t *testing.T) {
 	}
 }
 
+func TestCalendarEventCreateHelpKeepsRoomsStringMetavar(t *testing.T) {
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"calendar", "event", "create", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("calendar event create --help: %v\n%s", err, out.String())
+	}
+
+	help := out.String()
+	if !strings.Contains(help, "--rooms string") {
+		t.Fatalf("calendar event create help missing string metavar for --rooms:\n%s", help)
+	}
+	if strings.Contains(help, "--rooms room search") {
+		t.Fatalf("calendar event create help treated description text as --rooms metavar:\n%s", help)
+	}
+}
+
 func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 	root := NewRootCommand()
 	listDirect := mustFindCommand(t, root, "chat", "message", "list-direct")

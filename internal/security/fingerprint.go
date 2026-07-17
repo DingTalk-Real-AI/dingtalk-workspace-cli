@@ -34,6 +34,8 @@ var virtualMACPrefixes = []string{
 	"52:54:00",
 }
 
+var networkInterfaces = net.Interfaces
+
 func isVirtualMAC(mac string) bool {
 	for _, p := range virtualMACPrefixes {
 		if strings.HasPrefix(mac, p) {
@@ -78,7 +80,7 @@ func selectMAC(ifaces []net.Interface) (string, error) {
 // found (e.g. inside a Docker container), it falls back to the first
 // non-loopback virtual MAC address so that token encryption still works.
 func GetMACAddress() (string, error) {
-	ifaces, err := net.Interfaces()
+	ifaces, err := networkInterfaces()
 	if err != nil {
 		return "", fmt.Errorf("enumerating network interfaces: %w", err)
 	}

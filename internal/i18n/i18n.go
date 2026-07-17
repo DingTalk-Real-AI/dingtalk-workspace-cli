@@ -147,6 +147,10 @@ func loadCatalog(lang string) map[string]string {
 	if err != nil {
 		return map[string]string{}
 	}
+	return parseCatalog(data)
+}
+
+func parseCatalog(data []byte) map[string]string {
 	var catalog map[string]string
 	if err := json.Unmarshal(data, &catalog); err != nil {
 		return map[string]string{}

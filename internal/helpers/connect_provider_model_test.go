@@ -108,14 +108,11 @@ func TestForwarderProviderBaseURLDropsHaiku(t *testing.T) {
 // agent that prints "API Error: 422 ..." to stdout (and exits 0) must NOT have
 // that raw error forwarded as the answer; forward returns an actionable hint.
 func TestForwardReturnsHintOnAPIError(t *testing.T) {
+	requirePOSIXShell(t)
 	stub := t.TempDir()
-	bin := filepath.Join(stub, "fakeagent")
 	// Print a provider 422 to stdout and exit 0, exactly like claude does when
 	// the upstream provider rejects the model.
-	script := "#!/bin/sh\necho 'API Error: 422 未找到匹配的自定义供应商配置，请检查模型名称'\nexit 0\n"
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake agent: %v", err)
-	}
+	bin := writeShellExecutable(t, stub, "fakeagent", "echo 'API Error: 422 未找到匹配的自定义供应商配置，请检查模型名称'\nexit 0\n")
 
 	f := &execForwarder{name: "claudecode", argv: []string{bin}, timeout: 10_000_000_000}
 	got, err := f.forward(context.Background(), "conv-1", "hi")
@@ -130,10 +127,7 @@ func TestForwardReturnsHintOnAPIError(t *testing.T) {
 	}
 
 	// A normal reply is untouched.
-	okBin := filepath.Join(stub, "okagent")
-	if err := os.WriteFile(okBin, []byte("#!/bin/sh\necho '你好，这是正常回复'\n"), 0o755); err != nil {
-		t.Fatalf("write ok agent: %v", err)
-	}
+	okBin := writeShellExecutable(t, stub, "okagent", "echo '你好，这是正常回复'\n")
 	f2 := &execForwarder{name: "claudecode", argv: []string{okBin}, timeout: 10_000_000_000}
 	got2, err := f2.forward(context.Background(), "conv-2", "hi")
 	if err != nil {

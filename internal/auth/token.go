@@ -31,6 +31,41 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
+var (
+	tokenJSONMarshalIndent       = json.MarshalIndent
+	tokenJSONMarshal             = json.Marshal
+	tokenMkdirAll                = os.MkdirAll
+	tokenWriteFile               = os.WriteFile
+	tokenRename                  = os.Rename
+	tokenRemove                  = os.Remove
+	tokenGlob                    = filepath.Glob
+	tokenSaveKeychainForCorpID   = SaveTokenDataKeychainForCorpID
+	tokenSaveKeychain            = SaveTokenDataKeychain
+	tokenLoadKeychainForCorpID   = LoadTokenDataKeychainForCorpID
+	tokenLoadKeychain            = LoadTokenDataKeychain
+	tokenKeychainExists          = TokenDataExistsKeychain
+	tokenDeleteKeychainForCorpID = DeleteTokenDataKeychainForCorpID
+	tokenDeleteKeychain          = DeleteTokenDataKeychain
+	tokenLoadSecure              = LoadSecureTokenData
+	tokenDeleteSecure            = DeleteSecureData
+	tokenResolveProfile          = resolveProfileForLoad
+	tokenUpsertProfile           = upsertProfileFromTokenWithCurrentLocked
+	tokenRemoveProfile           = removeProfileLocked
+	tokenSyncLegacyMirror        = syncLegacyTokenMirrorLocked
+	tokenLoadProfiles            = LoadProfiles
+	tokenWriteMarker             = WriteTokenMarker
+	tokenDeleteMarker            = DeleteTokenMarker
+	tokenParseURL                = url.Parse
+	tokenNewRequest              = http.NewRequestWithContext
+	tokenDefaultConfigDir        = getDefaultConfigDir
+	tokenLoadData                = LoadTokenData
+	tokenRevokeURL               = GetRevokeTokenURL
+	tokenLogoutURL               = LogoutURL
+	tokenLogoutContinueURL       = LogoutContinueURL
+	tokenLogoutHTTPClient        = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	tokenRevokeHTTPClient        = &http.Client{Timeout: 10 * time.Second}
+)
+
 // TokenData holds the OAuth token set persisted to disk.
 type TokenData struct {
 	AccessToken    string    `json:"access_token"`
@@ -82,20 +117,20 @@ type TokenMarker struct {
 // decide whether it needs to trigger a new auth exchange.
 func WriteTokenMarker(configDir string) error {
 	marker := TokenMarker{UpdatedAt: time.Now().Format(time.RFC3339)}
-	data, _ := json.MarshalIndent(marker, "", "  ")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
+	data, _ := tokenJSONMarshalIndent(marker, "", "  ")
+	if err := tokenMkdirAll(configDir, 0o700); err != nil {
 		return err
 	}
 	tmp := filepath.Join(configDir, tokenJSONFile+"."+uuid.New().String()+".tmp")
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := tokenWriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(configDir, tokenJSONFile))
+	return tokenRename(tmp, filepath.Join(configDir, tokenJSONFile))
 }
 
 // DeleteTokenMarker removes the token.json marker file.
 func DeleteTokenMarker(configDir string) error {
-	if err := os.Remove(filepath.Join(configDir, tokenJSONFile)); err != nil && !os.IsNotExist(err) {
+	if err := tokenRemove(filepath.Join(configDir, tokenJSONFile)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
@@ -123,30 +158,30 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		return saveTokenViaHook(h, configDir, data)
 	}
 	if data != nil && strings.TrimSpace(data.CorpID) != "" {
-		if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+		if err := tokenSaveKeychainForCorpID(data.CorpID, data); err != nil {
 			return err
 		}
 		makeCurrent := strings.TrimSpace(RuntimeProfile()) == ""
-		if err := upsertProfileFromTokenWithCurrentLocked(configDir, data, makeCurrent); err != nil {
+		if err := tokenUpsertProfile(configDir, data, makeCurrent); err != nil {
 			return err
 		}
 		if makeCurrent {
-			if err := SaveTokenDataKeychain(data); err != nil {
+			if err := tokenSaveKeychain(data); err != nil {
 				return err
 			}
-		} else if err := syncLegacyTokenMirrorLocked(configDir); err != nil {
+		} else if err := tokenSyncLegacyMirror(configDir); err != nil {
 			return err
 		}
-		return WriteTokenMarker(configDir)
+		return tokenWriteMarker(configDir)
 	}
-	if err := SaveTokenDataKeychain(data); err != nil {
+	if err := tokenSaveKeychain(data); err != nil {
 		return err
 	}
-	return WriteTokenMarker(configDir)
+	return tokenWriteMarker(configDir)
 }
 
 func saveTokenViaHook(h *edition.Hooks, configDir string, data *TokenData) error {
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	jsonData, err := tokenJSONMarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling token data for hook: %w", err)
 	}
@@ -179,12 +214,12 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 	}
 
 	// Default: keychain with legacy .data migration
-	selected, err := resolveProfileForLoad(configDir, profile)
+	selected, err := tokenResolveProfile(configDir, profile)
 	if err != nil {
 		return nil, err
 	}
 	if selected != nil {
-		data, err := LoadTokenDataKeychainForCorpID(selected.CorpID)
+		data, err := tokenLoadKeychainForCorpID(selected.CorpID)
 		if err == nil {
 			return data, nil
 		}
@@ -195,7 +230,7 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		// profile. Only fall back to the legacy single slot when it belongs to
 		// the SAME org; otherwise surface the error instead of silently acting
 		// as a different organization (the legacy mirror may have drifted).
-		if legacy, lerr := LoadTokenDataKeychain(); lerr == nil && legacy != nil &&
+		if legacy, lerr := tokenLoadKeychain(); lerr == nil && legacy != nil &&
 			strings.TrimSpace(legacy.CorpID) == strings.TrimSpace(selected.CorpID) {
 			return legacy, nil
 		} else if lerr != nil && !errors.Is(lerr, ErrTokenDataNotFound) {
@@ -203,17 +238,17 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		}
 		return nil, err
 	}
-	if TokenDataExistsKeychain() {
-		return LoadTokenDataKeychain()
+	if tokenKeychainExists() {
+		return tokenLoadKeychain()
 	}
-	data, err := LoadSecureTokenData(configDir)
+	data, err := tokenLoadSecure(configDir)
 	if err != nil {
 		return nil, err
 	}
 	// One-time legacy secure-store -> keychain migration. This read path may run
 	// while the refresh lock is already held, so use the lock-free saver.
 	if err := saveTokenDataLocked(configDir, data); err == nil {
-		_ = DeleteSecureData(configDir)
+		_ = tokenDeleteSecure(configDir)
 	}
 	return data, nil
 }
@@ -240,15 +275,15 @@ func DeleteTokenDataForProfile(configDir, profile string) error {
 }
 
 func deleteTokenDataForProfileLocked(configDir, profile string) error {
-	selected, err := resolveProfileForLoad(configDir, profile)
+	selected, err := tokenResolveProfile(configDir, profile)
 	if err != nil {
 		return err
 	}
 	if selected != nil {
-		keychainErr := DeleteTokenDataKeychainForCorpID(selected.CorpID)
-		_, removeErr := removeProfileLocked(configDir, selected.CorpID)
-		legacyErr := syncLegacyTokenMirrorLocked(configDir)
-		secureErr := DeleteSecureData(configDir)
+		keychainErr := tokenDeleteKeychainForCorpID(selected.CorpID)
+		_, removeErr := tokenRemoveProfile(configDir, selected.CorpID)
+		legacyErr := tokenSyncLegacyMirror(configDir)
+		secureErr := tokenDeleteSecure(configDir)
 		if keychainErr != nil {
 			return keychainErr
 		}
@@ -261,9 +296,9 @@ func deleteTokenDataForProfileLocked(configDir, profile string) error {
 		return secureErr
 	}
 
-	keychainErr := DeleteTokenDataKeychain()
-	legacyErr := DeleteSecureData(configDir)
-	markerErr := DeleteTokenMarker(configDir)
+	keychainErr := tokenDeleteKeychain()
+	legacyErr := tokenDeleteSecure(configDir)
+	markerErr := tokenDeleteMarker(configDir)
 	if keychainErr != nil {
 		return keychainErr
 	}
@@ -282,31 +317,31 @@ func DeleteAllTokenData(configDir string) error {
 		var firstErr error
 		// Best-effort: even if profiles.json is unreadable, still clear every
 		// other slot so the user can always self-heal via auth reset / logout.
-		if cfg, err := LoadProfiles(configDir); err == nil {
+		if cfg, err := tokenLoadProfiles(configDir); err == nil {
 			for _, profile := range cfg.Profiles {
-				if e := DeleteTokenDataKeychainForCorpID(profile.CorpID); e != nil && firstErr == nil {
+				if e := tokenDeleteKeychainForCorpID(profile.CorpID); e != nil && firstErr == nil {
 					firstErr = e
 				}
 			}
 		}
-		if e := os.Remove(ProfilesPath(configDir)); e != nil && !os.IsNotExist(e) && firstErr == nil {
+		if e := tokenRemove(ProfilesPath(configDir)); e != nil && !os.IsNotExist(e) && firstErr == nil {
 			firstErr = e
 		}
 		// Sweep any quarantined corrupt-profiles files so they don't accumulate.
-		if matches, _ := filepath.Glob(ProfilesPath(configDir) + ".corrupt-*"); len(matches) > 0 {
+		if matches, _ := tokenGlob(ProfilesPath(configDir) + ".corrupt-*"); len(matches) > 0 {
 			for _, m := range matches {
-				if e := os.Remove(m); e != nil && !os.IsNotExist(e) && firstErr == nil {
+				if e := tokenRemove(m); e != nil && !os.IsNotExist(e) && firstErr == nil {
 					firstErr = e
 				}
 			}
 		}
-		if e := DeleteTokenDataKeychain(); e != nil && firstErr == nil {
+		if e := tokenDeleteKeychain(); e != nil && firstErr == nil {
 			firstErr = e
 		}
-		if e := DeleteSecureData(configDir); e != nil && firstErr == nil {
+		if e := tokenDeleteSecure(configDir); e != nil && firstErr == nil {
 			firstErr = e
 		}
-		if e := DeleteTokenMarker(configDir); e != nil && firstErr == nil {
+		if e := tokenDeleteMarker(configDir); e != nil && firstErr == nil {
 			firstErr = e
 		}
 		return firstErr
@@ -323,30 +358,22 @@ func RevokeTokenRemote(ctx context.Context) error {
 		return revokeTokenViaMCP(ctx)
 	}
 	// Direct mode: use DingTalk logout endpoint
-	logoutURL, err := url.Parse(LogoutURL)
+	logoutURL, err := tokenParseURL(tokenLogoutURL)
 	if err != nil {
 		return fmt.Errorf("parsing logout URL: %w", err)
 	}
 
 	q := logoutURL.Query()
 	q.Set("client_id", ClientID())
-	q.Set("continue", LogoutContinueURL)
+	q.Set("continue", tokenLogoutContinueURL)
 	logoutURL.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, logoutURL.String(), nil)
+	req, err := tokenNewRequest(ctx, http.MethodGet, logoutURL.String(), nil)
 	if err != nil {
 		return fmt.Errorf("creating logout request: %w", err)
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		// Do not follow redirects — we just need to hit the logout endpoint.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	resp, err := client.Do(req)
+	resp, err := tokenLogoutHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("calling logout endpoint: %w", err)
 	}
@@ -362,13 +389,13 @@ func RevokeTokenRemote(ctx context.Context) error {
 
 // revokeTokenViaMCP revokes token via MCP endpoint.
 func revokeTokenViaMCP(ctx context.Context) error {
-	revokeURL := GetRevokeTokenURL()
+	revokeURL := tokenRevokeURL()
 	if revokeURL == "" {
 		return nil // No revoke endpoint available
 	}
 
 	// Load current token to get accessToken
-	tokenData, err := LoadTokenData(getDefaultConfigDir())
+	tokenData, err := tokenLoadData(tokenDefaultConfigDir())
 	if err != nil || tokenData == nil {
 		return nil // No token to revoke
 	}
@@ -377,19 +404,18 @@ func revokeTokenViaMCP(ctx context.Context) error {
 		"clientId":    ClientID(),
 		"accessToken": tokenData.AccessToken,
 	}
-	bodyBytes, err := json.Marshal(body)
+	bodyBytes, err := tokenJSONMarshal(body)
 	if err != nil {
 		return fmt.Errorf("marshaling revoke request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, revokeURL, bytes.NewReader(bodyBytes))
+	req, err := tokenNewRequest(ctx, http.MethodPost, revokeURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return fmt.Errorf("creating revoke request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := tokenRevokeHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("calling revoke endpoint: %w", err)
 	}

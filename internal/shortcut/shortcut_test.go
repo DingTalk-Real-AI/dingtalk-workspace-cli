@@ -14,13 +14,14 @@
 package shortcut
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
 
-func TestProductDefaultsToService(t *testing.T) {
+func TestCrossPlatformCoverageProductDefaultsToService(t *testing.T) {
 	if got := (Shortcut{Service: "contact"}).product(); got != "contact" {
 		t.Fatalf("product() = %q, want contact", got)
 	}
@@ -29,7 +30,7 @@ func TestProductDefaultsToService(t *testing.T) {
 	}
 }
 
-func TestRiskDefaultsToRead(t *testing.T) {
+func TestCrossPlatformCoverageRiskDefaultsToRead(t *testing.T) {
 	if got := (Shortcut{}).risk(); got != RiskRead {
 		t.Fatalf("risk() = %q, want read", got)
 	}
@@ -38,7 +39,7 @@ func TestRiskDefaultsToRead(t *testing.T) {
 	}
 }
 
-func TestMountRegistersFlagsAndUse(t *testing.T) {
+func TestCrossPlatformCoverageMountRegistersFlagsAndUse(t *testing.T) {
 	s := Shortcut{
 		Service:     "contact",
 		Command:     "+search-user",
@@ -64,7 +65,7 @@ func TestMountRegistersFlagsAndUse(t *testing.T) {
 	}
 }
 
-func TestValidateFlagsRequiredAndEnum(t *testing.T) {
+func TestCrossPlatformCoverageValidateFlagsRequiredAndEnum(t *testing.T) {
 	s := Shortcut{
 		Service: "contact",
 		Command: "+x",
@@ -100,7 +101,100 @@ func TestValidateFlagsRequiredAndEnum(t *testing.T) {
 	}
 }
 
-func TestBuildGroupsByService(t *testing.T) {
+func TestCrossPlatformCoverageValidateFlagsRejectsEmptyRequiredValuesAndInvalidSliceEnums(t *testing.T) {
+	s := Shortcut{
+		Service: "minutes",
+		Command: "+detail",
+		Flags: []Flag{
+			{Name: "id", Type: FlagString, Required: true},
+			{Name: "artifacts", Type: FlagStringSlice, Enum: []string{"summary", "todos"}},
+		},
+	}
+	cmd := mount(s)
+	rt := &RuntimeContext{cmd: cmd, shortcut: s}
+
+	_ = cmd.Flags().Set("id", "   ")
+	if err := validateFlags(rt, s); err == nil {
+		t.Fatal("expected empty required string to fail")
+	}
+	_ = cmd.Flags().Set("id", "task-1")
+	_ = cmd.Flags().Set("artifacts", "summary,unknown")
+	if err := validateFlags(rt, s); err == nil {
+		t.Fatal("expected invalid string-slice enum value to fail")
+	}
+	cmd = mount(s)
+	rt = &RuntimeContext{cmd: cmd, shortcut: s}
+	_ = cmd.Flags().Set("id", "task-1")
+	_ = cmd.Flags().Set("artifacts", "summary,todos")
+	if err := validateFlags(rt, s); err != nil {
+		t.Fatalf("valid string-slice enum failed: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDeclarativeConstraintsRejectEmptyAndConflictingValues(t *testing.T) {
+	s := Shortcut{
+		Service: "chat",
+		Command: "+messages",
+		Flags: []Flag{
+			{Name: "group", Type: FlagString},
+			{Name: "user", Type: FlagString},
+		},
+		Constraints: []Constraint{
+			{Kind: ConstraintExactlyOne, Flags: []string{"group", "user"}},
+		},
+	}
+	cmd := mount(s)
+	rt := &RuntimeContext{cmd: cmd, shortcut: s}
+	if err := validateConstraints(rt, s); err == nil {
+		t.Fatal("expected missing exactly-one flags to fail")
+	}
+	_ = cmd.Flags().Set("group", " ")
+	if err := validateConstraints(rt, s); err == nil {
+		t.Fatal("empty flag must not satisfy exactly-one")
+	}
+	_ = cmd.Flags().Set("group", "cid-1")
+	if err := validateConstraints(rt, s); err != nil {
+		t.Fatalf("one non-empty flag should pass: %v", err)
+	}
+	_ = cmd.Flags().Set("user", "user-1")
+	if err := validateConstraints(rt, s); err == nil {
+		t.Fatal("two flags must violate exactly-one")
+	}
+}
+
+func TestCrossPlatformCoverageMountHelpPublishesRequiredEnumsAndConstraints(t *testing.T) {
+	s := Shortcut{
+		Service:     "chat",
+		Command:     "+messages",
+		Description: "messages",
+		Intent:      "读取群聊或单聊消息。",
+		Flags: []Flag{
+			{Name: "group", Type: FlagString, Required: true, Desc: "群 ID"},
+			{Name: "user", Type: FlagString, Desc: "用户 ID"},
+			{Name: "direction", Type: FlagString, Enum: []string{"newer", "older"}, Desc: "方向"},
+		},
+		Constraints: []Constraint{
+			{Kind: ConstraintExactlyOne, Flags: []string{"group", "user"}},
+		},
+	}
+	cmd := mount(s)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := cmd.Help(); err != nil {
+		t.Fatal(err)
+	}
+	help := out.String()
+	for _, want := range []string{
+		"参数约束", "--group、--user 必须且只能指定一个", "群 ID（必填）", "可选值: newer, older",
+	} {
+		if !strings.Contains(help, want) {
+			t.Errorf("help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageBuildGroupsByService(t *testing.T) {
 	shortcuts := []Shortcut{
 		{Service: "contact", Command: "+a", Execute: noop},
 		{Service: "contact", Command: "+b", Execute: noop},
@@ -124,7 +218,7 @@ func TestBuildGroupsByService(t *testing.T) {
 
 func noop(_ *RuntimeContext) error { return nil }
 
-func TestCallMCPWriteDataRejectsDryRun(t *testing.T) {
+func TestCrossPlatformCoverageCallMCPWriteDataRejectsDryRun(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().Bool("dry-run", false, "")
 	cmd := &cobra.Command{Use: "x"}
@@ -143,7 +237,7 @@ func TestCallMCPWriteDataRejectsDryRun(t *testing.T) {
 	}
 }
 
-func TestCallMCPDataRejectsLikelyWriteUnderDryRun(t *testing.T) {
+func TestCrossPlatformCoverageCallMCPDataRejectsLikelyWriteUnderDryRun(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().Bool("dry-run", false, "")
 	cmd := &cobra.Command{Use: "x"}
@@ -162,7 +256,7 @@ func TestCallMCPDataRejectsLikelyWriteUnderDryRun(t *testing.T) {
 	}
 }
 
-func TestValidationHelpers(t *testing.T) {
+func TestCrossPlatformCoverageValidationHelpers(t *testing.T) {
 	s := Shortcut{
 		Service: "x", Command: "+y",
 		Flags: []Flag{

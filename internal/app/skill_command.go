@@ -35,6 +35,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	skillLoadAccessToken   = loadSkillAccessToken
+	skillDownloadToTmp     = downloadSkillToTmpDir
+	skillHTTPDo            = func(client *http.Client, req *http.Request) (*http.Response, error) { return client.Do(req) }
+	skillNewRequest        = http.NewRequestWithContext
+	skillLoadTokenData     = authpkg.LoadTokenData
+	skillResolveTargetPath = resolveSkillTargetPath
+	skillFetchDownloadInfo = fetchSkillDownloadInfo
+	skillDownloadFile      = downloadSkillFile
+	skillExtractZip        = extractSkillZip
+	skillUserHomeDir       = os.UserHomeDir
+	skillMkdirTemp         = os.MkdirTemp
+	skillCreate            = os.Create
+	skillCreateTemp        = os.CreateTemp
+	skillRemoveAll         = os.RemoveAll
+	skillRemove            = os.Remove
+	skillMkdirAll          = os.MkdirAll
+	skillOpenFile          = os.OpenFile
+	skillCopy              = io.Copy
+	skillOpenZipFile       = func(file *zip.File) (io.ReadCloser, error) { return file.Open() }
+)
+
 func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:         "DWS_SKILL_API_HOST",
@@ -48,11 +70,13 @@ func init() {
 const (
 	// legacySkillAPIHost is the legacy skill market host used by the old cli.
 	legacySkillAPIHost = "https://mcp.dingtalk.com"
-	// skillDownloadEndpoint is the API endpoint for downloading skills.
-	skillDownloadEndpoint = "https://aihub.dingtalk.com/cli/download"
 	// skillDownloadTimeout is the timeout for skill download operations.
 	skillDownloadTimeout = 5 * time.Minute
 )
+
+// skillDownloadEndpoint is variable so tests and private distributions can
+// exercise the download flow without contacting the public service.
+var skillDownloadEndpoint = "https://aihub.dingtalk.com/cli/download"
 
 // downloadSkillResponse represents the API response for skill download.
 type downloadSkillResponse struct {
@@ -272,7 +296,7 @@ func newSkillAddHintCommand() *cobra.Command {
 
 func runSkillGet(cmd *cobra.Command, args []string) error {
 	skillID, _ := cmd.Flags().GetString("skill-id")
-	accessToken, err := loadSkillAccessToken()
+	accessToken, err := skillLoadAccessToken()
 	if err != nil {
 		return err
 	}
@@ -280,7 +304,7 @@ func runSkillGet(cmd *cobra.Command, args []string) error {
 	apiURL := fmt.Sprintf("%s/cli/install?skillId=%s", skillAPIHost(), url.QueryEscape(strings.TrimSpace(skillID)))
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "⬇️  下载技能包...")
 
-	tmpDir, err := downloadSkillToTmpDir(cmd.Context(), apiURL, accessToken)
+	tmpDir, err := skillDownloadToTmp(cmd.Context(), apiURL, accessToken)
 	if err != nil {
 		return err
 	}
@@ -295,7 +319,7 @@ func runSkillFind(cmd *cobra.Command, args []string) error {
 	if source == "" {
 		source, _ = cmd.Flags().GetString("scopes")
 	}
-	accessToken, err := loadSkillAccessToken()
+	accessToken, err := skillLoadAccessToken()
 	if err != nil {
 		return err
 	}
@@ -304,14 +328,14 @@ func runSkillFind(cmd *cobra.Command, args []string) error {
 	if source != "" {
 		apiURL += "&source=" + url.QueryEscape(source)
 	}
-	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, apiURL, nil)
+	req, err := skillNewRequest(cmd.Context(), http.MethodGet, apiURL, nil)
 	if err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to create request: %v", err))
 	}
 	req.Header.Set("x-user-access-token", accessToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := skillHTTPDo(client, req)
 	if err != nil {
 		return apperrors.NewAPI(fmt.Sprintf("failed to search skills: %v", err), apperrors.WithRetryable(true))
 	}
@@ -359,12 +383,12 @@ func runSkillAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve target path
-	destPath, err := resolveSkillTargetPath(target)
+	destPath, err := skillResolveTargetPath(target)
 	if err != nil {
 		return apperrors.NewValidation(fmt.Sprintf("invalid target '%s': %v. Supported targets: %s", target, err, supportedTargets()))
 	}
 
-	accessToken, err := loadSkillAccessToken()
+	accessToken, err := skillLoadAccessToken()
 	if err != nil {
 		return err
 	}
@@ -376,7 +400,7 @@ func runSkillAdd(cmd *cobra.Command, args []string) error {
 
 	// Step 1: Get download URL from API
 	fmt.Fprintf(w, "正在获取技能信息...\n")
-	downloadResp, err := fetchSkillDownloadInfo(ctx, accessToken, skillID)
+	downloadResp, err := skillFetchDownloadInfo(ctx, accessToken, skillID)
 	if err != nil {
 		return err
 	}
@@ -399,7 +423,7 @@ func runSkillAdd(cmd *cobra.Command, args []string) error {
 
 	// Step 2: Download the skill zip file
 	fmt.Fprintf(w, "正在下载技能...\n")
-	tempZipPath, err := downloadSkillFile(ctx, downloadResp.Result.DownloadURL, downloadResp.Result.FileName)
+	tempZipPath, err := skillDownloadFile(ctx, downloadResp.Result.DownloadURL, downloadResp.Result.FileName)
 	if err != nil {
 		return err
 	}
@@ -407,7 +431,7 @@ func runSkillAdd(cmd *cobra.Command, args []string) error {
 
 	// Step 3: Extract zip to destination
 	fmt.Fprintf(w, "正在解压到 %s...\n", destPath)
-	if err := extractSkillZip(tempZipPath, destPath); err != nil {
+	if err := skillExtractZip(tempZipPath, destPath); err != nil {
 		return err
 	}
 
@@ -419,7 +443,7 @@ func runSkillAdd(cmd *cobra.Command, args []string) error {
 
 func loadSkillAccessToken() (string, error) {
 	configDir := defaultConfigDir()
-	tokenData, err := authpkg.LoadTokenData(configDir)
+	tokenData, err := skillLoadTokenData(configDir)
 	if err != nil || tokenData == nil || !tokenData.IsAccessTokenValid() {
 		return "", skillAuthError()
 	}
@@ -462,7 +486,7 @@ func resolveSkillTargetPath(target string) (string, error) {
 		return "", fmt.Errorf("unsupported target")
 	}
 
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := skillUserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
@@ -474,7 +498,7 @@ func resolveSkillTargetPath(target string) (string, error) {
 func fetchSkillDownloadInfo(ctx context.Context, accessToken, skillID string) (*downloadSkillResponse, error) {
 	url := fmt.Sprintf("%s?skillId=%s", skillDownloadEndpoint, skillID)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := skillNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, apperrors.NewInternal(fmt.Sprintf("failed to create request: %v", err))
 	}
@@ -483,7 +507,7 @@ func fetchSkillDownloadInfo(ctx context.Context, accessToken, skillID string) (*
 	req.Header.Set("x-user-access-token", accessToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := skillHTTPDo(client, req)
 	if err != nil {
 		return nil, apperrors.NewAPI(fmt.Sprintf("failed to call download API: %v", err),
 			apperrors.WithRetryable(true))
@@ -513,14 +537,14 @@ func fetchSkillDownloadInfo(ctx context.Context, accessToken, skillID string) (*
 }
 
 func downloadSkillToTmpDir(ctx context.Context, apiURL, accessToken string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	req, err := skillNewRequest(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to create request: %v", err))
 	}
 	req.Header.Set("x-user-access-token", accessToken)
 
 	client := &http.Client{Timeout: skillDownloadTimeout}
-	resp, err := client.Do(req)
+	resp, err := skillHTTPDo(client, req)
 	if err != nil {
 		return "", apperrors.NewAPI(fmt.Sprintf("failed to download skill package: %v", err), apperrors.WithRetryable(true))
 	}
@@ -530,22 +554,22 @@ func downloadSkillToTmpDir(ctx context.Context, apiURL, accessToken string) (str
 		return "", parseLegacySkillAPIError(resp)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "dws-skill-*")
+	tmpDir, err := skillMkdirTemp("", "dws-skill-*")
 	if err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to create temp dir: %v", err))
 	}
 
 	filename := filenameFromDisposition(resp.Header.Get("Content-Disposition"))
 	destPath := filepath.Join(tmpDir, filename)
-	file, err := os.Create(destPath)
+	file, err := skillCreate(destPath)
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		_ = skillRemoveAll(tmpDir)
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to create temp file: %v", err))
 	}
 	defer file.Close()
 
-	if _, err := io.Copy(file, resp.Body); err != nil {
-		os.RemoveAll(tmpDir)
+	if _, err := skillCopy(file, resp.Body); err != nil {
+		_ = skillRemoveAll(tmpDir)
 		return "", apperrors.NewAPI(fmt.Sprintf("failed to save downloaded file: %v", err))
 	}
 	return tmpDir, nil
@@ -584,7 +608,7 @@ func downloadSkillFile(ctx context.Context, downloadURL, fileName string) (strin
 	}
 
 	client := &http.Client{Timeout: skillDownloadTimeout}
-	resp, err := client.Do(req)
+	resp, err := skillHTTPDo(client, req)
 	if err != nil {
 		return "", apperrors.NewAPI(fmt.Sprintf("failed to download skill: %v", err),
 			apperrors.WithRetryable(true))
@@ -600,21 +624,21 @@ func downloadSkillFile(ctx context.Context, downloadURL, fileName string) (strin
 	if fileName == "" {
 		fileName = "skill.zip"
 	}
-	tempFile, err := os.CreateTemp("", "dws-skill-*.zip")
+	tempFile, err := skillCreateTemp("", "dws-skill-*.zip")
 	if err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to create temp file: %v", err))
 	}
 	tempPath := tempFile.Name()
 
 	// Copy response body to temp file
-	_, err = io.Copy(tempFile, resp.Body)
+	_, err = skillCopy(tempFile, resp.Body)
 	closeErr := tempFile.Close()
 	if err != nil {
-		os.Remove(tempPath)
+		_ = skillRemove(tempPath)
 		return "", apperrors.NewAPI(fmt.Sprintf("failed to save downloaded file: %v", err))
 	}
 	if closeErr != nil {
-		os.Remove(tempPath)
+		_ = skillRemove(tempPath)
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to close temp file: %v", closeErr))
 	}
 
@@ -624,7 +648,7 @@ func downloadSkillFile(ctx context.Context, downloadURL, fileName string) (strin
 // extractSkillZip extracts a zip file to the destination directory.
 func extractSkillZip(zipPath, destDir string) error {
 	// Ensure destination directory exists
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := skillMkdirAll(destDir, 0755); err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to create destination directory: %v", err))
 	}
 
@@ -653,16 +677,16 @@ func extractZipFile(file *zip.File, destDir string) error {
 
 	if file.FileInfo().IsDir() {
 		// Use 0755 to ensure we have write permission for creating files inside
-		return os.MkdirAll(filePath, 0755)
+		return skillMkdirAll(filePath, 0755)
 	}
 
 	// Ensure parent directory exists with write permission
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+	if err := skillMkdirAll(filepath.Dir(filePath), 0755); err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to create directory: %v", err))
 	}
 
 	// Extract file
-	srcFile, err := file.Open()
+	srcFile, err := skillOpenZipFile(file)
 	if err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to open file in zip: %v", err))
 	}
@@ -673,13 +697,13 @@ func extractZipFile(file *zip.File, destDir string) error {
 	if fileMode&0600 == 0 {
 		fileMode = 0644
 	}
-	destFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
+	destFile, err := skillOpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
 	if err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to create file: %v", err))
 	}
 	defer destFile.Close()
 
-	if _, err := io.Copy(destFile, srcFile); err != nil {
+	if _, err := skillCopy(destFile, srcFile); err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to extract file: %v", err))
 	}
 
@@ -689,6 +713,6 @@ func extractZipFile(file *zip.File, destDir string) error {
 // cleanupTempFile removes a temporary file, ignoring errors.
 func cleanupTempFile(path string) {
 	if path != "" {
-		os.Remove(path)
+		_ = skillRemove(path)
 	}
 }

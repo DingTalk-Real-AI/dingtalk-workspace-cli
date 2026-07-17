@@ -33,6 +33,13 @@ const DefaultStopTimeout = 5 * time.Second
 // distinguish "nothing to stop" from "failed to stop".
 var ErrNotRunning = errors.New("busctl: bus is not running")
 
+var (
+	stopReadHolderPID = bus.ReadHolderPID
+	stopAlive         = process.Alive
+	stopFindProcess   = os.FindProcess
+	stopSignalProcess = func(proc *os.Process, signal os.Signal) error { return proc.Signal(signal) }
+)
+
 // StopConfig identifies the target bus and tunes timing.
 type StopConfig struct {
 	// WorkDir holds bus.lock; Stop reads the PID from there.
@@ -62,19 +69,19 @@ func Stop(cfg StopConfig) error {
 		cfg.Timeout = DefaultStopTimeout
 	}
 
-	pid := bus.ReadHolderPID(LockPath(cfg.WorkDir))
+	pid := stopReadHolderPID(LockPath(cfg.WorkDir))
 	if pid <= 0 {
 		return ErrNotRunning
 	}
-	if !process.Alive(pid) {
+	if !stopAlive(pid) {
 		return ErrNotRunning
 	}
 
-	proc, err := os.FindProcess(pid)
+	proc, err := stopFindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("busctl: find process %d: %w", pid, err)
 	}
-	if err := proc.Signal(stopSignal()); err != nil {
+	if err := stopSignalProcess(proc, stopSignal()); err != nil {
 		// On many Unix platforms Signal returns "process already finished"
 		// when the bus has just exited on its own — treat that as success.
 		if errors.Is(err, os.ErrProcessDone) {
@@ -86,7 +93,7 @@ func Stop(cfg StopConfig) error {
 	// Poll for actual exit.
 	deadline := time.Now().Add(cfg.Timeout)
 	for time.Now().Before(deadline) {
-		if !process.Alive(pid) {
+		if !stopAlive(pid) {
 			return nil
 		}
 		time.Sleep(50 * time.Millisecond)

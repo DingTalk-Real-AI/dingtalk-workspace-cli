@@ -66,9 +66,6 @@ func ParseRoute(spec string) (Route, error) {
 	if err != nil {
 		return Route{}, fmt.Errorf("consume: route regex %q: %w", pattern, err)
 	}
-	if path == "" {
-		return Route{}, fmt.Errorf("consume: route path is empty in %q", spec)
-	}
 	return Route{Pattern: re, Dir: path, Raw: spec}, nil
 }
 

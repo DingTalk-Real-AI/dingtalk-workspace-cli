@@ -66,10 +66,10 @@ func newProfileListCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
-			if err := authpkg.EnsureProfilesMigration(configDir); err != nil {
+			if err := profileEnsureProfilesMigration(configDir); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to migrate profiles: %v", err))
 			}
-			cfg, err := authpkg.LoadProfiles(configDir)
+			cfg, err := profileLoadProfiles(configDir)
 			if err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", err))
 			}
@@ -139,6 +139,12 @@ func addProfileSwitchSelectorFlags(cmd *cobra.Command) {
 var (
 	profileSwitchSelector            = selectProfileSwitchProfile
 	profileSwitchInteractiveTerminal = isInteractiveTerminal
+	profileSwitchTUIRunner           = runProfileSwitchTUI
+	profileEnsureProfilesMigration   = authpkg.EnsureProfilesMigration
+	profileLoadProfiles              = authpkg.LoadProfiles
+	profileUsePrevious               = authpkg.UsePreviousProfile
+	profileSetCurrent                = authpkg.SetCurrentProfile
+	profileRunTeaProgram             = (*tea.Program).Run
 )
 
 const (
@@ -218,9 +224,9 @@ func switchProfileAndWrite(cmd *cobra.Command, configDir, selector string, usedT
 		err     error
 	)
 	if strings.TrimSpace(selector) == "-" {
-		profile, err = authpkg.UsePreviousProfile(configDir)
+		profile, err = profileUsePrevious(configDir)
 	} else {
-		profile, err = authpkg.SetCurrentProfile(configDir, selector)
+		profile, err = profileSetCurrent(configDir, selector)
 	}
 	if err != nil {
 		return apperrors.NewValidation(err.Error())
@@ -229,7 +235,7 @@ func switchProfileAndWrite(cmd *cobra.Command, configDir, selector string, usedT
 	clearCompatCache()
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if strings.EqualFold(strings.TrimSpace(format), "json") && !(usedTUI && authLoginAllowsInteractiveDefault(cmd, format)) {
-		cfg, loadErr := authpkg.LoadProfiles(configDir)
+		cfg, loadErr := profileLoadProfiles(configDir)
 		if loadErr != nil {
 			return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", loadErr))
 		}
@@ -243,10 +249,10 @@ func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, e
 	if !profileSwitchInteractiveTerminal() {
 		return "", apperrors.NewValidation("profile selector required in non-interactive mode; use dws profile switch <name|corpId>")
 	}
-	if err := authpkg.EnsureProfilesMigration(configDir); err != nil {
+	if err := profileEnsureProfilesMigration(configDir); err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to migrate profiles: %v", err))
 	}
-	cfg, err := authpkg.LoadProfiles(configDir)
+	cfg, err := profileLoadProfiles(configDir)
 	if err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", err))
 	}
@@ -260,7 +266,7 @@ func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, e
 	if choice == "" {
 		choice = cfg.Profiles[0].CorpID
 	}
-	return runProfileSwitchTUI(cmd, cfg, choice)
+	return profileSwitchTUIRunner(cmd, cfg, choice)
 }
 
 func runProfileSwitchTUI(cmd *cobra.Command, cfg *authpkg.ProfilesConfig, selectedCorpID string) (string, error) {
@@ -272,7 +278,7 @@ func runProfileSwitchTUI(cmd *cobra.Command, cfg *authpkg.ProfilesConfig, select
 		tea.WithOutput(cmd.ErrOrStderr()),
 		tea.WithContext(cmd.Context()),
 	)
-	finalModel, err := program.Run()
+	finalModel, err := profileRunTeaProgram(program)
 	if err != nil {
 		if errors.Is(err, tea.ErrInterrupted) {
 			return "", apperrors.NewValidation("组织选择中止: user aborted")

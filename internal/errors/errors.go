@@ -26,6 +26,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+var marshalErrorJSON = jsonutil.MarshalIndent
+
 // Category represents a stable error class with a documented exit code.
 type Category string
 
@@ -312,7 +314,7 @@ func PrintJSON(w io.Writer, err error) error {
 	}
 	payload := map[string]any{"error": errorPayload}
 
-	data, marshalErr := jsonutil.MarshalIndent(payload, "", "  ")
+	data, marshalErr := marshalErrorJSON(payload, "", "  ")
 	if marshalErr != nil {
 		_, writeErr := fmt.Fprintf(w, "{\"error\":{\"code\":5,\"category\":\"internal\",\"message\":\"failed to encode error output\"}}\n")
 		return writeErr

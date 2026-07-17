@@ -31,6 +31,15 @@ const (
 	reportDispatchAuthFailureHint     = "dws auth login"
 )
 
+var (
+	reportOpenFile     = os.Open
+	reportAbsPath      = filepath.Abs
+	reportGetwd        = os.Getwd
+	reportEvalSymlinks = filepath.EvalSymlinks
+	reportStat         = os.Stat
+	reportRelPath      = filepath.Rel
+)
+
 // ──────────────────────────────────────────────────────────
 // dws report — 钉钉日志
 // MCP tools: get_available_report_templates, get_template_details_by_name,
@@ -551,15 +560,8 @@ func enrichReportListReadable(ctx context.Context, operation string, parsed any)
 				"command": "dws report entry get --report-id " + entry.reportID + " --format json",
 			})
 		}
-		if includeContent {
-			if _, ok := row["日志内容"]; !ok {
-				row["日志内容"] = ""
-			}
-		} else {
+		if !includeContent {
 			delete(row, "日志内容")
-		}
-		if _, ok := row["钉钉链接"]; !ok {
-			row["钉钉链接"] = "查看详情"
 		}
 		rows = append(rows, row)
 	}
@@ -1387,7 +1389,7 @@ func resolveReportContentsFromFlags(cmd *cobra.Command) (string, error) {
 }
 
 func readReportContentsFile(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	file, err := reportOpenFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", &CLIError{
@@ -1451,11 +1453,11 @@ func resolveSafeReportContentsFilePath(filePath string) (string, error) {
 		return "", reportContentsFilePathError(filePath, "parent-directory traversal is not allowed")
 	}
 
-	absPath, err := filepath.Abs(cleanPath)
+	absPath, err := reportAbsPath(cleanPath)
 	if err != nil {
 		return "", reportContentsFilePathError(filePath, err.Error())
 	}
-	cwd, err := os.Getwd()
+	cwd, err := reportGetwd()
 	if err != nil {
 		return "", &CLIError{
 			Code:      CodeFileNotFound,
@@ -1464,14 +1466,14 @@ func resolveSafeReportContentsFilePath(filePath string) (string, error) {
 			Cause:     err,
 		}
 	}
-	cwdAbs, err := filepath.Abs(cwd)
+	cwdAbs, err := reportAbsPath(cwd)
 	if err != nil {
 		return "", reportContentsFilePathError(filePath, err.Error())
 	}
 	if !pathWithinRoot(cwdAbs, absPath) {
 		return "", reportContentsFilePathError(filePath, "path must stay under the current working directory")
 	}
-	rootPath, err := filepath.EvalSymlinks(cwdAbs)
+	rootPath, err := reportEvalSymlinks(cwdAbs)
 	if err != nil {
 		return "", &CLIError{
 			Code:      CodeFileNotFound,
@@ -1480,7 +1482,7 @@ func resolveSafeReportContentsFilePath(filePath string) (string, error) {
 			Cause:     err,
 		}
 	}
-	info, err := os.Stat(absPath)
+	info, err := reportStat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", &CLIError{
@@ -1501,7 +1503,7 @@ func resolveSafeReportContentsFilePath(filePath string) (string, error) {
 	if info.IsDir() {
 		return "", reportContentsFilePathError(filePath, "must point to a file, not a directory")
 	}
-	realPath, err := filepath.EvalSymlinks(absPath)
+	realPath, err := reportEvalSymlinks(absPath)
 	if err != nil {
 		return "", &CLIError{
 			Code:      CodeFileNotFound,
@@ -1521,7 +1523,7 @@ func pathEscapesUpward(cleanPath string) bool {
 }
 
 func pathWithinRoot(rootPath, targetPath string) bool {
-	rel, err := filepath.Rel(rootPath, targetPath)
+	rel, err := reportRelPath(rootPath, targetPath)
 	if err != nil {
 		return false
 	}

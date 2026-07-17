@@ -9,7 +9,7 @@ cli_version: ">=1.0.15"
 通过 `dws` 命令管理钉钉产品能力。
 
 
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。`--help` 决定 Cobra 实际接受的 flags；对应 leaf Schema 决定 Agent 选择、参数映射/约束和安全确认语义。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。`--help` 决定 Cobra 实际接受的 flags；基础命令的 leaf Schema 决定 Agent 选择、参数映射/约束和安全确认语义，`+` shortcut 则读取独立 shortcut catalog。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 ## 严格禁止 (NEVER DO)
 - 不要使用 dws 命令以外的方式操作（禁止 curl、HTTP API、浏览器）
@@ -28,8 +28,10 @@ cli_version: ">=1.0.15"
 
 `shortcut` 是对常用操作的高层封装，适合优先承担用户意图；产品参考文档和本 skill 负责判断意图、风险、跨产品流程和复杂参数，CLI 帮助负责声明当前版本真正可调用的命令。
 
-- 用户意图可由可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`。
-- 调用前用 `dws <service> --help` 或 `dws shortcut list --service <service> --format json` 确认可见命令；不要凭文档或记忆猜测 shortcut。
+- 先按产品参考、意图表和 recipe 路由。存在精确覆盖场景的专用脚本/recipe 时继续遵循“脚本优先”；否则用户意图可由可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`，不要手写等价的多步原子命令。
+- shortcut 有独立 catalog，按设计不进入 Runtime Schema。调用前用 `dws shortcut list --service <service> --format json` 读取完整 flags、required/enum、跨参数 constraints、risk/confirmation 和 examples；不要对 `+` 路径调用 `dws schema`。
+- 真正组装参数前用叶子帮助 `dws <service> +<verb> --help` 核对当前 Cobra 接受的 flags。父级 `dws <service> --help` 只能发现子命令，不能替代叶子参数帮助。
+- shortcut catalog 中 `confirmation=user_required` 时，必须先获得用户确认，确认后才加 `--yes`；`not_required` 不额外确认。
 - 如果 shortcut 不在 help / list 中，改用产品参考里的原子命令、脚本或标准流程；不要猜测未展示的 `+` 命令。
 - shortcut 失败时按“错误处理”流程先加 `--verbose` 复查；若仍失败，应记录具体输入、输出、trace / endpoint / tool 信息。
 
@@ -37,26 +39,26 @@ cli_version: ">=1.0.15"
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->
 ## Shortcut 总览
 
-下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws <service> --help` 查看 flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
+下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws shortcut list --service <service> --format json` 读取参数、约束、风险和示例，最后用 `dws <service> +<shortcut> --help` 核对当前 Cobra flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
 
 | 服务 | shortcut 数 | multi skill | 发现命令 |
 |---|---:|---|---|
-| `aitable` | 29 | `dingtalk-aitable` | `dws aitable --help` / `dws shortcut list --service aitable --format json` |
-| `attendance` | 19 | `dingtalk-attendance` | `dws attendance --help` / `dws shortcut list --service attendance --format json` |
-| `calendar` | 20 | `dingtalk-calendar` | `dws calendar --help` / `dws shortcut list --service calendar --format json` |
-| `chat` | 42 | `dingtalk-chat` | `dws chat --help` / `dws shortcut list --service chat --format json` |
-| `contact` | 14 | `dingtalk-contact` | `dws contact --help` / `dws shortcut list --service contact --format json` |
-| `devapp` | 19 | `dingtalk-dev` | `dws devapp --help` / `dws shortcut list --service devapp --format json` |
-| `ding` | 4 | `dingtalk-ding` | `dws ding --help` / `dws shortcut list --service ding --format json` |
-| `doc` | 17 | `dingtalk-doc` | `dws doc --help` / `dws shortcut list --service doc --format json` |
-| `drive` | 7 | `dingtalk-drive` | `dws drive --help` / `dws shortcut list --service drive --format json` |
-| `mail` | 10 | `dingtalk-mail` | `dws mail --help` / `dws shortcut list --service mail --format json` |
-| `minutes` | 6 | `dingtalk-minutes` | `dws minutes --help` / `dws shortcut list --service minutes --format json` |
-| `oa` | 7 | `dingtalk-oa` | `dws oa --help` / `dws shortcut list --service oa --format json` |
-| `report` | 2 | `dingtalk-report` | `dws report --help` / `dws shortcut list --service report --format json` |
-| `sheet` | 2 | `dingtalk-sheet` | `dws sheet --help` / `dws shortcut list --service sheet --format json` |
-| `todo` | 11 | `dingtalk-todo` | `dws todo --help` / `dws shortcut list --service todo --format json` |
-| `wiki` | 1 | `dingtalk-wiki` | `dws wiki --help` / `dws shortcut list --service wiki --format json` |
+| `aitable` | 29 | `dingtalk-aitable` | `dws shortcut list --service aitable --format json` |
+| `attendance` | 19 | `dingtalk-attendance` | `dws shortcut list --service attendance --format json` |
+| `calendar` | 20 | `dingtalk-calendar` | `dws shortcut list --service calendar --format json` |
+| `chat` | 42 | `dingtalk-chat` | `dws shortcut list --service chat --format json` |
+| `contact` | 14 | `dingtalk-contact` | `dws shortcut list --service contact --format json` |
+| `devapp` | 19 | `dingtalk-dev` | `dws shortcut list --service devapp --format json` |
+| `ding` | 4 | `dingtalk-ding` | `dws shortcut list --service ding --format json` |
+| `doc` | 17 | `dingtalk-doc` | `dws shortcut list --service doc --format json` |
+| `drive` | 7 | `dingtalk-drive` | `dws shortcut list --service drive --format json` |
+| `mail` | 10 | `dingtalk-mail` | `dws shortcut list --service mail --format json` |
+| `minutes` | 6 | `dingtalk-minutes` | `dws shortcut list --service minutes --format json` |
+| `oa` | 7 | `dingtalk-oa` | `dws shortcut list --service oa --format json` |
+| `report` | 2 | `dingtalk-report` | `dws shortcut list --service report --format json` |
+| `sheet` | 2 | `dingtalk-sheet` | `dws shortcut list --service sheet --format json` |
+| `todo` | 11 | `dingtalk-todo` | `dws shortcut list --service todo --format json` |
+| `wiki` | 1 | `dingtalk-wiki` | `dws shortcut list --service wiki --format json` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
 ## 产品总览
@@ -69,7 +71,7 @@ cli_version: ">=1.0.15"
 | `attendance`      | 考勤：打卡结果/打卡流水/考勤组查询/考勤规则/汇总统计/假期类型/假期余额（P0 已落地，部分管理类命令仍属 P1） | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
 | `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/消息发送(文本/Markdown/图片/文件)/拉取消息/消息收藏/@我/特别关注/机器人群发/单聊/撤回/转发/引用回复/Webhook/机器人搜索 | [chat.md](./references/products/chat.md)                       |
-| `contact`         | 通讯录：用户查询(当前用户/搜索/详情/手机号)/花名册档案(学历/家庭/银行卡/合同)/离职员工查询(姓名/时间范围/部门)/部门查询(搜索/详情/子部门/成员)/角色查询(主管/管理员/财务/HR 等 label)/特别关注列表              | [contact.md](./references/products/contact.md)                 |
+| `contact`         | 通讯录：用户查询/部门/角色/花名册/离职员工/特别关注，以及创建企业、企业账号和邀请员工              | [contact.md](./references/products/contact.md)                 |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
@@ -93,7 +95,7 @@ cli_version: ">=1.0.15"
 用户提到"考勤/打卡/排班" → `attendance`
 用户提到"日程/日历/会议室/约会/时间建议" → `calendar`
 用户提到"群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知" → `chat`
-用户提到"通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人" → `contact`
+用户提到"通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人/创建企业/企业账号/邀请员工/新员工入职" → `contact`
 用户提到"开发/API/调用错误 文档" → `devdoc`
 用户提到"DING/紧急消息/电话提醒" → `ding`
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
@@ -165,6 +167,8 @@ Step 3 → 加 --yes 执行命令
 
 `dws schema` 内嵌当前二进制公开命令面的结构化契约。**Agent 选择命令、读取参数映射/约束和安全语义时必须优先渐进查询 leaf Schema**；真正组装执行参数前，用 `--help` 确认当前 Cobra 接受的 flags：
 
+本节适用于进入 Runtime Schema 的基础/原子命令。`+` shortcut 是明确例外：按“Shortcut 与原子命令的使用原则”读取 `dws shortcut list`，不得把 Schema lookup 失败误判为 shortcut 不可执行。
+
 稳定 command identity、主 CLI path 和 alias 已在构建时由 reviewed registry 与真实 Cobra tree 精确绑定。Agent 不应读取 Catalog 文件、native annotation 或其他生成 JSON 来重新推断命令；所有运行时查询都以当前二进制交付的 Schema 投影为准。
 
 ```bash
@@ -230,7 +234,8 @@ dws schema --all --format json
 | 信息 | 事实源 |
 |------|--------|
 | 命令是否存在、当前 Cobra 接受哪些 flags | `dws <cli_path> --help` |
-| Agent 选择、参数映射/required/组合约束、risk/confirmation | `dws schema "<cli_path>"`（按需加 `--compact`） |
+| Agent 选择、参数映射/required/组合约束、risk/confirmation（原子/基础命令） | `dws schema "<cli_path>"`（按需加 `--compact`） |
+| shortcut 的参数、组合约束、risk/confirmation、示例 | `dws shortcut list --service <service> --format json` |
 | 人类可读用法 | `dws <cli_path> --help` |
 | 钉钉中的文档、文件、日程、消息等实际数据 | 真正执行对应的 `read` / `search` / `list` 命令 |
 
@@ -261,7 +266,7 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
 
 ## 详细参考 (按需读取)
 
-- [references/products/](./references/products/) — 各产品命令详细参考（Cobra 接受的 flag 以 `--help` 为准，Agent 映射/约束/安全语义以 leaf Schema 为准）
+- [references/products/](./references/products/) — 各产品命令详细参考（Cobra 接受的 flag 以叶子 `--help` 为准；基础命令的 Agent 映射/约束/安全语义以 leaf Schema 为准，shortcut 以独立 catalog 为准）
 - [references/intent-guide.md](./references/intent-guide.md) — 意图路由指南（易混淆场景对照）
 - [references/url-patterns.md](./references/url-patterns.md) — URL 格式规范 + alidocs URL 分流决策与类型探测流程（含钉盘 `document/edit|preview?dentryKey=` 链接）
 - [references/global-reference.md](./references/global-reference.md) — 全局标志、认证、输出格式

@@ -125,10 +125,10 @@ var BotFind = shortcut.Shortcut{
 		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页返回数量"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传 nextCursor"},
 	},
-	Tips: []string{`dws chat +bot-find --query "日报"`},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.AtLeastOne("query", "keyword")
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"query", "keyword"}},
 	},
+	Tips: []string{`dws chat +bot-find --query "日报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"keyword": rt.StrFirst("query", "keyword")}
 		if rt.Int("limit") > 0 {

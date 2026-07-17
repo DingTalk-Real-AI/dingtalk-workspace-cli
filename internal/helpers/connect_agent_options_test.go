@@ -17,14 +17,27 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
-// writeExecStub drops an executable shell stub named name into dir so PATH
-// lookups resolve without the real CLI installed.
+// writeExecStub drops a PATH candidate named name into dir so dependency
+// discovery resolves without the real CLI installed. These stubs are never
+// executed; Windows only needs a PATHEXT-recognized regular file.
 func writeExecStub(dir, name string) error {
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+		return os.WriteFile(filepath.Join(dir, name), []byte("test executable stub"), 0o755)
+	}
 	return os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755)
+}
+
+func requirePOSIXShell(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("test fixture requires a POSIX shell executable")
+	}
 }
 
 // TestConvSessions covers the per-conversation session contract: first message

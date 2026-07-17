@@ -63,9 +63,6 @@ var FindMailUser = shortcut.Shortcut{
 		`dws mail +find-mail-user --query "张三"`,
 		`dws mail +find-mail-user --query alice --limit 10`,
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		return rt.RequireAll("query")
-	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — search mailbox users. keyword/size mirror the toolArgs built in
 		// helpers.mail.go's `mail user search` command; size is passed as a string.

@@ -60,14 +60,13 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 		{Name: "direction", Type: shortcut.FlagString, Desc: "时间方向 newer/older（可选，newer 从给定时间往现在拉，older 往以前拉）"},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id", "user"}},
+	},
 	Tips: []string{
 		`dws chat +chat-messages --group <openconversation_id> --time "2025-03-01 00:00:00"`,
 		`dws chat +chat-messages --user <userId> --time "2025-03-01 00:00:00" --limit 50`,
 		`dws chat +chat-messages --group <openconversation_id> --direction older`,
-	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		// --group aliases and --user are mutually exclusive and exactly one is required.
-		return rt.ExactlyOne("group", "conversation-id", "id", "user")
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — build params and pick the right tool. Param keys

@@ -183,9 +183,6 @@ func visibleMCPRootCommands(root *cobra.Command) []*cobra.Command {
 	}
 
 	allowed := resolveVisibleProducts()
-	if len(allowed) == 0 {
-		return nil
-	}
 
 	commands := make([]*cobra.Command, 0)
 	for _, cmd := range root.Commands() {

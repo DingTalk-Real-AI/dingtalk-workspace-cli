@@ -376,22 +376,37 @@ func newDevAppGetCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "get",
 		Short:             "查询开放平台企业内部应用详情",
-		Example:           "  dws dev app get --unified-app-id UNIFIED_APP_ID --format json",
+		Example:           "  dws dev app get --unified-app-id UNIFIED_APP_ID --format json\n  dws dev app get --app-key APP_KEY --format json",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appID, err := requiredDevAppUnifiedID(cmd)
+			params, err := buildDevAppGetParams(cmd)
 			if err != nil {
 				return err
 			}
-			params := map[string]any{"unifiedAppId": appID}
 			return runDevAppTool(runner, cmd, devAppGetTool, params)
 		},
 	}
-	addDevAppUnifiedIDFlag(cmd)
+	cmd.Flags().String("unified-app-id", "", "开放平台统一应用 ID（与 --app-key 二选一）")
+	cmd.Flags().String("app-key", "", "按 appKey/clientId 查询应用详情（与 --unified-app-id 二选一）")
 	preferLegacyLeaf(cmd)
 	annotateDevAppTool(cmd, devAppGetTool)
 	return cmd
+}
+
+// buildDevAppGetParams accepts either --unified-app-id or --app-key for read-only
+// detail lookup. Prefer unifiedAppId when both are somehow present so the server
+// keeps a deterministic primary key.
+func buildDevAppGetParams(cmd *cobra.Command) (map[string]any, error) {
+	appID := devAppStringFlag(cmd, "unified-app-id")
+	appKey := devAppStringFlag(cmd, "app-key")
+	if appID == "" && appKey == "" {
+		return nil, apperrors.NewValidation("请传入 --unified-app-id 或 --app-key")
+	}
+	params := map[string]any{}
+	devAppPutString(params, "unifiedAppId", appID)
+	devAppPutString(params, "appKey", appKey)
+	return params, nil
 }
 
 func newDevAppCreateCommand(runner executor.Runner) *cobra.Command {
@@ -1896,9 +1911,9 @@ func splitDevAppList(raw string) []string {
 	return values
 }
 
-// 应用定位统一只用 --unified-app-id（--app-key / --name 定位已下线，列表搜索的
-// --name/--app-key 是过滤参数、不在此列）。所有 app 作用域命令共用 addDevAppUnifiedIDFlag
-// + requiredDevAppUnifiedID。
+// 应用定位：写操作统一只用 --unified-app-id；dev app get 额外支持只读 --app-key。
+// --name 定位已下线（列表搜索的 --name/--app-key 是过滤参数、不在此列）。
+// 写操作与其它 app 作用域命令共用 addDevAppUnifiedIDFlag + requiredDevAppUnifiedID。
 
 func devAppRequireWriteGuard(cmd *cobra.Command, operation string) error {
 	if commandDryRun(cmd) || devAppYes(cmd) {

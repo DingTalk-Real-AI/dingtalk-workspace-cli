@@ -89,6 +89,9 @@ var (
 	embeddedSchemaCommandRegistryOnce sync.Once
 	embeddedSchemaCommandRegistryData CommandRegistry
 	embeddedSchemaCommandRegistryErr  error
+	loadReviewedCommandRegistry       = loadEmbeddedCommandRegistry
+	validateReviewedParameterBindings = ValidateEmbeddedSchemaParameterBindings
+	loadReviewedManualSchemaHints     = embeddedManualSchemaHints
 )
 
 func loadEmbeddedCommandRegistry() (CommandRegistry, error) {
@@ -107,7 +110,7 @@ func ValidateCommandRegistrySource(data []byte) (CommandRegistry, error) {
 	if err != nil {
 		return CommandRegistry{}, err
 	}
-	embedded, err := loadEmbeddedCommandRegistry()
+	embedded, err := loadReviewedCommandRegistry()
 	if err != nil {
 		return CommandRegistry{}, err
 	}
@@ -120,7 +123,7 @@ func ValidateCommandRegistrySource(data []byte) (CommandRegistry, error) {
 // EmbeddedCommandRegistrySourceHash returns the stable semantic hash used by
 // all generated downstream views.
 func EmbeddedCommandRegistrySourceHash() (string, error) {
-	registry, err := loadEmbeddedCommandRegistry()
+	registry, err := loadReviewedCommandRegistry()
 	if err != nil {
 		return "", err
 	}
@@ -225,9 +228,6 @@ func decodeCommandRegistry(data []byte) (CommandRegistry, error) {
 				if sourceProductID != rawSourceProductID || !validCommandRegistryProductID(sourceProductID) {
 					return CommandRegistry{}, fmt.Errorf("schema command registry tool %s has invalid source_product_id %q", canonical, rawSourceProductID)
 				}
-			}
-			if sourceProductID == "" {
-				sourceProductID = productID
 			}
 			if !validReviewedCommandRegistryCLIPath(tool.CLIPath) {
 				return CommandRegistry{}, fmt.Errorf("schema command registry tool %s has invalid primary cli path %q", canonical, tool.CLIPath)
@@ -374,9 +374,6 @@ func validReviewedCommandRegistryCLIPath(value string) bool {
 		return false
 	}
 	parts := strings.Split(value, " ")
-	if len(parts) == 0 {
-		return false
-	}
 	for _, part := range parts {
 		if !commandRegistryCLIPathToken.MatchString(part) {
 			return false
@@ -405,14 +402,14 @@ func BuildEffectiveCommandRegistry(root *cobra.Command) (EffectiveCommandRegistr
 	if root == nil {
 		return EffectiveCommandRegistry{}, fmt.Errorf("build effective Schema command registry: root is nil")
 	}
-	if err := ValidateEmbeddedSchemaParameterBindings(); err != nil {
+	if err := validateReviewedParameterBindings(); err != nil {
 		return EffectiveCommandRegistry{}, fmt.Errorf("validate reviewed Schema parameter bindings: %w", err)
 	}
-	reviewed, err := loadEmbeddedCommandRegistry()
+	reviewed, err := loadReviewedCommandRegistry()
 	if err != nil {
 		return EffectiveCommandRegistry{}, err
 	}
-	manual, err := embeddedManualSchemaHints()
+	manual, err := loadReviewedManualSchemaHints()
 	if err != nil {
 		return EffectiveCommandRegistry{}, err
 	}
@@ -479,9 +476,6 @@ func buildEffectiveCommandRegistry(root *cobra.Command, reviewed CommandRegistry
 		canonicalSpec, canonicalExists := byCanonical[canonical]
 		if pathExists && pathSpec.CanonicalPath != canonical {
 			return EffectiveCommandRegistry{}, fmt.Errorf("manual Schema hint %q canonical path %q conflicts with command registry canonical path %q", path, canonical, pathSpec.CanonicalPath)
-		}
-		if pathExists && canonicalExists && pathSpec.CanonicalPath != canonicalSpec.CanonicalPath {
-			return EffectiveCommandRegistry{}, fmt.Errorf("manual Schema hint %q has inconsistent command registry identity %q", path, canonical)
 		}
 		if pathExists {
 			continue

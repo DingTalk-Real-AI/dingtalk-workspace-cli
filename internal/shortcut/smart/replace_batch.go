@@ -47,14 +47,18 @@ var ReplaceBatch = shortcut.Shortcut{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid（必填）", Required: true},
 		{Name: "pair", Type: shortcut.FlagStringSlice, Desc: `替换规则，格式 "原文=>替换"，可重复传多组（必填）`, Required: true},
 	},
+	Constraints: []shortcut.Constraint{
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"pair"},
+			Description: `每个 --pair 必须使用 "原文=>替换" 格式，原文不能为空且不能重复`,
+		},
+	},
 	Tips: []string{
 		`dws minutes +replace-batch --id <taskUuid> --pair "张三=>张三丰"`,
 		`dws minutes +replace-batch --id <taskUuid> --pair "Q2=>第二季度" --pair "PM=>产品经理"`,
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
-		if err := rt.RequireAll("id", "pair"); err != nil {
-			return err
-		}
 		_, err := parseReplacePairs(rt.StrSlice("pair"))
 		return err
 	},

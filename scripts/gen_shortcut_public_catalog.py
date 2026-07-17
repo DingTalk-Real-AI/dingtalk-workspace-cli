@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -99,13 +100,15 @@ def write_go(rows: list[dict[str, Any]]) -> None:
         "",
         "// publicShortcutCatalog contains the generated shortcut surface used by",
         "// command discovery and skill generation.",
-        "var publicShortcutCatalog = map[string]struct{}{",
+        "func generatedPublicShortcutCatalog() map[string]struct{} {",
+        "\treturn map[string]struct{}{",
     ]
     for row in rows:
         key = f"{row['service']}\x00{row['command']}"
-        lines.append(f"\t{go_quote(key)}: {{}},")
-    lines.extend(["}", ""])
+        lines.append(f"\t\t{go_quote(key)}: {{}},")
+    lines.extend(["\t}", "}", ""])
     GO_PATH.write_text("\n".join(lines), encoding="utf-8")
+    subprocess.run(["gofmt", "-w", str(GO_PATH)], check=True)
 
 
 def md_escape(s: str) -> str:
@@ -138,20 +141,38 @@ def write_followup_md(rows: list[dict[str, Any]]) -> None:
             f"{md_escape(squish(basis, 160))} |"
         )
     lines.append("")
-    FOLLOWUP_MD_PATH.write_text("\n".join(lines), encoding="utf-8")
+    rendered = "\n".join(lines)
+    if FOLLOWUP_MD_PATH.exists():
+        existing = FOLLOWUP_MD_PATH.read_text(encoding="utf-8")
+        without_time = re.compile(r"生成时间：`[^`]+`")
+        if without_time.sub("生成时间：`<generated>`", existing) == without_time.sub(
+            "生成时间：`<generated>`", rendered
+        ):
+            return
+    FOLLOWUP_MD_PATH.write_text(rendered, encoding="utf-8")
 
 
 def write_json(public: list[dict[str, Any]], followups: list[dict[str, Any]]) -> None:
     generated = dt.datetime.now().isoformat()
-    CATALOG_PATH.write_text(json.dumps({
-        "generated_at": generated,
+    write_json_if_changed(CATALOG_PATH, {
         "count": len(public),
         "results": public,
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
-    FOLLOWUP_JSON_PATH.write_text(json.dumps({
-        "generated_at": generated,
+    }, generated)
+    write_json_if_changed(FOLLOWUP_JSON_PATH, {
         "count": len(followups),
         "results": followups,
+    }, generated)
+
+
+def write_json_if_changed(path: Path, payload: dict[str, Any], generated: str) -> None:
+    if path.exists():
+        existing = load(path)
+        existing.pop("generated_at", None)
+        if existing == payload:
+            return
+    path.write_text(json.dumps({
+        "generated_at": generated,
+        **payload,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

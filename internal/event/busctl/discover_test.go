@@ -36,6 +36,9 @@ func skipOnWindows(t *testing.T) {
 
 func shortTempDir(t *testing.T) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		return t.TempDir()
+	}
 	dir, err := os.MkdirTemp("/tmp", "dws-busctl-")
 	if err != nil {
 		t.Fatalf("mktemp: %v", err)

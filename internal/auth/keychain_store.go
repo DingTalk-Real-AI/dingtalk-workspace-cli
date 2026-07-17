@@ -26,8 +26,16 @@ import (
 )
 
 var (
-	migrationOnce sync.Once
-	migrationDone bool
+	migrationOnce         sync.Once
+	migrationDone         bool
+	authKeychainMarshal   = json.MarshalIndent
+	authKeychainUnmarshal = json.Unmarshal
+	authKeychainSet       = keychain.Set
+	authKeychainGet       = keychain.Get
+	authKeychainRemove    = keychain.Remove
+	authKeychainExists    = keychain.Exists
+	authKeychainMigrate   = keychain.MigrateFromLegacy
+	authValidateEntries   = keychain.ValidateAuthTokenEntries
 )
 
 // ErrTokenDataNotFound means the requested keychain slot does not exist.
@@ -54,7 +62,7 @@ func SaveTokenDataKeychainForCorpID(corpID string, data *TokenData) error {
 }
 
 func saveTokenDataKeychainAccount(account string, data *TokenData) error {
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	jsonData, err := authKeychainMarshal(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal token data: %w", err)
 	}
@@ -65,7 +73,7 @@ func saveTokenDataKeychainAccount(account string, data *TokenData) error {
 		}
 	}()
 
-	if err := keychain.Set(keychain.Service, account, string(jsonData)); err != nil {
+	if err := authKeychainSet(keychain.Service, account, string(jsonData)); err != nil {
 		return fmt.Errorf("save to keychain: %w", err)
 	}
 	return nil
@@ -86,7 +94,7 @@ func LoadTokenDataKeychainForCorpID(corpID string) (*TokenData, error) {
 }
 
 func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
-	jsonStr, err := keychain.Get(keychain.Service, account)
+	jsonStr, err := authKeychainGet(keychain.Service, account)
 	if err != nil {
 		return nil, fmt.Errorf("load from keychain: %w", err)
 	}
@@ -95,7 +103,7 @@ func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
 	}
 
 	var data TokenData
-	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+	if err := authKeychainUnmarshal([]byte(jsonStr), &data); err != nil {
 		return nil, fmt.Errorf("parse token data: %w", err)
 	}
 	return &data, nil
@@ -119,17 +127,9 @@ func preflightTokenPersistence(configDir string) error {
 	if err != nil {
 		return fmt.Errorf("load token profiles: %w", err)
 	}
-	seen := make(map[string]struct{}, len(cfg.Profiles))
 	for _, profile := range cfg.Profiles {
-		corpID := strings.TrimSpace(profile.CorpID)
-		if corpID == "" {
-			continue
-		}
-		if _, ok := seen[corpID]; ok {
-			continue
-		}
-		seen[corpID] = struct{}{}
-
+		// LoadProfiles normalizes away blank and duplicate corp IDs.
+		corpID := profile.CorpID
 		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 			return fmt.Errorf(
 				"profile token slot %q is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
@@ -137,7 +137,7 @@ func preflightTokenPersistence(configDir string) error {
 			)
 		}
 	}
-	if err := keychain.ValidateAuthTokenEntries(keychain.Service); err != nil {
+	if err := authValidateEntries(keychain.Service); err != nil {
 		return fmt.Errorf(
 			"auth token ciphertext inventory is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, use `dws auth reset` only when discarding all local profiles: %w",
 			err,
@@ -169,7 +169,7 @@ func preflightTokenRefreshPersistence(data *TokenData) error {
 
 // DeleteTokenDataKeychain removes TokenData from the platform keychain.
 func DeleteTokenDataKeychain() error {
-	return keychain.Remove(keychain.Service, keychain.AccountToken)
+	return authKeychainRemove(keychain.Service, keychain.AccountToken)
 }
 
 // DeleteTokenDataKeychainForCorpID removes TokenData from a corp-scoped keychain slot.
@@ -178,12 +178,12 @@ func DeleteTokenDataKeychainForCorpID(corpID string) error {
 	if corpID == "" {
 		return fmt.Errorf("corpId is required for profile token storage")
 	}
-	return keychain.Remove(keychain.Service, TokenAccountForCorpID(corpID))
+	return authKeychainRemove(keychain.Service, TokenAccountForCorpID(corpID))
 }
 
 // TokenDataExistsKeychain checks if token data exists in keychain.
 func TokenDataExistsKeychain() bool {
-	return keychain.Exists(keychain.Service, keychain.AccountToken)
+	return authKeychainExists(keychain.Service, keychain.AccountToken)
 }
 
 // TokenDataExistsKeychainForCorpID checks if a corp-scoped token exists.
@@ -192,7 +192,7 @@ func TokenDataExistsKeychainForCorpID(corpID string) bool {
 	if corpID == "" {
 		return false
 	}
-	return keychain.Exists(keychain.Service, TokenAccountForCorpID(corpID))
+	return authKeychainExists(keychain.Service, TokenAccountForCorpID(corpID))
 }
 
 // EnsureMigration performs one-time migration from legacy .data to keychain.
@@ -200,7 +200,7 @@ func TokenDataExistsKeychainForCorpID(corpID string) bool {
 // The migration is idempotent and thread-safe.
 func EnsureMigration(configDir string, logger *slog.Logger) {
 	migrationOnce.Do(func() {
-		result := keychain.MigrateFromLegacy(configDir)
+		result := authKeychainMigrate(configDir)
 		migrationDone = true
 
 		if result.Migrated {
@@ -240,7 +240,7 @@ func SaveClientSecret(clientID, clientSecret string) error {
 		return nil // Nothing to save
 	}
 	account := clientSecretPrefix + clientID
-	if err := keychain.Set(keychain.Service, account, clientSecret); err != nil {
+	if err := authKeychainSet(keychain.Service, account, clientSecret); err != nil {
 		return fmt.Errorf("save client secret: %w", err)
 	}
 	return nil
@@ -253,7 +253,7 @@ func LoadClientSecret(clientID string) string {
 		return ""
 	}
 	account := clientSecretPrefix + clientID
-	secret, err := keychain.Get(keychain.Service, account)
+	secret, err := authKeychainGet(keychain.Service, account)
 	if err != nil {
 		return ""
 	}
@@ -266,5 +266,5 @@ func DeleteClientSecret(clientID string) error {
 		return nil
 	}
 	account := clientSecretPrefix + clientID
-	return keychain.Remove(keychain.Service, account)
+	return authKeychainRemove(keychain.Service, account)
 }
