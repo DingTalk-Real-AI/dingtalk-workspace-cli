@@ -622,7 +622,7 @@ jobs:
 
   release:
     name: Build signed release artifacts
-    if: ${{ needs.release-contract.result == 'success' }}
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' }}
     needs: [release-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -788,7 +788,7 @@ jobs:
 
   verify-darwin-signatures:
     name: Verify Apple Developer ID signatures
-    if: ${{ needs.release.result == 'success' }}
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     needs: [release-contract, release]
     runs-on: macos-latest
     timeout-minutes: 10
@@ -816,7 +816,7 @@ jobs:
 
   publish-release:
     name: Publish immutable GitHub Release
-    if: ${{ needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
     needs: [release-contract, release, verify-darwin-signatures]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1055,7 +1055,7 @@ jobs:
 
   publish-channels:
     name: Publish npm and mirrors
-    if: ${{ needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}
     needs: [release-contract, publish-release]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1286,7 +1286,7 @@ jobs:
 
   mirror-gitee-release:
     name: Mirror immutable release to Gitee
-    if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
+    if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
     needs: [release-contract, release, publish-channels]
     runs-on: ubuntu-latest
     timeout-minutes: 120

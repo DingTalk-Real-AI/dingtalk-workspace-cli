@@ -14,6 +14,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 ### Fixed
 
 - **Release preflight reliability** — source-mode installer tests now use isolated temporary checkouts and HOME directories instead of overwriting and deleting the real repository `dws` binary, release preflight explicitly rebuilds before policy checks, and the full-suite runner gives the growing script package a non-flaky five-minute per-suite budget.
+- **Tag-push publication after the recovery refactor** — the guarded-recovery jobs are skipped on ordinary tag pushes, and the downstream build/sign/publish jobs relied on an implicit `success()` that treats those skipped ancestors as a chain failure, so pushing an annotated release tag validated the contract but silently skipped every publish job. The `release`, `verify-darwin-signatures`, `publish-release`, `publish-channels`, and `mirror-gitee-release` gates now use an explicit `!cancelled()` status check alongside their existing `result == 'success'` conditions, restoring direct tag-push delivery while keeping protected recovery as the failure break-glass.
 
 ## [1.0.53-beta.4] - 2026-07-17
 
