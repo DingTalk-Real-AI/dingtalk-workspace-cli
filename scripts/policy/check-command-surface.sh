@@ -2,7 +2,11 @@
 set -eu
 
 # Check command surface for drift.
-# Stub placeholder — extend with actual surface comparison logic as needed.
+#
+# 硬门禁：校验内嵌 schema_catalog.json 的封闭结构（字段白名单 + 枚举值 +
+# 交叉一致性），由 internal/cli/schema_catalog_structure.go 的
+# TestEmbeddedSchemaCatalogStructure 实现。该门禁确保任何写入 catalog 的代码
+# 路径都不会产出结构非法的工具条目。
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BIN="${DWS_BIN:-$ROOT/dws}"
@@ -17,6 +21,12 @@ cd "$ROOT"
 if [ ! -x "$BIN" ]; then
   printf 'error: dws binary not found at %s (run make build first)\n' "$BIN" >&2
   exit 2
+fi
+
+# 硬门禁：内嵌 schema_catalog.json 封闭结构校验。
+if ! go test ./internal/cli -run '^TestEmbeddedSchemaCatalogStructure$' -count=1; then
+  printf 'embedded schema catalog structure check: FAILED\n' >&2
+  exit 1
 fi
 
 # These utility commands are stable across the current open-source CLI shape.

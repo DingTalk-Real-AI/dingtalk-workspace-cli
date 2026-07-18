@@ -1,0 +1,65 @@
+{
+  "id": "contact",
+  "tools": [
+    {
+      "canonical_path": "contact.add_employee",
+      "cli_path": "contact user invite"
+    },
+    {
+      "canonical_path": "contact.exclusive_account_create",
+      "cli_path": "contact account create"
+    },
+    {
+      "canonical_path": "contact.get_dept_info_by_dept_id",
+      "cli_path": "contact dept get-info"
+    },
+    {
+      "canonical_path": "contact.get_sub_depts_by_dept_id",
+      "cli_path": "contact dept list-children"
+    },
+    {
+      "canonical_path": "contact.get_dept_members_by_deptId",
+      "cli_path": "contact dept list-members"
+    },
+    {
+      "canonical_path": "contact.search_dept_by_keyword",
+      "cli_path": "contact dept search"
+    },
+    {
+      "canonical_path": "contact.list_my_followings",
+      "cli_path": "contact relation list-my-followings"
+    },
+    {
+      "canonical_path": "contact.org_create",
+      "cli_path": "contact org create"
+    },
+    {
+      "canonical_path": "contact.query_dismission_employee_list",
+      "cli_path": "contact user dismission search"
+    },
+    {
+      "canonical_path": "contact.get_user_info_by_user_ids",
+      "cli_path": "contact user get"
+    },
+    {
+      "canonical_path": "contact.get_current_user_profile",
+      "cli_path": "contact user get-self"
+    },
+    {
+      "canonical_path": "contact.list_authorized_roster_fields",
+      "cli_path": "contact user profile fields"
+    },
+    {
+      "canonical_path": "contact.get_authorized_emp_rosterInfo",
+      "cli_path": "contact user profile get"
+    },
+    {
+      "canonical_path": "contact.search_contact_by_key_word",
+      "cli_path": "contact user search"
+    },
+    {
+      "canonical_path": "contact.search_user_by_mobile",
+      "cli_path": "contact user search-mobile"
+    }
+  ]
+}

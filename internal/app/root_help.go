@@ -5,6 +5,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -41,6 +42,7 @@ func configureRootHelp(root *cobra.Command) {
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if cmd != root {
 			defaultHelpFunc(cmd, args)
+			cli.RenderSafetyAnnotation(cmd)
 			return
 		}
 		renderRootHelp(root)

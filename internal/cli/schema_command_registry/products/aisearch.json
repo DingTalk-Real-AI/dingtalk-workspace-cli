@@ -1,0 +1,17 @@
+{
+  "id": "aisearch",
+  "tools": [
+    {
+      "canonical_path": "aisearch.search_enterprise_behavior",
+      "cli_path": "aisearch behavior"
+    },
+    {
+      "canonical_path": "aisearch.search_enterprise",
+      "cli_path": "aisearch enterprise"
+    },
+    {
+      "canonical_path": "aisearch.enterprise_person_search",
+      "cli_path": "aisearch person"
+    }
+  ]
+}

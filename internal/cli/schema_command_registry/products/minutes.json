@@ -1,0 +1,129 @@
+{
+  "id": "minutes",
+  "tools": [
+    {
+      "canonical_path": "minutes.query_minutes_audio_url",
+      "cli_path": "minutes get audio"
+    },
+    {
+      "canonical_path": "minutes.batch_get_minutes_details",
+      "cli_path": "minutes get batch"
+    },
+    {
+      "canonical_path": "minutes.get_minutes_basic_info",
+      "cli_path": "minutes get info"
+    },
+    {
+      "canonical_path": "minutes.get_minutes_keywords",
+      "cli_path": "minutes get keywords"
+    },
+    {
+      "canonical_path": "minutes.get_minutes_ai_summary",
+      "cli_path": "minutes get summary"
+    },
+    {
+      "canonical_path": "minutes.list_minutes_todos",
+      "cli_path": "minutes get todos"
+    },
+    {
+      "canonical_path": "minutes.get_minutes_transcription",
+      "cli_path": "minutes get transcription"
+    },
+    {
+      "canonical_path": "minutes.add_personal_hot_word",
+      "cli_path": "minutes hot-word add"
+    },
+    {
+      "canonical_path": "minutes.list_my_hotwords",
+      "cli_path": "minutes hot-word list"
+    },
+    {
+      "canonical_path": "minutes.list_accessible_minutes",
+      "cli_path": "minutes list all"
+    },
+    {
+      "canonical_path": "minutes.list_by_keyword_and_time_range",
+      "cli_path": "minutes list mine"
+    },
+    {
+      "canonical_path": "minutes.list_shared_minutes",
+      "cli_path": "minutes list shared"
+    },
+    {
+      "canonical_path": "minutes.create_mind_graph",
+      "cli_path": "minutes mind-graph create"
+    },
+    {
+      "canonical_path": "minutes.query_mind_graph_status",
+      "cli_path": "minutes mind-graph status"
+    },
+    {
+      "canonical_path": "minutes.add_member_permission",
+      "cli_path": "minutes permission add"
+    },
+    {
+      "canonical_path": "minutes.remove_member_permission",
+      "cli_path": "minutes permission remove"
+    },
+    {
+      "canonical_path": "minutes.record_pause",
+      "cli_path": "minutes record pause"
+    },
+    {
+      "canonical_path": "minutes.record_resume",
+      "cli_path": "minutes record resume"
+    },
+    {
+      "canonical_path": "minutes.record_start",
+      "cli_path": "minutes record start"
+    },
+    {
+      "canonical_path": "minutes.record_stop",
+      "cli_path": "minutes record stop"
+    },
+    {
+      "canonical_path": "minutes.replace_minutes_text",
+      "cli_path": "minutes replace-text"
+    },
+    {
+      "canonical_path": "minutes.replace_speaker",
+      "cli_path": "minutes speaker replace"
+    },
+    {
+      "canonical_path": "minutes.create_speaker_summary",
+      "cli_path": "minutes speaker summary create"
+    },
+    {
+      "canonical_path": "minutes.get_speaker_summary",
+      "cli_path": "minutes speaker summary get"
+    },
+    {
+      "canonical_path": "minutes.query_user_tag_list",
+      "cli_path": "minutes tag list"
+    },
+    {
+      "canonical_path": "minutes.query_minutes_by_tag_id",
+      "cli_path": "minutes tag query"
+    },
+    {
+      "canonical_path": "minutes.update_minutes_summary",
+      "cli_path": "minutes update summary"
+    },
+    {
+      "canonical_path": "minutes.update_minutes_title",
+      "cli_path": "minutes update title"
+    },
+    {
+      "canonical_path": "minutes.cancel_upload_session",
+      "cli_path": "minutes upload cancel"
+    },
+    {
+      "canonical_path": "minutes.complete_upload_session",
+      "cli_path": "minutes upload complete"
+    },
+    {
+      "canonical_path": "minutes.create_upload_session",
+      "cli_path": "minutes upload create"
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "id": "calendar",
+  "tools": [
+    {
+      "canonical_path": "calendar.list_acls",
+      "cli_path": "calendar acl list"
+    },
+    {
+      "canonical_path": "calendar.add_attachments",
+      "cli_path": "calendar attachment add"
+    },
+    {
+      "canonical_path": "calendar.add_calendar_participant",
+      "cli_path": "calendar attendee add"
+    },
+    {
+      "canonical_path": "calendar.remove_calendar_participant",
+      "cli_path": "calendar attendee delete"
+    },
+    {
+      "canonical_path": "calendar.get_calendar_participants",
+      "cli_path": "calendar attendee list"
+    },
+    {
+      "canonical_path": "calendar.get_calendar",
+      "cli_path": "calendar book get"
+    },
+    {
+      "canonical_path": "calendar.list_calendars",
+      "cli_path": "calendar book list"
+    },
+    {
+      "canonical_path": "calendar.search_calendar",
+      "cli_path": "calendar book search"
+    },
+    {
+      "canonical_path": "calendar.query_busy_status",
+      "cli_path": "calendar busy search"
+    },
+    {
+      "canonical_path": "calendar.create_calendar_event",
+      "cli_path": "calendar event create"
+    },
+    {
+      "canonical_path": "calendar.delete_calendar_event",
+      "cli_path": "calendar event delete"
+    },
+    {
+      "canonical_path": "calendar.get_calendar_detail",
+      "cli_path": "calendar event get"
+    },
+    {
+      "canonical_path": "calendar.list_calendar_events",
+      "cli_path": "calendar event list"
+    },
+    {
+      "canonical_path": "calendar.respond",
+      "cli_path": "calendar event respond"
+    },
+    {
+      "canonical_path": "calendar.list_suggested_event_times",
+      "cli_path": "calendar event suggest"
+    },
+    {
+      "canonical_path": "calendar.update_calendar_event",
+      "cli_path": "calendar event update"
+    },
+    {
+      "canonical_path": "calendar.add_meeting_room",
+      "cli_path": "calendar room add"
+    },
+    {
+      "canonical_path": "calendar.delete_meeting_room",
+      "cli_path": "calendar room delete"
+    },
+    {
+      "canonical_path": "calendar.list_meeting_room_groups",
+      "cli_path": "calendar room list-groups"
+    },
+    {
+      "canonical_path": "calendar.query_available_meeting_room",
+      "cli_path": "calendar room search"
+    }
+  ]
+}

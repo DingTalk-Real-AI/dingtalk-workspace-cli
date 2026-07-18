@@ -1,0 +1,25 @@
+{
+  "id": "event",
+  "tools": [
+    {
+      "canonical_path": "event.consume",
+      "cli_path": "event consume"
+    },
+    {
+      "canonical_path": "event.list",
+      "cli_path": "event list"
+    },
+    {
+      "canonical_path": "event.schema",
+      "cli_path": "event schema"
+    },
+    {
+      "canonical_path": "event.status",
+      "cli_path": "event status"
+    },
+    {
+      "canonical_path": "event.stop",
+      "cli_path": "event stop"
+    }
+  ]
+}

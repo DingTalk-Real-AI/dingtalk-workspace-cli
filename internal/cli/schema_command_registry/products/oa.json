@@ -1,0 +1,65 @@
+{
+  "id": "oa",
+  "tools": [
+    {
+      "canonical_path": "oa.approve_processInstance",
+      "cli_path": "oa approval approve"
+    },
+    {
+      "canonical_path": "oa.get_processInstance_detail",
+      "cli_path": "oa approval detail"
+    },
+    {
+      "canonical_path": "oa.get_noticed_instances",
+      "cli_path": "oa approval list-cc"
+    },
+    {
+      "canonical_path": "oa.get_done_tasks",
+      "cli_path": "oa approval list-executed"
+    },
+    {
+      "canonical_path": "oa.list_user_visible_process",
+      "cli_path": "oa approval list-forms"
+    },
+    {
+      "canonical_path": "oa.list_initiated_instances",
+      "cli_path": "oa approval list-initiated"
+    },
+    {
+      "canonical_path": "oa.list_pending_approvals",
+      "cli_path": "oa approval list-pending"
+    },
+    {
+      "canonical_path": "oa.get_submitted_instances",
+      "cli_path": "oa approval list-submitted"
+    },
+    {
+      "canonical_path": "oa.oa_cc_noticer",
+      "cli_path": "oa approval oa-cc-noticer"
+    },
+    {
+      "canonical_path": "oa.dingflow_comments",
+      "cli_path": "oa approval oa-comments"
+    },
+    {
+      "canonical_path": "oa.get_processInstance_records",
+      "cli_path": "oa approval records"
+    },
+    {
+      "canonical_path": "oa.redirect_task",
+      "cli_path": "oa approval redirect-task"
+    },
+    {
+      "canonical_path": "oa.reject_processInstance",
+      "cli_path": "oa approval reject"
+    },
+    {
+      "canonical_path": "oa.revoke_processInstance",
+      "cli_path": "oa approval revoke"
+    },
+    {
+      "canonical_path": "oa.list_pending_tasks",
+      "cli_path": "oa approval tasks"
+    }
+  ]
+}

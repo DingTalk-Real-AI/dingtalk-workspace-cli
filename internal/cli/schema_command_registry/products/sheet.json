@@ -1,0 +1,327 @@
+{
+  "id": "sheet",
+  "tools": [
+    {
+      "canonical_path": "sheet.add_dimension",
+      "cli_path": "sheet add-dimension"
+    },
+    {
+      "canonical_path": "sheet.append_rows",
+      "cli_path": "sheet append"
+    },
+    {
+      "canonical_path": "sheet.batch_update",
+      "cli_path": "sheet batch-update"
+    },
+    {
+      "canonical_path": "sheet.chart_create",
+      "cli_path": "sheet chart create"
+    },
+    {
+      "canonical_path": "sheet.chart_delete",
+      "cli_path": "sheet chart delete"
+    },
+    {
+      "canonical_path": "sheet.chart_list",
+      "cli_path": "sheet chart list"
+    },
+    {
+      "canonical_path": "sheet.chart_update",
+      "cli_path": "sheet chart update"
+    },
+    {
+      "canonical_path": "sheet.create_cond_format",
+      "cli_path": "sheet cond-format create"
+    },
+    {
+      "canonical_path": "sheet.delete_cond_format",
+      "cli_path": "sheet cond-format delete"
+    },
+    {
+      "canonical_path": "sheet.get_cond_format",
+      "cli_path": "sheet cond-format list"
+    },
+    {
+      "canonical_path": "sheet.update_cond_format",
+      "cli_path": "sheet cond-format update"
+    },
+    {
+      "canonical_path": "sheet.copy_sheet",
+      "cli_path": "sheet copy"
+    },
+    {
+      "canonical_path": "sheet.create_workspace_sheet",
+      "cli_path": "sheet create"
+    },
+    {
+      "canonical_path": "sheet.create_float_image",
+      "cli_path": "sheet create-float-image"
+    },
+    {
+      "canonical_path": "sheet.get_range_as_csv",
+      "cli_path": "sheet csv-get"
+    },
+    {
+      "canonical_path": "sheet.set_range_from_csv",
+      "cli_path": "sheet csv-put"
+    },
+    {
+      "canonical_path": "sheet.delete_dimension",
+      "cli_path": "sheet delete-dimension"
+    },
+    {
+      "canonical_path": "sheet.delete_dropdown_lists",
+      "cli_path": "sheet delete-dropdown"
+    },
+    {
+      "canonical_path": "sheet.delete_float_image",
+      "cli_path": "sheet delete-float-image"
+    },
+    {
+      "canonical_path": "sheet.delete_sheet",
+      "cli_path": "sheet delete-sheet"
+    },
+    {
+      "canonical_path": "sheet.submit_export_job",
+      "cli_path": "sheet export"
+    },
+    {
+      "canonical_path": "sheet.filter_clear_criteria",
+      "cli_path": "sheet filter clear-criteria"
+    },
+    {
+      "canonical_path": "sheet.create_filter",
+      "cli_path": "sheet filter create"
+    },
+    {
+      "canonical_path": "sheet.delete_filter",
+      "cli_path": "sheet filter delete"
+    },
+    {
+      "canonical_path": "sheet.get_filter",
+      "cli_path": "sheet filter get"
+    },
+    {
+      "canonical_path": "sheet.sort_filter",
+      "cli_path": "sheet filter sort"
+    },
+    {
+      "canonical_path": "sheet.update_filter",
+      "cli_path": "sheet filter update"
+    },
+    {
+      "canonical_path": "sheet.create_filter_view",
+      "cli_path": "sheet filter-view create"
+    },
+    {
+      "canonical_path": "sheet.delete_filter_view",
+      "cli_path": "sheet filter-view delete"
+    },
+    {
+      "canonical_path": "sheet.filter_view_delete_criteria",
+      "cli_path": "sheet filter-view delete-criteria"
+    },
+    {
+      "canonical_path": "sheet.filter_view_get_criteria",
+      "cli_path": "sheet filter-view get-criteria"
+    },
+    {
+      "canonical_path": "sheet.filter_view_info",
+      "cli_path": "sheet filter-view info"
+    },
+    {
+      "canonical_path": "sheet.get_filter_views",
+      "cli_path": "sheet filter-view list"
+    },
+    {
+      "canonical_path": "sheet.filter_view_list_criteria",
+      "cli_path": "sheet filter-view list-criteria"
+    },
+    {
+      "canonical_path": "sheet.update_filter_view",
+      "cli_path": "sheet filter-view update"
+    },
+    {
+      "canonical_path": "sheet.filter_view_update_criteria",
+      "cli_path": "sheet filter-view update-criteria"
+    },
+    {
+      "canonical_path": "sheet.find_cells",
+      "cli_path": "sheet find"
+    },
+    {
+      "canonical_path": "sheet.get_dropdown_lists",
+      "cli_path": "sheet get-dropdown"
+    },
+    {
+      "canonical_path": "sheet.get_float_image",
+      "cli_path": "sheet get-float-image"
+    },
+    {
+      "canonical_path": "sheet.group_dimension",
+      "cli_path": "sheet group-dimension"
+    },
+    {
+      "canonical_path": "sheet.hide_gridline",
+      "cli_path": "sheet hide-gridline"
+    },
+    {
+      "canonical_path": "sheet.info",
+      "cli_path": "sheet info"
+    },
+    {
+      "canonical_path": "sheet.import",
+      "cli_path": "sheet import create"
+    },
+    {
+      "canonical_path": "sheet.import_get",
+      "cli_path": "sheet import get"
+    },
+    {
+      "canonical_path": "sheet.insert_dimension",
+      "cli_path": "sheet insert-dimension"
+    },
+    {
+      "canonical_path": "sheet.get_all_sheets",
+      "cli_path": "sheet list"
+    },
+    {
+      "canonical_path": "sheet.list_float_images",
+      "cli_path": "sheet list-float-images"
+    },
+    {
+      "canonical_path": "sheet.media_upload",
+      "cli_path": "sheet media-upload"
+    },
+    {
+      "canonical_path": "sheet.merge_cells",
+      "cli_path": "sheet merge-cells"
+    },
+    {
+      "canonical_path": "sheet.move_dimension",
+      "cli_path": "sheet move-dimension"
+    },
+    {
+      "canonical_path": "sheet.create_sheet",
+      "cli_path": "sheet new"
+    },
+    {
+      "canonical_path": "sheet.create_pivot_table",
+      "cli_path": "sheet pivot-table create"
+    },
+    {
+      "canonical_path": "sheet.delete_pivot_table",
+      "cli_path": "sheet pivot-table delete"
+    },
+    {
+      "canonical_path": "sheet.list_pivot_tables",
+      "cli_path": "sheet pivot-table list"
+    },
+    {
+      "canonical_path": "sheet.update_pivot_table",
+      "cli_path": "sheet pivot-table update"
+    },
+    {
+      "canonical_path": "sheet.range_batch_clear",
+      "cli_path": "sheet range batch-clear"
+    },
+    {
+      "canonical_path": "sheet.range_batch_set_style",
+      "cli_path": "sheet range batch-set-style"
+    },
+    {
+      "canonical_path": "sheet.clear_range",
+      "cli_path": "sheet range clear"
+    },
+    {
+      "canonical_path": "sheet.range_copy_to",
+      "cli_path": "sheet range copy-to"
+    },
+    {
+      "canonical_path": "sheet.fill_range",
+      "cli_path": "sheet range fill"
+    },
+    {
+      "canonical_path": "sheet.range_move_to",
+      "cli_path": "sheet range move-to"
+    },
+    {
+      "canonical_path": "sheet.range_read",
+      "cli_path": "sheet range read"
+    },
+    {
+      "canonical_path": "sheet.range_set_style",
+      "cli_path": "sheet range set-style"
+    },
+    {
+      "canonical_path": "sheet.sort_range",
+      "cli_path": "sheet range sort"
+    },
+    {
+      "canonical_path": "sheet.range_update",
+      "cli_path": "sheet range update"
+    },
+    {
+      "canonical_path": "sheet.replace_all",
+      "cli_path": "sheet replace"
+    },
+    {
+      "canonical_path": "sheet.set_dropdown_lists",
+      "cli_path": "sheet set-dropdown"
+    },
+    {
+      "canonical_path": "sheet.show_gridline",
+      "cli_path": "sheet show-gridline"
+    },
+    {
+      "canonical_path": "sheet.table_get",
+      "cli_path": "sheet table-get",
+      "aliases": [
+        "sheet table-read"
+      ]
+    },
+    {
+      "canonical_path": "sheet.table_put",
+      "cli_path": "sheet table-put",
+      "aliases": [
+        "sheet table-write"
+      ]
+    },
+    {
+      "canonical_path": "sheet.template_apply",
+      "cli_path": "sheet template apply"
+    },
+    {
+      "canonical_path": "sheet.template_list",
+      "cli_path": "sheet template list"
+    },
+    {
+      "canonical_path": "sheet.template_search",
+      "cli_path": "sheet template search"
+    },
+    {
+      "canonical_path": "sheet.ungroup_dimension",
+      "cli_path": "sheet ungroup-dimension"
+    },
+    {
+      "canonical_path": "sheet.unmerge_range",
+      "cli_path": "sheet unmerge-cells"
+    },
+    {
+      "canonical_path": "sheet.update_sheet",
+      "cli_path": "sheet update"
+    },
+    {
+      "canonical_path": "sheet.update_dimension",
+      "cli_path": "sheet update-dimension"
+    },
+    {
+      "canonical_path": "sheet.update_float_image",
+      "cli_path": "sheet update-float-image"
+    },
+    {
+      "canonical_path": "sheet.write_image",
+      "cli_path": "sheet write-image"
+    }
+  ]
+}

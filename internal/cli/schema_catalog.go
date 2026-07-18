@@ -15,10 +15,11 @@ package cli
 
 import (
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,8 +30,20 @@ import (
 
 const SchemaCatalogSnapshotVersion = 1
 
-//go:embed schema_catalog.json
-var embeddedSchemaCatalogJSON []byte
+// The release Catalog is committed as a per-product split so concurrent
+// feature PRs only rewrite the shard for the product they touch:
+//
+//	schema_catalog/catalog.json        global envelope + Catalog map
+//	schema_catalog/tools/<product>.json   that product's leaf ToolSpecs
+//
+// The loader reassembles the exact same SchemaCatalogSnapshot, so the
+// source_hash integrity check is identical to the single-file layout.
+//
+//go:embed schema_catalog/catalog.json
+var embeddedSchemaCatalogEnvelopeJSON []byte
+
+//go:embed schema_catalog/tools
+var embeddedSchemaCatalogTools embed.FS
 
 // SchemaCatalogSnapshot is the release-stable Agent contract. Catalog holds
 // the progressive product/tool index; Tools holds full leaf parameter schemas.
@@ -68,9 +81,67 @@ var runtimeEmbeddedSchemaCatalogLazyLoadCount atomic.Uint64
 func embeddedSchemaCatalog() loadedSchemaCatalog {
 	runtimeEmbeddedSchemaCatalogOnce.Do(func() {
 		runtimeEmbeddedSchemaCatalogLazyLoadCount.Add(1)
-		runtimeEmbeddedSchemaCatalog, runtimeEmbeddedSchemaCatalogErr = decodeSchemaCatalogSnapshot(embeddedSchemaCatalogJSON)
+		runtimeEmbeddedSchemaCatalog, runtimeEmbeddedSchemaCatalogErr = assembleEmbeddedSchemaCatalog()
 	})
 	return runtimeEmbeddedSchemaCatalog
+}
+
+// schemaCatalogEnvelope is the global half of the split release Catalog. It
+// mirrors the generator's envelope struct; the Catalog map and release hashes
+// do not partition by product and stay in one file.
+type schemaCatalogEnvelope struct {
+	Version     int            `json:"version"`
+	SurfaceHash string         `json:"surface_hash,omitempty"`
+	SourceHash  string         `json:"source_hash"`
+	Catalog     map[string]any `json:"catalog"`
+}
+
+// schemaCatalogToolShard mirrors the per-product shard written by the
+// generator. Only the product and its leaf ToolSpecs are stored here.
+type schemaCatalogToolShard struct {
+	Product string                    `json:"product"`
+	Tools   map[string]map[string]any `json:"tools"`
+}
+
+// assembleEmbeddedSchemaCatalog reassembles the split release Catalog shards
+// into the same SchemaCatalogSnapshot the single-file layout produced, then
+// validates it through the production loader. source_hash still covers the
+// whole payload: if any shard is missing, stale, or tampered, the content hash
+// check in loadSchemaCatalogSnapshot fails exactly as before.
+func assembleEmbeddedSchemaCatalog() (loadedSchemaCatalog, error) {
+	var envelope schemaCatalogEnvelope
+	if err := decodeStrictSchemaJSON(embeddedSchemaCatalogEnvelopeJSON, &envelope); err != nil {
+		return loadedSchemaCatalog{}, fmt.Errorf("decode embedded schema catalog.json: %w", err)
+	}
+	entries, err := embeddedSchemaCatalogTools.ReadDir("schema_catalog/tools")
+	if err != nil {
+		return loadedSchemaCatalog{}, fmt.Errorf("read embedded schema catalog tools directory: %w", err)
+	}
+	tools := make(map[string]map[string]any, len(entries)*8)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		data, readErr := fs.ReadFile(embeddedSchemaCatalogTools, "schema_catalog/tools/"+entry.Name())
+		if readErr != nil {
+			return loadedSchemaCatalog{}, fmt.Errorf("read embedded schema catalog shard %s: %w", entry.Name(), readErr)
+		}
+		var shard schemaCatalogToolShard
+		if err := decodeStrictSchemaJSON(data, &shard); err != nil {
+			return loadedSchemaCatalog{}, fmt.Errorf("decode embedded schema catalog shard %s: %w", entry.Name(), err)
+		}
+		for canonical, spec := range shard.Tools {
+			tools[canonical] = spec
+		}
+	}
+	snapshot := SchemaCatalogSnapshot{
+		Version:     envelope.Version,
+		SurfaceHash: envelope.SurfaceHash,
+		SourceHash:  envelope.SourceHash,
+		Catalog:     envelope.Catalog,
+		Tools:       tools,
+	}
+	return loadSchemaCatalogSnapshot(snapshot)
 }
 
 func embeddedSchemaCatalogError() error {

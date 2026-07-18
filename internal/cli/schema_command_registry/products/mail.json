@@ -1,0 +1,129 @@
+{
+  "id": "mail",
+  "tools": [
+    {
+      "canonical_path": "mail.create_download_session",
+      "cli_path": "mail attachment download"
+    },
+    {
+      "canonical_path": "mail.list_mail_attachments",
+      "cli_path": "mail attachment list"
+    },
+    {
+      "canonical_path": "mail.batch_delete_user_mail_contacts",
+      "cli_path": "mail contact batch-delete"
+    },
+    {
+      "canonical_path": "mail.create_user_mail_contact",
+      "cli_path": "mail contact create"
+    },
+    {
+      "canonical_path": "mail.list_user_mail_contacts",
+      "cli_path": "mail contact list"
+    },
+    {
+      "canonical_path": "mail.update_user_mail_contact",
+      "cli_path": "mail contact update"
+    },
+    {
+      "canonical_path": "mail.create_draft",
+      "cli_path": "mail draft create"
+    },
+    {
+      "canonical_path": "mail.send_draft",
+      "cli_path": "mail draft send"
+    },
+    {
+      "canonical_path": "mail.update_draft",
+      "cli_path": "mail draft update"
+    },
+    {
+      "canonical_path": "mail.create_mail_folder",
+      "cli_path": "mail folder create"
+    },
+    {
+      "canonical_path": "mail.delete_mail_folder",
+      "cli_path": "mail folder delete"
+    },
+    {
+      "canonical_path": "mail.list_folders",
+      "cli_path": "mail folder list"
+    },
+    {
+      "canonical_path": "mail.update_mail_folder",
+      "cli_path": "mail folder update"
+    },
+    {
+      "canonical_path": "mail.list_user_mailboxes",
+      "cli_path": "mail mailbox list"
+    },
+    {
+      "canonical_path": "mail.batch_delete_message",
+      "cli_path": "mail message batch-delete"
+    },
+    {
+      "canonical_path": "mail.batch_move_message",
+      "cli_path": "mail message batch-move"
+    },
+    {
+      "canonical_path": "mail.create_forward_draft",
+      "cli_path": "mail message forward"
+    },
+    {
+      "canonical_path": "mail.get_email_by_message_id",
+      "cli_path": "mail message get"
+    },
+    {
+      "canonical_path": "mail.create_reply_draft",
+      "cli_path": "mail message reply"
+    },
+    {
+      "canonical_path": "mail.create_replyall_draft",
+      "cli_path": "mail message reply-all"
+    },
+    {
+      "canonical_path": "mail.search_emails",
+      "cli_path": "mail message search"
+    },
+    {
+      "canonical_path": "mail.list_emails",
+      "cli_path": "mail message list"
+    },
+    {
+      "canonical_path": "mail.send_email",
+      "cli_path": "mail message send"
+    },
+    {
+      "canonical_path": "mail.list_tags",
+      "cli_path": "mail tag list"
+    },
+    {
+      "canonical_path": "mail.create_user_message_template",
+      "cli_path": "mail template create"
+    },
+    {
+      "canonical_path": "mail.delete_user_message_template",
+      "cli_path": "mail template delete"
+    },
+    {
+      "canonical_path": "mail.get_user_message_template",
+      "cli_path": "mail template get"
+    },
+    {
+      "canonical_path": "mail.list_user_message_templates",
+      "cli_path": "mail template list"
+    },
+    {
+      "canonical_path": "mail.update_user_message_template",
+      "cli_path": "mail template update"
+    },
+    {
+      "canonical_path": "mail.get_thread",
+      "cli_path": "mail thread get"
+    },
+    {
+      "canonical_path": "mail.search_mail_users",
+      "cli_path": "mail user search"
+    }
+  ]
+}

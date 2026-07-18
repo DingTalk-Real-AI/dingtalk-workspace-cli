@@ -1,0 +1,5141 @@
+{
+  "product": "report",
+  "tools": {
+    "report.create_report": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=report.create_report",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report entry submit",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.create_report",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.create_report",
+        "live-dws-schema:report.create_report",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.create_report",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.create_report"
+      ],
+      "agent_summary": "按模版提交一份新日报",
+      "agent_summary_source": "dws-agent-selection/report",
+      "aliases": [
+        "report create"
+      ],
+      "availability": "available",
+      "avoid_when": [
+        "尚未读取模板字段时先用 dws report template list / template get",
+        "只需查看已有日志正文时改用 dws report entry get"
+      ],
+      "canonical_path": "report.create_report",
+      "cli_name": "submit",
+      "cli_path": "report entry submit",
+      "confirmation": "not_required",
+      "constraints": {
+        "require_one_of": [
+          [
+            "contents",
+            "contents-file"
+          ]
+        ]
+      },
+      "description": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。",
+      "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+        "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": "按模版提交一份新日报"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": "按模版提交一份新日报"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.create_report.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "尚未读取模板字段时先用 dws report template list / template get",
+                "只需查看已有日志正文时改用 dws report entry get"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "尚未读取模板字段时先用 dws report template list / template get",
+            "只需查看已有日志正文时改用 dws report entry get"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "report entry submit",
+              "value": "report.create_report"
+            },
+            {
+              "precedence": "reviewed_manual",
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "selected": false,
+              "source": "reviewed_manual_hint",
+              "source_ref": "report entry submit",
+              "value": "report.create_report"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "report entry submit",
+          "value": "report.create_report"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "not_required"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "创建日志"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "write"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+                "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
+            "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "unknown"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "unknown"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.create_report.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "report",
+                "rpc_name": "create_report"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.create_report.interface_ref",
+              "value": "report.create_report"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "report",
+            "rpc_name": "create_report"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "medium"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "medium"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "提交一份新日报（按模版）"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "create_report"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "提交一份新日报（按模版）"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+          ]
+        }
+      },
+      "group": "entry",
+      "has_parameters": true,
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "create_report"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "create_report",
+      "parameter_count": 6,
+      "parameters": {
+        "contents": {
+          "description": "日志内容 JSON 数组 (必填，或用 --contents-file)，每项含 key/sort/content/contentType/type；传 - 表示从 stdin 读取",
+          "example": "[{\"content\":\"schema smoke\",\"sort\":\"0\",\"key\":\"work\",\"contentType\":\"markdown\",\"type\":\"1\"}]",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "日志内容 JSON 数组 (必填，或用 --contents-file)，每项含 key/sort/content/contentType/type；传 - 表示从 stdin 读取"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志内容列表"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "日志内容 JSON 数组 (必填，或用 --contents-file)，每项含 key/sort/content/contentType/type；传 - 表示从 stdin 读取"
+            },
+            "example": {
+              "candidates": [
+                {
+                  "precedence": "typed_metadata",
+                  "selected": true,
+                  "source": "typed_parameter_metadata",
+                  "value": "[{\"content\":\"schema smoke\",\"sort\":\"0\",\"key\":\"work\",\"contentType\":\"markdown\",\"type\":\"1\"}]"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "typed_metadata",
+              "resolution": "highest_precedence",
+              "source": "typed_parameter_metadata",
+              "value": "[{\"content\":\"schema smoke\",\"sort\":\"0\",\"key\":\"work\",\"contentType\":\"markdown\",\"type\":\"1\"}]"
+            },
+            "format": {
+              "candidates": [
+                {
+                  "precedence": "typed_metadata",
+                  "selected": true,
+                  "source": "typed_parameter_metadata",
+                  "value": "json"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "typed_metadata",
+              "resolution": "highest_precedence",
+              "source": "typed_parameter_metadata",
+              "value": "json"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "contents"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "contents"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "format": "json",
+          "interface_description": "日志内容列表",
+          "interface_type": "array",
+          "property": "contents",
+          "required": false,
+          "type": "string"
+        },
+        "contents-file": {
+          "description": "从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容，避免 shell 引号转义；优先级：--contents-file \u003e --contents - (stdin) \u003e --contents '\u003cjson\u003e'）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容，避免 shell 引号转义；优先级：--contents-file \u003e --contents - (stdin) \u003e --contents '\u003cjson\u003e'）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容，避免 shell 引号转义；优先级：--contents-file \u003e --contents - (stdin) \u003e --contents '\u003cjson\u003e'）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "local JSON file input used to populate contents",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "contentsFile"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "local JSON file input used to populate contents",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
+        "dd-from": {
+          "default": "dws",
+          "description": "创建来源标识",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "创建来源标识"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "创建日志的来源，自定义值"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "创建来源标识"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "ddFrom"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "ddFrom"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "创建日志的来源，自定义值",
+          "property": "ddFrom",
+          "required": false,
+          "type": "string"
+        },
+        "template-id": {
+          "description": "日志模版 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "日志模版 ID (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "需要发送哪个日志模板的日志，可通过获取可见日志模板服务获取"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "日志模版 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "templateId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "templateId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "需要发送哪个日志模板的日志，可通过获取可见日志模板服务获取",
+          "property": "templateId",
+          "required": true,
+          "type": "string"
+        },
+        "to-chat": {
+          "description": "是否发送到日志接收人单聊",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "是否发送到日志接收人单聊"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "是否发送到日志接收人的单聊"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "是否发送到日志接收人单聊"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "toChat"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "toChat"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "interface_description": "是否发送到日志接收人的单聊",
+          "property": "toChat",
+          "required": false,
+          "type": "boolean"
+        },
+        "to-user-ids": {
+          "description": "接收人 userId，逗号分隔 (可选)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "接收人 userId，逗号分隔 (可选)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "该日志发送到的人员userId列表"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "接收人 userId，逗号分隔 (可选)"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "toUserIds"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "toUserIds"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "该日志发送到的人员userId列表",
+          "interface_type": "array",
+          "property": "toUserIds",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "report.create_report",
+      "primary_cli_path": "report entry submit",
+      "product_id": "report",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "reviewed_command_registry",
+      "title": "提交一份新日报（按模版）",
+      "use_when": [
+        "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+      ]
+    },
+    "report.get_available_report_templates": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=report.get_available_report_templates",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report template list",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_available_report_templates",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates",
+        "live-dws-schema:report.get_available_report_templates",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_available_report_templates",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_available_report_templates"
+      ],
+      "agent_summary": "获取当前员工可使用的日志模版列表",
+      "agent_summary_source": "dws-agent-selection/report",
+      "availability": "available",
+      "avoid_when": [
+        "已知模版名称需要字段定义时改用 dws report template get"
+      ],
+      "canonical_path": "report.get_available_report_templates",
+      "cli_name": "list",
+      "cli_path": "report template list",
+      "confirmation": "not_required",
+      "description": "获取当前用户可用的日志模版列表",
+      "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report template list",
+        "dws report template list --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": "获取当前员工可使用的日志模版列表"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": "获取当前员工可使用的日志模版列表"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "已知模版名称需要字段定义时改用 dws report template get"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "已知模版名称需要字段定义时改用 dws report template get"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "report template list",
+              "value": "report.get_available_report_templates"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "report template list",
+          "value": "report.get_available_report_templates"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "获取当前用户可用的日志模版列表"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "获取当前员工可使用的日志模版信息，包含日志模板的名称、模板Id等"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "获取当前用户可用的日志模版列表"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "dws report template list",
+                "dws report template list --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "dws report template list",
+            "dws report template list --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "report",
+                "rpc_name": "get_available_report_templates"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_available_report_templates.interface_ref",
+              "value": "report.get_available_report_templates"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "report",
+            "rpc_name": "get_available_report_templates"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "获取当前用户可用的日志模版列表"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "get_available_report_templates"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "获取当前用户可用的日志模版列表"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "提交日志前需要列出可用模版名称与 templateId 时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "提交日志前需要列出可用模版名称与 templateId 时"
+          ]
+        }
+      },
+      "group": "template",
+      "has_parameters": false,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_available_report_templates"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "get_available_report_templates",
+      "parameter_count": 0,
+      "parameters": {},
+      "path": "report.get_available_report_templates",
+      "primary_cli_path": "report template list",
+      "product_id": "report",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "获取当前用户可用的日志模版列表",
+      "use_when": [
+        "提交日志前需要列出可用模版名称与 templateId 时"
+      ]
+    },
+    "report.get_received_report_list": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=report.get_received_report_list",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report inbox list",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_received_report_list",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list",
+        "live-dws-schema:report.get_received_report_list",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_received_report_list",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_received_report_list"
+      ],
+      "agent_summary": "查询当前人收到的日志列表",
+      "agent_summary_source": "dws-agent-selection/report",
+      "aliases": [
+        "report list"
+      ],
+      "availability": "available",
+      "avoid_when": [
+        "要看自己发出的日志时改用 dws report outbox list",
+        "已知 reportId 要看正文时改用 dws report entry get"
+      ],
+      "canonical_path": "report.get_received_report_list",
+      "cli_name": "list",
+      "cli_path": "report inbox list",
+      "confirmation": "not_required",
+      "description": "列出我收到的日报",
+      "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": "查询当前人收到的日志列表"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": "查询当前人收到的日志列表"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "要看自己发出的日志时改用 dws report outbox list",
+                "已知 reportId 要看正文时改用 dws report entry get"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "要看自己发出的日志时改用 dws report outbox list",
+            "已知 reportId 要看正文时改用 dws report entry get"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "report inbox list",
+              "value": "report.get_received_report_list"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "report inbox list",
+          "value": "report.get_received_report_list"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "列出我收到的日报"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "查询当前人收到的日志列表"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "列出我收到的日报"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "report",
+                "rpc_name": "get_received_report_list"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_received_report_list.interface_ref",
+              "value": "report.get_received_report_list"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "report",
+            "rpc_name": "get_received_report_list"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "列出我收到的日报"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "查询当前人收到的日志列表"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "列出我收到的日报"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
+          ]
+        }
+      },
+      "group": "inbox",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_received_report_list"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "get_received_report_list",
+      "parameter_count": 5,
+      "parameters": {
+        "cursor": {
+          "description": "分页游标（默认 0，翻页传返回的 cursor）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "分页游标（默认 0，翻页传返回的 cursor）"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "起始游标，从 0 开始，示例值：1734048000000，必填"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "分页游标（默认 0，翻页传返回的 cursor）"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "cursor"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "cursor"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "integer"
+            }
+          },
+          "interface_description": "起始游标，从 0 开始，示例值：1734048000000，必填",
+          "interface_type": "number",
+          "property": "cursor",
+          "required": false,
+          "type": "integer"
+        },
+        "end": {
+          "description": "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "结束时间，毫秒时间戳，示例值：1734048000000，必填，与开始时间的间隔不能超过180天"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)"
+            },
+            "format": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_format_inference",
+                  "value": "date-time"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_format_inference",
+              "value": "date-time"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "endTime"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "end"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "endTime"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "format": "date-time",
+          "interface_description": "结束时间，毫秒时间戳，示例值：1734048000000，必填，与开始时间的间隔不能超过180天",
+          "interface_type": "number",
+          "property": "endTime",
+          "required": true,
+          "type": "string"
+        },
+        "sender-user-ids": {
+          "description": "发送人 staffId 列表，逗号分隔，用于过滤指定发送人的日志",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "发送人 staffId 列表，逗号分隔，用于过滤指定发送人的日志"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "发送人的staffId"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "发送人 staffId 列表，逗号分隔，用于过滤指定发送人的日志"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "senderUserIds"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "senderUserIds"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "array"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "array"
+            }
+          },
+          "interface_description": "发送人的staffId",
+          "property": "senderUserIds",
+          "required": false,
+          "type": "array"
+        },
+        "size": {
+          "default": "20",
+          "description": "每页条数（默认 20，最大 20）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "每页条数（默认 20，最大 20）"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "每页条数，最大 20，示例值：1734048000000，必填"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "每页条数（默认 20，最大 20）"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "size"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "size"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "integer"
+            }
+          },
+          "interface_description": "每页条数，最大 20，示例值：1734048000000，必填",
+          "interface_type": "number",
+          "property": "size",
+          "required": false,
+          "type": "integer"
+        },
+        "start": {
+          "description": "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "开始时间，毫秒时间戳，示例值：1734048000000，必填，与结束时间的间隔不能超过180天"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)"
+            },
+            "format": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_format_inference",
+                  "value": "date-time"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_format_inference",
+              "value": "date-time"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "startTime"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "start"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "startTime"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "format": "date-time",
+          "interface_description": "开始时间，毫秒时间戳，示例值：1734048000000，必填，与结束时间的间隔不能超过180天",
+          "interface_type": "number",
+          "property": "startTime",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "report.get_received_report_list",
+      "primary_cli_path": "report inbox list",
+      "product_id": "report",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "列出我收到的日报",
+      "use_when": [
+        "需要按时间范围查看别人发给我的日志列表并提取 reportId 时"
+      ]
+    },
+    "report.get_report_entry_details": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=report.get_report_entry_details",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report entry get",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_entry_details",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details",
+        "live-dws-schema:report.get_report_entry_details",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_report_entry_details",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_report_entry_details"
+      ],
+      "agent_summary": "获取指定一篇日志的详情信息",
+      "agent_summary_source": "dws-agent-selection/report",
+      "aliases": [
+        "report detail"
+      ],
+      "availability": "available",
+      "avoid_when": [
+        "要提交新日志时改用 dws report entry submit",
+        "要看已读/评论统计时改用 dws report entry stats"
+      ],
+      "canonical_path": "report.get_report_entry_details",
+      "cli_name": "get",
+      "cli_path": "report entry get",
+      "confirmation": "not_required",
+      "description": "读取单份日报正文（含字段明细 + 钉钉跳转链接）",
+      "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry get --report-id \u003creportId\u003e --format json",
+        "dws report entry get --report-id \u003creportId\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": "获取指定一篇日志的详情信息"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": "获取指定一篇日志的详情信息"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "要提交新日志时改用 dws report entry submit",
+                "要看已读/评论统计时改用 dws report entry stats"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "要提交新日志时改用 dws report entry submit",
+            "要看已读/评论统计时改用 dws report entry stats"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "report entry get",
+              "value": "report.get_report_entry_details"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "report entry get",
+          "value": "report.get_report_entry_details"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取单份日报正文（含字段明细 + 钉钉跳转链接）"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "获取指定一篇日志的详情信息"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取单份日报正文（含字段明细 + 钉钉跳转链接）"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "dws report entry get --report-id \u003creportId\u003e --format json",
+                "dws report entry get --report-id \u003creportId\u003e"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "dws report entry get --report-id \u003creportId\u003e --format json",
+            "dws report entry get --report-id \u003creportId\u003e"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "report",
+                "rpc_name": "get_report_entry_details"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_entry_details.interface_ref",
+              "value": "report.get_report_entry_details"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "report",
+            "rpc_name": "get_report_entry_details"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取单份日报正文（含字段明细 + 钉钉跳转链接）"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "get_report_entry_details"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取单份日报正文（含字段明细 + 钉钉跳转链接）"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
+          ]
+        }
+      },
+      "group": "entry",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_entry_details"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "get_report_entry_details",
+      "parameter_count": 1,
+      "parameters": {
+        "report-id": {
+          "description": "日志 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "日志 ID (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志Id，可以从查询当前用户收到的日志列表获取"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "日志 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "report_id"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "reportId"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "report_id"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "日志Id，可以从查询当前用户收到的日志列表获取",
+          "property": "report_id",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "report.get_report_entry_details",
+      "primary_cli_path": "report entry get",
+      "product_id": "report",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "读取单份日报正文（含字段明细 + 钉钉跳转链接）",
+      "use_when": [
+        "已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"
+      ]
+    },
+    "report.get_report_statistics_by_id": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=report.get_report_statistics_by_id",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report entry stats",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_statistics_by_id",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id",
+        "live-dws-schema:report.get_report_statistics_by_id",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_report_statistics_by_id",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_report_statistics_by_id"
+      ],
+      "agent_summary": "获取指定日志的统计数据",
+      "agent_summary_source": "dws-agent-selection/report",
+      "aliases": [
+        "report stats"
+      ],
+      "availability": "available",
+      "avoid_when": [
+        "要读正文时改用 dws report entry get",
+        "要提交新日志时改用 dws report entry submit"
+      ],
+      "canonical_path": "report.get_report_statistics_by_id",
+      "cli_name": "stats",
+      "cli_path": "report entry stats",
+      "confirmation": "not_required",
+      "description": "读取单份日报的已读统计",
+      "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry stats --report-id \u003creportId\u003e",
+        "dws report entry stats --report-id \u003creportId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": "获取指定日志的统计数据"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": "获取指定日志的统计数据"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "要读正文时改用 dws report entry get",
+                "要提交新日志时改用 dws report entry submit"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "要读正文时改用 dws report entry get",
+            "要提交新日志时改用 dws report entry submit"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "report entry stats",
+              "value": "report.get_report_statistics_by_id"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "report entry stats",
+          "value": "report.get_report_statistics_by_id"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取单份日报的已读统计"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "获取日志统计数据，包括评论数量、点赞数量、已读数等"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取单份日报的已读统计"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "dws report entry stats --report-id \u003creportId\u003e",
+                "dws report entry stats --report-id \u003creportId\u003e --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "dws report entry stats --report-id \u003creportId\u003e",
+            "dws report entry stats --report-id \u003creportId\u003e --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "report",
+                "rpc_name": "get_report_statistics_by_id"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_report_statistics_by_id.interface_ref",
+              "value": "report.get_report_statistics_by_id"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "report",
+            "rpc_name": "get_report_statistics_by_id"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取单份日报的已读统计"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "获取指定日志的统计数据"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取单份日报的已读统计"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
+          ]
+        }
+      },
+      "group": "entry",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_statistics_by_id"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "get_report_statistics_by_id",
+      "parameter_count": 1,
+      "parameters": {
+        "report-id": {
+          "description": "日志 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "日志 ID (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志Id"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "日志 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "report_id"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "reportId"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "report_id"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "日志Id",
+          "property": "report_id",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "report.get_report_statistics_by_id",
+      "primary_cli_path": "report entry stats",
+      "product_id": "report",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "读取单份日报的已读统计",
+      "use_when": [
+        "已知 reportId，需要查看评论数、点赞数、已读数等统计时"
+      ]
+    },
+    "report.get_send_report_list": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=report.get_send_report_list",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report outbox list",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_send_report_list",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list",
+        "live-dws-schema:report.get_send_report_list",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_send_report_list",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_send_report_list"
+      ],
+      "agent_summary": "查询当前人创建的日志详情列表",
+      "agent_summary_source": "dws-agent-selection/report",
+      "aliases": [
+        "report created",
+        "report sent"
+      ],
+      "availability": "available",
+      "avoid_when": [
+        "要看收到的日志时改用 dws report inbox list",
+        "已知 reportId 要完整正文时改用 dws report entry get"
+      ],
+      "canonical_path": "report.get_send_report_list",
+      "cli_name": "list",
+      "cli_path": "report outbox list",
+      "confirmation": "not_required",
+      "description": "列出我发出的日报",
+      "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report outbox list --cursor 0 --size 20 --format json",
+        "dws report outbox list --cursor 0 --size 20"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": "查询当前人创建的日志详情列表"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": "查询当前人创建的日志详情列表"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "要看收到的日志时改用 dws report inbox list",
+                "已知 reportId 要完整正文时改用 dws report entry get"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "要看收到的日志时改用 dws report inbox list",
+            "已知 reportId 要完整正文时改用 dws report entry get"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "report outbox list",
+              "value": "report.get_send_report_list"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "report outbox list",
+          "value": "report.get_send_report_list"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "列出我发出的日报"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "查询当前人创建的日志详情列表，包含日志的内容、日志名称、创建时间、访问地址等信息"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "列出我发出的日报"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "dws report outbox list --cursor 0 --size 20 --format json",
+                "dws report outbox list --cursor 0 --size 20"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "dws report outbox list --cursor 0 --size 20 --format json",
+            "dws report outbox list --cursor 0 --size 20"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "report",
+                "rpc_name": "get_send_report_list"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_send_report_list.interface_ref",
+              "value": "report.get_send_report_list"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "report",
+            "rpc_name": "get_send_report_list"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "列出我发出的日报"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "get_send_report_list"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "列出我发出的日报"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
+          ]
+        }
+      },
+      "group": "outbox",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_send_report_list"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "get_send_report_list",
+      "parameter_count": 7,
+      "parameters": {
+        "cursor": {
+          "description": "分页游标，首次传 0 (默认 0)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "分页游标，首次传 0 (默认 0)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "分页游标，首次传0"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "分页游标，首次传 0 (默认 0)"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "cursor"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "cursor"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "integer"
+            }
+          },
+          "interface_description": "分页游标，首次传0",
+          "interface_type": "number",
+          "property": "cursor",
+          "required": false,
+          "type": "integer"
+        },
+        "end": {
+          "description": "创建结束时间 ISO-8601 (默认最近 20 天；服务端单次查询跨度上限 20 天)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "创建结束时间 ISO-8601 (默认最近 20 天；服务端单次查询跨度上限 20 天)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志创建的结束时间，毫秒级时间戳格式，示例：1734048000000；注意：开始时间和结束时间跨度不能超过180天"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "创建结束时间 ISO-8601 (默认最近 20 天；服务端单次查询跨度上限 20 天)"
+            },
+            "format": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_format_inference",
+                  "value": "date-time"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_format_inference",
+              "value": "date-time"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "endTime"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "end"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "endTime"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "format": "date-time",
+          "interface_description": "日志创建的结束时间，毫秒级时间戳格式，示例：1734048000000；注意：开始时间和结束时间跨度不能超过180天",
+          "interface_type": "number",
+          "property": "endTime",
+          "required": false,
+          "type": "string"
+        },
+        "modified-end": {
+          "description": "修改结束时间 ISO-8601 (可选)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "修改结束时间 ISO-8601 (可选)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志修改的结束时间，毫秒级时间戳格式，示例：1734048000000"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "修改结束时间 ISO-8601 (可选)"
+            },
+            "format": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_format_inference",
+                  "value": "date-time"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_format_inference",
+              "value": "date-time"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "modifiedEndTime"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "modifiedEnd"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "modifiedEndTime"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "format": "date-time",
+          "interface_description": "日志修改的结束时间，毫秒级时间戳格式，示例：1734048000000",
+          "interface_type": "number",
+          "property": "modifiedEndTime",
+          "required": false,
+          "type": "string"
+        },
+        "modified-start": {
+          "description": "修改开始时间 ISO-8601 (可选)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "修改开始时间 ISO-8601 (可选)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志修改的开始时间，毫秒级时间戳格式，示例：1734048000000"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "修改开始时间 ISO-8601 (可选)"
+            },
+            "format": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_format_inference",
+                  "value": "date-time"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_format_inference",
+              "value": "date-time"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "modifiedStartTime"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "modifiedStart"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "modifiedStartTime"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "format": "date-time",
+          "interface_description": "日志修改的开始时间，毫秒级时间戳格式，示例：1734048000000",
+          "interface_type": "number",
+          "property": "modifiedStartTime",
+          "required": false,
+          "type": "string"
+        },
+        "size": {
+          "default": "20",
+          "description": "每页条数，最大 20 (默认 20)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "每页条数，最大 20 (默认 20)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "分页大小，最大20"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "每页条数，最大 20 (默认 20)"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "size"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "size"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "integer"
+            }
+          },
+          "interface_description": "分页大小，最大20",
+          "interface_type": "number",
+          "property": "size",
+          "required": false,
+          "type": "integer"
+        },
+        "start": {
+          "description": "创建开始时间 ISO-8601 (默认最近 20 天；服务端单次查询跨度上限 20 天)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "创建开始时间 ISO-8601 (默认最近 20 天；服务端单次查询跨度上限 20 天)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志创建的开始时间，毫秒级时间戳格式，示例：1734048000000；注意：开始时间和结束时间跨度不能超过180天"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "创建开始时间 ISO-8601 (默认最近 20 天；服务端单次查询跨度上限 20 天)"
+            },
+            "format": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_format_inference",
+                  "value": "date-time"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_format_inference",
+              "value": "date-time"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "startTime"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "start"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "startTime"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "format": "date-time",
+          "interface_description": "日志创建的开始时间，毫秒级时间戳格式，示例：1734048000000；注意：开始时间和结束时间跨度不能超过180天",
+          "interface_type": "number",
+          "property": "startTime",
+          "required": false,
+          "type": "string"
+        },
+        "template-name": {
+          "description": "日志模板名称 (可选，不传查全部)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "日志模板名称 (可选，不传查全部)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志模板名称，可不传，查询的是全部日志"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "日志模板名称 (可选，不传查全部)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "report_template_name"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "templateName"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "report_template_name"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "日志模板名称，可不传，查询的是全部日志",
+          "property": "report_template_name",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "report.get_send_report_list",
+      "primary_cli_path": "report outbox list",
+      "product_id": "report",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "列出我发出的日报",
+      "use_when": [
+        "需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"
+      ]
+    },
+    "report.get_template_details_by_name": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=report.get_template_details_by_name",
+        "Skill:skills/mono/references/products/report.md",
+        "cobra-help:dws report template get",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_template_details_by_name",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/report.json",
+        "internal/cli/schema_hints/selection/report.json",
+        "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name",
+        "live-dws-schema:report.get_template_details_by_name",
+        "skills/mono/references/products/report.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_template_details_by_name",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#report.get_template_details_by_name"
+      ],
+      "agent_summary": "按名称获取日志模版字段定义",
+      "agent_summary_source": "dws-agent-selection/report",
+      "aliases": [
+        "report template detail"
+      ],
+      "availability": "available",
+      "avoid_when": [
+        "不知道有哪些模版时先用 dws report template list"
+      ],
+      "canonical_path": "report.get_template_details_by_name",
+      "cli_name": "get",
+      "cli_path": "report template get",
+      "confirmation": "not_required",
+      "description": "读取单个日志模版的字段定义",
+      "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report template get --name \u003ctemplateName\u003e",
+        "dws report template get --name \"日报\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": "按名称获取日志模版字段定义"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": "按名称获取日志模版字段定义"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "不知道有哪些模版时先用 dws report template list"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "不知道有哪些模版时先用 dws report template list"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "report template get",
+              "value": "report.get_template_details_by_name"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "report template get",
+          "value": "report.get_template_details_by_name"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取单个日志模版的字段定义"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "获取当前员工可使用的日志模版详情信息，包括日志模板Id、日志模板内字段的名称、字段类型、字段排序等"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取单个日志模版的字段定义"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "dws report template get --name \u003ctemplateName\u003e",
+                "dws report template get --name \"日报\" --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "dws report template get --name \u003ctemplateName\u003e",
+            "dws report template get --name \"日报\" --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "report",
+                "rpc_name": "get_template_details_by_name"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.report.get_template_details_by_name.interface_ref",
+              "value": "report.get_template_details_by_name"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "report",
+            "rpc_name": "get_template_details_by_name"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/report.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/report marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/report.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取单个日志模版的字段定义"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "get_template_details_by_name"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取单个日志模版的字段定义"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/report.json",
+              "value": [
+                "已知模版名称，提交前需要读取字段名称、类型与排序时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "source": "internal/cli/schema_hints/selection/report.json",
+          "value": [
+            "已知模版名称，提交前需要读取字段名称、类型与排序时"
+          ]
+        }
+      },
+      "group": "template",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_template_details_by_name"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "get_template_details_by_name",
+      "parameter_count": 1,
+      "parameters": {
+        "name": {
+          "description": "模版名称 (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "模版名称 (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "日志模板名称"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "模版名称 (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "report_template_name"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "name"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "report_template_name"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "日志模板名称",
+          "property": "report_template_name",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "report.get_template_details_by_name",
+      "primary_cli_path": "report template get",
+      "product_id": "report",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "读取单个日志模版的字段定义",
+      "use_when": [
+        "已知模版名称，提交前需要读取字段名称、类型与排序时"
+      ]
+    }
+  }
+}

@@ -80,7 +80,7 @@ func main() {
 	flag.StringVar(&outputPath, "output", "", "Output embedded Agent metadata JSON file (legacy single-file mode)")
 	flag.StringVar(&outputDir, "output-dir", "", "Output directory for split embedded Agent metadata JSON")
 	flag.StringVar(&auditOutputPath, "audit-output", "", "Optional output path for build-time source and CommandRegistry diagnostics")
-	flag.StringVar(&registryPath, "registry", "internal/cli/schema_command_registry.json", "Reviewed CommandRegistry path, relative to --root; validation-only because the registry is embedded")
+	flag.StringVar(&registryPath, "registry", "internal/cli/schema_command_registry", "Reviewed CommandRegistry path, relative to --root; validation-only because the registry is embedded")
 	flag.StringVar(&legacySurfacePath, "surface", "", "Deprecated alias for --registry; the file must equal the embedded reviewed CommandRegistry")
 	flag.IntVar(&maxExamples, "max-examples", 2, "Maximum examples retained per command")
 	flag.IntVar(&maxInterfaceSummaryRunes, "max-interface-summary-runes", 120, "Maximum runes retained in an unreviewed MCP-derived Agent summary")
@@ -95,7 +95,7 @@ func main() {
 		{Name: "canonical product Skill input directory", Path: "skills/mono/references/products"},
 		{Name: "canonical intent guide input", Path: "skills/mono/references/intent-guide.md"},
 		{Name: "canonical structured hint input directory", Path: "internal/cli/schema_hints"},
-		{Name: "canonical reviewed CommandRegistry input", Path: "internal/cli/schema_command_registry.json"},
+		{Name: "canonical reviewed CommandRegistry input", Path: "internal/cli/schema_command_registry"},
 		{Name: "canonical pinned interface metadata input", Path: "internal/cli/schema_mcp_metadata.json"},
 		{Name: "main Skill input", Path: skillPath},
 		{Name: "product Skill input directory", Path: productsDir},
@@ -372,12 +372,70 @@ func validateCommandRegistryFile(rootPath, registryPath string) error {
 	if strings.TrimSpace(registryPath) == "" {
 		return nil
 	}
-	data, err := os.ReadFile(resolveRootPath(rootPath, registryPath))
+	absPath := resolveRootPath(rootPath, registryPath)
+	info, err := os.Stat(absPath)
 	if err != nil {
 		return err
 	}
+	var data []byte
+	if info.IsDir() {
+		// Per-product shards: merge envelope + products/*.json into one JSON.
+		data, err = mergeRegistryShards(absPath)
+		if err != nil {
+			return err
+		}
+	} else {
+		data, err = os.ReadFile(absPath)
+		if err != nil {
+			return err
+		}
+	}
 	_, err = cli.ValidateCommandRegistrySource(data)
 	return err
+}
+
+// mergeRegistryShards reads registry.json (envelope) + products/*.json (shards)
+// and returns a single JSON document matching the pre-split layout.
+func mergeRegistryShards(dir string) ([]byte, error) {
+	envelopeData, err := os.ReadFile(filepath.Join(dir, "registry.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read registry envelope: %w", err)
+	}
+	var envelope struct {
+		Schema  string `json:"$schema,omitempty"`
+		Version int    `json:"version"`
+	}
+	if err := json.Unmarshal(envelopeData, &envelope); err != nil {
+		return nil, fmt.Errorf("decode registry envelope: %w", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "products"))
+	if err != nil {
+		return nil, fmt.Errorf("read registry products dir: %w", err)
+	}
+	var products []json.RawMessage
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		shardData, err := os.ReadFile(filepath.Join(dir, "products", entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("read registry shard %s: %w", entry.Name(), err)
+		}
+		products = append(products, json.RawMessage(shardData))
+	}
+	result := struct {
+		Schema   string          `json:"$schema,omitempty"`
+		Version  int             `json:"version"`
+		Products json.RawMessage `json:"products"`
+	}{
+		Schema:  envelope.Schema,
+		Version: envelope.Version,
+	}
+	result.Products, err = json.Marshal(products)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(result)
 }
 
 func validateSelectionHintInput(rootPath, hintsDir string, registry commandRegistryProjection) error {

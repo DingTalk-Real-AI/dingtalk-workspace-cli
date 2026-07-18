@@ -6,7 +6,7 @@ DWS_POLICY_TMPDIR ?= $(CURDIR)/.worktrees/policy-tmp
 POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 
-.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -101,16 +101,16 @@ test-schema-agent-examples:
 
 generate-schema:
 	@set -e; \
-	registry_guard=$$(mktemp); \
+	registry_guard=$$(mktemp -d); \
 	metadata_guard=$$(mktemp -d); \
 	selection_guard=$$(mktemp -d); \
 	trap 'rm -rf "$$registry_guard" "$$metadata_guard" "$$selection_guard"' EXIT HUP INT TERM; \
-	cp internal/cli/schema_command_registry.json "$$registry_guard"; \
+	cp -R internal/cli/schema_command_registry/ "$$registry_guard/"; \
 	cp -R internal/cli/schema_hints/metadata/. "$$metadata_guard/"; \
 	cp -R internal/cli/schema_hints/selection/. "$$selection_guard/"; \
 	$(GO) generate ./internal/cli; \
-	cmp -s internal/cli/schema_command_registry.json "$$registry_guard" || { \
-		printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry.json' >&2; \
+	diff -qr internal/cli/schema_command_registry "$$registry_guard" >/dev/null || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry/' >&2; \
 		exit 1; \
 	}; \
 	diff -qr internal/cli/schema_hints/metadata "$$metadata_guard" >/dev/null || { \
@@ -125,14 +125,18 @@ generate-schema:
 generate-schema-agent-metadata:
 	$(GO) run ./internal/generator/cmd_schema_agent_metadata \
 		-root . \
-		-registry internal/cli/schema_command_registry.json \
+		-registry internal/cli/schema_command_registry \
 		-output-dir internal/cli/schema_agent_metadata \
 		-audit-output internal/cli/schema_agent_metadata_audit.json
 
 generate-schema-catalog:
 	$(GO) run -a ./internal/generator/cmd_schema_catalog \
 		-root . \
-		-output internal/cli/schema_catalog.json
+		-output internal/cli/schema_catalog
+
+fetch-mcp-metadata:
+	@printf '  %sRefreshing MCP metadata from live server%s\n' "$(COLOR_RUN)" "$(COLOR_RESET)"
+	@./scripts/dev/fetch_mcp_metadata.sh
 
 package:
 	@version="$(if $(VERSION),$(VERSION),v0.0.0-SNAPSHOT)"; VERSION="$${version#v}" ./scripts/dev/build-all.sh

@@ -1,0 +1,9 @@
+{
+  "id": "devdoc",
+  "tools": [
+    {
+      "canonical_path": "devdoc.search_open_platform_docs_rag",
+      "cli_path": "devdoc article search"
+    }
+  ]
+}
