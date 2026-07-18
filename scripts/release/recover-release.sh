@@ -8,11 +8,12 @@ ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 VERSION="${1:-}"
 REMOTE=""
 FAILED_RUN_ID=""
+FAILED_RUN_ATTEMPT=""
 EXPECTED_REPOSITORY="DingTalk-Real-AI/dingtalk-workspace-cli"
 
 usage() {
   cat >&2 <<'EOF'
-usage: recover-release.sh <version> --remote <name> [--failed-run <run-id>]
+usage: recover-release.sh <version> --remote <name> [--failed-run <run-id>] [--failed-attempt <attempt>]
 
 Recovers one failed existing release tag through the protected default-branch
 Release workflow. It never creates, moves, or deletes a tag.
@@ -25,6 +26,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --remote) [ "$#" -ge 2 ] || { usage; exit 2; }; REMOTE="$2"; shift 2 ;;
     --failed-run) [ "$#" -ge 2 ] || { usage; exit 2; }; FAILED_RUN_ID="$2"; shift 2 ;;
+    --failed-attempt) [ "$#" -ge 2 ] || { usage; exit 2; }; FAILED_RUN_ATTEMPT="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'unknown recovery argument: %s\n' "$1" >&2; usage; exit 2 ;;
   esac
@@ -39,7 +41,45 @@ if [ -n "$FAILED_RUN_ID" ]; then
     exit 2
   }
 fi
+if [ -n "$FAILED_RUN_ATTEMPT" ]; then
+  [ -n "$FAILED_RUN_ID" ] || {
+    printf '%s\n' '--failed-attempt requires --failed-run' >&2
+    exit 2
+  }
+  printf '%s\n' "$FAILED_RUN_ATTEMPT" | grep -Eq '^[1-9][0-9]*$' || {
+    printf 'invalid failed Release run attempt: %s\n' "$FAILED_RUN_ATTEMPT" >&2
+    exit 2
+  }
+fi
 command -v gh >/dev/null 2>&1 || { printf '%s\n' 'gh is required for release recovery' >&2; exit 1; }
+
+find_latest_failed_attempt() {
+  find_run_id="$1"
+  find_latest="$(
+    gh api \
+      -H 'Accept: application/vnd.github+json' \
+      "repos/$EXPECTED_REPOSITORY/actions/runs/$find_run_id" \
+      --jq .run_attempt
+  )" || return 1
+  printf '%s\n' "$find_latest" | grep -Eq '^[1-9][0-9]*$' || return 1
+  find_attempt="$find_latest"
+  while [ "$find_attempt" -ge 1 ]; do
+    find_conclusion="$(
+      gh api \
+        -H 'Accept: application/vnd.github+json' \
+        "repos/$EXPECTED_REPOSITORY/actions/runs/$find_run_id/attempts/$find_attempt" \
+        --jq .conclusion
+    )" || return 1
+    case "$find_conclusion" in
+      failure|cancelled|timed_out|startup_failure|stale)
+        printf '%s\n' "$find_attempt"
+        return 0
+        ;;
+    esac
+    find_attempt=$((find_attempt - 1))
+  done
+  return 1
+}
 
 cd "$ROOT"
 [ "$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "main" ] || {
@@ -86,27 +126,81 @@ git merge-base --is-ancestor "$commit" "refs/remotes/$REMOTE/main" || {
 }
 
 if [ -z "$FAILED_RUN_ID" ]; then
-  failed_runs="$(
+  candidate_runs="$(
     gh api \
       -H 'Accept: application/vnd.github+json' \
       "repos/$EXPECTED_REPOSITORY/actions/workflows/release.yml/runs?branch=$VERSION&event=push&status=completed&per_page=100" \
-      --jq ".workflow_runs[] | select(.head_sha == \"$commit\" and .head_branch == \"$VERSION\" and (.conclusion as \\$c | [\"failure\", \"cancelled\", \"timed_out\", \"startup_failure\", \"stale\"] | index(\\$c))) | .id"
+      --jq ".workflow_runs[] | select(.head_sha == \"$commit\" and .head_branch == \"$VERSION\") | .id"
   )" || {
-    printf 'could not query failed Release runs for %s\n' "$VERSION" >&2
+    printf 'could not query Release runs for %s\n' "$VERSION" >&2
     exit 1
   }
-  FAILED_RUN_ID="$(printf '%s\n' "$failed_runs" | sed -n '1p')"
+  for candidate_run_id in $candidate_runs; do
+    if candidate_attempt="$(find_latest_failed_attempt "$candidate_run_id")"; then
+      FAILED_RUN_ID="$candidate_run_id"
+      FAILED_RUN_ATTEMPT="$candidate_attempt"
+      break
+    fi
+  done
   [ -n "$FAILED_RUN_ID" ] || {
     printf 'no failed exact-tag Release run found for %s at %s\n' "$VERSION" "$commit" >&2
     exit 1
   }
+elif [ -z "$FAILED_RUN_ATTEMPT" ]; then
+  FAILED_RUN_ATTEMPT="$(find_latest_failed_attempt "$FAILED_RUN_ID")" || {
+    printf 'Release run %s has no failed attempt\n' "$FAILED_RUN_ID" >&2
+    exit 1
+  }
+fi
+printf '%s\n' "$FAILED_RUN_ATTEMPT" | grep -Eq '^[1-9][0-9]*$' || {
+  printf 'invalid failed Release run attempt: %s\n' "$FAILED_RUN_ATTEMPT" >&2
+  exit 1
+}
+attempt_record="$(
+  gh api \
+    -H 'Accept: application/vnd.github+json' \
+    "repos/$EXPECTED_REPOSITORY/actions/runs/$FAILED_RUN_ID/attempts/$FAILED_RUN_ATTEMPT" \
+    --jq '[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha] | @tsv'
+)" || {
+  printf 'could not query Release run %s attempt %s\n' "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT" >&2
+  exit 1
+}
+attempt_id="$(printf '%s\n' "$attempt_record" | cut -f1)"
+attempt_number="$(printf '%s\n' "$attempt_record" | cut -f2)"
+attempt_repository="$(printf '%s\n' "$attempt_record" | cut -f3)"
+attempt_path="$(printf '%s\n' "$attempt_record" | cut -f4)"
+attempt_event="$(printf '%s\n' "$attempt_record" | cut -f5)"
+attempt_status="$(printf '%s\n' "$attempt_record" | cut -f6)"
+attempt_conclusion="$(printf '%s\n' "$attempt_record" | cut -f7)"
+attempt_branch="$(printf '%s\n' "$attempt_record" | cut -f8)"
+attempt_commit="$(printf '%s\n' "$attempt_record" | cut -f9)"
+case "$attempt_conclusion" in
+  failure|cancelled|timed_out|startup_failure|stale) ;;
+  *)
+    printf 'Release run %s attempt %s is not failed: %s\n' \
+      "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT" "$attempt_conclusion" >&2
+    exit 1
+    ;;
+esac
+if [ "$attempt_id" != "$FAILED_RUN_ID" ] ||
+   [ "$attempt_number" != "$FAILED_RUN_ATTEMPT" ] ||
+   [ "$attempt_repository" != "$EXPECTED_REPOSITORY" ] ||
+   [ "$attempt_path" != ".github/workflows/release.yml" ] ||
+   [ "$attempt_event" != "push" ] ||
+   [ "$attempt_status" != "completed" ] ||
+   [ "$attempt_branch" != "$VERSION" ] ||
+   [ "$attempt_commit" != "$commit" ]; then
+  printf 'Release run %s attempt %s does not match %s at %s\n' \
+    "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT" "$VERSION" "$commit" >&2
+  exit 1
 fi
 
 printf 'Recovery target:\n'
 printf '  version:    %s\n' "$VERSION"
 printf '  tag object: %s\n' "$tag_object"
 printf '  commit:     %s\n' "$commit"
-printf '  failed run: https://github.com/%s/actions/runs/%s\n' "$EXPECTED_REPOSITORY" "$FAILED_RUN_ID"
+printf '  failed run: https://github.com/%s/actions/runs/%s/attempts/%s\n' \
+  "$EXPECTED_REPOSITORY" "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT"
 [ -t 0 ] || { printf '%s\n' 'interactive recovery confirmation is required' >&2; exit 1; }
 printf 'Type %s to request protected recovery: ' "$VERSION"
 IFS= read -r confirmation
@@ -121,6 +215,7 @@ gh workflow run release.yml \
   -f "recover_release_tag_object=$tag_object" \
   -f "recover_release_commit=$commit" \
   -f "recover_failed_run_id=$FAILED_RUN_ID" \
+  -f "recover_failed_run_attempt=$FAILED_RUN_ATTEMPT" \
   -f "recover_release_nonce=$nonce" \
   -f "recover_release_confirmation=$VERSION"
 

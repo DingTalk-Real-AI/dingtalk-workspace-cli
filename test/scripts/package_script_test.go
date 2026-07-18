@@ -733,6 +733,7 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		"recover_release_tag_object:",
 		"recover_release_commit:",
 		"recover_failed_run_id:",
+		"recover_failed_run_attempt:",
 		"recover_release_nonce:",
 		"recover_release_confirmation:",
 		`format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce)`,
@@ -745,6 +746,9 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		"can_admins_bypass !== false",
 		`run.path !== ".github/workflows/release.yml"`,
 		`run.event !== "push"`,
+		`"GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}"`,
+		"attempt_number: Number(failedRunAttempt)",
+		"run.run_attempt !== Number(failedRunAttempt)",
 		`["failure", "cancelled", "timed_out", "startup_failure", "stale"].includes(run.conclusion)`,
 		`run.head_branch !== version`,
 		`run.head_sha !== commit`,
@@ -792,6 +796,133 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		strings.Count(workflow, "name: Publish immutable GitHub Release") != 1 ||
 		strings.Count(workflow, "name: Publish npm and mirrors") != 1 {
 		t.Fatal("normal and recovery publication must share one build/sign/publish job graph")
+	}
+}
+
+func TestRecoverReleaseBindsOneFailedRunAttempt(t *testing.T) {
+	t.Parallel()
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "recover-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(recover-release.sh) error = %v", err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	script := string(data)
+
+	for _, required := range []string{
+		"--failed-attempt <attempt>",
+		"--failed-attempt requires --failed-run",
+		"find_latest_failed_attempt",
+		`while [ "$find_attempt" -ge 1 ]`,
+		"actions/runs/$find_run_id/attempts/$find_attempt",
+		`select(.head_sha == \"$commit\" and .head_branch == \"$VERSION\")`,
+		"Release run %s has no failed attempt",
+		`[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha] | @tsv`,
+		"actions/runs/%s/attempts/%s",
+		`-f "recover_failed_run_attempt=$FAILED_RUN_ATTEMPT"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("release recovery script is missing attempt binding %q", required)
+		}
+	}
+}
+
+func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+
+	tests := []struct {
+		name      string
+		start     string
+		end       string
+		condition string
+	}{
+		{
+			name:      "release contract",
+			start:     "  release-contract:\n",
+			end:       "\n  release:\n",
+			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success')) }}`,
+		},
+		{
+			name:      "build",
+			start:     "  release:\n",
+			end:       "\n  verify-darwin-signatures:\n",
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' }}`,
+		},
+		{
+			name:      "Darwin verification",
+			start:     "  verify-darwin-signatures:\n",
+			end:       "\n  publish-release:\n",
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' }}`,
+		},
+		{
+			name:      "GitHub publication",
+			start:     "  publish-release:\n",
+			end:       "\n  publish-channels:\n",
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}`,
+		},
+		{
+			name:      "channel publication",
+			start:     "  publish-channels:\n",
+			end:       "\n  mirror-gitee-release:\n",
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}`,
+		},
+		{
+			name:      "Gitee mirror",
+			start:     "  mirror-gitee-release:\n",
+			end:       "\n  repair-npm:\n",
+			condition: `if: ${{ !cancelled() && vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			section := releaseWorkflowSection(t, workflow, test.start, test.end)
+			if !strings.Contains(section, test.condition) {
+				t.Errorf("%s must override skipped dispatch ancestors while preserving cancellation and dependency gates", test.name)
+			}
+		})
+	}
+}
+
+func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	start := strings.Index(workflow, "  release-delivery-gate:\n")
+	if start == -1 {
+		t.Fatal("release workflow is missing the terminal delivery gate")
+	}
+	gate := workflow[start:]
+
+	for _, required := range []string{
+		"name: Release delivery gate",
+		`if: ${{ !cancelled() }}`,
+		"- dispatch-contract",
+		"- authorize-recovery",
+		"- governance-preflight",
+		"- release-contract",
+		"- release",
+		"- verify-darwin-signatures",
+		"- publish-release",
+		"- publish-channels",
+		"- mirror-gitee-release",
+		"- repair-npm",
+		"require_publication",
+		`require_result release-contract "$RELEASE_CONTRACT_RESULT" success`,
+		`require_result release "$RELEASE_RESULT" success`,
+		`require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success`,
+		`require_result publish-release "$PUBLISH_RELEASE_RESULT" success`,
+		`require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success`,
+		"workflow_dispatch:recover_release",
+		"workflow_dispatch:governance_preflight",
+		"workflow_dispatch:repair_npm",
+		"unsupported release mode",
+	} {
+		if !strings.Contains(gate, required) {
+			t.Errorf("release delivery gate is missing %q", required)
+		}
 	}
 }
 
