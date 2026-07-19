@@ -106,6 +106,44 @@ parameter mappings, positional execution fields, constraints, and safety
 semantics remain protected. Positional descriptions are documentation and may
 change without breaking compatibility.
 
+### Two-stage exact contract migrations
+
+An intentional interface-mode or interface-ref migration requires two pull
+requests and explicit human review. The same exact approval may optionally
+carry canonical `old_constraints` and `new_constraints` snapshots when that
+interface transition also requires a reviewed constraint migration:
+
+1. A governance pull request adds one exact old-to-new entry to
+   `scripts/policy/schema-compat/approved-interface-migrations-v1.json` without
+   changing the product Schema. The entry names one exact
+   `product/canonical_path`, both interface modes, both interface refs, and a
+   concrete review reason. Constraint snapshots, when present, must be supplied
+   as an old/new pair of exact JSON objects.
+2. After that governance pull request is merged, the product pull request
+   rebases onto it, applies exactly the approved interface and optional
+   constraint transition, and removes the consumed entry (or the manifest when
+   it becomes empty).
+
+The authoritative check builds the compatibility checker and reads approvals
+from the temporary worktree at the PR merge-base. The candidate manifest is
+read only to enforce lifecycle: a pending base entry must remain the same
+normalized exact entry after strict parsing, while an entry whose complete
+interface-and-constraint contract matches exact `new` must be removed. A
+candidate may add a separately reviewed future entry, but cannot authorize a
+Schema transition in the same pull request. Wildcards, duplicate or
+non-canonical JSON keys, unknown tools, malformed refs or constraint snapshots,
+and entries whose complete historical contract matches neither exact `old` nor
+exact `new` fail closed. If a previously merged product change accidentally
+left an already-applied entry behind, a cleanup pull request may recover only
+by removing that entry while preserving normal Schema compatibility.
+
+An active exact approval suppresses `interface_mode` and `interface_ref` drift,
+and suppresses the constraints failure only when both reviewed constraint
+snapshots are present and match exactly. It does not relax other constraint
+fields. Availability, parameters, positional fields, and
+safety semantics remain protected; newly added `require_one_of` members still
+must resolve to optional parameters or historical positionals.
+
 `make update-interface-baseline` still extends the local checked-in Interface
 fixture used by `make interface-integrity`. Updates are monotonic: they add new
 commands and flags without removing history.

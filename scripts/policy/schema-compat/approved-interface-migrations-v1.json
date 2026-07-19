@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "migrations": [
+    {
+      "tool": "pat/pat.batch_grant",
+      "old": {
+        "interface_mode": "mcp",
+        "interface_ref": {
+          "product_id": "pat",
+          "rpc_name": "pat.batch_grant"
+        }
+      },
+      "new": {
+        "interface_mode": "composite",
+        "interface_ref": null
+      },
+      "old_constraints": {
+        "require_one_of": [
+          [
+            "scope",
+            "product",
+            "products",
+            "domain",
+            "domains",
+            "recommend"
+          ]
+        ]
+      },
+      "new_constraints": {
+        "mutually_exclusive": [
+          [
+            "all",
+            "scope"
+          ],
+          [
+            "all",
+            "recommend"
+          ],
+          [
+            "all",
+            "revoke"
+          ],
+          [
+            "revoke",
+            "product"
+          ],
+          [
+            "revoke",
+            "products"
+          ],
+          [
+            "revoke",
+            "domain"
+          ],
+          [
+            "revoke",
+            "domains"
+          ],
+          [
+            "revoke",
+            "recommend"
+          ],
+          [
+            "revoke",
+            "grant-type"
+          ],
+          [
+            "revoke",
+            "session-id"
+          ]
+        ],
+        "require_one_of": [
+          [
+            "scope",
+            "product",
+            "products",
+            "domain",
+            "domains",
+            "recommend",
+            "all"
+          ]
+        ]
+      },
+      "reason": "Reviewed exact PAT chmod contract migration: composite grant/revoke routing plus the ten mode-exclusion pairs and optional --all selector."
+    }
+  ]
+}
