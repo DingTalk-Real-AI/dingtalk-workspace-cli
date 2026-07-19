@@ -14,6 +14,7 @@ import (
 // absent canonical deliberately publishes no dry_run field.
 type dryRunCapabilityGroup struct {
 	PreviewKind    string
+	RemoteReads    bool
 	CanonicalPaths []string
 }
 
@@ -43,6 +44,9 @@ var reviewedDryRunCapabilityGroups = []dryRunCapabilityGroup{
 		"sheet.write_image",
 		"todo.add_todo_attachment",
 	}},
+	{PreviewKind: DryRunPreviewPlan, RemoteReads: true, CanonicalPaths: []string{
+		"pat.batch_grant",
+	}},
 }
 
 var reviewedDryRunCapabilitiesLazy struct {
@@ -55,7 +59,7 @@ func loadReviewedDryRunCapabilities() (map[string]DryRunSpec, error) {
 	reviewedDryRunCapabilitiesLazy.once.Do(func() {
 		byCanonical := make(map[string]DryRunSpec)
 		for _, group := range reviewedDryRunCapabilityGroups {
-			spec := DryRunSpec{PreviewKind: group.PreviewKind}
+			spec := DryRunSpec{PreviewKind: group.PreviewKind, RemoteReads: group.RemoteReads}
 			if err := spec.Validate("<reviewed-dry-run-registry>"); err != nil {
 				reviewedDryRunCapabilitiesLazy.err = err
 				return

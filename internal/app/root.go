@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,6 +74,7 @@ var (
 	rootPluginLoadHooks             = (*plugin.Plugin).LoadHooks
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
+	rootAuthLoadTokenDataReadOnly   = authpkg.LoadTokenDataForProfileReadOnly
 )
 
 // Execute runs the root command and returns the process exit code.
@@ -229,6 +231,10 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 }
 
 func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
+	var suppressor interface{ SuppressCLIErrorOutput() bool }
+	if stderrors.As(err, &suppressor) && suppressor.SuppressCLIErrorOutput() {
+		return nil
+	}
 	var raw apperrors.RawStderrError
 	if stderrors.As(err, &raw) {
 		_, writeErr := fmt.Fprintln(stderr, raw.RawStderr())
@@ -435,6 +441,142 @@ func preparseProfileFlag(args []string) string {
 		}
 	}
 	return ""
+}
+
+func preparseExplicitTokenFlag(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "--token" && i+1 < len(args):
+			return strings.TrimSpace(args[i+1]) != ""
+		case strings.HasPrefix(arg, "--token="):
+			return strings.TrimSpace(strings.TrimPrefix(arg, "--token=")) != ""
+		}
+	}
+	return false
+}
+
+// isStrictPATReadOnlyRawInvocation recognizes the public PAT chmod preview
+// entry point before Cobra parses flags. The scan mirrors pflag's relevant
+// bool and shorthand syntax, but deliberately tolerates unknown flags: Cobra
+// remains responsible for rejecting them after root construction, while an
+// otherwise recognizable preview still gets side-effect-free initialization.
+func isStrictPATReadOnlyRawInvocation(args []string) bool {
+	commandPath := make([]string, 0, 2)
+	dryRun := false
+	invalidDryRun := false
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			if len(commandPath) < 2 {
+				return false
+			}
+			continue
+		}
+		if arg == "--" {
+			if len(commandPath) < 2 {
+				return false
+			}
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			name, value, hasValue := strings.Cut(arg, "=")
+			if name == "--dry-run" {
+				if !hasValue {
+					dryRun = true
+				} else if parsed, err := strconv.ParseBool(strings.TrimSpace(value)); err == nil {
+					dryRun = parsed
+				} else {
+					// Cobra will reject the value. Keep initialization read-only
+					// instead of resolving credentials for an error-only path.
+					invalidDryRun = true
+				}
+				continue
+			}
+			if rawBooleanFlag(name, len(commandPath) == 2) {
+				continue
+			}
+			if rawGlobalFlagConsumesNextValue(name) || (len(commandPath) == 2 && rawPATFlagConsumesNextValue(name)) {
+				if hasValue {
+					continue
+				}
+				if i+1 < len(args) {
+					i++
+				}
+				continue
+			}
+			// Unknown flags are rejected by Cobra later. Do not turn a
+			// recognizable dry-run into credential-bearing initialization.
+			continue
+		}
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			if rawShortGlobalFlagConsumesNextValue(arg) && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if len(commandPath) < 2 {
+			expected := []string{"pat", "chmod"}[len(commandPath)]
+			if arg != expected {
+				return false
+			}
+			commandPath = append(commandPath, arg)
+		}
+	}
+	return (dryRun || invalidDryRun) && len(commandPath) == 2 && commandPath[0] == "pat" && commandPath[1] == "chmod"
+}
+
+func rawBooleanFlag(name string, allowPATFlags bool) bool {
+	switch name {
+	case "--debug", "--mock", "--verbose", "--yes":
+		return true
+	case "--all", "--recommend", "--revoke":
+		return allowPATFlags
+	default:
+		return false
+	}
+}
+
+// rawShortGlobalFlagConsumesNextValue reports whether a valid global shorthand
+// token leaves its value in the next argv element. pflag permits grouped bool
+// shorthands (-vy), attached string values (-fjson/-opath), and mixtures such
+// as -vfjson; the first string shorthand consumes the remainder of the token.
+func rawShortGlobalFlagConsumesNextValue(arg string) bool {
+	cluster := strings.TrimPrefix(arg, "-")
+	for i := 0; i < len(cluster); i++ {
+		switch cluster[i] {
+		case 'v', 'y':
+			if i+1 < len(cluster) && cluster[i+1] == '=' {
+				return false
+			}
+		case 'f', 'o':
+			return i == len(cluster)-1
+		default:
+			// Cobra will reject an unknown shorthand later. It does not
+			// justify credential-bearing initialization for a dry-run.
+			return false
+		}
+	}
+	return false
+}
+
+func rawGlobalFlagConsumesNextValue(arg string) bool {
+	switch arg {
+	case "--client-id", "--client-secret", "--fields", "--format", "-f",
+		"--jq", "--output", "-o", "--profile", "--timeout", "--token":
+		return true
+	default:
+		return false
+	}
+}
+
+func rawPATFlagConsumesNextValue(arg string) bool {
+	switch arg {
+	case "--agentCode", "--grant-type", "--session-id", "--product", "--products", "--domain", "--domains":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeProcessProfileArgs() func() {
@@ -820,8 +962,18 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 	// precedence (InjectPluginConfigEnv skips already-set keys).
 	rootPluginInjectConfigEnv(pluginLoader)
 
-	// Load TokenData once; reused for stdio injection below.
-	tokenData, _ := rootAuthLoadTokenData(defaultConfigDir())
+	// Ordinary commands retain the historical loader, including edition
+	// storage, keychain and legacy .data migration, because stdio plugins use
+	// the persisted user/corp context. Only exact PAT chmod previews use the
+	// side-effect-free loader; an explicit token has no persisted attribution.
+	var tokenData *authpkg.TokenData
+	if isStrictPATReadOnlyRawInvocation(os.Args[1:]) {
+		if !preparseExplicitTokenFlag(os.Args[1:]) {
+			tokenData, _ = rootAuthLoadTokenDataReadOnly(defaultConfigDir(), authpkg.RuntimeProfile())
+		}
+	} else {
+		tokenData, _ = rootAuthLoadTokenData(defaultConfigDir())
+	}
 	var userCtx *plugin.UserContext
 	if tokenData != nil {
 		// Inject user context if either UserID or CorpID is present.

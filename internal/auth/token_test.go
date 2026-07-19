@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 // cleanupKeychain isolates keychain state to a per-test temporary directory
@@ -2175,5 +2176,402 @@ func TestTokenValidityChecks(t *testing.T) {
 	}
 	if expiredRefresh.IsRefreshTokenValid() {
 		t.Fatal("expired refresh token should be invalid")
+	}
+}
+
+func TestCrossPlatformCoverageLoadValidAccessTokenReadOnlyUsesSelectedProfileWithoutProfileMutation(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	if err := SaveTokenData(configDir, testToken("at_read_only", "corp_read_only", "Read Only Org")); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+	profilesPath := ProfilesPath(configDir)
+	before, err := os.ReadFile(profilesPath)
+	if err != nil {
+		t.Fatalf("ReadFile(profiles before) error = %v", err)
+	}
+
+	token, err := LoadValidAccessTokenReadOnly(configDir, "  Read Only Org  ")
+	if err != nil {
+		t.Fatalf("LoadValidAccessTokenReadOnly() error = %v", err)
+	}
+	if token != "at_read_only" {
+		t.Fatalf("token = %q, want at_read_only", token)
+	}
+	after, err := os.ReadFile(profilesPath)
+	if err != nil {
+		t.Fatalf("ReadFile(profiles after) error = %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("read-only token lookup mutated profiles.json")
+	}
+}
+
+func TestCrossPlatformCoverageLoadTokenDataForProfileReadOnlyDoesNotRepairMalformedProfiles(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	profilesPath := ProfilesPath(configDir)
+	malformed := []byte(`{"version":1,"profiles":[`)
+	if err := os.WriteFile(profilesPath, malformed, 0o600); err != nil {
+		t.Fatalf("WriteFile(profiles) error = %v", err)
+	}
+
+	if _, err := LoadTokenDataForProfileReadOnly(configDir, ""); err == nil || !strings.Contains(err.Error(), "不会自动修复") {
+		t.Fatalf("LoadTokenDataForProfileReadOnly() error = %v, want non-repairing parse error", err)
+	}
+	after, err := os.ReadFile(profilesPath)
+	if err != nil {
+		t.Fatalf("ReadFile(profiles after) error = %v", err)
+	}
+	if string(after) != string(malformed) {
+		t.Fatal("malformed profiles.json was modified")
+	}
+	matches, err := filepath.Glob(profilesPath + ".corrupt-*")
+	if err != nil {
+		t.Fatalf("Glob(corrupt profiles) error = %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("read-only lookup quarantined profiles.json: %v", matches)
+	}
+}
+
+func TestCrossPlatformCoverageValidAccessTokenReadOnly(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    *TokenData
+		want    string
+		wantErr string
+	}{
+		{name: "missing data", wantErr: "未找到登录凭证"},
+		{name: "blank token", data: &TokenData{AccessToken: "  "}, wantErr: "未找到登录凭证"},
+		{name: "expired token", data: &TokenData{AccessToken: "expired", ExpiresAt: time.Now().Add(-time.Hour)}, wantErr: "登录凭证已过期"},
+		{name: "valid token is trimmed", data: &TokenData{AccessToken: "  valid-token  ", ExpiresAt: time.Now().Add(time.Hour)}, want: "valid-token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := validAccessTokenReadOnly(tt.data)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("validAccessTokenReadOnly() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validAccessTokenReadOnly() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("validAccessTokenReadOnly() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageLoadTokenDataForProfileReadOnlyEditionHookContract(t *testing.T) {
+	previous := edition.Get()
+	t.Cleanup(func() { edition.Override(previous) })
+
+	loadErr := errors.New("host token unavailable")
+	tests := []struct {
+		name              string
+		profile           string
+		loadTokenReadOnly func(string) ([]byte, error)
+		wantToken         string
+		wantErr           string
+	}{
+		{
+			name:    "profile selection is rejected",
+			profile: "work",
+			loadTokenReadOnly: func(string) ([]byte, error) {
+				t.Fatal("LoadTokenReadOnly must not run when a profile selector is present")
+				return nil, nil
+			},
+			wantErr: "不支持 --profile",
+		},
+		{
+			name: "host load error is preserved",
+			loadTokenReadOnly: func(string) ([]byte, error) {
+				return nil, loadErr
+			},
+			wantErr: "host token unavailable",
+		},
+		{
+			name: "malformed host token is rejected",
+			loadTokenReadOnly: func(string) ([]byte, error) {
+				return []byte(`{"accessToken":`), nil
+			},
+			wantErr: "无法解析登录凭证",
+		},
+		{
+			name: "valid host token is loaded",
+			loadTokenReadOnly: func(string) ([]byte, error) {
+				return []byte(`{"access_token":"host-token"}`), nil
+			},
+			wantToken: "host-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			edition.Override(&edition.Hooks{LoadTokenReadOnly: tt.loadTokenReadOnly})
+			data, err := LoadTokenDataForProfileReadOnly(t.TempDir(), tt.profile)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("LoadTokenDataForProfileReadOnly() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadTokenDataForProfileReadOnly() error = %v", err)
+			}
+			if data == nil || data.AccessToken != tt.wantToken {
+				t.Fatalf("LoadTokenDataForProfileReadOnly() = %#v, want token %q", data, tt.wantToken)
+			}
+		})
+	}
+
+	t.Run("ordinary edition loader is never reused for read-only access", func(t *testing.T) {
+		edition.Override(&edition.Hooks{LoadToken: func(string) ([]byte, error) {
+			t.Fatal("ordinary LoadToken must not run for a strict read-only lookup")
+			return nil, nil
+		}})
+		if _, err := LoadTokenDataForProfileReadOnly(t.TempDir(), ""); err == nil || !strings.Contains(err.Error(), "未提供只读凭证加载能力") {
+			t.Fatalf("LoadTokenDataForProfileReadOnly() error = %v, want missing read-only hook guidance", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageLoadProfilesReadOnlyMissingAndUnreadable(t *testing.T) {
+	missingDir := t.TempDir()
+	profiles, err := loadProfilesReadOnly(missingDir)
+	if err != nil {
+		t.Fatalf("loadProfilesReadOnly(missing) error = %v", err)
+	}
+	if profiles.Version != 1 || len(profiles.Profiles) != 0 {
+		t.Fatalf("loadProfilesReadOnly(missing) = %#v, want empty version 1 config", profiles)
+	}
+
+	unreadableDir := t.TempDir()
+	if err := os.Mkdir(ProfilesPath(unreadableDir), 0o700); err != nil {
+		t.Fatalf("Mkdir(profiles path) error = %v", err)
+	}
+	if _, err := loadProfilesReadOnly(unreadableDir); err == nil || !strings.Contains(err.Error(), "无法只读加载 profiles") {
+		t.Fatalf("loadProfilesReadOnly(directory) error = %v, want read failure", err)
+	}
+}
+
+func TestCrossPlatformCoverageLoadTokenDataFromKeychainReadOnlySelectorFailures(t *testing.T) {
+	cleanupKeychain(t)
+	profiles := &ProfilesConfig{Profiles: []Profile{{Name: "broken", CorpID: ""}}}
+
+	if _, err := loadTokenDataFromKeychainReadOnly(nil, ""); err == nil || !strings.Contains(err.Error(), "未找到登录凭证") {
+		t.Fatalf("nil profiles error = %v, want missing credential guidance", err)
+	}
+	if _, err := loadTokenDataFromKeychainReadOnly(profiles, "missing"); err == nil || !strings.Contains(err.Error(), `profile "missing" not found`) {
+		t.Fatalf("missing selector error = %v", err)
+	}
+	if _, err := loadTokenDataFromKeychainReadOnly(profiles, "broken"); err == nil || !strings.Contains(err.Error(), "corpId is required") {
+		t.Fatalf("broken selector error = %v, want keychain load error", err)
+	}
+}
+
+func TestCrossPlatformCoverageLoadTokenDataFromKeychainReadOnlyResolutionOrder(t *testing.T) {
+	t.Run("current missing never falls back to primary", func(t *testing.T) {
+		cleanupKeychain(t)
+		profiles := &ProfilesConfig{
+			Version:        profilesVersion,
+			CurrentProfile: "current",
+			PrimaryProfile: "primary",
+			Profiles: []Profile{
+				{Name: "current", CorpID: "corp_current"},
+				{Name: "primary", CorpID: "corp_primary"},
+			},
+		}
+		want := testToken("at_primary", "corp_primary", "Primary")
+		if err := SaveTokenDataKeychainForCorpID(want.CorpID, want); err != nil {
+			t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+		}
+		if got, err := loadTokenDataFromKeychainReadOnly(profiles, ""); err == nil || got != nil || !strings.Contains(err.Error(), "不会迁移旧凭证") {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() = %#v, %v; want current-profile missing error", got, err)
+		}
+	})
+
+	t.Run("duplicate default profile falls back to matching legacy token", func(t *testing.T) {
+		cleanupKeychain(t)
+		profiles := &ProfilesConfig{
+			CurrentProfile: "corp_current",
+			PrimaryProfile: "corp_current",
+			Profiles:       []Profile{{Name: "current", CorpID: "corp_current"}},
+		}
+		want := testToken("at_legacy", "corp_current", "Current")
+		if err := SaveTokenDataKeychain(want); err != nil {
+			t.Fatalf("SaveTokenDataKeychain() error = %v", err)
+		}
+		got, err := loadTokenDataFromKeychainReadOnly(profiles, "")
+		if err != nil {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() error = %v", err)
+		}
+		if got.AccessToken != want.AccessToken {
+			t.Fatalf("token = %#v, want matching legacy token", got)
+		}
+	})
+
+	t.Run("mismatched legacy organization is rejected", func(t *testing.T) {
+		cleanupKeychain(t)
+		profiles := &ProfilesConfig{
+			CurrentProfile: "corp_current",
+			Profiles:       []Profile{{Name: "current", CorpID: "corp_current"}},
+		}
+		if err := SaveTokenDataKeychain(testToken("at_other", "corp_other", "Other")); err != nil {
+			t.Fatalf("SaveTokenDataKeychain() error = %v", err)
+		}
+		if _, err := loadTokenDataFromKeychainReadOnly(profiles, ""); err == nil || !strings.Contains(err.Error(), "不会切换到其他组织") {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() error = %v, want organization mismatch", err)
+		}
+	})
+
+	t.Run("mismatched legacy account is rejected", func(t *testing.T) {
+		cleanupKeychain(t)
+		profiles := &ProfilesConfig{
+			Version:        profilesVersion,
+			CurrentProfile: "corp_current:user_current",
+			Profiles:       []Profile{{Name: "current", CorpID: "corp_current", UserID: "user_current"}},
+		}
+		legacy := testToken("at_other_user", "corp_current", "Current")
+		legacy.UserID = "user_other"
+		if err := SaveTokenDataKeychain(legacy); err != nil {
+			t.Fatalf("SaveTokenDataKeychain() error = %v", err)
+		}
+		if _, err := loadTokenDataFromKeychainReadOnly(profiles, ""); err == nil || !strings.Contains(err.Error(), "不会切换到其他组织或账号") {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() error = %v, want account mismatch", err)
+		}
+	})
+
+	t.Run("v2 empty current is a logged-out tombstone", func(t *testing.T) {
+		cleanupKeychain(t)
+		profiles := &ProfilesConfig{Version: profilesVersion, PrimaryProfile: "primary", Profiles: []Profile{{Name: "primary", CorpID: "corp_primary"}}}
+		if err := SaveTokenDataKeychain(testToken("at_legacy", "corp_primary", "Primary")); err != nil {
+			t.Fatalf("SaveTokenDataKeychain() error = %v", err)
+		}
+		if got, err := loadTokenDataFromKeychainReadOnly(profiles, ""); err == nil || got != nil || !strings.Contains(err.Error(), "不会迁移旧凭证") {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() = %#v, %v; want logged-out tombstone failure", got, err)
+		}
+	})
+
+	t.Run("invalid profile metadata fails closed", func(t *testing.T) {
+		cleanupKeychain(t)
+		profiles := &ProfilesConfig{
+			CurrentProfile: "broken",
+			Profiles:       []Profile{{Name: "broken", CorpID: ""}},
+		}
+		if _, err := loadTokenDataFromKeychainReadOnly(profiles, ""); err == nil || !strings.Contains(err.Error(), "corpId is required") {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() error = %v, want invalid profile failure", err)
+		}
+	})
+
+	t.Run("missing current profile metadata fails closed", func(t *testing.T) {
+		cleanupKeychain(t)
+		profiles := &ProfilesConfig{CurrentProfile: "missing"}
+		if _, err := loadTokenDataFromKeychainReadOnly(profiles, ""); err == nil || !strings.Contains(err.Error(), `profile "missing" not found`) {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() error = %v, want current profile resolution failure", err)
+		}
+	})
+
+	t.Run("legacy keychain failure is preserved", func(t *testing.T) {
+		oldGet := authKeychainGet
+		t.Cleanup(func() { authKeychainGet = oldGet })
+		keychainErr := errors.New("keychain unavailable")
+		authKeychainGet = func(_ string, account string) (string, error) {
+			switch account {
+			case TokenAccountForCorpID("corp_current"):
+				return "", nil
+			case keychain.AccountToken:
+				return "", keychainErr
+			default:
+				t.Fatalf("unexpected keychain account %q", account)
+				return "", nil
+			}
+		}
+		profiles := &ProfilesConfig{CurrentProfile: "current", Profiles: []Profile{{Name: "current", CorpID: "corp_current"}}}
+		if _, err := loadTokenDataFromKeychainReadOnly(profiles, ""); !errors.Is(err, keychainErr) {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() error = %v, want wrapped keychain failure", err)
+		}
+	})
+
+	t.Run("v1 empty current reads legacy token", func(t *testing.T) {
+		oldGet := authKeychainGet
+		t.Cleanup(func() { authKeychainGet = oldGet })
+		authKeychainGet = func(_ string, account string) (string, error) {
+			if account != keychain.AccountToken {
+				t.Fatalf("unexpected keychain account %q", account)
+			}
+			return `{"access_token":"legacy","corp_id":"corp_legacy","user_id":"user_legacy"}`, nil
+		}
+		got, err := loadTokenDataFromKeychainReadOnly(&ProfilesConfig{Version: 1}, "")
+		if err != nil || got == nil || got.AccessToken != "legacy" {
+			t.Fatalf("loadTokenDataFromKeychainReadOnly() = %#v, %v; want legacy token", got, err)
+		}
+	})
+
+	t.Run("missing all token slots remains read only", func(t *testing.T) {
+		cleanupKeychain(t)
+		if _, err := LoadValidAccessTokenReadOnly(t.TempDir(), ""); err == nil || !strings.Contains(err.Error(), "不会迁移旧凭证") {
+			t.Fatalf("LoadValidAccessTokenReadOnly() error = %v, want missing credential guidance", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageLoadTokenDataForProfileIdentityReadOnlyOrganizationMirror(t *testing.T) {
+	profile := Profile{CorpID: "corp_current", UserID: "user_current"}
+	identityAccount := TokenAccountForIdentity(profile.CorpID, profile.UserID)
+	organizationAccount := TokenAccountForCorpID(profile.CorpID)
+	keychainErr := errors.New("organization mirror unavailable")
+	tests := []struct {
+		name       string
+		orgValue   string
+		orgErr     error
+		wantToken  string
+		wantSource error
+	}{
+		{name: "organization read error", orgErr: keychainErr, wantSource: keychainErr},
+		{name: "different account is rejected", orgValue: `{"access_token":"other","corp_id":"corp_current","user_id":"user_other"}`, wantSource: ErrTokenDataNotFound},
+		{name: "matching account is accepted", orgValue: `{"access_token":"current","corp_id":"corp_current","user_id":"user_current"}`, wantToken: "current"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldGet := authKeychainGet
+			t.Cleanup(func() { authKeychainGet = oldGet })
+			authKeychainGet = func(_ string, account string) (string, error) {
+				switch account {
+				case identityAccount:
+					return "", nil
+				case organizationAccount:
+					return tt.orgValue, tt.orgErr
+				default:
+					t.Fatalf("unexpected keychain account %q", account)
+					return "", nil
+				}
+			}
+			got, err := loadTokenDataForProfileIdentityReadOnly(profile)
+			if tt.wantSource != nil {
+				if !errors.Is(err, tt.wantSource) {
+					t.Fatalf("loadTokenDataForProfileIdentityReadOnly() error = %v, want source %v", err, tt.wantSource)
+				}
+				return
+			}
+			if err != nil || got == nil || got.AccessToken != tt.wantToken {
+				t.Fatalf("loadTokenDataForProfileIdentityReadOnly() = %#v, %v; want token %q", got, err, tt.wantToken)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageReadOnlyTokenLoadErrorClassification(t *testing.T) {
+	if err := readOnlyTokenLoadError(ErrTokenDataNotFound); err == nil || !strings.Contains(err.Error(), "不会迁移旧凭证") {
+		t.Fatalf("readOnlyTokenLoadError(not found) = %v", err)
+	}
+	want := errors.New("keychain unavailable")
+	if err := readOnlyTokenLoadError(want); err == nil || !errors.Is(err, want) {
+		t.Fatalf("readOnlyTokenLoadError(unavailable) = %v, want wrapped source", err)
 	}
 }

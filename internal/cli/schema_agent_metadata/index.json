@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:de587cba5051dd4c2715353012d8d9f2a7c5208a0c6dee4ea703cfc97b7351f0",
+  "source_hash": "sha256:60db9f53d0a372309b2583a5999ba2d8ad1cc1c1d8bad089f4fe0da0df854761",
   "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
   "coverage": {
     "surface_products": 22,
@@ -1231,20 +1231,20 @@
       ]
     },
     "pat": {
-      "agent_summary": "管理 Agent 的 PAT 行为授权与本地浏览器策略",
+      "agent_summary": "管理 Agent 的 PAT 行为授权、单 scope 授权撤回与本地浏览器策略",
       "agent_summary_source": "dws-agent-selection/pat",
       "avoid_when": [
-        "普通登录用 auth；不要与开放平台应用权限或具体业务写操作混用"
+        "普通登录用 auth；不要与开放平台应用权限、批量撤回、OAuth logout、永久 DENIED 或具体业务写操作混用"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "管理 Agent 的 PAT 行为授权与本地浏览器策略",
+          "value": "管理 Agent 的 PAT 行为授权、单 scope 授权撤回与本地浏览器策略",
           "source": "internal/cli/schema_hints/selection/pat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "管理 Agent 的 PAT 行为授权与本地浏览器策略",
+              "value": "管理 Agent 的 PAT 行为授权、单 scope 授权撤回与本地浏览器策略",
               "source": "internal/cli/schema_hints/selection/pat.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -1253,7 +1253,7 @@
         },
         "avoid_when": {
           "value": [
-            "普通登录用 auth；不要与开放平台应用权限或具体业务写操作混用"
+            "普通登录用 auth；不要与开放平台应用权限、批量撤回、OAuth logout、永久 DENIED 或具体业务写操作混用"
           ],
           "source": "internal/cli/schema_hints/selection/pat.json",
           "precedence": "reviewed_explicit",
@@ -1261,7 +1261,7 @@
           "candidates": [
             {
               "value": [
-                "普通登录用 auth；不要与开放平台应用权限或具体业务写操作混用"
+                "普通登录用 auth；不要与开放平台应用权限、批量撤回、OAuth logout、永久 DENIED 或具体业务写操作混用"
               ],
               "source": "internal/cli/schema_hints/selection/pat.json",
               "precedence": "reviewed_explicit",
@@ -1271,7 +1271,7 @@
         },
         "use_when": {
           "value": [
-            "缺少行为授权需要预览/授予 scope，或配置授权是否打开浏览器"
+            "缺少行为授权需要预览/授予 scope、撤回一个显式 scope 授权，或配置授权是否打开浏览器"
           ],
           "source": "internal/cli/schema_hints/selection/pat.json",
           "precedence": "reviewed_explicit",
@@ -1279,7 +1279,7 @@
           "candidates": [
             {
               "value": [
-                "缺少行为授权需要预览/授予 scope，或配置授权是否打开浏览器"
+                "缺少行为授权需要预览/授予 scope、撤回一个显式 scope 授权，或配置授权是否打开浏览器"
               ],
               "source": "internal/cli/schema_hints/selection/pat.json",
               "precedence": "reviewed_explicit",
@@ -1296,7 +1296,7 @@
         "skills/mono/SKILL.md"
       ],
       "use_when": [
-        "缺少行为授权需要预览/授予 scope，或配置授权是否打开浏览器"
+        "缺少行为授权需要预览/授予 scope、撤回一个显式 scope 授权，或配置授权是否打开浏览器"
       ]
     },
     "report": {
