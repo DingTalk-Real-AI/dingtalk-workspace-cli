@@ -453,9 +453,14 @@ func TestCrossPlatformCoverageChmodCommandRemainingBranches(t *testing.T) {
 	if err := run(dryMismatch, "--recommend", "--agentCode", "expected"); err == nil {
 		t.Fatal("dry-run plan agent mismatch accepted")
 	}
-	dryPreview := &patEdgeCaller{dryRun: true}
+	dryPreview := &patEdgeCaller{dryRun: true, results: []*edition.ToolResult{patText(
+		`{"success":true,"code":"OK","data":{"operation":"grant","allScopes":false,"selectedScopes":["scope"]}}`,
+	)}}
 	if err := run(dryPreview, "scope", "--grant-type", "session", "--session-id", "sid"); err != nil {
 		t.Fatalf("dry-run session preview: %v", err)
+	}
+	if dryPreview.calls != 1 {
+		t.Fatalf("dry-run session preview calls = %d, want one server plan", dryPreview.calls)
 	}
 	if err := run(nil, "scope"); err == nil {
 		t.Fatal("nil chmod runtime accepted")

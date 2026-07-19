@@ -1239,7 +1239,7 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 
 	runner := &runtimeRunner{
 		fallback:    mock,
-		globalFlags: &GlobalFlags{Format: "json"},
+		globalFlags: &GlobalFlags{Format: "json", Yes: true},
 	}
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Df72437f040f04a8295988ff71e690b35%26userCode%3D98JV-JSBL#/personalAuthorization?flowId=f72437f040f04a8295988ff71e690b35&userCode=98JV-JSBL"
 	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-json","uri":"` + rawURI + `","clientId":"test-client-id"}}`
@@ -1317,7 +1317,7 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 
 	runner := &runtimeRunner{
 		fallback:    mock,
-		globalFlags: &GlobalFlags{Format: "table"},
+		globalFlags: &GlobalFlags{Format: "table", Yes: true},
 	}
 	authURL := patTestAuthorizationURL(server)
 	raw := makePATErrorJSONWithAuthorizationURL("flow-approved", "test-client-id", authURL)

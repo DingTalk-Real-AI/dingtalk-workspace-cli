@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync/atomic"
@@ -53,6 +54,77 @@ func TestRuntimeRunnerGlobalDryRunStopsBeforeInjectedFallback(t *testing.T) {
 	}
 	if got := fallback.calls.Load(); got != 0 {
 		t.Fatalf("fallback calls = %d, want 0", got)
+	}
+}
+
+func TestCrossPlatformCoverageInvocationReadOnlyDryRunCapabilityIsNotSerialized(t *testing.T) {
+	invocation := executor.NewHelperInvocation("overlay.pat.pat.batch_plan", "pat", "pat.batch_plan", map[string]any{"dryRun": true})
+	invocation.DryRun = true
+	invocation.AllowReadOnlyDuringDryRun = true
+
+	encoded, err := json.Marshal(invocation)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if strings.Contains(string(encoded), "AllowReadOnlyDuringDryRun") || strings.Contains(string(encoded), "allow_read_only") {
+		t.Fatalf("read-only dry-run capability leaked into JSON: %s", encoded)
+	}
+	if invocation.SkipExecutionDuringDryRun() {
+		t.Fatal("allowed read-only invocation should not be skipped")
+	}
+
+	invocation.AllowReadOnlyDuringDryRun = false
+	if !invocation.SkipExecutionDuringDryRun() {
+		t.Fatal("ordinary dry-run invocation should be skipped")
+	}
+	result, err := (executor.EchoRunner{}).Run(context.Background(), invocation)
+	if err != nil {
+		t.Fatalf("EchoRunner.Run() error = %v", err)
+	}
+	if result.Response["dry_run"] != true {
+		t.Fatalf("EchoRunner dry_run = %#v, want true", result.Response["dry_run"])
+	}
+}
+
+func TestCrossPlatformCoverageRuntimeRunnerRejectsForgedReadOnlyDryRunMarker(t *testing.T) {
+	tests := []struct {
+		name    string
+		product string
+		tool    string
+		params  map[string]any
+	}{
+		{name: "other product", product: "calendar", tool: "pat.batch_plan", params: map[string]any{"dryRun": true}},
+		{name: "other PAT tool", product: "pat", tool: "pat.batch_grant", params: map[string]any{"dryRun": true}},
+		{name: "missing request dryRun", product: "pat", tool: "pat.batch_plan", params: map[string]any{}},
+		{name: "false request dryRun", product: "pat", tool: "pat.scope_revoke", params: map[string]any{"dryRun": false}},
+		{name: "string request dryRun", product: "pat", tool: "pat.scope_revoke", params: map[string]any{"dryRun": "true"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fallback := &countingErrorRunner{}
+			runner := &runtimeRunner{globalFlags: &GlobalFlags{DryRun: true}, fallback: fallback}
+			invocation := executor.NewHelperInvocation("forged", tt.product, tt.tool, tt.params)
+			invocation.DryRun = true
+			invocation.AllowReadOnlyDuringDryRun = true
+			if isReadOnlyDryRunInvocation(invocation) {
+				t.Fatal("forged tuple passed the final read-only predicate")
+			}
+
+			result, err := runner.Run(context.Background(), invocation)
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.Response["dry_run"] != true || !result.Invocation.DryRun {
+				t.Fatalf("forged marker did not fall back to Echo: %#v", result)
+			}
+			if result.Invocation.AllowReadOnlyDuringDryRun {
+				t.Fatal("forged marker survived the runtime boundary")
+			}
+			if got := fallback.calls.Load(); got != 0 {
+				t.Fatalf("fallback calls = %d, want 0", got)
+			}
+		})
 	}
 }
 
