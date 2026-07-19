@@ -1,23 +1,37 @@
 #!/bin/sh
 set -eu
 
-# Validate the narrow PR fast path. The diff must be exactly one in-place
-# CHANGELOG.md modification, and every touched release section must still
-# satisfy the release contract.
+# Validate CHANGELOG.md changes against the release contract.
+#
+# --fast-path additionally requires the complete PR diff to be exactly one
+# in-place CHANGELOG.md modification. --content-only validates CHANGELOG.md
+# while allowing other files to change in the same PR.
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 
 usage() {
-	printf '%s\n' "usage: $0 BASE HEAD" >&2
+	printf '%s\n' "usage: $0 (--fast-path|--content-only) BASE HEAD" >&2
 }
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 3 ]; then
 	usage
 	exit 2
 fi
 
-BASE_REF="$1"
-HEAD_REF="$2"
+case "$1" in
+--fast-path)
+	VALIDATION_MODE="fast-path"
+	;;
+--content-only)
+	VALIDATION_MODE="content-only"
+	;;
+*)
+	usage
+	exit 2
+	;;
+esac
+BASE_REF="$2"
+HEAD_REF="$3"
 
 cd "$ROOT"
 
@@ -44,18 +58,69 @@ if [ "$merge_base_count" -ne 1 ]; then
 fi
 IFS= read -r MERGE_BASE <"$TMP_ROOT/merge-bases"
 
+require_regular_changelog() {
+	_rrc_label="$1"
+	_rrc_commit="$2"
+	if ! git ls-tree "$_rrc_commit" -- CHANGELOG.md |
+		awk '
+			NR == 1 &&
+				$1 == "100644" &&
+				$2 == "blob" &&
+				$4 == "CHANGELOG.md" {
+				valid = 1
+			}
+			END {
+				exit !(NR == 1 && valid)
+			}
+		'; then
+		printf 'error: CHANGELOG.md must be a regular 100644 blob at %s\n' \
+			"$_rrc_label" >&2
+		exit 1
+	fi
+}
+
+# The merge base is the effective base of the PR diff. Also validate the
+# caller-provided base commit so a stale or malformed target ref fails closed.
+require_regular_changelog "base" "$BASE_COMMIT"
+if [ "$MERGE_BASE" != "$BASE_COMMIT" ]; then
+	require_regular_changelog "merge base" "$MERGE_BASE"
+fi
+require_regular_changelog "head" "$HEAD_COMMIT"
+
 git diff --no-ext-diff --find-renames --name-status \
 	"$MERGE_BASE" "$HEAD_COMMIT" >"$TMP_ROOT/name-status"
-printf 'M\tCHANGELOG.md\n' >"$TMP_ROOT/expected-name-status"
-if ! cmp -s "$TMP_ROOT/expected-name-status" "$TMP_ROOT/name-status"; then
-	printf '%s\n' 'error: fast path requires exactly one in-place modification: CHANGELOG.md' >&2
-	if [ -s "$TMP_ROOT/name-status" ]; then
-		sed 's/^/  /' "$TMP_ROOT/name-status" >&2
-	else
-		printf '%s\n' '  (no changed files)' >&2
+case "$VALIDATION_MODE" in
+fast-path)
+	printf 'M\tCHANGELOG.md\n' >"$TMP_ROOT/expected-name-status"
+	if ! cmp -s "$TMP_ROOT/expected-name-status" "$TMP_ROOT/name-status"; then
+		printf '%s\n' 'error: fast path requires exactly one in-place modification: CHANGELOG.md' >&2
+		if [ -s "$TMP_ROOT/name-status" ]; then
+			sed 's/^/  /' "$TMP_ROOT/name-status" >&2
+		else
+			printf '%s\n' '  (no changed files)' >&2
+		fi
+		exit 1
 	fi
-	exit 1
-fi
+	;;
+content-only)
+	if ! awk -F '	' '
+		$1 == "M" && $2 == "CHANGELOG.md" && NF == 2 {
+			count++
+		}
+		END {
+			exit count != 1
+		}
+	' "$TMP_ROOT/name-status"; then
+		printf '%s\n' 'error: content-only validation requires an in-place modification: CHANGELOG.md' >&2
+		if [ -s "$TMP_ROOT/name-status" ]; then
+			sed 's/^/  /' "$TMP_ROOT/name-status" >&2
+		else
+			printf '%s\n' '  (no changed files)' >&2
+		fi
+		exit 1
+	fi
+	;;
+esac
 
 if ! git diff --no-ext-diff --check "$MERGE_BASE" "$HEAD_COMMIT" -- CHANGELOG.md; then
 	printf '%s\n' 'error: CHANGELOG diff contains whitespace errors' >&2
@@ -200,7 +265,7 @@ validate_release_notes() {
 extract_unmanaged_content "$TMP_ROOT/base-changelog" >"$TMP_ROOT/base-unmanaged"
 extract_unmanaged_content "$TMP_ROOT/head-changelog" >"$TMP_ROOT/head-unmanaged"
 if ! cmp -s "$TMP_ROOT/base-unmanaged" "$TMP_ROOT/head-unmanaged"; then
-	printf '%s\n' 'error: fast path only permits notes inside Unreleased or versioned release sections' >&2
+	printf '%s\n' 'error: CHANGELOG validation only permits notes inside Unreleased or versioned release sections' >&2
 	exit 1
 fi
 
@@ -270,5 +335,5 @@ if [ "$changed_release_count" -eq 0 ] && [ "$unreleased_changed" -eq 0 ]; then
 	exit 1
 fi
 
-printf 'CHANGELOG PR check: ok (release_sections=%s unreleased_changed=%s)\n' \
-	"$changed_release_count" "$unreleased_changed"
+printf 'CHANGELOG PR check: ok (mode=%s release_sections=%s unreleased_changed=%s)\n' \
+	"$VALIDATION_MODE" "$changed_release_count" "$unreleased_changed"

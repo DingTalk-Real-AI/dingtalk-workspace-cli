@@ -11,7 +11,7 @@ other pull request, mark the targeted check `N/A` and complete the applicable
 full-suite checks.
 
 - [ ] Exact `CHANGELOG.md`-only check (otherwise `N/A`):
-  `./scripts/policy/check-changelog-pr.sh "$(git merge-base HEAD origin/main)" HEAD`
+  `./scripts/policy/check-changelog-pr.sh --fast-path "$(git merge-base HEAD origin/main)" HEAD`
 - [ ] `make build`
 - [ ] `make lint`
 - [ ] `make test`

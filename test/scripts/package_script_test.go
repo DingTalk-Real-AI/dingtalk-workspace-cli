@@ -33,6 +33,18 @@ var expectedPackagedSkillTargets = []string{
 	".hermes/skills/dws",
 }
 
+var expectedReleaseAdmissionContexts = []string{
+	"Lint",
+	"Test",
+	"Coverage",
+	"Policy",
+	"Edition",
+	"Interface Integrity",
+	"AI Behavior",
+	"CLI Smoke",
+	"Mock MCP",
+}
+
 func seedDistArchive(t *testing.T, path string) {
 	t.Helper()
 	file, err := os.Create(path)
@@ -630,11 +642,15 @@ func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 
 	const (
 		checksCall    = "github.rest.checks.listForRef"
+		paginatedCall = "github.paginate(github.rest.checks.listForRef"
 		immutableCall = `"GET /repos/{owner}/{repo}/immutable-releases"`
 		governanceID  = `github-token: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}`
 	)
 	if got := strings.Count(workflow, checksCall); got != 2 {
 		t.Fatalf("release workflow Checks API call count = %d, want one tag check and one preflight check", got)
+	}
+	if got := strings.Count(workflow, paginatedCall); got != 2 {
+		t.Fatalf("release workflow paginated Checks API call count = %d, want one tag check and one preflight check", got)
 	}
 	if got := strings.Count(workflow, immutableCall); got != 2 {
 		t.Fatalf("release workflow immutable governance call count = %d, want one tag check and one preflight check", got)
@@ -651,6 +667,12 @@ func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 		for _, required := range []string{
 			"checks: read",
 			checksCall,
+			paginatedCall,
+			"run.head_sha !== sha",
+			"const missing = requiredContexts.filter",
+			"const nonSuccess = requiredContexts.flatMap",
+			"missing:",
+			"non-success:",
 			immutableCall,
 			governanceID,
 			"RELEASE_GOVERNANCE_TOKEN with repository Administration read permission is required",
@@ -659,12 +681,65 @@ func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 				t.Errorf("%s governance path is missing %q", name, required)
 			}
 		}
+		for _, context := range expectedReleaseAdmissionContexts {
+			if !strings.Contains(section, fmt.Sprintf("%q", context)) {
+				t.Errorf("%s governance path is missing exact Code Admission context %q", name, context)
+			}
+		}
+		if strings.Contains(section, "check_name:") {
+			t.Errorf("%s governance path must fetch all check runs in one exact-SHA query", name)
+		}
 		if strings.Contains(section, "contents: write") {
 			t.Errorf("%s governance path must not grant contents write permission", name)
 		}
 		if strings.Contains(section, `github-token: ${{ secrets.GITHUB_TOKEN }}`) {
 			t.Errorf("%s immutable governance path must not fall back to GITHUB_TOKEN", name)
 		}
+	}
+	if strings.Contains(workflow, "CI"+" Gate") {
+		t.Error("release workflow must not retain the retired aggregate gate name")
+	}
+}
+
+func TestReleaseScriptRequiresExactCodeAdmissionContexts(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(release.sh) error = %v", err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	script := string(data)
+
+	const checksQuery = `commits/$sealed_commit/check-runs?filter=latest&per_page=100`
+	if got := strings.Count(script, checksQuery); got != 1 {
+		t.Fatalf("release script exact-SHA Checks API query count = %d, want 1", got)
+	}
+	for _, required := range []string{
+		`group_by(.name) | map(max_by(.id))`,
+		`missing_contexts=""`,
+		`non_success_contexts=""`,
+		`"$context_state" != "success"`,
+		"Code Admission contexts are not all successful for sealed commit",
+		"missing: %s; non-success: %s",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("release script Code Admission gate is missing %q", required)
+		}
+	}
+	for _, context := range expectedReleaseAdmissionContexts {
+		if !strings.Contains(script, "\n"+context+"\n") {
+			t.Errorf("release script is missing exact Code Admission context %q", context)
+		}
+	}
+	if strings.Contains(script, "check_name=") {
+		t.Error("release script must fetch all check runs in one exact-SHA query")
+	}
+	if strings.Contains(script, "CI"+" Gate") {
+		t.Error("release script must not retain the retired aggregate gate name")
 	}
 }
 
@@ -703,10 +778,10 @@ func TestReleaseWorkflowGovernancePreflightCannotPublish(t *testing.T) {
 			t.Errorf("governance preflight must not contain publishing behavior %q", forbidden)
 		}
 	}
-	ciGate := strings.Index(preflight, "Require successful CI Gate on the preflight commit")
+	admission := strings.Index(preflight, "Require successful Code Admission contexts on the preflight commit")
 	homebrewCanary := strings.Index(preflight, "Verify Homebrew PR automation permission")
-	if ciGate == -1 || homebrewCanary == -1 || ciGate > homebrewCanary {
-		t.Error("governance preflight must validate the exact CI Gate before exposing Homebrew credentials")
+	if admission == -1 || homebrewCanary == -1 || admission > homebrewCanary {
+		t.Error("governance preflight must validate all exact Code Admission contexts before exposing Homebrew credentials")
 	}
 
 	mirror := releaseWorkflowSection(t, workflow, "  mirror-gitee-release:\n", "\n  repair-npm:\n")
@@ -839,7 +914,8 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		"dws-release-recovery run=%s tag-object=%s commit=%s",
 		"Public release is not bound to this exact recovery run.",
 		"Public recovery asset differs from this run's sealed artifact",
-		`ref: process.env.RELEASE_COMMIT`,
+		`const sha = process.env.RELEASE_COMMIT`,
+		`ref: sha`,
 		`path: tmp/trusted-release-tooling`,
 		`ref: ${{ github.sha }}`,
 		`step.name === "Require immutable published GitHub Release"`,
@@ -1335,10 +1411,10 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 		t.Errorf("Homebrew PR permission preflight count = %d, want one default-branch preflight and one tag contract", got)
 	}
 	tagContract := releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n")
-	tagCI := strings.Index(tagContract, "Require successful CI Gate on the sealed commit")
+	tagAdmission := strings.Index(tagContract, "Require successful Code Admission contexts on the sealed commit")
 	tagHomebrew := strings.Index(tagContract, "Verify Homebrew PR automation permission")
-	if tagCI == -1 || tagHomebrew == -1 || tagCI > tagHomebrew {
-		t.Error("tag contract must validate the sealed CI Gate before exposing Homebrew credentials")
+	if tagAdmission == -1 || tagHomebrew == -1 || tagAdmission > tagHomebrew {
+		t.Error("tag contract must validate all exact Code Admission contexts before exposing Homebrew credentials")
 	}
 
 	start := strings.Index(workflow, "- name: Open stable Homebrew formula PR")

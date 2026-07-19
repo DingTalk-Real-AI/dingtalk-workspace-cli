@@ -25,6 +25,23 @@ const changelogGateBase = `# Changelog
 - Initial release.
 `
 
+const changelogGateValidRelease = `# Changelog
+
+## [Unreleased]
+
+## [1.0.1-beta.1] - 2026-07-17
+
+### Changed
+
+- Valid release note.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`
+
 func newChangelogGateRepo(t *testing.T) *changelogGateRepo {
 	t.Helper()
 
@@ -110,7 +127,17 @@ func (r *changelogGateRepo) commit(t *testing.T, message string) {
 
 func (r *changelogGateRepo) run(t *testing.T) (string, error) {
 	t.Helper()
-	cmd := exec.Command("sh", r.gate, r.base, "HEAD")
+	return r.runMode(t, "--fast-path")
+}
+
+func (r *changelogGateRepo) runMode(t *testing.T, mode string) (string, error) {
+	t.Helper()
+	return r.runRefs(t, mode, r.base, "HEAD")
+}
+
+func (r *changelogGateRepo) runRefs(t *testing.T, mode, base, head string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("sh", r.gate, mode, base, head)
 	cmd.Dir = r.root
 	output, err := cmd.CombinedOutput()
 	return string(output), err
@@ -176,6 +203,158 @@ func TestChangelogPRGateAcceptsTargetedChanges(t *testing.T) {
 	}
 }
 
+func TestChangelogPRContentOnlyAllowsOtherFiles(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
+	changelogGateWrite(t, repo.root, "internal/change.go", "package internal\n", 0o644)
+	repo.commit(t, "change code with release notes")
+
+	output, err := repo.runMode(t, "--content-only")
+	if err != nil {
+		t.Fatalf("content-only gate error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "CHANGELOG PR check: ok (mode=content-only") {
+		t.Fatalf("content-only gate output missing success marker:\n%s", output)
+	}
+}
+
+func TestChangelogPRContentOnlyStillValidatesContentWithOtherFiles(t *testing.T) {
+	tests := []struct {
+		name       string
+		changelog  string
+		wantOutput string
+	}{
+		{
+			name: "invalid calendar date",
+			changelog: strings.Replace(
+				changelogGateValidRelease,
+				"2026-07-17",
+				"2026-02-30",
+				1,
+			),
+			wantOutput: "invalid calendar date",
+		},
+		{
+			name: "placeholder",
+			changelog: strings.Replace(
+				changelogGateValidRelease,
+				"- Valid release note.",
+				"- TODO: write release notes.",
+				1,
+			),
+			wantOutput: "must not contain TODO/TBD",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newChangelogGateRepo(t)
+			changelogGateWrite(t, repo.root, "CHANGELOG.md", test.changelog, 0o644)
+			changelogGateWrite(t, repo.root, "internal/change.go", "package internal\n", 0o644)
+			repo.commit(t, test.name)
+
+			output, err := repo.runMode(t, "--content-only")
+			if err == nil {
+				t.Fatalf("unsafe content-only change unexpectedly passed:\n%s", output)
+			}
+			if !strings.Contains(output, test.wantOutput) {
+				t.Fatalf("content-only gate output missing %q:\n%s", test.wantOutput, output)
+			}
+		})
+	}
+}
+
+func TestChangelogPRGateValidatesSyntheticMergeTree(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	commonChangelog := `# Changelog
+
+## [Unreleased]
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+
+## [0.9.0] - 2026-06-01
+
+### Added
+
+- Earlier release.
+`
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", commonChangelog, 0o644)
+	repo.commit(t, "expand changelog history")
+	common := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	repo.base = common
+
+	changelogGateGit(t, repo.root, "switch", "-c", "feature")
+	featureChangelog := strings.Replace(
+		commonChangelog,
+		"## [1.0.0] - 2026-07-01",
+		`## [1.0.1-beta.1] - 2026-07-17
+
+### Changed
+
+- Feature branch release note.
+
+## [1.0.0] - 2026-07-01`,
+		1,
+	)
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", featureChangelog, 0o644)
+	repo.commit(t, "add feature release note")
+	featureHead := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	if output, err := repo.runRefs(t, "--fast-path", common, featureHead); err != nil {
+		t.Fatalf("feature head should be valid before merging: %v\n%s", err, output)
+	}
+
+	changelogGateGit(t, repo.root, "switch", "main")
+	mainChangelog := strings.Replace(
+		commonChangelog,
+		"## [0.9.0] - 2026-06-01",
+		`## [1.0.1-beta.1] - 2026-07-17
+
+### Changed
+
+- Main branch release note.
+
+## [0.9.0] - 2026-06-01`,
+		1,
+	)
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", mainChangelog, 0o644)
+	repo.commit(t, "add main release note")
+	mergeBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	changelogGateGit(t, repo.root, "merge", "--no-ff", "feature", "-m", "merge feature")
+	mergeHead := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+
+	output, err := repo.runRefs(t, "--fast-path", mergeBase, mergeHead)
+	if err == nil {
+		t.Fatalf("synthetic merge with duplicate release heading unexpectedly passed:\n%s", output)
+	}
+	if !strings.Contains(output, "exactly one well-formed section") {
+		t.Fatalf("synthetic merge rejection missing duplicate-section evidence:\n%s", output)
+	}
+}
+
+func TestChangelogPRGateRejectsExecutableModeInBothModes(t *testing.T) {
+	for _, mode := range []string{"--fast-path", "--content-only"} {
+		t.Run(strings.TrimPrefix(mode, "--"), func(t *testing.T) {
+			repo := newChangelogGateRepo(t)
+			changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
+			changelogGateGit(t, repo.root, "add", "CHANGELOG.md")
+			changelogGateGit(t, repo.root, "update-index", "--chmod=+x", "CHANGELOG.md")
+			changelogGateGit(t, repo.root, "commit", "-m", "make changelog executable")
+
+			output, err := repo.runMode(t, mode)
+			if err == nil {
+				t.Fatalf("executable CHANGELOG unexpectedly passed:\n%s", output)
+			}
+			if !strings.Contains(output, "regular 100644 blob at head") {
+				t.Fatalf("gate output missing regular-file rejection:\n%s", output)
+			}
+		})
+	}
+}
+
 func TestReleaseChangelogExtractionAllowsLowercaseTodoProductName(t *testing.T) {
 	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -210,42 +389,96 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Abs(repo root) error = %v", err)
 	}
-	workflows := map[string][]string{
-		".github/workflows/ci.yml": {
-			"name: Classify PR changes",
-			"name: Changelog Check",
-			`run: ./scripts/policy/check-changelog-pr.sh "$PR_BASE_SHA" "$PR_HEAD_SHA"`,
-			"expected_heavy_result=skipped",
-			"name: CI Gate",
-		},
-		".github/workflows/multi-profile-e2e.yml": {
-			"branches:",
-			"- main",
-			"Record changelog-only fast path",
-			"Full E2E: runs after merge",
-		},
+
+	readWorkflow := func(path string) string {
+		t.Helper()
+		data, readErr := os.ReadFile(filepath.Join(root, path))
+		if readErr != nil {
+			t.Fatalf("ReadFile(%s) error = %v", path, readErr)
+		}
+		return string(data)
 	}
-	classifierContract := []string{
+
+	admission := readWorkflow(".github/workflows/ci.yml")
+	for _, want := range []string{
+		"name: Code Admission — PR 合入门禁",
 		"files.length === 1",
 		"files[0].filename === 'CHANGELOG.md'",
 		"files[0].status === 'modified'",
 		"!files[0].previous_filename",
+		"pre-classification",
+		"post-classification",
+		"before.changed_files !== files.length",
+		"after.changed_files !== files.length",
+		`test "$(git rev-parse HEAD^1)" = "$PR_BASE_SHA"`,
+		`test "$(git rev-parse HEAD^2)" = "$PR_HEAD_SHA"`,
+		"Files API and synthetic merge tree disagree on CHANGELOG scope",
+		"mode=--content-only",
+		"mode=--fast-path",
+		`"$mode" "$PR_BASE_SHA" HEAD`,
+		"needs.lint.outputs.platform_sensitive == 'true'",
+	} {
+		if !strings.Contains(admission, want) {
+			t.Errorf("Code Admission workflow missing contract %q", want)
+		}
+	}
+	for _, context := range []string{
+		"Lint",
+		"Test",
+		"Coverage",
+		"Policy",
+		"Edition",
+		"Interface Integrity",
+		"CLI Smoke",
+		"Mock MCP",
+	} {
+		if !strings.Contains(admission, "\n    name: "+context+"\n") {
+			t.Errorf("Code Admission workflow missing exact context %q", context)
+		}
+	}
+	for _, forbidden := range []string{
+		"name: CI Gate",
+		"name: Changelog Check",
+		"name: Policy Check",
+		"name: Edition Contract Tests",
+		"name: Mock MCP Smoke",
+	} {
+		if strings.Contains(admission, forbidden) {
+			t.Errorf("Code Admission workflow retains legacy context %q", forbidden)
+		}
+	}
+	if strings.Contains(admission, "paths-ignore:") {
+		t.Error("Code Admission must not suppress required contexts with paths-ignore")
 	}
 
-	for path, required := range workflows {
-		data, err := os.ReadFile(filepath.Join(root, path))
-		if err != nil {
-			t.Fatalf("ReadFile(%s) error = %v", path, err)
+	aiBehavior := readWorkflow(".github/workflows/ai-behavior-check.yml")
+	for _, want := range []string{
+		"name: Code Admission — AI Behavior",
+		"\n    name: AI Behavior\n",
+		"context: 'AI Behavior'",
+		"pull_request_target:",
+		"pull.head.sha !== expectedHead",
+		"pull.base.sha !== expectedBase",
+	} {
+		if !strings.Contains(aiBehavior, want) {
+			t.Errorf("AI Behavior workflow missing contract %q", want)
 		}
-		workflow := string(data)
-		for _, want := range append(classifierContract, required...) {
-			if !strings.Contains(workflow, want) {
-				t.Errorf("%s missing fast-path contract %q", path, want)
-			}
+	}
+
+	integration := readWorkflow(".github/workflows/multi-profile-e2e.yml")
+	for _, want := range []string{
+		"name: Main Integration — 主干集成",
+		"\n    name: Multi-profile E2E\n",
+		"branches:",
+		"- main",
+		"workflow_dispatch:",
+	} {
+		if !strings.Contains(integration, want) {
+			t.Errorf("main integration workflow missing contract %q", want)
 		}
-		if strings.Contains(workflow, "paths-ignore:") {
-			t.Errorf("%s must not skip the required workflow with paths-ignore", path)
-		}
+	}
+	if strings.Contains(integration, "pull_request:") {
+		t.Error("complete Multi-profile E2E must not run as a pull-request admission context")
 	}
 }
 
@@ -351,7 +584,7 @@ func TestChangelogPRGateRejectsUnsafeChanges(t *testing.T) {
 					t.Fatalf("Rename CHANGELOG.md error = %v", err)
 				}
 			},
-			wantOutput: "exactly one in-place modification",
+			wantOutput: "regular 100644 blob at head",
 		},
 	}
 

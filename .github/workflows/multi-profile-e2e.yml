@@ -1,7 +1,6 @@
-name: Multi Profile E2E
+name: Main Integration — 主干集成
 
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -9,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: multi-profile-e2e-${{ github.ref }}
@@ -17,70 +15,36 @@ concurrency:
 
 jobs:
   multi-profile-e2e:
-    name: Multi Profile E2E
+    name: Multi-profile E2E
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       MULTI_PROFILE_E2E_LOG: .tmp-bin/multi-profile-e2e.log
 
     steps:
-      - name: Classify pull request changes
-        id: changes
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              per_page: 100,
-            });
-            const changelogOnly =
-              files.length === 1 &&
-              files[0].filename === 'CHANGELOG.md' &&
-              files[0].status === 'modified' &&
-              !files[0].previous_filename;
-
-            core.setOutput('changelog_only', String(changelogOnly));
-
-      - name: Record changelog-only fast path
-        if: github.event_name == 'pull_request' && steps.changes.outputs.changelog_only == 'true'
-        shell: bash
-        run: |
-          {
-            echo "### Multi Profile E2E"
-            echo "- Scope: exact in-place modification of \`CHANGELOG.md\`"
-            echo "- Result: skipped by the changelog-only pull request fast path"
-            echo "- Full E2E: runs after merge on the \`main\` push"
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Check out repository
-        if: steps.changes.outputs.changelog_only != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Go
-        if: steps.changes.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Run isolated multi-profile chain
-        if: steps.changes.outputs.changelog_only != 'true'
         shell: bash
         run: |
           set -o pipefail
           mkdir -p .tmp-bin
           bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir | tee "$MULTI_PROFILE_E2E_LOG"
           {
-            echo "### Multi Profile E2E"
+            echo "### Multi-profile E2E"
             echo "- Command: \`bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir\`"
             echo "- Scope: isolated auth/profile storage, profile switch/use, one-shot profile override, CSV multi-profile aggregation, legacy migration"
             echo "- Result: passed"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload debug artifacts
-        if: failure() && steps.changes.outputs.changelog_only != 'true'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: multi-profile-e2e-debug

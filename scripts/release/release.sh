@@ -134,16 +134,44 @@ require_github_publication_authority() {
   }
 
   sealed_commit="$(git rev-parse HEAD)"
-  passed_gate="$(
+  admission_check_runs="$(
     gh api -H 'Accept: application/vnd.github+json' \
-      "repos/$github_repository/commits/$sealed_commit/check-runs?check_name=CI%20Gate&filter=latest&per_page=100" \
-      --jq '[.check_runs[] | select(.name == "CI Gate" and .conclusion == "success")] | length'
+      "repos/$github_repository/commits/$sealed_commit/check-runs?filter=latest&per_page=100" \
+      --jq '.check_runs | group_by(.name) | map(max_by(.id)) | .[] | [.name, (.conclusion // .status // "unknown")] | @tsv'
   )" || {
-    printf 'could not query CI Gate for %s\n' "$sealed_commit" >&2
+    printf 'could not query Code Admission contexts for %s\n' "$sealed_commit" >&2
     return 1
   }
-  [ "$passed_gate" -gt 0 ] || {
-    printf 'CI Gate has not succeeded for sealed commit %s in %s\n' "$sealed_commit" "$github_repository" >&2
+
+  missing_contexts=""
+  non_success_contexts=""
+  while IFS= read -r required_context; do
+    context_state="$(
+      printf '%s\n' "$admission_check_runs" |
+        awk -F '\t' -v required="$required_context" '$1 == required { state = $2 } END { print state }'
+    )"
+    if [ -z "$context_state" ]; then
+      missing_contexts="${missing_contexts}${missing_contexts:+, }$required_context"
+    elif [ "$context_state" != "success" ]; then
+      non_success_contexts="${non_success_contexts}${non_success_contexts:+, }$required_context=$context_state"
+    fi
+  done <<'ADMISSION_CONTEXTS'
+Lint
+Test
+Coverage
+Policy
+Edition
+Interface Integrity
+AI Behavior
+CLI Smoke
+Mock MCP
+ADMISSION_CONTEXTS
+  [ -z "$missing_contexts" ] && [ -z "$non_success_contexts" ] || {
+    printf 'Code Admission contexts are not all successful for sealed commit %s in %s; missing: %s; non-success: %s\n' \
+      "$sealed_commit" \
+      "$github_repository" \
+      "${missing_contexts:-none}" \
+      "${non_success_contexts:-none}" >&2
     return 1
   }
 

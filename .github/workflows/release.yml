@@ -235,26 +235,56 @@ jobs:
             exit 1
           }
 
-      - name: Require successful CI Gate on the preflight commit
+      - name: Require successful Code Admission contexts on the preflight commit
         uses: actions/github-script@v7
         env:
           PREFLIGHT_COMMIT: ${{ inputs.governance_preflight_commit }}
         with:
           script: |
             const { owner, repo } = context.repo;
-            const { data } = await github.rest.checks.listForRef({
+            const sha = process.env.PREFLIGHT_COMMIT;
+            const requiredContexts = [
+              "Lint",
+              "Test",
+              "Coverage",
+              "Policy",
+              "Edition",
+              "Interface Integrity",
+              "AI Behavior",
+              "CLI Smoke",
+              "Mock MCP",
+            ];
+            const runs = await github.paginate(github.rest.checks.listForRef, {
               owner,
               repo,
-              ref: process.env.PREFLIGHT_COMMIT,
-              check_name: "CI Gate",
+              ref: sha,
               filter: "latest",
               per_page: 100,
             });
-            const passed = data.check_runs.some(
-              (run) => run.name === "CI Gate" && run.conclusion === "success",
-            );
-            if (!passed) {
-              core.setFailed(`CI Gate has not succeeded for ${process.env.PREFLIGHT_COMMIT}`);
+            const latestByName = new Map();
+            for (const run of runs) {
+              if (run.head_sha !== sha || !requiredContexts.includes(run.name)) {
+                continue;
+              }
+              const current = latestByName.get(run.name);
+              if (!current || run.id > current.id) {
+                latestByName.set(run.name, run);
+              }
+            }
+            const missing = requiredContexts.filter((name) => !latestByName.has(name));
+            const nonSuccess = requiredContexts.flatMap((name) => {
+              const run = latestByName.get(name);
+              if (!run || run.conclusion === "success") {
+                return [];
+              }
+              return [`${name}=${run.conclusion || run.status || "unknown"}`];
+            });
+            if (missing.length > 0 || nonSuccess.length > 0) {
+              core.setFailed(
+                `Code Admission contexts are not all successful for ${sha}; ` +
+                `missing: ${missing.length > 0 ? missing.join(", ") : "none"}; ` +
+                `non-success: ${nonSuccess.length > 0 ? nonSuccess.join(", ") : "none"}`,
+              );
             }
 
       - name: Check out trusted preflight tooling
@@ -502,26 +532,56 @@ jobs:
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
-      - name: Require successful CI Gate on the sealed commit
+      - name: Require successful Code Admission contexts on the sealed commit
         uses: actions/github-script@v7
         env:
           RELEASE_COMMIT: ${{ steps.target.outputs.release_commit }}
         with:
           script: |
             const { owner, repo } = context.repo;
-            const { data } = await github.rest.checks.listForRef({
+            const sha = process.env.RELEASE_COMMIT;
+            const requiredContexts = [
+              "Lint",
+              "Test",
+              "Coverage",
+              "Policy",
+              "Edition",
+              "Interface Integrity",
+              "AI Behavior",
+              "CLI Smoke",
+              "Mock MCP",
+            ];
+            const runs = await github.paginate(github.rest.checks.listForRef, {
               owner,
               repo,
-              ref: process.env.RELEASE_COMMIT,
-              check_name: "CI Gate",
+              ref: sha,
               filter: "latest",
               per_page: 100,
             });
-            const passed = data.check_runs.some(
-              (run) => run.name === "CI Gate" && run.conclusion === "success",
-            );
-            if (!passed) {
-              core.setFailed(`CI Gate has not succeeded for ${process.env.RELEASE_COMMIT}`);
+            const latestByName = new Map();
+            for (const run of runs) {
+              if (run.head_sha !== sha || !requiredContexts.includes(run.name)) {
+                continue;
+              }
+              const current = latestByName.get(run.name);
+              if (!current || run.id > current.id) {
+                latestByName.set(run.name, run);
+              }
+            }
+            const missing = requiredContexts.filter((name) => !latestByName.has(name));
+            const nonSuccess = requiredContexts.flatMap((name) => {
+              const run = latestByName.get(name);
+              if (!run || run.conclusion === "success") {
+                return [];
+              }
+              return [`${name}=${run.conclusion || run.status || "unknown"}`];
+            });
+            if (missing.length > 0 || nonSuccess.length > 0) {
+              core.setFailed(
+                `Code Admission contexts are not all successful for ${sha}; ` +
+                `missing: ${missing.length > 0 ? missing.join(", ") : "none"}; ` +
+                `non-success: ${nonSuccess.length > 0 ? nonSuccess.join(", ") : "none"}`,
+              );
             }
 
       - name: Require delivered previous stable baseline
@@ -721,7 +781,7 @@ jobs:
       - name: Install archive tooling
         run: sudo apt-get update && sudo apt-get install -y zip unzip
 
-      - name: Multi Profile E2E
+      - name: Multi-profile E2E
         run: bash scripts/dev/test-multi-profile-e2e.sh
 
       - name: Install rcodesign (sign darwin binaries from Linux)
