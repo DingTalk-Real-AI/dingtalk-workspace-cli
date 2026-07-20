@@ -242,7 +242,10 @@ func (p *OAuthProvider) postJSON(ctx context.Context, endpoint string, body any)
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateBody(data, 200))
+		return nil, &HTTPStatusError{
+			StatusCode:   resp.StatusCode,
+			responseBody: truncateBody(data, 200),
+		}
 	}
 	return data, nil
 }
