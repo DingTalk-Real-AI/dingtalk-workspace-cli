@@ -34,12 +34,16 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventSingleChat,
 		EventInChat,
 		EventFromUser,
+		EventAllSingleChat,
+		EventAllGroupChat,
 		EventReadO2O,
 		EventReadGroup,
 		EventRecallO2O,
 		EventRecallGroup,
 		EventReactionO2O,
 		EventReactionGroup,
+		EventGroupUpdated,
+		EventGroupDisbanded,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
@@ -96,7 +100,7 @@ func TestDefinitionJSONHidesInternalSchemaIDs(t *testing.T) {
 }
 
 func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
-	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
+	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
 			if !ok {
@@ -228,6 +232,15 @@ func TestTargetUIDEventSchemasRequireUserOrOpenDingTalkID(t *testing.T) {
 	if group.Constraints != nil {
 		t.Fatalf("group constraints = %#v, want none", group.Constraints)
 	}
+	for _, eventKey := range []string{EventAllSingleChat, EventAllGroupChat} {
+		def, _ := Lookup(eventKey)
+		if len(def.RequiredParams) != 0 {
+			t.Fatalf("%s required_params = %#v, want none", eventKey, def.RequiredParams)
+		}
+		if def.Constraints != nil {
+			t.Fatalf("%s constraints = %#v, want none", eventKey, def.Constraints)
+		}
+	}
 }
 
 func TestDefinitionCopiesDoNotMutateRegistryConstraints(t *testing.T) {
@@ -312,6 +325,38 @@ func TestActionSchemaDocumentsMatchOutputDTOs(t *testing.T) {
 	}
 }
 
+func TestGroupLifecycleSchemaDocumentsUseConservativePayload(t *testing.T) {
+	wantProperties := []string{"type", "event_id", "timestamp", "subscribe_id", "payload"}
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			if want := []string{"group"}; !reflect.DeepEqual(def.RequiredParams, want) {
+				t.Fatalf("required_params = %#v, want %#v", def.RequiredParams, want)
+			}
+			doc := BuildSchemaDocument(def)
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("schema.properties = %#v", doc.Schema["properties"])
+			}
+			if len(props) != len(wantProperties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d fields", props, len(wantProperties))
+			}
+			for _, name := range wantProperties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			payload := props["payload"].(map[string]any)
+			if payload["type"] != "object" || payload["additionalProperties"] != true {
+				t.Fatalf("schema.properties.payload = %#v, want open object", payload)
+			}
+		})
+	}
+}
+
 func TestBuildRuleParamMention(t *testing.T) {
 	rule, param, err := BuildRuleParam(EventMention, RuleOptions{})
 	if err != nil {
@@ -322,6 +367,29 @@ func TestBuildRuleParamMention(t *testing.T) {
 	}
 	if len(param) != 0 {
 		t.Fatalf("param = %#v, want empty map", param)
+	}
+}
+
+func TestBuildRuleParamAllEvents(t *testing.T) {
+	for _, eventKey := range []string{EventAllSingleChat, EventAllGroupChat} {
+		t.Run(eventKey, func(t *testing.T) {
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{})
+			if err != nil {
+				t.Fatalf("BuildRuleParam() error = %v", err)
+			}
+			if rule != "all" || len(param) != 0 {
+				t.Fatalf("rule = %q, param = %#v; want all and empty map", rule, param)
+			}
+			for name, opts := range map[string]RuleOptions{
+				"user":             {UserID: "staff-1"},
+				"open-dingtalk-id": {OpenDingTalkID: "open-user-1"},
+				"group":            {GroupID: "cid-1"},
+			} {
+				if _, _, err := BuildRuleParam(eventKey, opts); err == nil || !strings.Contains(err.Error(), "--"+name+" is not supported for "+eventKey) {
+					t.Fatalf("%s error = %v, want unsupported flag", name, err)
+				}
+			}
+		})
 	}
 }
 
@@ -428,7 +496,7 @@ func TestBuildRuleParamActionEvents(t *testing.T) {
 		})
 	}
 
-	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventReactionGroup} {
+	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventReactionGroup, EventGroupUpdated, EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
 				t.Fatalf("missing group error = %v", err)

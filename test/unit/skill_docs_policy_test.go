@@ -103,6 +103,10 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 			"operation_type",
 			"dws chat message download-media",
 			"--open-dingtalk-id",
+			"user_im_message_receive_o2o_all",
+			"user_im_message_receive_group_all",
+			"user_im_group_updated",
+			"user_im_group_disbanded",
 		} {
 			if !strings.Contains(text, required) {
 				t.Errorf("%s missing event contract %q", path, required)

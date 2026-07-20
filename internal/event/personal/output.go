@@ -95,6 +95,18 @@ type baseEventOutput struct {
 	SubscribeID string `json:"subscribe_id" description:"订阅 ID"`
 }
 
+// GroupLifecycleEventOutput is intentionally conservative until stable group
+// event payload samples are available. Payload keeps unknown business fields
+// while transport identity and routing metadata remain available only in raw
+// output.
+type GroupLifecycleEventOutput struct {
+	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
+	Payload     map[string]any `json:"payload" description:"群生命周期事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+}
+
 type personalEventData struct {
 	EventID      string          `json:"eventId"`
 	EventKey     string          `json:"eventKey"`
@@ -232,9 +244,42 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		return projectRecallEvent(ev, base, data.Payload)
 	case isReactionEvent(eventType):
 		return projectReactionEvent(ev, base, data.Payload)
+	case isGroupLifecycleEvent(eventType):
+		payload, err := decodeGroupLifecyclePayload(data.Payload)
+		if err != nil {
+			return ev, fmt.Errorf("decode personal group lifecycle payload: %w", err)
+		}
+		return GroupLifecycleEventOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			Payload:     payload,
+		}, nil
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
 	}
+}
+
+func decodeGroupLifecyclePayload(raw json.RawMessage) (map[string]any, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, fmt.Errorf("payload is missing")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(trimmed, &payload); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return nil, fmt.Errorf("payload is empty")
+	}
+	for key := range payload {
+		switch strings.ToLower(key) {
+		case "uid", "corpid", "clientid", "filtersubid", "bizid", "orgid", "sourceid":
+			delete(payload, key)
+		}
+	}
+	return payload, nil
 }
 
 func projectReadEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
@@ -404,6 +449,8 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(RecallEventOutput{})
 	case isReactionEvent(eventKey):
 		return reflect.TypeOf(ReactionEventOutput{})
+	case isGroupLifecycleEvent(eventKey):
+		return reflect.TypeOf(GroupLifecycleEventOutput{})
 	default:
 		return reflect.TypeOf(baseEventOutput{})
 	}
@@ -419,6 +466,10 @@ func isRecallEvent(eventKey string) bool {
 
 func isReactionEvent(eventKey string) bool {
 	return eventKey == EventReactionO2O || eventKey == EventReactionGroup
+}
+
+func isGroupLifecycleEvent(eventKey string) bool {
+	return eventKey == EventGroupUpdated || eventKey == EventGroupDisbanded
 }
 
 func schemaType(t reflect.Type) string {

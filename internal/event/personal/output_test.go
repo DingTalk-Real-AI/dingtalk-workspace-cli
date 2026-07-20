@@ -125,7 +125,7 @@ func personalReactionData(eventKey, messageID, conversationID string) string {
 }
 
 func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
-	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
+	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat} {
 		t.Run(eventKey, func(t *testing.T) {
 			projected, err := ProjectOutput(transport.Event{
 				Type:          transport.FrameTypeEvent,
@@ -157,6 +157,87 @@ func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("ProjectOutput() = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupLifecycleEvents(t *testing.T) {
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
+		t.Run(eventKey, func(t *testing.T) {
+			data := fmt.Sprintf(`{
+				"eventId":"group-event",
+				"eventKey":%q,
+				"occurredAtMs":1784009000000,
+				"subId":"data-sub",
+				"payload":{
+					"uid":100001,
+					"CORPID":"internal-corp",
+					"clientId":"internal-client",
+					"filterSubId":"internal-filter",
+					"bizid":"internal-biz",
+					"orgId":100002,
+					"sourceId":"open",
+					"event_time":1784008999000,
+					"body":{
+						"openConversationId":"cid-group-1",
+						"title":"测试群新标题",
+						"operator":{"uid":"business-user-1"}
+					}
+				}
+			}`, eventKey)
+			projected, err := ProjectOutput(transport.Event{
+				EventID:     "outer-event",
+				EventType:   eventKey,
+				SubscribeID: "outer-sub",
+				Data:        data,
+			})
+			if err != nil {
+				t.Fatalf("ProjectOutput() error = %v", err)
+			}
+			got, ok := projected.(GroupLifecycleEventOutput)
+			if !ok {
+				t.Fatalf("ProjectOutput() type = %T", projected)
+			}
+			if got.Type != eventKey || got.EventID != "group-event" || got.Timestamp != 1784009000000 || got.SubscribeID != "outer-sub" {
+				t.Fatalf("common fields = %#v", got)
+			}
+			for _, internal := range []string{"uid", "CORPID", "clientId", "filterSubId", "bizid", "orgId", "sourceId"} {
+				if _, ok := got.Payload[internal]; ok {
+					t.Fatalf("payload retained internal field %q: %#v", internal, got.Payload)
+				}
+			}
+			body, ok := got.Payload["body"].(map[string]any)
+			if !ok || body["title"] != "测试群新标题" {
+				t.Fatalf("payload body = %#v", got.Payload["body"])
+			}
+			operator := body["operator"].(map[string]any)
+			if operator["uid"] != "business-user-1" {
+				t.Fatalf("nested business uid was removed: %#v", operator)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputRejectsInvalidGroupLifecyclePayloads(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{name: "missing", data: `{"eventKey":"user_im_group_updated"}`},
+		{name: "null", data: `{"eventKey":"user_im_group_updated","payload":null}`},
+		{name: "empty object", data: `{"eventKey":"user_im_group_updated","payload":{}}`},
+		{name: "array", data: `{"eventKey":"user_im_group_updated","payload":[]}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{EventID: "outer-event", EventType: EventGroupUpdated, Data: tt.data}
+			projected, err := ProjectOutput(ev)
+			if err == nil {
+				t.Fatal("ProjectOutput() error = nil, want payload validation error")
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
 			}
 		})
 	}
@@ -333,6 +414,8 @@ func TestCrossPlatformCoverageProjectOutputRejectsEmptyPayloads(t *testing.T) {
 		EventSingleChat,
 		EventInChat,
 		EventFromUser,
+		EventAllSingleChat,
+		EventAllGroupChat,
 		EventReadO2O,
 		EventReadGroup,
 		EventRecallO2O,

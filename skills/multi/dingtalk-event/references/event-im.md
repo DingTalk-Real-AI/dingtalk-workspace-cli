@@ -1,6 +1,6 @@
 # IM 个人事件
 
-先读上层 [SKILL.md](../SKILL.md) 的命令规则、调用流和子进程契约。本参考覆盖当前公开的 IM 个人事件：消息接收、已读、撤回和表情回应。
+先读上层 [SKILL.md](../SKILL.md) 的命令规则、调用流和子进程契约。本参考覆盖当前公开的 IM 个人事件：消息接收、全量消息、已读、撤回、表情回应和群生命周期。
 
 实时监听、自动回复、订阅事件都必须使用 `dws event consume` 长连接，不要写轮询脚本。
 
@@ -19,12 +19,16 @@ dws event schema user_im_message_receive_at
 dws event schema user_im_message_receive_o2o
 dws event schema user_im_message_receive_group
 dws event schema user_im_message_receive_user
+dws event schema user_im_message_receive_o2o_all
+dws event schema user_im_message_receive_group_all
 dws event schema user_im_message_read_o2o
 dws event schema user_im_message_read_group
 dws event schema user_im_message_recall_o2o
 dws event schema user_im_message_recall_group
 dws event schema user_im_message_reaction_o2o
 dws event schema user_im_message_reaction_group
+dws event schema user_im_group_updated
+dws event schema user_im_group_disbanded
 ```
 
 schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 当前固定为 `.`。
@@ -37,12 +41,16 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 
 | `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_receive_group` | `group` | 当前用户所在指定群聊/会话的消息 | `--group` |
 | `user_im_message_receive_user` | `sender` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` 或 `--open-dingtalk-id` |
+| `user_im_message_receive_o2o_all` | `all` | 当前用户收到的所有单聊消息 | 无 |
+| `user_im_message_receive_group_all` | `all` | 当前用户收到的所有群聊消息 | 无 |
 | `user_im_message_read_o2o` | `singleChat` | 指定单聊中当前用户发送的消息被已读 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_read_group` | `group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
 | `user_im_message_recall_o2o` | `singleChat` | 指定单聊中的消息被撤回 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_recall_group` | `group` | 指定群聊中的消息被撤回 | `--group` |
 | `user_im_message_reaction_o2o` | `singleChat` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | `group` | 指定群聊中的消息收到表情回应 | `--group` |
+| `user_im_group_updated` | `group` | 指定群聊的标题发生变更 | `--group` |
+| `user_im_group_disbanded` | `group` | 指定群聊被解散 | `--group` |
 
 默认身份就是当前用户。不要额外加身份切换 flag，不要使用应用凭证模式，不要使用本表以外的事件码。
 
@@ -52,11 +60,13 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 
 - 企业内部 userId → `--user`；明确给出 openDingtalkId，或目标是外部联系人、机器人、跨组织身份 → `--open-dingtalk-id`。
 - 两个身份参数严格二选一，不得把 openDingtalkId 放进 `--user`，也不要自动猜测或转换；缺少外部目标的 openDingtalkId 时先追问。
 - “我和某人的单聊”选择 `user_im_message_receive_o2o`；“某人发给我的消息/某人发送的消息”选择 `user_im_message_receive_user`。
+- 只有明确要求“所有单聊消息”或“所有群消息”时才选择对应 `*_all` 事件；指定人或指定群继续选择范围更小的事件。
 - 群名 → `dws chat search --query "<group>" --format json`，确认后取 `openConversationId`。
 - 多候选 → 展示候选并让用户确认。
 - 仍缺必填 ID → 先追问，不要编造。
 - “撤回消息”表示执行操作时走 `dws chat`；“监听/订阅消息撤回”才走本事件能力。
 - “贴标签”表示给消息贴表情时，对应 `reaction` 表情回应事件。
+- “群改名/群标题变更”对应 `user_im_group_updated`；“群解散”对应 `user_im_group_disbanded`。群解散自测必须使用测试群，并在执行解散动作前再次确认破坏性影响。
 
 ## Consume commands
 
@@ -89,6 +99,12 @@ dws event consume user_im_message_receive_user \
   --open-dingtalk-id open-user-1 \
   -f ndjson
 
+# 所有单聊消息
+dws event consume user_im_message_receive_o2o_all -f ndjson
+
+# 所有群聊消息
+dws event consume user_im_message_receive_group_all -f ndjson
+
 # 指定单聊已读事件
 dws event consume user_im_message_read_o2o \
   --user test-user-001 \
@@ -118,6 +134,16 @@ dws event consume user_im_message_reaction_o2o \
 dws event consume user_im_message_reaction_group \
   --group cidxxxxxxxx \
   -f ndjson
+
+# 指定群标题变更
+dws event consume user_im_group_updated \
+  --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定群解散
+dws event consume user_im_group_disbanded \
+  --group cidxxxxxxxx \
+  -f ndjson
 ```
 
 ## Self-test triggers
@@ -128,12 +154,16 @@ dws event consume user_im_message_reaction_group \
 | `user_im_message_receive_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
 | `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
 | `user_im_message_receive_user` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 让指定用户分别在单聊或共同群聊中发送消息 |
+| `user_im_message_receive_o2o_all` | `--duration 10m -f ndjson` | 让任意其他用户给当前登录用户发送单聊消息 |
+| `user_im_message_receive_group_all` | `--duration 10m -f ndjson` | 让任意其他用户在当前登录用户所在的任意群发送消息 |
 | `user_im_message_read_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 当前用户给对端发送单聊消息，再让对端打开并阅读 |
 | `user_im_message_read_group` | `--group <openConversationId> --duration 10m -f ndjson` | 当前用户在群内发送消息，再让群成员打开并阅读 |
 | `user_im_message_recall_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 在指定单聊中发送并撤回一条消息 |
 | `user_im_message_recall_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中发送并撤回一条消息 |
 | `user_im_message_reaction_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 在指定单聊中给消息添加表情回应 |
 | `user_im_message_reaction_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中给消息添加表情回应 |
+| `user_im_group_updated` | `--group <openConversationId> --duration 10m -f ndjson` | 修改测试群的群标题 |
+| `user_im_group_disbanded` | `--group <openConversationId> --duration 10m -f ndjson` | 确认是可销毁测试群后再解散；该操作不可逆 |
 
 stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 表示本地 consume 已连接到事件 bus；父进程等这行再读 stdout。stdout 每行是一个扁平事件 JSON。
 
@@ -185,6 +215,8 @@ stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscr
 
 正常输出不会暴露 `payload`、`uid`、`corpid`、`clientId`、`filterSubId`、`bizid` 等内部字段。需要检查原始协议时才使用 `-f raw` 或 `--debug-raw-events`。
 
+群生命周期事件当前采用保守输出：顶层只承诺 `type`、`event_id`、`timestamp`、`subscribe_id` 和 `payload`。`payload` 会保留服务端推送的未知业务字段，并移除已知的顶层身份/路由字段；不要猜测群标题、操作者等尚未由真实样本确认的键。
+
 ## Event-driven replies
 
 - 群消息自动回复：读取顶层 `conversation_id`，再调用 `dws chat message send --group "<conversation_id>" --text "<reply>" --format json`。
@@ -197,6 +229,7 @@ stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscr
 
 - 单聊用 `--user`。
 - 群消息用 `--group`。
+- 全量单聊/群聊事件没有范围参数，只在用户明确要求“所有”时使用。
 
 收消息事件需要额外文本过滤时再用 `--query` 或 `--filter-json`：
 
@@ -209,7 +242,7 @@ dws event consume user_im_message_receive_group \
 
 `--filter-json` 使用 `content`、`sender`、`conversation_id`、`sender_open_dingtalk_id` 等业务别名表达意图。
 
-动作事件只使用 `--user` 或 `--group` 限定订阅范围。`--query` 和消息内容 `--filter-json` 面向接收消息事件，不用于已读、撤回或表情回应事件。
+动作事件只使用 `--user` 或 `--group` 限定订阅范围。`--query` 和消息内容 `--filter-json` 面向接收消息事件（包括两个 `*_all` 事件），不用于已读、撤回、表情回应或群生命周期事件。
 
 ## Status and stop
 
@@ -218,9 +251,13 @@ dws event status --event user_im_message_receive_at
 dws event status --event user_im_message_receive_o2o
 dws event status --event user_im_message_receive_group
 dws event status --event user_im_message_receive_user
+dws event status --event user_im_message_receive_o2o_all
+dws event status --event user_im_message_receive_group_all
 dws event status --event user_im_message_read_o2o
 dws event status --event user_im_message_recall_group
 dws event status --event user_im_message_reaction_o2o
+dws event status --event user_im_group_updated
+dws event status --event user_im_group_disbanded
 ```
 
 `status` 同时展示服务端 `Subscriptions` 和本地 `Consumers`。`Consumers` 表里的 PID、事件码、`subscribe_id`、received/dropped 计数用于确认当前前台 consume 是否还挂在 personal bus 上。

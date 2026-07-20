@@ -474,7 +474,7 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog currently covers messages that mention the current user, one-to-one messages with a specified user, and messages in a specified group.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, and group title/disband lifecycle events.
 
 > **Prerequisite**: run `dws auth login`. Personal identity is resolved from the OAuth token and cannot be supplied through command-line identity flags.
 
@@ -500,6 +500,14 @@ dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId
 
 # Listen for messages in a specified group
 dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
+
+# Listen for all one-to-one or all group messages
+dws event consume user_im_message_receive_o2o_all -f ndjson
+dws event consume user_im_message_receive_group_all -f ndjson
+
+# Listen for a specified group's title changes or disband event
+dws event consume user_im_group_updated --group <openConversationId> -f ndjson
+dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 
 # Inspect local consumers and cancel a subscription
 dws event status

@@ -23,16 +23,20 @@ import (
 )
 
 const (
-	EventMention       = "user_im_message_receive_at"
-	EventSingleChat    = "user_im_message_receive_o2o"
-	EventInChat        = "user_im_message_receive_group"
-	EventFromUser      = "user_im_message_receive_user"
-	EventReadO2O       = "user_im_message_read_o2o"
-	EventReadGroup     = "user_im_message_read_group"
-	EventRecallO2O     = "user_im_message_recall_o2o"
-	EventRecallGroup   = "user_im_message_recall_group"
-	EventReactionO2O   = "user_im_message_reaction_o2o"
-	EventReactionGroup = "user_im_message_reaction_group"
+	EventMention        = "user_im_message_receive_at"
+	EventSingleChat     = "user_im_message_receive_o2o"
+	EventInChat         = "user_im_message_receive_group"
+	EventFromUser       = "user_im_message_receive_user"
+	EventAllSingleChat  = "user_im_message_receive_o2o_all"
+	EventAllGroupChat   = "user_im_message_receive_group_all"
+	EventReadO2O        = "user_im_message_read_o2o"
+	EventReadGroup      = "user_im_message_read_group"
+	EventRecallO2O      = "user_im_message_recall_o2o"
+	EventRecallGroup    = "user_im_message_recall_group"
+	EventReactionO2O    = "user_im_message_reaction_o2o"
+	EventReactionGroup  = "user_im_message_reaction_group"
+	EventGroupUpdated   = "user_im_group_updated"
+	EventGroupDisbanded = "user_im_group_disbanded"
 )
 
 const (
@@ -133,6 +137,28 @@ var definitions = []Definition{
 		Public:         true,
 	},
 	{
+		EventKey:       EventAllSingleChat,
+		DisplayName:    "全部单聊消息",
+		Description:    "当前用户收到的所有单聊消息",
+		Category:       "im",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventAllGroupChat,
+		DisplayName:    "全部群消息",
+		Description:    "当前用户收到的所有群聊消息",
+		Category:       "im",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
 		EventKey:       EventReadO2O,
 		DisplayName:    "指定单聊消息已读",
 		Description:    "当前用户在指定单聊中发送的消息被对方已读",
@@ -194,6 +220,28 @@ var definitions = []Definition{
 		EventKey:       EventReactionGroup,
 		DisplayName:    "指定群消息表情回应",
 		Description:    "指定群聊中的消息收到表情回应（贴表情）",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupUpdated,
+		DisplayName:    "群标题变更",
+		Description:    "指定群聊的标题发生变更",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupDisbanded,
+		DisplayName:    "群解散",
+		Description:    "指定群聊被解散",
 		Category:       "im",
 		RuleType:       "group",
 		Status:         StatusEnabled,
@@ -322,7 +370,7 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)
 	groupID := strings.TrimSpace(opts.GroupID)
 	switch def.RuleType {
-	case "at":
+	case "at", "all":
 		if userID != "" {
 			return "", nil, fmt.Errorf("--user is not supported for %s", eventKey)
 		}
@@ -480,7 +528,7 @@ func normalizeFilterAliases(v any) any {
 
 func isMessageReceiveEvent(eventKey string) bool {
 	switch eventKey {
-	case EventMention, EventSingleChat, EventInChat, EventFromUser:
+	case EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat:
 		return true
 	default:
 		return false

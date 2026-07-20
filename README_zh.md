@@ -468,7 +468,7 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 <details>
 <summary><strong>个人事件订阅</strong> — 实时接收钉钉消息，驱动事件触发的 Agent</summary>
 
-`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录包括：当前用户被 @ 的消息、与指定用户的单聊消息、指定群的消息。
+`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应，以及群标题变更和群解散事件。
 
 > **前置条件**：先运行 `dws auth login`。个人身份从 OAuth token 解析，不允许通过命令行伪造。
 
@@ -494,6 +494,14 @@ dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId
 
 # 监听指定群的消息
 dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
+
+# 监听所有单聊或所有群消息
+dws event consume user_im_message_receive_o2o_all -f ndjson
+dws event consume user_im_message_receive_group_all -f ndjson
+
+# 监听指定群标题变更或群解散
+dws event consume user_im_group_updated --group <openConversationId> -f ndjson
+dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 
 # 查看本地 consume，并取消指定订阅
 dws event status

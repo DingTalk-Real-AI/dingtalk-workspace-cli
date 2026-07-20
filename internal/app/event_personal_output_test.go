@@ -47,12 +47,16 @@ func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
 			assertPersonalOutputHidesSchemaIDs(t, got)
 			for _, eventKey := range []string{
 				personal.EventFromUser,
+				personal.EventAllSingleChat,
+				personal.EventAllGroupChat,
 				personal.EventReadO2O,
 				personal.EventReadGroup,
 				personal.EventRecallO2O,
 				personal.EventRecallGroup,
 				personal.EventReactionO2O,
 				personal.EventReactionGroup,
+				personal.EventGroupUpdated,
+				personal.EventGroupDisbanded,
 			} {
 				if !strings.Contains(got, eventKey) {
 					t.Fatalf("list output missing %s: %s", eventKey, got)
@@ -193,6 +197,8 @@ func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
 		personal.EventMention,
 		personal.EventSingleChat,
 		personal.EventInChat,
+		personal.EventAllSingleChat,
+		personal.EventAllGroupChat,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			cmd := newEventSchemaCommand()
@@ -271,6 +277,42 @@ func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
 			}
 			if _, ok := props["content"].(map[string]any); !ok {
 				t.Fatalf("schema.properties.content = %#v, want object", props["content"])
+			}
+		})
+	}
+}
+
+func TestPersonalGroupLifecycleEventSchemaUsesConservativePayload(t *testing.T) {
+	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupDisbanded} {
+		t.Run(eventKey, func(t *testing.T) {
+			cmd := newEventSchemaCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetArgs([]string{eventKey})
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			var doc map[string]any
+			if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+				t.Fatalf("schema output is not JSON: %v\n%s", err, out.String())
+			}
+			if doc["event_key"] != eventKey || doc["rule_type"] != "group" || doc["jq_root_path"] != "." {
+				t.Fatalf("schema metadata = %#v", doc)
+			}
+			required, ok := doc["required_params"].([]any)
+			if !ok || len(required) != 1 || required[0] != "group" {
+				t.Fatalf("required_params = %#v, want [group]", doc["required_params"])
+			}
+			schema := doc["schema"].(map[string]any)
+			properties := schema["properties"].(map[string]any)
+			if len(properties) != 5 {
+				t.Fatalf("schema.properties = %#v, want five conservative fields", properties)
+			}
+			payload, ok := properties["payload"].(map[string]any)
+			if !ok || payload["type"] != "object" || payload["additionalProperties"] != true {
+				t.Fatalf("schema.properties.payload = %#v", properties["payload"])
 			}
 		})
 	}
@@ -442,6 +484,62 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	err = missingUserCmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "one of --user or --open-dingtalk-id is required for "+personal.EventFromUser) {
 		t.Fatalf("missing target identity error = %v", err)
+	}
+}
+
+func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
+	configDir := setupPersonalIdentityToken(t, &authpkg.TokenData{
+		AccessToken:  "access-1",
+		RefreshToken: "refresh-1",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "corp-1",
+		UserID:       "user-1",
+		ClientID:     "client-1",
+	})
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	for _, test := range []struct {
+		eventKey string
+		args     []string
+	}{
+		{eventKey: personal.EventAllSingleChat},
+		{eventKey: personal.EventAllGroupChat},
+		{eventKey: personal.EventGroupUpdated, args: []string{"--group", "cid-test-group"}},
+		{eventKey: personal.EventGroupDisbanded, args: []string{"--group", "cid-test-group"}},
+	} {
+		t.Run(test.eventKey, func(t *testing.T) {
+			if err := ensurePublicPersonalEvent(test.eventKey); err != nil {
+				t.Fatalf("ensurePublicPersonalEvent() error = %v", err)
+			}
+			cmd := newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			cmd.SetArgs(append([]string{test.eventKey}, append(test.args, "--dry-run")...))
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("dry-run Execute() error = %v", err)
+			}
+		})
+	}
+
+	for _, eventKey := range []string{personal.EventAllSingleChat, personal.EventAllGroupChat} {
+		cmd := newEventConsumeCommand()
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs([]string{eventKey, "--user", "test-user-001", "--dry-run"})
+		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+eventKey) {
+			t.Fatalf("%s scoped user error = %v", eventKey, err)
+		}
+	}
+
+	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupDisbanded} {
+		cmd := newEventConsumeCommand()
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs([]string{eventKey, "--dry-run"})
+		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
+			t.Fatalf("%s missing group error = %v", eventKey, err)
+		}
 	}
 }
 
