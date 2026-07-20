@@ -6,14 +6,19 @@ package source
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
+	"github.com/gorilla/websocket"
+	"github.com/open-dingtalk/dingtalk-stream-sdk-go/payload"
 )
 
 func transientRefreshError() error {
@@ -127,6 +132,28 @@ func TestCrossPlatformCoveragePersonalSourceRetriesTransientRejectedTokenRefresh
 	}
 }
 
+func TestCrossPlatformCoveragePersonalRetryLogErrorFallsBackToNetworkMessage(t *testing.T) {
+	err := retryPersonal(fmt.Errorf("personal source: resolve access token: %w", errors.New("dial tcp: lookup oauth.invalid")))
+	if got, want := personalRetryLogError(err), "personal source: token refresh: temporary network error"; got != want {
+		t.Fatalf("personalRetryLogError() = %q, want %q", got, want)
+	}
+}
+
+func TestCrossPlatformCoveragePortalStageErrorNilAndUnwrap(t *testing.T) {
+	var nilErr *portalStageError
+	if got, want := nilErr.Error(), "source: portal stream failed"; got != want {
+		t.Fatalf("nil stage error = %q, want %q", got, want)
+	}
+	if nilErr.Unwrap() != nil {
+		t.Fatal("nil stage error should unwrap to nil")
+	}
+	cause := errors.New("cause")
+	stageErr := &portalStageError{stage: "stream_read", retryable: true, cause: cause}
+	if !errors.Is(stageErr, cause) {
+		t.Fatalf("stage error should unwrap to cause: %v", stageErr)
+	}
+}
+
 func TestCrossPlatformCoveragePortalSourceRetriesTransientTokenResolutionFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -139,8 +166,9 @@ func TestCrossPlatformCoveragePortalSourceRetriesTransientTokenResolutionFailure
 			}
 			return "", transientRefreshError()
 		},
-		SourceID:     "open",
-		ReconnectMin: time.Millisecond,
+		SourceID: "open",
+		// Min above max exercises the reconnect clamp.
+		ReconnectMin: 2 * time.Millisecond,
 		ReconnectMax: time.Millisecond,
 	}})
 	if err != nil {
@@ -152,6 +180,55 @@ func TestCrossPlatformCoveragePortalSourceRetriesTransientTokenResolutionFailure
 	}
 	if calls.Load() != 2 || src.State().ReconnectCount != 1 {
 		t.Fatalf("provider calls=%d reconnects=%d, want 2 calls and 1 reconnect", calls.Load(), src.State().ReconnectCount)
+	}
+}
+
+func TestCrossPlatformCoveragePortalSourceResetsBackoffAfterAckedAttempt(t *testing.T) {
+	var ticketCalls atomic.Int32
+	upgrader := websocket.Upgrader{}
+	var wsURL string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ticket", func(w http.ResponseWriter, _ *http.Request) {
+		if ticketCalls.Add(1) > 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(w, `{"endpoint":`+strconvQuote(wsURL)+`,"ticket":"t"}`)
+	})
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		df := payload.DataFrame{Type: "event", Headers: payload.DataFrameHeader{payload.DataFrameHeaderKMessageId: "m"}, Data: `{}`}
+		_ = conn.WriteJSON(df)
+		// Wait for the ACK, then close so the read fails retryably with an
+		// acked attempt behind it, which resets the reconnect backoff.
+		_, _, _ = conn.ReadMessage()
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	wsURL = "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+
+	src, err := New(Config{PortalTicket: &PortalTicketConfig{
+		TicketURL:    srv.URL + "/ticket",
+		AccessToken:  "t",
+		SourceID:     "open",
+		HTTPClient:   srv.Client(),
+		ReconnectMin: time.Millisecond,
+		ReconnectMax: time.Millisecond,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var events atomic.Int32
+	err = src.Start(context.Background(), func(*dwsevent.RawEvent) { events.Add(1) })
+	if err == nil || !strings.Contains(err.Error(), "portal ticket HTTP 400") {
+		t.Fatalf("Start() error = %v, want fatal ticket HTTP 400 after reconnect", err)
+	}
+	if events.Load() != 1 || ticketCalls.Load() != 2 || src.State().ReconnectCount != 1 {
+		t.Fatalf("events=%d ticket calls=%d reconnects=%d, want 1/2/1", events.Load(), ticketCalls.Load(), src.State().ReconnectCount)
 	}
 }
 

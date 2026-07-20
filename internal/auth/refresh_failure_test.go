@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,6 +32,9 @@ func TestCrossPlatformCoverageClassifyRefreshFailureUsesStructuredSignals(t *tes
 		{name: "invalid grant", err: &HTTPStatusError{StatusCode: http.StatusBadRequest}, want: RefreshFailureTerminal},
 		{name: "forbidden", err: &HTTPStatusError{StatusCode: http.StatusForbidden}, want: RefreshFailureTerminal},
 		{name: "local persistence", err: errors.New("save refreshed token failed"), want: RefreshFailureUnknown},
+		{name: "nil error", err: nil, want: RefreshFailureUnknown},
+		{name: "dns failure", err: &net.DNSError{Err: "no such host", Name: "oauth.test"}, want: RefreshFailureTransient},
+		{name: "redirect status", err: &HTTPStatusError{StatusCode: http.StatusFound}, want: RefreshFailureUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,6 +57,19 @@ func TestCrossPlatformCoverageHTTPStatusErrorRetainsStatusThroughWrapping(t *tes
 	}
 	if got, want := statusErr.Error(), "HTTP 429"; got != want {
 		t.Fatalf("HTTP status error = %q, want %q", got, want)
+	}
+	var nilStatus *HTTPStatusError
+	if got, want := nilStatus.Error(), "OAuth endpoint request failed"; got != want {
+		t.Fatalf("nil HTTP status error = %q, want %q", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageOAuthExchangeDisplayErrorFallsBackToPlainError(t *testing.T) {
+	if got, want := oauthExchangeDisplayError(&HTTPStatusError{StatusCode: http.StatusBadGateway}), "HTTP 502: token exchange failed"; got != want {
+		t.Fatalf("status display error = %q, want %q", got, want)
+	}
+	if got, want := oauthExchangeDisplayError(errors.New("exchange failed")), "exchange failed"; got != want {
+		t.Fatalf("plain display error = %q, want %q", got, want)
 	}
 }
 

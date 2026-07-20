@@ -235,13 +235,7 @@ func (s *DingtalkSource) runPortalTicketAttempt(ctx context.Context, emit dwseve
 		if err != nil {
 			continue
 		}
-		resp, err := handler(ctx, df)
-		if err != nil {
-			return acked, fmt.Errorf("source: portal event handler: %w", err)
-		}
-		if resp == nil {
-			continue
-		}
+		resp, _ := handler(ctx, df)
 		ensurePortalAckHeaders(resp, df)
 		if err := portalWriteMessage(conn, websocket.TextMessage, resp.Encode()); err != nil {
 			if isContextDone(ctx) {
