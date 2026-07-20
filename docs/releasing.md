@@ -97,7 +97,16 @@ dws-release v1.2.3 --from-beta v1.2.3-beta.1 --publish
 
 npm 补发只允许从默认分支触发 Release workflow 的 `repair_npm_version`。它只支持启用 immutable releases 后、由本流水线成功产出的公开 immutable release：目标必须是 `main` 历史中的 annotated tag，并且同 commit 的 `Build immutable GitHub Release` job 已成功。即使后续 npm 分发失败，这个独立的产物封存边界仍可作为补发依据。补发会用目标 commit 的 npm 模板重组包，逐平台核验资产和二进制版本，再发布到隔离的 `backfill` dist-tag，不会回滚 `latest` / `beta`。历史 mutable release 不进入自动补发路径，避免把可被替换的资产带入 npm。
 
-OSS/Gitee 分发失败时直接重跑该 tag 的 `Publish npm and mirrors` failed job；各步会复用 immutable GitHub 资产并保持 channel 单调。独立 Gitee release workflow 和本地直发脚本已停用，避免绕开 publication queue 或用重新构建的不同字节覆盖镜像。
+OSS/Gitee 分发失败且 GitHub immutable Release、npm 已交付时，从受保护的默认分支触发
+Release workflow，并且只填写 `repair_oss_version` 或 `repair_gitee_version` 之一。channel
+repair 会精确绑定失败 tag run 的最新 attempt；contract、构建、Developer ID 签名、
+immutable GitHub 发布和 npm delivery 必须全部成功，且只能有一个 OSS/Gitee 下游失败，
+随后才会下载并重新校验原始资产、修复所选镜像。OSS repair 必须匹配失败的 OSS step；
+Gitee repair 还允许其 job 因该 OSS 失败而 skipped，此时只代表 Gitee backfill 成功，
+不会把仍未修复的 OSS 标成成功。该证据不能用于 beta → stable 或
+stable baseline，后两者仍要求整条 Release 成功或受保护 recovery 成功。不要重跑旧
+attempt 的单个 failed job，以免在 attempts 之间拼接交付证据。独立 Gitee release
+workflow 和本地直发脚本已停用，避免绕开 publication queue 或用重新构建的不同字节覆盖镜像。
 
 ## 既有 tag 的紧急恢复
 

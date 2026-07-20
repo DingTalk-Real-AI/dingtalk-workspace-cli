@@ -1,5 +1,5 @@
 name: Release
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.event_name == 'workflow_dispatch' && inputs.repair_gitee_version != '' && format('Release Gitee repair {0}', inputs.repair_gitee_version) || github.workflow }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.event_name == 'workflow_dispatch' && inputs.repair_gitee_version != '' && format('Release Gitee repair {0}', inputs.repair_gitee_version) || github.event_name == 'workflow_dispatch' && inputs.repair_oss_version != '' && format('Release OSS repair {0}', inputs.repair_oss_version) || github.workflow }}
 
 on:
   push:
@@ -13,6 +13,10 @@ on:
         type: string
       repair_gitee_version:
         description: "Mirror an existing public immutable release's assets to Gitee"
+        required: false
+        type: string
+      repair_oss_version:
+        description: "Mirror an existing public immutable release's assets to OSS"
         required: false
         type: string
       governance_preflight_commit:
@@ -75,6 +79,7 @@ jobs:
         env:
           REPAIR_NPM_VERSION: ${{ inputs.repair_npm_version }}
           REPAIR_GITEE_VERSION: ${{ inputs.repair_gitee_version }}
+          REPAIR_OSS_VERSION: ${{ inputs.repair_oss_version }}
           GOVERNANCE_COMMIT: ${{ inputs.governance_preflight_commit }}
           GOVERNANCE_NONCE: ${{ inputs.governance_preflight_nonce }}
           RECOVER_VERSION: ${{ inputs.recover_release_version }}
@@ -88,17 +93,19 @@ jobs:
           set -eu
           npm_repair=0
           gitee_repair=0
+          oss_repair=0
           governance=0
           recovery=0
           test -z "$REPAIR_NPM_VERSION" || npm_repair=1
           test -z "$REPAIR_GITEE_VERSION" || gitee_repair=1
+          test -z "$REPAIR_OSS_VERSION" || oss_repair=1
           if test -n "$GOVERNANCE_COMMIT" || test -n "$GOVERNANCE_NONCE"; then governance=1; fi
           if test -n "$RECOVER_VERSION" || test -n "$RECOVER_TAG_OBJECT" || \
              test -n "$RECOVER_COMMIT" || test -n "$RECOVER_FAILED_RUN_ID" || \
              test -n "$RECOVER_FAILED_RUN_ATTEMPT" || \
              test -n "$RECOVER_NONCE" || \
              test -n "$RECOVER_CONFIRMATION"; then recovery=1; fi
-          test $((npm_repair + gitee_repair + governance + recovery)) -eq 1 || {
+          test $((npm_repair + gitee_repair + oss_repair + governance + recovery)) -eq 1 || {
             echo "workflow_dispatch must select exactly one release mode" >&2
             exit 1
           }
@@ -106,6 +113,8 @@ jobs:
             echo "mode=repair_npm" >> "$GITHUB_OUTPUT"
           elif test "$gitee_repair" -eq 1; then
             echo "mode=repair_gitee" >> "$GITHUB_OUTPUT"
+          elif test "$oss_repair" -eq 1; then
+            echo "mode=repair_oss" >> "$GITHUB_OUTPUT"
           elif test "$governance" -eq 1; then
             if test -z "$GOVERNANCE_COMMIT" || test -z "$GOVERNANCE_NONCE"; then
               echo "governance preflight requires both commit and nonce" >&2
@@ -1878,7 +1887,7 @@ jobs:
       - publish-channels
       - mirror-gitee-release
       - repair-npm
-      - repair-gitee
+      - repair-channel
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -1898,7 +1907,7 @@ jobs:
           PUBLISH_CHANNELS_RESULT: ${{ needs.publish-channels.result }}
           MIRROR_GITEE_RESULT: ${{ needs.mirror-gitee-release.result }}
           REPAIR_NPM_RESULT: ${{ needs.repair-npm.result }}
-          REPAIR_GITEE_RESULT: ${{ needs.repair-gitee.result }}
+          REPAIR_CHANNEL_RESULT: ${{ needs.repair-channel.result }}
         run: |
           set -eu
           require_result() {
@@ -1928,7 +1937,7 @@ jobs:
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
-              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
               require_publication
               ;;
             workflow_dispatch:recover_release)
@@ -1936,7 +1945,7 @@ jobs:
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" success
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
-              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
               require_publication
               ;;
             workflow_dispatch:governance_preflight)
@@ -1950,7 +1959,7 @@ jobs:
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
-              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
               ;;
             workflow_dispatch:repair_npm)
               require_result dispatch-contract "$DISPATCH_RESULT" success
@@ -1963,11 +1972,24 @@ jobs:
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
-              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
               ;;
             workflow_dispatch:repair_gitee)
               require_result dispatch-contract "$DISPATCH_RESULT" success
-              require_result repair-gitee "$REPAIR_GITEE_RESULT" success
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" success
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
+              require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release "$RELEASE_RESULT" skipped
+              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
+              require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
+              require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
+              require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              ;;
+            workflow_dispatch:repair_oss)
+              require_result dispatch-contract "$DISPATCH_RESULT" success
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" success
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
@@ -1983,16 +2005,16 @@ jobs:
               exit 1
               ;;
           esac
-  # Mirror an existing public immutable release's assets to Gitee on demand. The
-  # push-triggered mirror-gitee-release job depends on the same run's finalized
-  # dist artifact, so a tag that was already published (including one delivered
-  # by a recovery dispatch) cannot reuse it. This dispatch path re-derives the
-  # asset set from the immutable GitHub Release itself and mirrors it. The
-  # release tag and asset checksums remain the sealed authority boundary.
-  repair-gitee:
-    name: Mirror an existing immutable release to Gitee
+  # Repair one downstream channel from an existing public immutable release on
+  # demand. The push-triggered channel jobs depend on the original run's
+  # finalized dist artifact, so a tag that was already published cannot reuse
+  # it. This dispatch path re-derives the asset set from the immutable GitHub
+  # Release itself. The release tag, delivery provenance, and asset checksums
+  # remain the sealed authority boundary.
+  repair-channel:
+    name: Repair an existing immutable release channel
     needs: dispatch-contract
-    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'repair_gitee' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
+    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'repair_gitee' || needs.dispatch-contract.outputs.mode == 'repair_oss') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -2010,7 +2032,7 @@ jobs:
       - name: Validate repair version
         working-directory: tooling
         env:
-          VERSION: ${{ inputs.repair_gitee_version }}
+          VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
         run: |
           set -eu
           . ./scripts/release/release-lib.sh
@@ -2023,7 +2045,7 @@ jobs:
         id: authority
         uses: actions/github-script@v7
         env:
-          VERSION: ${{ inputs.repair_gitee_version }}
+          VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -2102,12 +2124,20 @@ jobs:
             core.setOutput("commit_sha", commitSha);
             core.setOutput("tag_object", ref.data.object.sha);
 
+      - name: Check out sealed release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.authority.outputs.commit_sha }}
+          path: release-source
+          persist-credentials: false
+
       - name: Fetch and verify sealed release tag
         working-directory: tooling
         env:
-          VERSION: ${{ inputs.repair_gitee_version }}
+          VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
           RELEASE_COMMIT: ${{ steps.authority.outputs.commit_sha }}
           RELEASE_TAG_OBJECT: ${{ steps.authority.outputs.tag_object }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           git fetch --force --no-tags \
@@ -2119,17 +2149,23 @@ jobs:
       - name: Require successful Release workflow delivery
         working-directory: tooling
         env:
-          VERSION: ${{ inputs.repair_gitee_version }}
+          VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
           RELEASE_COMMIT: ${{ steps.authority.outputs.commit_sha }}
+          REPAIR_MODE: ${{ needs.dispatch-contract.outputs.mode }}
           DWS_RELEASE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          case "$REPAIR_MODE" in
+            repair_gitee) target=gitee ;;
+            repair_oss) target=oss ;;
+            *) echo "Unsupported channel repair mode: $REPAIR_MODE" >&2; exit 2 ;;
+          esac
           ./scripts/release/verify-release-workflow-delivery.sh \
-            "$VERSION" "$RELEASE_COMMIT"
+            --channel-repair "$target" "$VERSION" "$RELEASE_COMMIT"
 
       - name: Download and verify immutable GitHub Release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.repair_gitee_version }}
+          VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
         run: |
           set -eu
           mkdir -p dist
@@ -2143,14 +2179,31 @@ jobs:
             "$GITHUB_WORKSPACE/tooling/scripts/release/verify-release-artifacts.sh" "$VERSION"
 
       - name: Mirror release to Gitee (China)
+        if: ${{ needs.dispatch-contract.outputs.mode == 'repair_gitee' }}
         timeout-minutes: 100
         working-directory: tooling
         run: |
           "$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-gitee.sh"
         env:
-          VERSION: ${{ inputs.repair_gitee_version }}
+          VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
           DIST_DIR: ${{ github.workspace }}/dist
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_USER: ${{ secrets.GITEE_USER }}
           GITEE_REPO: ${{ secrets.GITEE_REPO }}
           DWS_REQUIRE_GITEE: "1"
+
+      - name: Mirror release to OSS (China)
+        if: ${{ needs.dispatch-contract.outputs.mode == 'repair_oss' }}
+        timeout-minutes: 30
+        working-directory: release-source
+        run: |
+          "$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-oss.sh"
+        env:
+          VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
+          DIST_DIR: ${{ github.workspace }}/dist
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+          DWS_REQUIRE_OSS: "1"
