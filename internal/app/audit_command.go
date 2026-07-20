@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -117,9 +118,29 @@ func newAuditVerifyCommand() *cobra.Command {
 				}
 			}
 
-			valid, brokenAt, err := auditVerify(target)
-			if err != nil {
-				return fmt.Errorf("校验失败: %w", err)
+			valid, brokenAt, verifyErr := auditVerify(target)
+			if output.ResolveFormat(cmd, output.FormatTable) == output.FormatJSON {
+				if verifyErr != nil && brokenAt == 0 {
+					return fmt.Errorf("校验失败: %w", verifyErr)
+				}
+				payload := map[string]any{
+					"valid":    valid,
+					"file":     target,
+					"brokenAt": brokenAt,
+				}
+				if verifyErr != nil {
+					payload["reason"] = verifyErr.Error()
+				}
+				if err := output.WriteCommandPayload(cmd, payload, output.FormatTable); err != nil {
+					return err
+				}
+				if !valid {
+					auditExit(1)
+				}
+				return nil
+			}
+			if verifyErr != nil {
+				return fmt.Errorf("校验失败: %w", verifyErr)
 			}
 			if valid {
 				fmt.Printf("✓ %s 哈希链完整（全部通过）\n", filepath.Base(target))

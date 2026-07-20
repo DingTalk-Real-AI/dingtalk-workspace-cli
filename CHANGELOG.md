@@ -6,6 +6,28 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Changed
+
+- **Fast guarded beta and stable releases** — successful local release checks now leave a six-hour proof bound to the exact version, commit, repository identity, remote `main`, and stable baseline, so the subsequent guarded `--publish` invocation revalidates authority without repeating tests and packaging. A default-branch governance smoke uses the same dedicated immutable-release credential as the tag workflow before any tag is allocated.
+- **Protected existing-tag recovery** — `dws-release recover <version>` can resume a failed, unpublished annotated tag through the normal contract, build, Developer ID signing, immutable GitHub Release, Homebrew, npm, and OSS jobs. Recovery requires the exact tag object, peeled commit, failed tag-push run, typed version confirmation, and the protected `release-recovery` environment; successful runs are accepted as future beta/stable delivery evidence.
+
+### Fixed
+
+- **Tag-push GitHub Release publication** — Draft publication now locks one GitHub Release database ID, verifies its exact tag, channel, notes, recovery marker, asset set, and uploaded bytes, then publishes and rechecks that same ID as immutable. Recovery runs use the trusted default-branch release helpers instead of the sealed tag's historical scripts, fixing the Draft-only `GET /releases/tags/{tag}` 404 without allowing the release identity to drift during recovery.
+- **Release preflight reliability** — source-mode installer tests now use isolated temporary checkouts and HOME directories instead of overwriting and deleting the real repository `dws` binary, release preflight explicitly rebuilds before policy checks, and the full-suite runner gives the growing script package a non-flaky five-minute per-suite budget.
+
+## [1.0.53-beta.4] - 2026-07-17
+
+This beta validates the expanded personal IM event subscriptions and the flattened `event consume` structured output introduced after v1.0.53-beta.3.
+
+### Added
+
+- **Expanded personal IM event subscriptions** (#651) — adds one-to-one and group events for message read receipts, recalls, and reactions; publishes the specified-sender receive event; and lets one-to-one/sender subscriptions target either a staff `--user` or an `--open-dingtalk-id`. Event Schema now exposes these alternatives through machine-readable parameter constraints.
+
+### Changed
+
+- **Personal event structured output is now flat** (#651) — `event consume` projects NDJSON/JSON/pretty/compact output into event-specific top-level DTOs, so consumers read fields such as `content`, `sender`, and `conversation_id` directly instead of parsing `.data | fromjson`. This is a breaking change for scripts using the former transport envelope; the original server payload remains available through `-f raw`, while `--debug-raw-events` preserves the full diagnostic envelope.
+
 ## [1.0.53-beta.3] - 2026-07-17
 
 This beta validates multi-account profile support and the post-v1.0.53-beta.2 compatibility fixes for Windows portable authentication, IM shortcuts, and Aitable import uploads.

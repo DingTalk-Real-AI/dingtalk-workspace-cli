@@ -246,10 +246,11 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	// 7. Graceful shutdown — cancel runCtx first so all background
-	// goroutines wake up, then close listener / drain consumers.
+	// goroutines wake up, then stop accepting connections before draining
+	// consumers. The accept-loop barrier is required before WaitGroup.Wait:
+	// sync.WaitGroup forbids a positive Add racing with Wait.
 	cancelRun()
-	d.shutdown()
-	<-acceptDone
+	d.shutdown(acceptDone)
 	<-idleDone
 	<-dropWarnDone
 
@@ -291,6 +292,10 @@ func (d *daemon) acceptLoop(ctx context.Context) {
 			d.log.Warn("bus: accept error", "err", err)
 			continue
 		}
+		// Track the connection before publishing the handler goroutine. Once
+		// acceptLoop returns, shutdown can therefore close every accepted
+		// connection before waiting for handlers to drain.
+		d.conns.Store(conn, struct{}{})
 		d.consumerWG.Add(1)
 		go func() {
 			defer d.consumerWG.Done()
@@ -303,7 +308,6 @@ func (d *daemon) acceptLoop(ctx context.Context) {
 // Hello → register with Hub → spawn writer goroutine → read until EOF/Bye.
 // Always Unregisters and Closes on exit (plan invariant #5).
 func (d *daemon) handleConnection(ctx context.Context, conn net.Conn) {
-	d.conns.Store(conn, struct{}{})
 	defer func() {
 		d.conns.Delete(conn)
 		conn.Close()
@@ -478,9 +482,10 @@ func (d *daemon) triggerShutdown(reason string) {
 //  1. mark shuttingDown so acceptLoop exits cleanly
 //  2. broadcast Bye to all consumers
 //  3. close listener (interrupts pending Accept)
-//  4. wait for all per-connection goroutines to drain
-//  5. lock + meta cleanup via Run's defers
-func (d *daemon) shutdown() {
+//  4. wait for acceptLoop to return so no future consumerWG.Add can occur
+//  5. close all accepted connections and wait for handlers to drain
+//  6. lock + meta cleanup via Run's defers
+func (d *daemon) shutdown(acceptDone <-chan struct{}) {
 	d.shutdownMu.Lock()
 	defer d.shutdownMu.Unlock()
 	if !d.shuttingDown.CompareAndSwap(false, true) {
@@ -488,6 +493,7 @@ func (d *daemon) shutdown() {
 	}
 	d.hub.Broadcast(transport.Bye{Type: transport.FrameTypeBye, Reason: "shutdown"})
 	_ = d.listener.Close()
+	<-acceptDone
 	// Force-close all open IPC connections so any reader goroutine blocked
 	// on Read() returns with a network error and exits cleanly. Without
 	// this the consumerWG never drains and Run hangs forever.

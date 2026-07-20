@@ -57,8 +57,8 @@ func TestCrossPlatformCoveragePersonalEventRemainingSchemaAndSubscriptionCoverag
 	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) {
 		return &personal.Subscription{EventKey: personal.EventFromUser}, nil
 	}
-	if _, _, _, err := ensurePersonalSubscription(context.Background(), client, personal.Identity{}, personalConsumeOptions{SubscribeID: "sub"}); err == nil {
-		t.Fatal("private subscription event succeeded")
+	if _, key, rule, err := ensurePersonalSubscription(context.Background(), client, personal.Identity{}, personalConsumeOptions{SubscribeID: "sub"}); err != nil || key != personal.EventFromUser || rule != "sender" {
+		t.Fatalf("sender subscription = %q %q, %v", key, rule, err)
 	}
 	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) {
 		return &personal.Subscription{EventKey: personal.EventMention}, nil

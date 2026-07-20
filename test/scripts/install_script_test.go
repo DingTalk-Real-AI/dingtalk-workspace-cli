@@ -17,21 +17,36 @@ var expectedHomeSkillTargets = []string{
 	".cursor/skills/dws",
 }
 
-func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
-	t.Parallel()
+type installSourceFixture struct {
+	root       string
+	scriptPath string
+	stubRoot   string
+	fakeHome   string
+}
 
-	root := t.TempDir()
-	installDir := filepath.Join(root, "bin")
+func newInstallSourceFixture(t *testing.T) *installSourceFixture {
+	t.Helper()
 
-	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	repoScript, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
 	if err != nil {
 		t.Fatalf("Abs(install.sh) error = %v", err)
 	}
+	scriptData, err := os.ReadFile(repoScript)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", repoScript, err)
+	}
 
-	// Stub make: when invoked as "make -C <dir> build", create a fake dws binary
-	// in the project root (the -C target directory).
+	root := t.TempDir()
+	scriptPath := filepath.Join(root, "scripts", "install.sh")
+	mustWriteFile(t, scriptPath, scriptData, 0o755)
+	// resolve_source_root requires both go.mod and cmd/. The source installer
+	// tests need only that layout plus small representative skill trees.
+	mustWriteFile(t, filepath.Join(root, "go.mod"), []byte("module example.com/dws-install-test\n"), 0o644)
+	mustWriteFile(t, filepath.Join(root, "cmd", ".keep"), nil, 0o644)
+	mustWriteFile(t, filepath.Join(root, "skills", "mono", "SKILL.md"), []byte("# Test skill\n"), 0o644)
+	mustWriteFile(t, filepath.Join(root, "skills", "multi", "dingtalk-test", "SKILL.md"), []byte("# Test split skill\n"), 0o644)
+
 	stubRoot := filepath.Join(root, "stubs")
-	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
 	makeStub := `#!/bin/sh
 set -eu
 dir=""
@@ -44,19 +59,40 @@ done
 [ -n "$dir" ] && printf 'fake-binary\n' > "$dir/dws"
 `
 	mustWriteFile(t, filepath.Join(stubRoot, "make"), []byte(makeStub), 0o755)
-	// Also need a stub go so need_cmd check passes
 	mustWriteFile(t, filepath.Join(stubRoot, "go"), []byte("#!/bin/sh\ntrue\n"), 0o755)
 
-	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = append(os.Environ(),
-		"PATH="+stubRoot+":"+os.Getenv("PATH"),
+	return &installSourceFixture{
+		root:       root,
+		scriptPath: scriptPath,
+		stubRoot:   stubRoot,
+		fakeHome:   filepath.Join(root, "home"),
+	}
+}
+
+func (f *installSourceFixture) env(extra ...string) []string {
+	env := append(os.Environ(),
+		"HOME="+f.fakeHome,
+		"PATH="+f.stubRoot+":"+os.Getenv("PATH"),
+		"DWS_VERSION=latest",
+		"DWS_SKILLS_ONLY=0",
+		"DWS_SKILL_MODE=mono",
+	)
+	return append(env, extra...)
+}
+
+func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
+	t.Parallel()
+
+	fixture := newInstallSourceFixture(t)
+	installDir := filepath.Join(fixture.root, "bin")
+
+	cmd := exec.Command("sh", fixture.scriptPath)
+	cmd.Env = fixture.env(
 		"DWS_INSTALL_DIR="+installDir,
 		"DWS_INSTALL_NAME=dws-test",
+		"DWS_NO_SKILLS=1",
 	)
 	output, err := cmd.CombinedOutput()
-
-	// Clean up the fake binary created in the real repo root
-	_ = os.Remove(filepath.Join(repoRoot, "dws"))
 
 	if err != nil {
 		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))
@@ -64,7 +100,7 @@ done
 
 	got := string(output)
 	for _, want := range []string{
-		"Installing dws from source checkout",
+		"Installing dws from source checkout: " + fixture.root,
 		"Install dir: " + installDir,
 		"Binary installed:",
 		installDir + "/dws-test",
@@ -87,53 +123,27 @@ done
 func TestInstallScriptSourceModeInstallsSkillsIntoAgentsDir(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	fakeHome := filepath.Join(root, "home")
-	installDir := filepath.Join(root, "bin")
-
-	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
-	if err != nil {
-		t.Fatalf("Abs(install.sh) error = %v", err)
-	}
-
-	stubRoot := filepath.Join(root, "stubs")
-	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
-	makeStub := `#!/bin/sh
-set -eu
-dir=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -C) dir="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-[ -n "$dir" ] && printf 'fake-binary\n' > "$dir/dws"
-`
-	mustWriteFile(t, filepath.Join(stubRoot, "make"), []byte(makeStub), 0o755)
-	mustWriteFile(t, filepath.Join(stubRoot, "go"), []byte("#!/bin/sh\ntrue\n"), 0o755)
+	fixture := newInstallSourceFixture(t)
+	installDir := filepath.Join(fixture.root, "bin")
 
 	// Gate for index>0 agent dirs (matches build/npm/install.js): parent must exist.
-	if err := os.MkdirAll(filepath.Join(fakeHome, ".cursor"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(fixture.fakeHome, ".cursor"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.cursor) error = %v", err)
 	}
 
-	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = append(os.Environ(),
-		"HOME="+fakeHome,
-		"PATH="+stubRoot+":"+os.Getenv("PATH"),
+	cmd := exec.Command("sh", fixture.scriptPath)
+	cmd.Env = fixture.env(
 		"DWS_INSTALL_DIR="+installDir,
+		"DWS_NO_SKILLS=0",
 	)
 	output, err := cmd.CombinedOutput()
-
-	// Clean up the fake binary created in the real repo root
-	_ = os.Remove(filepath.Join(repoRoot, "dws"))
 
 	if err != nil {
 		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))
 	}
 
 	for _, rel := range expectedHomeSkillTargets {
-		skillPath := filepath.Join(fakeHome, filepath.FromSlash(rel), "SKILL.md")
+		skillPath := filepath.Join(fixture.fakeHome, filepath.FromSlash(rel), "SKILL.md")
 		if _, err := os.Stat(skillPath); err != nil {
 			t.Fatalf("Stat(%s) error = %v\noutput:\n%s", skillPath, err, string(output))
 		}
@@ -694,48 +704,22 @@ func TestInstallScriptsCacheMultiSkills(t *testing.T) {
 func TestInstallScriptCachesMultiEndToEnd(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	fakeHome := filepath.Join(root, "home")
-	installDir := filepath.Join(root, "bin")
+	fixture := newInstallSourceFixture(t)
+	installDir := filepath.Join(fixture.root, "bin")
 
-	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
-	if err != nil {
-		t.Fatalf("Abs(install.sh) error = %v", err)
-	}
-
-	stubRoot := filepath.Join(root, "stubs")
-	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
-	makeStub := `#!/bin/sh
-set -eu
-dir=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -C) dir="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-[ -n "$dir" ] && printf 'fake-binary\n' > "$dir/dws"
-`
-	mustWriteFile(t, filepath.Join(stubRoot, "make"), []byte(makeStub), 0o755)
-	mustWriteFile(t, filepath.Join(stubRoot, "go"), []byte("#!/bin/sh\ntrue\n"), 0o755)
-
-	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = append(os.Environ(),
-		"HOME="+fakeHome,
-		"PATH="+stubRoot+":"+os.Getenv("PATH"),
+	cmd := exec.Command("sh", fixture.scriptPath)
+	cmd.Env = fixture.env(
 		"DWS_INSTALL_DIR="+installDir,
+		"DWS_NO_SKILLS=0",
 	)
 	output, err := cmd.CombinedOutput()
-
-	// Clean up the fake binary created in the real repo root
-	_ = os.Remove(filepath.Join(repoRoot, "dws"))
 
 	if err != nil {
 		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))
 	}
 
 	// Verify multi cache was populated. We expect dingtalk-* subdirs.
-	multiCache := filepath.Join(fakeHome, ".dws", "skills", "multi")
+	multiCache := filepath.Join(fixture.fakeHome, ".dws", "skills", "multi")
 	entries, err := os.ReadDir(multiCache)
 	if err != nil {
 		t.Fatalf("ReadDir(%s) error = %v\noutput:\n%s", multiCache, err, string(output))
@@ -751,7 +735,7 @@ done
 	}
 
 	// And verify mono cache.
-	monoCacheSkill := filepath.Join(fakeHome, ".dws", "skills", "mono", "SKILL.md")
+	monoCacheSkill := filepath.Join(fixture.fakeHome, ".dws", "skills", "mono", "SKILL.md")
 	if _, err := os.Stat(monoCacheSkill); err != nil {
 		t.Fatalf("missing mono cache SKILL.md at %s: %v", monoCacheSkill, err)
 	}

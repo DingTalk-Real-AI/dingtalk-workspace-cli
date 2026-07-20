@@ -95,6 +95,14 @@ type Config struct {
 	OutputDir string
 	// Routes are pre-parsed --route specs. Empty = no routing.
 	Routes []Route
+	// Projector, when set, maps transport envelopes to the public value used
+	// by all structured formats. Raw format always bypasses it.
+	Projector Projector
+
+	// ReadySubscribeID identifies the personal subscription in the stable
+	// ready marker emitted after HelloAck. It is separate from SubscribeID
+	// because debug raw mode deliberately clears the latter's local filter.
+	ReadySubscribeID string
 
 	// Stdin, when non-nil, is watched for EOF: closing stdin triggers a
 	// graceful shutdown (reason: signal). This wires the AI-subprocess
@@ -175,7 +183,14 @@ func Run(ctx context.Context, cfg Config) error {
 	defer cancelRun()
 	ctx = runCtx
 
-	pipeline, err := BuildPipeline(cfg.Format, cfg.OutputDir, cfg.Routes, cfg.Stdout)
+	pipeline, err := BuildPipeline(
+		cfg.Format,
+		cfg.OutputDir,
+		cfg.Routes,
+		cfg.Stdout,
+		WithProjector(cfg.Projector),
+		WithProjectionWarnings(cfg.Stderr),
+	)
 	if err != nil {
 		return fmt.Errorf("consume: build pipeline: %w", err)
 	}
@@ -221,7 +236,11 @@ func Run(ctx context.Context, cfg Config) error {
 		// Contract: a fixed ready line on stderr BEFORE any stdout event.
 		// Parents block on stderr until this appears, then read stdout.
 		if cfg.EventKey != "" {
-			fmt.Fprintf(cfg.Stderr, "[event] ready event_key=%s bus_pid=%d\n", cfg.EventKey, ack.BusPID)
+			fmt.Fprintf(cfg.Stderr, "[event] ready event_key=%s bus_pid=%d", cfg.EventKey, ack.BusPID)
+			if cfg.ReadySubscribeID != "" {
+				fmt.Fprintf(cfg.Stderr, " subscribe_id=%s", cfg.ReadySubscribeID)
+			}
+			fmt.Fprintln(cfg.Stderr)
 		} else {
 			fmt.Fprintf(cfg.Stderr, "[event] ready bus_pid=%d\n", ack.BusPID)
 		}

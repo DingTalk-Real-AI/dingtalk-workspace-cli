@@ -14,6 +14,7 @@
 package consume
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -139,13 +140,15 @@ func TestRun_StdoutNDJSON(t *testing.T) {
 	ctx, consumeCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer consumeCancel()
 	err := Run(ctx, Config{
-		WorkDir:     dir,
-		IPCEndpoint: sock,
-		ClientID:    "ding_test",
-		Stdout:      &stdout,
-		Stderr:      &stderr,
-		EventTypes:  []string{"im.*"},
-		MaxEvents:   2,
+		WorkDir:          dir,
+		IPCEndpoint:      sock,
+		ClientID:         "ding_test",
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		EventTypes:       []string{"im.*"},
+		EventKey:         "im.message.receive_v1",
+		ReadySubscribeID: "sub-1",
+		MaxEvents:        2,
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -170,6 +173,10 @@ func TestRun_StdoutNDJSON(t *testing.T) {
 	if !strings.Contains(stderr.String(), "[event] ready ") {
 		t.Errorf("stderr missing ready marker:\n%s", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "[event] ready event_key=im.message.receive_v1 bus_pid=") ||
+		!strings.Contains(stderr.String(), " subscribe_id=sub-1") {
+		t.Errorf("stderr missing ready marker:\n%s", stderr.String())
+	}
 }
 
 func TestRun_QuietSuppressesStderr(t *testing.T) {
@@ -184,13 +191,15 @@ func TestRun_QuietSuppressesStderr(t *testing.T) {
 	ctx, consumeCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer consumeCancel()
 	err := Run(ctx, Config{
-		WorkDir:     dir,
-		IPCEndpoint: sock,
-		ClientID:    "ding_test",
-		Stdout:      &stdout,
-		Stderr:      &stderr,
-		Quiet:       true,
-		MaxEvents:   1,
+		WorkDir:          dir,
+		IPCEndpoint:      sock,
+		ClientID:         "ding_test",
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Quiet:            true,
+		EventKey:         "im.message.receive_v1",
+		ReadySubscribeID: "sub-1",
+		MaxEvents:        1,
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -200,6 +209,78 @@ func TestRun_QuietSuppressesStderr(t *testing.T) {
 	}
 	if stdout.Len() == 0 {
 		t.Error("stdout should still contain the NDJSON event")
+	}
+}
+
+func TestRun_WritesFirstProjectedEventBeforeConsumeExits(t *testing.T) {
+	skipOnWindows(t)
+	dir, sock, cancelBus, runDone, trigger := bringUpBus(t, []dwsevent.RawEvent{
+		{EventID: "1", EventType: "personal.message", Data: `{"content":"hello"}`},
+	})
+	defer func() { cancelBus(); <-runDone }()
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+
+	ctx, cancelConsume := context.WithCancel(context.Background())
+	consumeDone := make(chan error, 1)
+	go func() {
+		consumeDone <- Run(ctx, Config{
+			WorkDir:     dir,
+			IPCEndpoint: sock,
+			ClientID:    "ding_test",
+			Stdout:      writer,
+			Stderr:      io.Discard,
+			Projector: func(ev transport.Event) (any, error) {
+				return map[string]any{"type": ev.EventType, "content": "hello"}, nil
+			},
+		})
+	}()
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		close(trigger)
+	}()
+
+	lineCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		line, err := bufio.NewReader(reader).ReadString('\n')
+		if err != nil {
+			errCh <- err
+			return
+		}
+		lineCh <- line
+	}()
+
+	select {
+	case line := <-lineCh:
+		var got map[string]any
+		if err := json.Unmarshal([]byte(line), &got); err != nil || got["content"] != "hello" {
+			t.Fatalf("first line = %q, err = %v", line, err)
+		}
+	case err := <-errCh:
+		t.Fatalf("read first line: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("first event was not readable while consume was running")
+	}
+
+	select {
+	case err := <-consumeDone:
+		t.Fatalf("consume exited before cancellation: %v", err)
+	default:
+	}
+	cancelConsume()
+	select {
+	case err := <-consumeDone:
+		if err != nil {
+			t.Fatalf("Run() after cancellation = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("consume did not exit after cancellation")
 	}
 }
 

@@ -16,6 +16,8 @@ package consume
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/registry"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
@@ -49,8 +51,8 @@ const (
 	// event, newline-terminated). Useful when piping into jq / a tool
 	// that wants the cloud payload verbatim without our envelope.
 	FormatRaw Format = "raw"
-	// FormatCompact runs the per-event-type compact processor (see
-	// registry.LookupProcessor) and emits one flattened JSON line.
+	// FormatCompact emits one compact JSON line. Personal streams use their
+	// configured business projection; other streams use the registry processor.
 	FormatCompact Format = "compact"
 )
 
@@ -90,27 +92,103 @@ type Formatter interface {
 	Render(ev transport.Event) ([]byte, error)
 }
 
-// NewFormatter returns a Formatter for the given Format. Compact wraps
-// registry.LookupProcessor so adding a new specialised compactor is just
-// a registry-side change. Returns an error only if format is an internally
-// unsupported value (defensive — NormalizeFormat guarantees the input is
-// one of the constants).
-func NewFormatter(format Format) (Formatter, error) {
+// Projector maps a transport envelope to the public value rendered by
+// structured formats. Returning a value together with an error means the
+// value is a safe fallback and should still be emitted after a warning.
+type Projector func(ev transport.Event) (any, error)
+
+type formatterConfig struct {
+	projector Projector
+	warnings  io.Writer
+	warnOnce  sync.Once
+}
+
+// FormatterOption configures structured event rendering. Raw output always
+// bypasses these options and preserves the source Data string.
+type FormatterOption func(*formatterConfig)
+
+func WithProjector(projector Projector) FormatterOption {
+	return func(cfg *formatterConfig) { cfg.projector = projector }
+}
+
+func WithProjectionWarnings(w io.Writer) FormatterOption {
+	return func(cfg *formatterConfig) {
+		if w != nil {
+			cfg.warnings = w
+		}
+	}
+}
+
+// NewFormatter returns a Formatter for the given Format. When no projector
+// is configured, compact dispatches through registry.LookupProcessor. Returns
+// an error only if format is internally unsupported.
+func NewFormatter(format Format, opts ...FormatterOption) (Formatter, error) {
+	cfg := &formatterConfig{warnings: io.Discard}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(cfg)
+		}
+	}
 	switch format {
 	case FormatNDJSON:
-		return &ndjsonFormatter{}, nil
+		return &structuredFormatter{config: cfg}, nil
 	case FormatJSON, FormatPretty:
-		return &prettyFormatter{}, nil
+		return &structuredFormatter{config: cfg, pretty: true}, nil
 	case FormatRaw:
 		return &rawFormatter{}, nil
 	case FormatCompact:
-		return &compactFormatter{}, nil
+		return &structuredFormatter{config: cfg, compact: true}, nil
 	default:
 		return nil, fmt.Errorf("consume: unsupported format %q", format)
 	}
 }
 
-// ndjsonFormatter encodes each Event as one compact JSON line + '\n'.
+// structuredFormatter renders either the transport envelope or a projected
+// business value. The same projector is used by ndjson/json/pretty/compact.
+type structuredFormatter struct {
+	config  *formatterConfig
+	pretty  bool
+	compact bool
+}
+
+func (f *structuredFormatter) Render(ev transport.Event) ([]byte, error) {
+	value := any(ev)
+	if f.config.projector != nil {
+		projected, err := f.config.projector(ev)
+		if projected != nil {
+			value = projected
+		}
+		if err != nil {
+			f.config.warnOnce.Do(func() {
+				fmt.Fprintf(f.config.warnings,
+					"WARN: personal event output projection failed; using raw envelope event_id=%q event_type=%q: %v\n",
+					ev.EventID, ev.EventType, err)
+			})
+		}
+	} else if f.compact {
+		value = registry.LookupProcessor(ev.EventType)(ev)
+	}
+	var (
+		b   []byte
+		err error
+	)
+	switch {
+	case f.pretty:
+		b, err = marshalEventIndent(value, "", "  ")
+	case f.compact:
+		b, err = marshalCompact(value)
+	default:
+		b, err = marshalEvent(value)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}
+
+// The basic formatters remain available for focused encoder tests. The public
+// construction path uses structuredFormatter so personal event projections are
+// applied consistently across all structured formats.
 type ndjsonFormatter struct{}
 
 func (ndjsonFormatter) Render(ev transport.Event) ([]byte, error) {
@@ -121,13 +199,21 @@ func (ndjsonFormatter) Render(ev transport.Event) ([]byte, error) {
 	return append(b, '\n'), nil
 }
 
-// prettyFormatter encodes each Event as multi-line indented JSON + '\n'.
-// json.MarshalIndent does not append a trailing newline; we add one so
-// successive events are visually separated in the output.
 type prettyFormatter struct{}
 
 func (prettyFormatter) Render(ev transport.Event) ([]byte, error) {
 	b, err := marshalEventIndent(ev, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}
+
+type compactFormatter struct{}
+
+func (compactFormatter) Render(ev transport.Event) ([]byte, error) {
+	value := registry.LookupProcessor(ev.EventType)(ev)
+	b, err := marshalCompact(value)
 	if err != nil {
 		return nil, err
 	}
@@ -146,18 +232,4 @@ func (rawFormatter) Render(ev transport.Event) ([]byte, error) {
 		out = append(out, '\n')
 	}
 	return out, nil
-}
-
-// compactFormatter dispatches to the registry per event_type and writes
-// the flattened map as one compact JSON line + '\n'.
-type compactFormatter struct{}
-
-func (compactFormatter) Render(ev transport.Event) ([]byte, error) {
-	p := registry.LookupProcessor(ev.EventType)
-	v := p(ev)
-	b, err := marshalCompact(v)
-	if err != nil {
-		return nil, err
-	}
-	return append(b, '\n'), nil
 }

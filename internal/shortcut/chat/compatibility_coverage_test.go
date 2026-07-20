@@ -58,6 +58,7 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 		wantProduct string
 		wantTool    string
 		wantArgs    map[string]any
+		wantAbsent  []string
 	}{
 		{
 			name:        "chat search keyword and size",
@@ -81,7 +82,8 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			},
 			wantProduct: "chat",
 			wantTool:    "list_conversation_message_v2",
-			wantArgs:    map[string]any{"openCid": "cid-1", "limit": 7},
+			wantArgs:    map[string]any{"openconversation_id": "cid-1", "limit": 7},
+			wantAbsent:  []string{"openCid", "cid"},
 		},
 		{
 			name: "direct messages size",
@@ -117,6 +119,11 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			for key, want := range tc.wantArgs {
 				if got := fake.args[key]; got != want {
 					t.Errorf("%s = %#v, want %#v", key, got, want)
+				}
+			}
+			for _, key := range tc.wantAbsent {
+				if _, ok := fake.args[key]; ok {
+					t.Errorf("unexpected legacy argument %q in %#v", key, fake.args)
 				}
 			}
 		})

@@ -65,20 +65,48 @@ git diff --check
 ## Homebrew Formula PR Automation
 
 Official tag releases require the repository Actions secret
-`HOMEBREW_PR_TOKEN`. The `DingTalk-Real-AI` organization currently does not
-allow fine-grained personal access tokens to target this repository, so use a
-classic personal access token owned by a maintainer or release-bot account with
+`HOMEBREW_PR_TOKEN`. Prefer a fine-grained personal access token owned by a
+maintainer or release-bot account, limited to this repository with
+`Contents: write` and `Pull requests: write`. If organization policy prevents
+that account from targeting the repository, use a dedicated classic token with
 only the `public_repo` scope. Do not reuse a broad developer token.
 
-Store the non-expiring token as the `HOMEBREW_PR_TOKEN` repository Actions
-secret. Replace it immediately if it is exposed, its owner loses repository
-access, or the release-bot ownership changes. The Release workflow uses this
+Store the dedicated token as the `HOMEBREW_PR_TOKEN` repository Actions secret
+and rotate it before its configured expiration. Replace it immediately if it is
+exposed, its owner loses repository access, or the release-bot ownership
+changes. The Release workflow uses this
 dedicated token only to push an `automation/homebrew-*` branch and open the
 stable or beta Formula PR. It does not push Formula changes directly to `main`.
+The default-branch governance preflight and every tag contract authenticate the
+token before publication, reject over-scoped classic tokens, confirm its
+identity, and run a controlled write canary. The canary pushes a unique
+`automation/homebrew-token-canary-*` branch with a `[skip ci]` commit, creates a
+draft PR, closes it, and deletes the branch with the same token. This proves both
+Contents and Pull requests write access before publication without merging
+anything. The gate also rejects reuse of `RELEASE_GOVERNANCE_TOKEN`.
 No maintainer environment variable is required when creating a tag. Using the
 built-in `GITHUB_TOKEN` is insufficient because organization policy prevents
 Actions from creating pull requests, and its generated PR events may require
 separate workflow approval.
+
+## Release Governance and Recovery
+
+Store `RELEASE_GOVERNANCE_TOKEN` as a dedicated Actions secret with only
+repository `Administration: read`. The immutable-releases REST endpoint is an
+administration setting and cannot be read by the workflow's built-in
+`GITHUB_TOKEN`. Both the default-branch governance preflight and the tag
+contract use this same credential so a missing or expired identity is detected
+before an irreversible tag is created.
+
+Create a protected `release-recovery` environment limited to protected
+branches, with a required reviewer, self-review disabled, and administrator
+bypass disabled. The workflow reads the environment through the GitHub API and
+fails closed unless the required-reviewer, prevent-self-review, and protected-
+branch rules are present.
+Recovery is restricted to an existing annotated tag whose exact tag object,
+commit, and failed tag-push run all match; it then reuses the normal release
+jobs. Do not put publication secrets in temporary branches or create ad-hoc
+recovery workflows.
 
 ## Handoff Checklist
 

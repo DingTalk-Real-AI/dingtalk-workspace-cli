@@ -1,10 +1,8 @@
 # Event consume — AI subprocess contract
 
-Aligns `dws event consume` with the "AI subprocess contract" that
-`lark-cli event consume` exposes, so any orchestrator (Claude Code's
-Monitor, a bash bridge, systemd, an agent plugin) can drive it with zero
-ambiguity: know when it is ready, stop it cleanly, and machine-read why it
-exited.
+Defines the stable `dws event consume` subprocess contract so an
+orchestrator can determine when the consumer is ready, stop it cleanly,
+and machine-read why it exited.
 
 Scope of this branch: the four **contract** items below. Reconnect
 resilience (keeping the stream alive across a transient upstream drop) is
@@ -16,7 +14,6 @@ tracked separately and intentionally out of scope here.
 - `--duration D` — wall-clock budget (exit 0). Kept as `--duration`, NOT
   aliased to `--timeout`: the global `--timeout` is the HTTP request
   timeout (int seconds) and would collide (different type and meaning).
-  Docs note the lark-cli name difference.
 - Bus idle-shutdown fires only with **zero** consumers, so a connected
   consumer is never idle-killed.
 - SIGINT/SIGTERM already cancel the run context and return cleanly.
@@ -28,7 +25,7 @@ tracked separately and intentionally out of scope here.
 On connect, emit a fixed stderr line **before** any stdout event:
 
 ```
-[event] ready event_key=<key> bus_pid=<pid>
+[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>
 ```
 
 Parents block on stderr until this line, then read stdout. Suppressed
@@ -75,7 +72,7 @@ or runtime failure (permissions, network, params) = non-zero, with no
 
 ### 4. Cleanup on exit (no `kill -9`)
 
-Ownership-based, matching lark-cli:
+Ownership-based cleanup:
 - If this run **created** the subscription (no `--subscribe-id`), a clean
   exit (SIGTERM / SIGINT / stdin-EOF / limit / timeout) **unsubscribes**
   it server-side and sends Bye.
