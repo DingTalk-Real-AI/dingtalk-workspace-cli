@@ -1,4 +1,4 @@
-name: Code Admission — PR 合入门禁
+name: CI
 
 on:
   push:
@@ -714,9 +714,10 @@ jobs:
       - name: Enforce coverage gate
         if: needs.lint.outputs.changelog_only != 'true'
         env:
-          COVERAGE_TARGET: "80"
+          COVERAGE_TARGET: "100"
           COVERAGE_ENFORCE_OVERALL: "false"
-        run: COVERAGE_ADDITIONAL_PROFILE=coverage-shortcut.txt make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
+          COVERAGE_OVERALL_TOLERANCE: "0"
+        run: COVERAGE_ADDITIONAL_DIFF_PROFILE=coverage-shortcut.txt make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
 
       - name: Generate coverage report
         if: needs.lint.outputs.changelog_only != 'true'

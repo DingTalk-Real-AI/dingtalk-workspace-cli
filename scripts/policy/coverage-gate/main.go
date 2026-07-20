@@ -13,7 +13,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,11 +36,13 @@ func (values *stringList) Set(value string) error {
 }
 
 type coverageBlock struct {
-	File       string
-	StartLine  int
-	EndLine    int
-	Statements int
-	Count      int
+	File        string
+	StartLine   int
+	StartColumn int
+	EndLine     int
+	EndColumn   int
+	Statements  int
+	Count       int
 }
 
 type lineRange struct {
@@ -78,6 +79,7 @@ func run(
 	buildableLoader func() (map[string]bool, error),
 ) int {
 	var overallPaths stringList
+	var baselinePaths stringList
 	var diffPaths stringList
 	var baseRef string
 	var modulePath string
@@ -90,12 +92,13 @@ func run(
 	flags := flag.NewFlagSet("coverage-gate", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.Var(&overallPaths, "overall-profile", "coverage profile used for overall coverage (repeatable)")
+	flags.Var(&baselinePaths, "baseline-profile", "merge-base coverage profile evaluated with the same model as the candidate (repeatable)")
 	flags.Var(&diffPaths, "diff-profile", "coverage profile used for changed-code coverage (repeatable)")
 	flags.StringVar(&baseRef, "base-ref", "", "Git merge-base or previous main SHA")
 	flags.StringVar(&modulePath, "module", "", "Go module path used to normalize profile filenames")
 	flags.Float64Var(&baselineOverall, "baseline-overall", -1, "authoritative overall coverage percentage")
-	flags.Float64Var(&overallTolerance, "overall-tolerance", 0.1, "allowed overall coverage measurement variance in percentage points")
-	flags.Float64Var(&target, "target", 80, "required changed-code and eventual overall coverage percentage")
+	flags.Float64Var(&overallTolerance, "overall-tolerance", 0, "allowed overall coverage measurement variance in percentage points")
+	flags.Float64Var(&target, "target", 100, "required changed-code coverage percentage and optional overall floor")
 	flags.BoolVar(&enforceOverall, "enforce-overall-target", false, "require overall coverage to reach target")
 	flags.BoolVar(&changedOnly, "changed-only", false, "enforce changed-code coverage without an overall baseline")
 	flags.BoolVar(&scopeBuildable, "scope-buildable", false, "only evaluate changed files buildable on the current platform")
@@ -103,8 +106,13 @@ func run(
 		return 2
 	}
 
-	if len(diffPaths) == 0 || baseRef == "" || modulePath == "" || (!changedOnly && (len(overallPaths) == 0 || baselineOverall < 0)) {
-		fmt.Fprintln(stderr, "coverage-gate requires --diff-profile, --base-ref, and --module; overall mode also requires --overall-profile and --baseline-overall")
+	if len(diffPaths) == 0 || baseRef == "" || modulePath == "" ||
+		(!changedOnly && (len(overallPaths) == 0 || (len(baselinePaths) == 0 && baselineOverall < 0))) {
+		fmt.Fprintln(stderr, "coverage-gate requires --diff-profile, --base-ref, and --module; overall mode also requires --overall-profile and either --baseline-profile or --baseline-overall")
+		return 2
+	}
+	if len(baselinePaths) > 0 && baselineOverall >= 0 {
+		fmt.Fprintln(stderr, "coverage-gate accepts either --baseline-profile or --baseline-overall, not both")
 		return 2
 	}
 	var overall []coverageBlock
@@ -114,6 +122,14 @@ func run(
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
+		}
+		if len(baselinePaths) > 0 {
+			baseline, baselineErr := readProfiles(baselinePaths, modulePath)
+			if baselineErr != nil {
+				fmt.Fprintln(stderr, baselineErr)
+				return 2
+			}
+			baselineOverall = coveragePercent(baseline)
 		}
 	}
 	diff, err := readProfiles(diffPaths, modulePath)
@@ -150,12 +166,12 @@ func run(
 		if enforceOverall {
 			mode = "required"
 		}
-		fmt.Fprintf(stdout, "overall coverage: %.1f%% (merge-base %.1f%%; tolerance %.1fpp; target %.1f%%; %s)\n", result.Overall, baselineOverall, overallTolerance, target, mode)
+		fmt.Fprintf(stdout, "overall coverage: %.4f%% (merge-base %.4f%%; tolerance %.4fpp; target %.4f%%; %s)\n", result.Overall, baselineOverall, overallTolerance, target, mode)
 	}
 	if result.ChangedStatements == 0 {
-		fmt.Fprintf(stdout, "changed code coverage: n/a (no changed executable statements; target %.1f%%)\n", target)
+		fmt.Fprintf(stdout, "changed code coverage: n/a (no changed executable statements; target %.4f%%)\n", target)
 	} else {
-		fmt.Fprintf(stdout, "changed code coverage: %.1f%% (%d executable statements; target %.1f%%)\n", result.ChangedCoverage, result.ChangedStatements, target)
+		fmt.Fprintf(stdout, "changed code coverage: %.4f%% (%d executable statements; target %.4f%%)\n", result.ChangedCoverage, result.ChangedStatements, target)
 	}
 	if len(result.Failures) > 0 {
 		fmt.Fprintln(stderr, "coverage gate failed:")
@@ -171,13 +187,11 @@ func evaluate(input gateInput) gateResult {
 	result := gateResult{Failures: []string{}}
 	if !input.ChangedOnly {
 		result.Overall = coveragePercent(input.Overall)
-		baselineRounded := roundOne(input.BaselineOverall)
-		overallRounded := roundOne(result.Overall)
-		if overallRounded+input.OverallTolerance+1e-9 < baselineRounded {
-			result.Failures = append(result.Failures, fmt.Sprintf("overall coverage regressed from %.1f%% to %.1f%%", baselineRounded, overallRounded))
+		if result.Overall+input.OverallTolerance < input.BaselineOverall {
+			result.Failures = append(result.Failures, fmt.Sprintf("overall coverage regressed from %.4f%% to %.4f%%", input.BaselineOverall, result.Overall))
 		}
-		if input.EnforceOverall && overallRounded < input.Target {
-			result.Failures = append(result.Failures, fmt.Sprintf("overall coverage %.1f%% is below target %.1f%%", overallRounded, input.Target))
+		if input.EnforceOverall && result.Overall < input.Target {
+			result.Failures = append(result.Failures, fmt.Sprintf("overall coverage %.4f%% is below target %.4f%%", result.Overall, input.Target))
 		}
 	}
 
@@ -206,8 +220,8 @@ func evaluate(input gateInput) gateResult {
 	result.ChangedStatements = total
 	if total > 0 {
 		result.ChangedCoverage = float64(covered) * 100 / float64(total)
-		if result.ChangedCoverage+1e-9 < input.Target {
-			result.Failures = append(result.Failures, fmt.Sprintf("changed code coverage %.1f%% is below target %.1f%%", result.ChangedCoverage, input.Target))
+		if result.ChangedCoverage < input.Target {
+			result.Failures = append(result.Failures, fmt.Sprintf("changed code coverage %.4f%% is below target %.4f%%", result.ChangedCoverage, input.Target))
 		}
 	}
 	return result
@@ -253,11 +267,13 @@ func readProfiles(paths []string, modulePath string) ([]coverageBlock, error) {
 				values = append(values, value)
 			}
 			blocks = append(blocks, coverageBlock{
-				File:       normalizeProfilePath(match[1], modulePath),
-				StartLine:  values[0],
-				EndLine:    values[2],
-				Statements: values[4],
-				Count:      values[5],
+				File:        normalizeProfilePath(match[1], modulePath),
+				StartLine:   values[0],
+				StartColumn: values[1],
+				EndLine:     values[2],
+				EndColumn:   values[3],
+				Statements:  values[4],
+				Count:       values[5],
 			})
 		}
 		err = scanner.Err()
@@ -402,7 +418,15 @@ func coveragePercent(blocks []coverageBlock) float64 {
 func mergeCoverageBlocks(blocks []coverageBlock) []coverageBlock {
 	merged := make(map[string]coverageBlock, len(blocks))
 	for _, block := range blocks {
-		key := fmt.Sprintf("%s:%d:%d:%d", block.File, block.StartLine, block.EndLine, block.Statements)
+		key := fmt.Sprintf(
+			"%s:%d:%d:%d:%d:%d",
+			block.File,
+			block.StartLine,
+			block.StartColumn,
+			block.EndLine,
+			block.EndColumn,
+			block.Statements,
+		)
 		current, ok := merged[key]
 		if !ok || block.Count > current.Count {
 			merged[key] = block
@@ -419,5 +443,3 @@ func mergeCoverageBlocks(blocks []coverageBlock) []coverageBlock {
 	}
 	return result
 }
-
-func roundOne(value float64) float64 { return math.Round(value*10) / 10 }
