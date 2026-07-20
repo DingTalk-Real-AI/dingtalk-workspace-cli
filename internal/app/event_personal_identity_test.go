@@ -133,18 +133,18 @@ func TestResolvePersonalEventIdentityDefaultsSourceIDToOpen(t *testing.T) {
 	}
 }
 
-func TestPersonalEventDefaultsUseProductionWithoutMCPConfig(t *testing.T) {
+func TestPersonalEventDefaultsUsePreReleaseWithoutMCPConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
 	prev := edition.Get()
 	edition.Override(&edition.Hooks{})
 	t.Cleanup(func() { edition.Override(prev) })
 
-	if got := personalEventControlBaseURL("", dir); got != "https://mcp.dingtalk.com/dws" {
-		t.Fatalf("personalEventControlBaseURL() = %q, want production control URL", got)
+	if got := personalEventControlBaseURL("", dir); got != "https://pre-mcp.dingtalk.com/dws" {
+		t.Fatalf("personalEventControlBaseURL() = %q, want pre-release control URL", got)
 	}
-	if got := personalEventStreamTicketURL("", dir); got != "https://mcp.dingtalk.com/stream/connections/ticket" {
-		t.Fatalf("personalEventStreamTicketURL() = %q, want production ticket URL", got)
+	if got := personalEventStreamTicketURL("", dir); got != "https://pre-mcp.dingtalk.com/stream/connections/ticket" {
+		t.Fatalf("personalEventStreamTicketURL() = %q, want pre-release ticket URL", got)
 	}
 	if got := personalEventStreamSourceID(""); got != "open" {
 		t.Fatalf("personalEventStreamSourceID() = %q, want open", got)
