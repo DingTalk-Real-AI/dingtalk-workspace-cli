@@ -47,6 +47,19 @@ if [ -n "$missing" ]; then
   exit 0
 fi
 
+# ossutil v2 signs with V4 and requires an explicit region. Derive it from the
+# endpoint host (oss-<region>[-internal].aliyuncs.com) unless OSS_REGION is set.
+if [ -z "${OSS_REGION:-}" ]; then
+  OSS_REGION="$(printf '%s' "$OSS_ENDPOINT" \
+    | sed -n 's#^\(https\{0,1\}://\)\{0,1\}oss-\([a-z0-9-]*[a-z0-9]\)\.aliyuncs\.com.*#\2#p' \
+    | sed 's#-internal$##')"
+fi
+if [ -z "$OSS_REGION" ]; then
+  echo "❌ Could not derive OSS_REGION from OSS_ENDPOINT=${OSS_ENDPOINT}; set OSS_REGION explicitly." >&2
+  exit 1
+fi
+export OSS_REGION
+
 # ── Resolve version ──────────────────────────────────────────────────────────
 VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"
 CHANNEL="${DWS_RELEASE_CHANNEL:-$(release_channel_for_version "$VERSION")}"
