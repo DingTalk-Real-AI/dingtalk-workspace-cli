@@ -150,7 +150,7 @@ func TestCrossPlatformCoverageRunnerRefreshFailurePreservesBothCausesAndSafeLog(
 	runnerCallTool = func(*transport.Client, context.Context, string, string, map[string]any) (transport.ToolCallResult, error) {
 		return transport.ToolCallResult{Content: map[string]any{"expired": true}}, nil
 	}
-	refreshErr := errors.New(`oauth refresh response parse failed: body={"access_token":"access-token-secret","refresh_token":"refresh-token-secret","uid":"4496576595"}`)
+	refreshErr := errors.New(`oauth refresh response parse failed: body={"access_token":"access-token-secret","refresh_token":"refresh-token-secret","uid":"uid-secret-value"}`)
 	runnerForceRefreshRejectedAccessToken = func(context.Context, string, string) (string, error) {
 		return "", refreshErr
 	}
@@ -177,7 +177,7 @@ func TestCrossPlatformCoverageRunnerRefreshFailurePreservesBothCausesAndSafeLog(
 			t.Fatalf("structured stderr missing %s: %s", want, rendered.String())
 		}
 	}
-	for _, secret := range []string{"access-token-secret", "refresh-token-secret", "4496576595"} {
+	for _, secret := range []string{"access-token-secret", "refresh-token-secret", "uid-secret-value"} {
 		if strings.Contains(err.Error(), secret) || strings.Contains(logs.String(), secret) || strings.Contains(rendered.String(), secret) {
 			t.Fatalf("auth output leaked %q: error=%q logs=%s stderr=%s", secret, err, logs.String(), rendered.String())
 		}
