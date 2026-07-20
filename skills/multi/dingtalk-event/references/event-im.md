@@ -28,6 +28,8 @@ dws event schema user_im_message_recall_group
 dws event schema user_im_message_reaction_o2o
 dws event schema user_im_message_reaction_group
 dws event schema user_im_group_updated
+dws event schema user_im_group_member_added
+dws event schema user_im_group_member_exited
 dws event schema user_im_group_disbanded
 ```
 
@@ -50,6 +52,8 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 
 | `user_im_message_reaction_o2o` | `singleChat` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | `group` | 指定群聊中的消息收到表情回应 | `--group` |
 | `user_im_group_updated` | `group` | 指定群聊的标题发生变更 | `--group` |
+| `user_im_group_member_added` | `group` | 指定群聊有成员加入 | `--group` |
+| `user_im_group_member_exited` | `group` | 指定群聊有成员退出 | `--group` |
 | `user_im_group_disbanded` | `group` | 指定群聊被解散 | `--group` |
 
 默认身份就是当前用户。不要额外加身份切换 flag，不要使用应用凭证模式，不要使用本表以外的事件码。
@@ -66,7 +70,7 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 
 - 仍缺必填 ID → 先追问，不要编造。
 - “撤回消息”表示执行操作时走 `dws chat`；“监听/订阅消息撤回”才走本事件能力。
 - “贴标签”表示给消息贴表情时，对应 `reaction` 表情回应事件。
-- “群改名/群标题变更”对应 `user_im_group_updated`；“群解散”对应 `user_im_group_disbanded`。群解散自测必须使用测试群，并在执行解散动作前再次确认破坏性影响。
+- “群改名/群标题变更”对应 `user_im_group_updated`；“有人进群”对应 `user_im_group_member_added`；“有人退群”对应 `user_im_group_member_exited`；“群解散”对应 `user_im_group_disbanded`。群解散自测必须使用测试群，并在执行解散动作前再次确认破坏性影响。
 
 ## Consume commands
 
@@ -140,6 +144,16 @@ dws event consume user_im_group_updated \
   --group cidxxxxxxxx \
   -f ndjson
 
+# 指定群有成员加入
+dws event consume user_im_group_member_added \
+  --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定群有成员退出
+dws event consume user_im_group_member_exited \
+  --group cidxxxxxxxx \
+  -f ndjson
+
 # 指定群解散
 dws event consume user_im_group_disbanded \
   --group cidxxxxxxxx \
@@ -163,6 +177,8 @@ dws event consume user_im_group_disbanded \
 | `user_im_message_reaction_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 在指定单聊中给消息添加表情回应 |
 | `user_im_message_reaction_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中给消息添加表情回应 |
 | `user_im_group_updated` | `--group <openConversationId> --duration 10m -f ndjson` | 修改测试群的群标题 |
+| `user_im_group_member_added` | `--group <openConversationId> --duration 10m -f ndjson` | 邀请一名测试成员加入测试群 |
+| `user_im_group_member_exited` | `--group <openConversationId> --duration 10m -f ndjson` | 让一名测试成员主动退出测试群 |
 | `user_im_group_disbanded` | `--group <openConversationId> --duration 10m -f ndjson` | 确认是可销毁测试群后再解散；该操作不可逆 |
 
 stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 表示本地 consume 已连接到事件 bus；父进程等这行再读 stdout。stdout 每行是一个扁平事件 JSON。
@@ -215,7 +231,7 @@ stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscr
 
 正常输出不会暴露 `payload`、`uid`、`corpid`、`clientId`、`filterSubId`、`bizid` 等内部字段。需要检查原始协议时才使用 `-f raw` 或 `--debug-raw-events`。
 
-群生命周期事件当前采用保守输出：顶层只承诺 `type`、`event_id`、`timestamp`、`subscribe_id` 和 `payload`。`payload` 会保留服务端推送的未知业务字段，并移除已知的顶层身份/路由字段；不要猜测群标题、操作者等尚未由真实样本确认的键。
+群生命周期事件当前采用保守输出：顶层只承诺 `type`、`event_id`、`timestamp`、`subscribe_id` 和 `payload`。`payload` 会保留服务端推送的未知业务字段，并移除已知的顶层身份/路由字段；不要猜测群标题、成员、操作者等尚未由真实样本确认的键。
 
 ## Event-driven replies
 
@@ -257,6 +273,8 @@ dws event status --event user_im_message_read_o2o
 dws event status --event user_im_message_recall_group
 dws event status --event user_im_message_reaction_o2o
 dws event status --event user_im_group_updated
+dws event status --event user_im_group_member_added
+dws event status --event user_im_group_member_exited
 dws event status --event user_im_group_disbanded
 ```
 

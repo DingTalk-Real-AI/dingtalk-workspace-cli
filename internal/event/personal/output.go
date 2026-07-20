@@ -469,7 +469,10 @@ func isReactionEvent(eventKey string) bool {
 }
 
 func isGroupLifecycleEvent(eventKey string) bool {
-	return eventKey == EventGroupUpdated || eventKey == EventGroupDisbanded
+	return eventKey == EventGroupUpdated ||
+		eventKey == EventGroupMemberAdded ||
+		eventKey == EventGroupMemberExited ||
+		eventKey == EventGroupDisbanded
 }
 
 func schemaType(t reflect.Type) string {

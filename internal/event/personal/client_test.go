@@ -131,6 +131,8 @@ func TestClientCreateRuleBasedSubscriptionsUsesDocumentedRuleParam(t *testing.T)
 		{"recall_group", EventRecallGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 		{"reaction_group", EventReactionGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 		{"group_updated", EventGroupUpdated, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"group_member_added", EventGroupMemberAdded, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"group_member_exited", EventGroupMemberExited, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 		{"group_disbanded", EventGroupDisbanded, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 	}
 	for _, tt := range tests {

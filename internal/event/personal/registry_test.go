@@ -43,6 +43,8 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventReactionO2O,
 		EventReactionGroup,
 		EventGroupUpdated,
+		EventGroupMemberAdded,
+		EventGroupMemberExited,
 		EventGroupDisbanded,
 	}
 	if !reflect.DeepEqual(keys, want) {
@@ -327,7 +329,7 @@ func TestActionSchemaDocumentsMatchOutputDTOs(t *testing.T) {
 
 func TestGroupLifecycleSchemaDocumentsUseConservativePayload(t *testing.T) {
 	wantProperties := []string{"type", "event_id", "timestamp", "subscribe_id", "payload"}
-	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupMemberAdded, EventGroupMemberExited, EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
 			if !ok {
@@ -496,7 +498,7 @@ func TestBuildRuleParamActionEvents(t *testing.T) {
 		})
 	}
 
-	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventReactionGroup, EventGroupUpdated, EventGroupDisbanded} {
+	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventReactionGroup, EventGroupUpdated, EventGroupMemberAdded, EventGroupMemberExited, EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
 				t.Fatalf("missing group error = %v", err)

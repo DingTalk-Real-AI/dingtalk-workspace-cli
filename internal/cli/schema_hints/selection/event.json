@@ -14,7 +14,7 @@
         "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
         "用户明确要求监听当前身份的所有单聊或所有群消息",
         "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
-        "需要监听指定群的标题变更或群解散事件",
+        "需要监听指定群的标题变更、成员进退群或群解散事件",
         "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
       ],
       "avoid_when": [
@@ -23,7 +23,7 @@
       ],
       "examples": [
         "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-        "dws event consume user_im_group_updated --group cid-example --max-events 1 --format ndjson"
+        "dws event consume user_im_group_member_added --group cid-example --max-events 1 --format ndjson"
       ],
       "reviewed": true,
       "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",

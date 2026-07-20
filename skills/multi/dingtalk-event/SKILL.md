@@ -44,9 +44,11 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 | `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | 指定群聊中的消息收到表情回应 | `--group` |
 | `user_im_group_updated` | 指定群聊的标题发生变更 | `--group` |
+| `user_im_group_member_added` | 指定群聊有成员加入 | `--group` |
+| `user_im_group_member_exited` | 指定群聊有成员退出 | `--group` |
 | `user_im_group_disbanded` | 指定群聊被解散 | `--group` |
 
-只承认上表 14 个事件码。其它身份模式、应用凭证模式、非个人 IM 事件不在本 skill 范围内。
+只承认上表 16 个事件码。其它身份模式、应用凭证模式、非个人 IM 事件不在本 skill 范围内。
 
 ## Command rules
 
@@ -60,7 +62,7 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 - “监听我和某人的单聊”使用 `user_im_message_receive_o2o`；“监听某人发给我的消息/监听某人发送的消息”使用 `user_im_message_receive_user`，后者覆盖该发送人的单聊和群聊消息。
 - 只有用户明确要求“所有单聊消息”或“所有群消息”时才使用 `user_im_message_receive_o2o_all` / `user_im_message_receive_group_all`；指定人或指定群仍使用范围更小的事件。
 - 用户只给群名时，先运行 `dws chat search --query "<group>" --format json` 解析 openConversationId；多候选必须让用户确认。
-- “监听群改名/群标题变更”使用 `user_im_group_updated`；“监听群解散”使用 `user_im_group_disbanded`。群解散自测只能使用明确的测试群，并在执行解散操作前再次提示其不可逆影响。
+- “监听群改名/群标题变更”使用 `user_im_group_updated`；“监听有人进群”使用 `user_im_group_member_added`；“监听有人退群”使用 `user_im_group_member_exited`；“监听群解散”使用 `user_im_group_disbanded`。群解散自测只能使用明确的测试群，并在执行解散操作前再次提示其不可逆影响。
 - 用户要求执行“撤回消息”时使用 `dws chat`；只有“监听/订阅消息撤回”才使用 `dws event consume user_im_message_recall_*`。
 - 用户说“贴标签”且语义是给消息贴表情时，按消息表情回应事件处理，event key 使用 `reaction`。
 - 正常 Agent 消费使用 `-f ndjson`。抓一条样本可用 `--max-events 1 -f json`。
@@ -144,6 +146,16 @@ dws event consume user_im_message_reaction_o2o \
 
 # 指定群标题变更
 dws event consume user_im_group_updated \
+  --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定群有成员加入
+dws event consume user_im_group_member_added \
+  --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定群有成员退出
+dws event consume user_im_group_member_exited \
   --group cidxxxxxxxx \
   -f ndjson
 

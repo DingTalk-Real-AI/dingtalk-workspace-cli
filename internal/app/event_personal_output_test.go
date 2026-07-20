@@ -56,6 +56,8 @@ func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
 				personal.EventReactionO2O,
 				personal.EventReactionGroup,
 				personal.EventGroupUpdated,
+				personal.EventGroupMemberAdded,
+				personal.EventGroupMemberExited,
 				personal.EventGroupDisbanded,
 			} {
 				if !strings.Contains(got, eventKey) {
@@ -283,7 +285,7 @@ func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
 }
 
 func TestPersonalGroupLifecycleEventSchemaUsesConservativePayload(t *testing.T) {
-	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupDisbanded} {
+	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupMemberAdded, personal.EventGroupMemberExited, personal.EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			cmd := newEventSchemaCommand()
 			cmd.SilenceUsage = true
@@ -506,6 +508,8 @@ func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
 		{eventKey: personal.EventAllSingleChat},
 		{eventKey: personal.EventAllGroupChat},
 		{eventKey: personal.EventGroupUpdated, args: []string{"--group", "cid-test-group"}},
+		{eventKey: personal.EventGroupMemberAdded, args: []string{"--group", "cid-test-group"}},
+		{eventKey: personal.EventGroupMemberExited, args: []string{"--group", "cid-test-group"}},
 		{eventKey: personal.EventGroupDisbanded, args: []string{"--group", "cid-test-group"}},
 	} {
 		t.Run(test.eventKey, func(t *testing.T) {
@@ -532,7 +536,7 @@ func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
 		}
 	}
 
-	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupDisbanded} {
+	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupMemberAdded, personal.EventGroupMemberExited, personal.EventGroupDisbanded} {
 		cmd := newEventConsumeCommand()
 		cmd.SilenceUsage = true
 		cmd.SilenceErrors = true

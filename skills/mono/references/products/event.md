@@ -38,9 +38,11 @@
 | `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | 指定群聊中的消息收到表情回应 | `--group` |
 | `user_im_group_updated` | 指定群聊的标题发生变更 | `--group` |
+| `user_im_group_member_added` | 指定群聊有成员加入 | `--group` |
+| `user_im_group_member_exited` | 指定群聊有成员退出 | `--group` |
 | `user_im_group_disbanded` | 指定群聊被解散 | `--group` |
 
-只承认上表 14 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
+只承认上表 16 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
 
 ## Intent mapping
 
@@ -61,6 +63,8 @@
 | "监听我和 userId test-user-001 的消息贴表情" | `event consume`，事件码 `user_im_message_reaction_o2o`，参数 `--user test-user-001 -f ndjson` |
 | "监听 XX 群消息表情回应" | 先解析群 ID，再 consume `user_im_message_reaction_group --group <id>` |
 | "监听 XX 群改名" | 先解析群 ID，再 consume `user_im_group_updated --group <id>` |
+| "监听有人加入 XX 群" | 先解析群 ID，再 consume `user_im_group_member_added --group <id>` |
+| "监听有人退出 XX 群" | 先解析群 ID，再 consume `user_im_group_member_exited --group <id>` |
 | "监听 XX 群解散" | 先解析群 ID，再 consume `user_im_group_disbanded --group <id>`；破坏性自测只能用测试群 |
 | "监听并自动回复某人的单聊消息" | 先解析对端 userId，再启动 o2o consume；不要写轮询脚本 |
 | "查看个人消息事件 schema" | `dws event schema <event_key>` |
@@ -96,6 +100,8 @@ dws event schema user_im_message_recall_group
 dws event schema user_im_message_reaction_o2o
 dws event schema user_im_message_reaction_group
 dws event schema user_im_group_updated
+dws event schema user_im_group_member_added
+dws event schema user_im_group_member_exited
 dws event schema user_im_group_disbanded
 ```
 
@@ -115,6 +121,8 @@ dws event consume user_im_message_recall_group --group <openConversationId> -f n
 dws event consume user_im_message_reaction_o2o --user test-user-001 -f ndjson
 dws event consume user_im_message_reaction_group --group <openConversationId> -f ndjson
 dws event consume user_im_group_updated --group <openConversationId> -f ndjson
+dws event consume user_im_group_member_added --group <openConversationId> -f ndjson
+dws event consume user_im_group_member_exited --group <openConversationId> -f ndjson
 dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 ```
 

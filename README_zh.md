@@ -499,8 +499,10 @@ dws event consume user_im_message_receive_group --group <openConversationId> -f 
 dws event consume user_im_message_receive_o2o_all -f ndjson
 dws event consume user_im_message_receive_group_all -f ndjson
 
-# 监听指定群标题变更或群解散
+# 监听指定群标题变更、成员进退群或群解散
 dws event consume user_im_group_updated --group <openConversationId> -f ndjson
+dws event consume user_im_group_member_added --group <openConversationId> -f ndjson
+dws event consume user_im_group_member_exited --group <openConversationId> -f ndjson
 dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 
 # 查看本地 consume，并取消指定订阅

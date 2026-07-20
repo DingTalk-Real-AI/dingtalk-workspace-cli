@@ -696,6 +696,8 @@ func TestPersonalSourceNewIMEventsPassNormalBusFilter(t *testing.T) {
 		"user_im_message_receive_o2o_all",
 		"user_im_message_receive_group_all",
 		"user_im_group_updated",
+		"user_im_group_member_added",
+		"user_im_group_member_exited",
 		"user_im_group_disbanded",
 	} {
 		t.Run(eventKey, func(t *testing.T) {

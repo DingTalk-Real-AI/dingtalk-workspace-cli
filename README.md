@@ -505,8 +505,10 @@ dws event consume user_im_message_receive_group --group <openConversationId> -f 
 dws event consume user_im_message_receive_o2o_all -f ndjson
 dws event consume user_im_message_receive_group_all -f ndjson
 
-# Listen for a specified group's title changes or disband event
+# Listen for a specified group's title changes, member changes, or disband event
 dws event consume user_im_group_updated --group <openConversationId> -f ndjson
+dws event consume user_im_group_member_added --group <openConversationId> -f ndjson
+dws event consume user_im_group_member_exited --group <openConversationId> -f ndjson
 dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 
 # Inspect local consumers and cancel a subscription

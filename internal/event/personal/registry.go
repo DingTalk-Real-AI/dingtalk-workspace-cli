@@ -23,20 +23,22 @@ import (
 )
 
 const (
-	EventMention        = "user_im_message_receive_at"
-	EventSingleChat     = "user_im_message_receive_o2o"
-	EventInChat         = "user_im_message_receive_group"
-	EventFromUser       = "user_im_message_receive_user"
-	EventAllSingleChat  = "user_im_message_receive_o2o_all"
-	EventAllGroupChat   = "user_im_message_receive_group_all"
-	EventReadO2O        = "user_im_message_read_o2o"
-	EventReadGroup      = "user_im_message_read_group"
-	EventRecallO2O      = "user_im_message_recall_o2o"
-	EventRecallGroup    = "user_im_message_recall_group"
-	EventReactionO2O    = "user_im_message_reaction_o2o"
-	EventReactionGroup  = "user_im_message_reaction_group"
-	EventGroupUpdated   = "user_im_group_updated"
-	EventGroupDisbanded = "user_im_group_disbanded"
+	EventMention           = "user_im_message_receive_at"
+	EventSingleChat        = "user_im_message_receive_o2o"
+	EventInChat            = "user_im_message_receive_group"
+	EventFromUser          = "user_im_message_receive_user"
+	EventAllSingleChat     = "user_im_message_receive_o2o_all"
+	EventAllGroupChat      = "user_im_message_receive_group_all"
+	EventReadO2O           = "user_im_message_read_o2o"
+	EventReadGroup         = "user_im_message_read_group"
+	EventRecallO2O         = "user_im_message_recall_o2o"
+	EventRecallGroup       = "user_im_message_recall_group"
+	EventReactionO2O       = "user_im_message_reaction_o2o"
+	EventReactionGroup     = "user_im_message_reaction_group"
+	EventGroupUpdated      = "user_im_group_updated"
+	EventGroupMemberAdded  = "user_im_group_member_added"
+	EventGroupMemberExited = "user_im_group_member_exited"
+	EventGroupDisbanded    = "user_im_group_disbanded"
 )
 
 const (
@@ -231,6 +233,28 @@ var definitions = []Definition{
 		EventKey:       EventGroupUpdated,
 		DisplayName:    "群标题变更",
 		Description:    "指定群聊的标题发生变更",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupMemberAdded,
+		DisplayName:    "群成员加入",
+		Description:    "指定群聊有成员加入",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupMemberExited,
+		DisplayName:    "群成员退出",
+		Description:    "指定群聊有成员退出",
 		Category:       "im",
 		RuleType:       "group",
 		Status:         StatusEnabled,

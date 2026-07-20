@@ -163,7 +163,7 @@ func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageProjectOutputGroupLifecycleEvents(t *testing.T) {
-	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupMemberAdded, EventGroupMemberExited, EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			data := fmt.Sprintf(`{
 				"eventId":"group-event",
