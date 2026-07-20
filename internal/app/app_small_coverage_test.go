@@ -212,14 +212,16 @@ func TestCrossPlatformCoverageConfigAndTokenSeamsCoverage(t *testing.T) {
 	if _, err := resolveAccessTokenFromDir(context.Background(), "unused"); !errors.Is(err, authpkg.ErrTokenDecryption) {
 		t.Fatalf("decryption error = %v", err)
 	}
-	newAccessTokenProvider = func(string) accessTokenGetter { return fakeAccessTokenGetter{err: errors.New("missing")} }
+	newAccessTokenProvider = func(string) accessTokenGetter {
+		return fakeAccessTokenGetter{err: authpkg.ErrTokenDataNotFound}
+	}
 	newLegacyTokenManager = func(string) legacyTokenGetter { return fakeLegacyTokenGetter{token: " legacy "} }
 	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); err != nil || got != "legacy" {
 		t.Fatalf("legacy token = %q, %v", got, err)
 	}
 	authpkg.SetRuntimeProfile("corp:user")
 	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
-	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); got != "" || err == nil || err.Error() != "missing" {
+	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); got != "" || !errors.Is(err, authpkg.ErrTokenDataNotFound) {
 		t.Fatalf("explicit profile fallback = token %q error %v, want profile error", got, err)
 	}
 	authpkg.SetRuntimeProfile("")

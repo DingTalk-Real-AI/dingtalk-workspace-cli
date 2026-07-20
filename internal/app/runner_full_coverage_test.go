@@ -50,9 +50,9 @@ func TestCrossPlatformCoverageRunnerRemainingRoutingCoverage(t *testing.T) {
 
 	inv := executor.Invocation{CanonicalProduct: "product", Tool: "tool"}
 	prefetched := make(chan struct{}, 1)
-	runnerGetCachedRuntimeToken = func(context.Context) string {
+	runnerGetCachedRuntimeToken = func(context.Context) (string, error) {
 		prefetched <- struct{}{}
-		return ""
+		return "", nil
 	}
 	r := &runtimeRunner{
 		loader:    cli.CatalogLoaderFrom(cli.Catalog{}, wantErr),
@@ -329,19 +329,19 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 	}
 
 	r.globalFlags.Token = " explicit "
-	if got := r.resolveAuthToken(context.Background()); got != "explicit" {
-		t.Fatalf("explicit auth token = %q", got)
+	if got, err := r.resolveAuthToken(context.Background()); err != nil || got != "explicit" {
+		t.Fatalf("explicit auth token = %q, %v", got, err)
 	}
 	edition.Override(&edition.Hooks{TokenProvider: func(_ context.Context, fallback func() (string, error)) (string, error) {
 		_, _ = fallback()
 		return "provided", nil
 	}})
 	r.globalFlags.Token = ""
-	if got := r.resolveAuthToken(context.Background()); got != "provided" {
-		t.Fatalf("provided auth token = %q", got)
+	if got, err := r.resolveAuthToken(context.Background()); err != nil || got != "provided" {
+		t.Fatalf("provided auth token = %q, %v", got, err)
 	}
-	if got := resolveRuntimeAuthToken(context.Background(), " runtime "); got != "runtime" {
-		t.Fatalf("runtime explicit token = %q", got)
+	if got, err := resolveRuntimeAuthToken(context.Background(), " runtime "); err != nil || got != "runtime" {
+		t.Fatalf("runtime explicit token = %q, %v", got, err)
 	}
 
 	t.Setenv(envDWSChannel, "channel")

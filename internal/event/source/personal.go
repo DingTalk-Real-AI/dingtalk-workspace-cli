@@ -41,18 +41,21 @@ const (
 )
 
 type PersonalConfig struct {
-	AccessToken     string
-	ClientID        string
-	ClientSecret    string
-	SourceID        string
-	TicketURL       string
-	TicketMode      string
-	HTTPClient      *http.Client
-	WebSocketDialer *websocket.Dialer
-	Now             func() time.Time
-	ReconnectMin    time.Duration
-	ReconnectMax    time.Duration
+	AccessToken         string
+	AccessTokenProvider AccessTokenProvider
+	ClientID            string
+	ClientSecret        string
+	SourceID            string
+	TicketURL           string
+	TicketMode          string
+	HTTPClient          *http.Client
+	WebSocketDialer     *websocket.Dialer
+	Now                 func() time.Time
+	ReconnectMin        time.Duration
+	ReconnectMax        time.Duration
 }
+
+type AccessTokenProvider func(context.Context) (string, error)
 
 type PersonalSource struct {
 	cfg     PersonalConfig
@@ -73,8 +76,8 @@ type ticketResponse struct {
 }
 
 func NewPersonal(cfg PersonalConfig) (*PersonalSource, error) {
-	if strings.TrimSpace(cfg.AccessToken) == "" {
-		return nil, errors.New("personal source: AccessToken is required")
+	if cfg.AccessTokenProvider == nil && strings.TrimSpace(cfg.AccessToken) == "" {
+		return nil, errors.New("personal source: AccessToken or AccessTokenProvider is required")
 	}
 	if strings.TrimSpace(cfg.ClientID) == "" {
 		return nil, errors.New("personal source: ClientID is required")
@@ -192,6 +195,10 @@ func (s *PersonalSource) runAttempt(ctx context.Context, emit dwsevent.EmitFn) (
 }
 
 func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, error) {
+	accessToken, err := resolveSourceAccessToken(ctx, s.cfg.AccessTokenProvider, s.cfg.AccessToken, "personal source")
+	if err != nil {
+		return nil, err
+	}
 	body := map[string]any{
 		"sourceId": s.cfg.SourceID,
 		"mode":     s.cfg.TicketMode,
@@ -207,8 +214,8 @@ func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, erro
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("x-user-access-token", s.cfg.AccessToken)
-	req.Header.Set("Authorization", "Bearer "+s.cfg.AccessToken)
+	req.Header.Set("x-user-access-token", accessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("X-DWS-Client-Id", s.cfg.ClientID)
 	req.Header.Set("X-DWS-Source-Id", s.cfg.SourceID)
 
@@ -236,6 +243,23 @@ func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, erro
 		return nil, errors.New("personal source: ticket response missing endpoint or ticket")
 	}
 	return ticket, nil
+}
+
+func resolveSourceAccessToken(ctx context.Context, provider AccessTokenProvider, fallback, component string) (string, error) {
+	if provider != nil {
+		token, err := provider(ctx)
+		if err != nil {
+			return "", fmt.Errorf("%s: resolve access token: %w", component, err)
+		}
+		if token = strings.TrimSpace(token); token != "" {
+			return token, nil
+		}
+		return "", fmt.Errorf("%s: access token provider returned empty token", component)
+	}
+	if token := strings.TrimSpace(fallback); token != "" {
+		return token, nil
+	}
+	return "", fmt.Errorf("%s: access token is required", component)
 }
 
 func (s *PersonalSource) handleFrame(conn *websocket.Conn, data []byte, emit dwsevent.EmitFn) error {

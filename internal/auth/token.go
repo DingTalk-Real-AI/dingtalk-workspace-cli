@@ -127,6 +127,10 @@ const tokenJSONFile = "token.json"
 type TokenMarker struct {
 	UpdatedAt   string `json:"updated_at"`
 	ManualToken bool   `json:"manual_token,omitempty"`
+	// Revision changes on every credential publication. Runtime token caches
+	// use it as a cheap cross-process invalidation signal without reading the
+	// platform keychain on every request.
+	Revision string `json:"revision,omitempty"`
 }
 
 // WriteTokenMarker writes a token.json marker containing only an updated_at
@@ -147,6 +151,7 @@ func writeTokenMarker(configDir string, manual bool) error {
 	marker := TokenMarker{
 		UpdatedAt:   time.Now().Format(time.RFC3339),
 		ManualToken: manual,
+		Revision:    uuid.NewString(),
 	}
 	data, _ := tokenJSONMarshalIndent(marker, "", "  ")
 	if err := tokenMkdirAll(configDir, 0o700); err != nil {
@@ -157,6 +162,27 @@ func writeTokenMarker(configDir string, manual bool) error {
 		return err
 	}
 	return tokenRename(tmp, filepath.Join(configDir, tokenJSONFile))
+}
+
+// ReadTokenMarkerRevision returns the current credential publication revision.
+// Existing markers without a revision remain readable, but callers must avoid
+// caching them because they cannot prove that the credential is unchanged.
+func ReadTokenMarkerRevision(configDir string) (revision string, present bool, err error) {
+	data, err := tokenReadFile(filepath.Join(configDir, tokenJSONFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("read token marker: %w", err)
+	}
+	var marker TokenMarker
+	if err := json.Unmarshal(data, &marker); err != nil {
+		// The marker is only a cache-coherency hint. A malformed historical or
+		// externally modified marker must disable caching, not make an otherwise
+		// valid credential unusable.
+		return "", true, nil
+	}
+	return strings.TrimSpace(marker.Revision), true, nil
 }
 
 func manualTokenMarkerActive(configDir string) (bool, error) {
