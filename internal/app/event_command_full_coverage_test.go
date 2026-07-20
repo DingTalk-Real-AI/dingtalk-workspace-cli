@@ -132,18 +132,14 @@ func TestCrossPlatformCoverageEventSourcesAndForegroundCoverage(t *testing.T) {
 	if _, err := newEventSource(context.Background(), "config", "client", "secret", eventStreamTicketOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	stream := eventStreamTicketOptions{Mode: "custom"}
-	var captured source.Config
-	eventNewDingtalkSource = func(cfg source.Config, _ ...source.SourceOption) (*source.DingtalkSource, error) {
-		captured = cfg
-		return &source.DingtalkSource{}, nil
-	}
 	eventResolveAccessToken = func(context.Context, string, string) (string, error) { return "", fail }
-	if _, err := newEventSource(context.Background(), "config", "client", "secret", stream); err != nil {
-		t.Fatalf("stream source construction = %v", err)
+	stream := eventStreamTicketOptions{Mode: "custom"}
+	if _, err := newEventSource(context.Background(), "config", "client", "secret", stream); !errors.Is(err, fail) {
+		t.Fatalf("stream token error = %v", err)
 	}
-	if _, err := captured.PortalTicket.AccessTokenProvider(context.Background()); !errors.Is(err, fail) {
-		t.Fatalf("stream token provider error = %v", err)
+	eventResolveAccessToken = func(context.Context, string, string) (string, error) { return " ", nil }
+	if _, err := newEventSource(context.Background(), "config", "client", "secret", stream); err == nil {
+		t.Fatal("empty stream token succeeded")
 	}
 	eventResolveAccessToken = func(context.Context, string, string) (string, error) { return "token", nil }
 	for _, mode := range []string{"custom", "normal"} {

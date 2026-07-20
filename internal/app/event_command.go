@@ -413,12 +413,20 @@ func eventStreamBusID(streamOpts eventStreamTicketOptions) string {
 	return "portal-ticket-normal:" + sourceID
 }
 
-func newEventSource(_ context.Context, configDir, clientID, clientSecret string, streamOpts eventStreamTicketOptions) (*source.DingtalkSource, error) {
+func newEventSource(ctx context.Context, configDir, clientID, clientSecret string, streamOpts eventStreamTicketOptions) (*source.DingtalkSource, error) {
 	if !streamOpts.enabled() {
 		return eventNewDingtalkSource(source.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 		})
+	}
+
+	token, err := eventResolveAccessToken(ctx, configDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("event stream ticket: resolve user token: %w", err)
+	}
+	if strings.TrimSpace(token) == "" {
+		return nil, errors.New("event stream ticket: empty user token")
 	}
 
 	portalClientID := clientID
@@ -432,10 +440,8 @@ func newEventSource(_ context.Context, configDir, clientID, clientSecret string,
 		ClientID:     portalClientID,
 		ClientSecret: portalClientSecret,
 		PortalTicket: &source.PortalTicketConfig{
-			TicketURL: eventStreamTicketURL(streamOpts.TicketURL),
-			AccessTokenProvider: func(ctx context.Context) (string, error) {
-				return eventResolveAccessToken(ctx, configDir, "")
-			},
+			TicketURL:    eventStreamTicketURL(streamOpts.TicketURL),
+			AccessToken:  token,
 			SourceID:     eventStreamSourceID(streamOpts.SourceID),
 			Mode:         streamOpts.Mode,
 			ClientID:     portalClientID,

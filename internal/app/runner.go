@@ -235,9 +235,7 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 	// ~70ms on macOS; starting it here lets the load overlap with endpoint
 	// resolution and catalog loading below.
 	if prefetchToken {
-		go func() {
-			_, _ = runnerGetCachedRuntimeToken(ctx)
-		}()
+		go runnerGetCachedRuntimeToken(ctx)
 	}
 
 	if shouldUseDirectRuntime(invocation) {
@@ -536,12 +534,8 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	authToken := ""
 	if hasPluginAuth {
 		authToken = pluginAuth.Token
-	} else if !invocation.DryRun && (r.globalFlags == nil || !r.globalFlags.Mock) {
-		var tokenErr error
-		authToken, tokenErr = r.resolveAuthToken(ctx)
-		if tokenErr != nil {
-			return executor.Result{}, tokenResolutionError(tokenErr)
-		}
+	} else {
+		authToken = r.resolveAuthToken(ctx)
 	}
 
 	var timeoutSec int
@@ -623,12 +617,6 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			}
 			return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 		}
-		if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, err, hasPluginAuth); handled {
-			if retryErr != nil {
-				runnerCaptureRuntimeFailure(invocation, err, retryErr)
-			}
-			return result, retryErr
-		}
 		runnerCaptureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
 	}
@@ -637,15 +625,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	callResult, err := runnerCallTool(tc, callCtx, endpoint, invocation.Tool, invocation.Params)
 	RecordTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
-		if isRefreshableTransportAuthError(err) {
+		if isAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
 				if overrideErr := fn(defaultConfigDir(), err); overrideErr != nil {
-					if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, overrideErr, hasPluginAuth); handled {
-						if retryErr != nil {
-							runnerCaptureRuntimeFailure(invocation, err, retryErr)
-						}
-						return result, retryErr
-					}
 					runnerCaptureRuntimeFailure(invocation, err, overrideErr)
 					return executor.Result{}, overrideErr
 				}
@@ -670,12 +652,6 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 				}
 				return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 			}
-			if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, editionErr, hasPluginAuth); handled {
-				if retryErr != nil {
-					runnerCaptureRuntimeFailure(invocation, editionErr, retryErr)
-				}
-				return result, retryErr
-			}
 			return executor.Result{}, editionErr
 		}
 	}
@@ -696,12 +672,6 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// patterns (PAT permission, gateway-auth) before generic handling.
 		if classify := edition.Get().ClassifyToolResult; classify != nil {
 			if hookErr := classify(callResult.Content); hookErr != nil {
-				if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, hookErr, hasPluginAuth); handled {
-					if retryErr != nil {
-						runnerCaptureRuntimeFailure(invocation, hookErr, retryErr)
-					}
-					return result, retryErr
-				}
 				runnerCaptureRuntimeFailure(invocation, hookErr, hookErr)
 				return executor.Result{}, hookErr
 			}
@@ -826,49 +796,67 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 	}, nil
 }
 
-func (r *runtimeRunner) resolveAuthToken(ctx context.Context) (string, error) {
+func (r *runtimeRunner) resolveAuthToken(ctx context.Context) string {
 	explicitToken := ""
 	if r != nil && r.globalFlags != nil {
 		explicitToken = r.globalFlags.Token
 	}
-	return resolveRuntimeAuthToken(ctx, explicitToken)
-}
-
-func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) (string, error) {
-	snapshot, err := runtimeTokenManager.Get(ctx, defaultConfigDir(), explicitToken)
-	if err != nil {
-		return "", err
+	if token := strings.TrimSpace(explicitToken); token != "" {
+		return token
 	}
-	return snapshot.AccessToken, nil
+	if tp := edition.Get().TokenProvider; tp != nil {
+		token, _ := tp(ctx, func() (string, error) {
+			return resolveAccessTokenFromDir(ctx, defaultConfigDir())
+		})
+		return token
+	}
+	return getCachedRuntimeToken(ctx)
 }
 
-// getCachedRuntimeToken is kept as the prefetch seam used by runner tests. The
-// cache itself lives exclusively in TokenManager.
-func getCachedRuntimeToken(ctx context.Context) (string, error) {
+func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
+	if token := strings.TrimSpace(explicitToken); token != "" {
+		return token
+	}
+	// Use cached token to avoid repeated Keychain access (~70ms per call)
+	return getCachedRuntimeToken(ctx)
+}
+
+// Cached token state for process lifetime
+var (
+	cachedRuntimeTokenMu sync.Mutex
+	cachedRuntimeTokens  = map[string]string{}
+)
+
+// getCachedRuntimeToken returns a cached access token, loading it only once per process.
+// This avoids repeated Keychain access which takes ~70ms each time.
+func getCachedRuntimeToken(ctx context.Context) string {
+	cacheKey := strings.TrimSpace(authpkg.RuntimeProfile())
+	if cacheKey == "" {
+		cacheKey = "__default__"
+	}
+	cachedRuntimeTokenMu.Lock()
+	if token := cachedRuntimeTokens[cacheKey]; token != "" {
+		cachedRuntimeTokenMu.Unlock()
+		return token
+	}
+	cachedRuntimeTokenMu.Unlock()
+
 	loadStart := time.Now()
 	defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
-	return resolveRuntimeAuthToken(ctx, "")
-}
 
-func tokenResolutionError(err error) error {
-	if err == nil {
-		return nil
+	configDir := defaultConfigDir()
+	token, tokenErr := resolveAccessTokenFromDir(ctx, configDir)
+	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
+		slog.Error(tokenErr.Error())
+		return ""
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return err
+	if token == "" {
+		return ""
 	}
-	if errors.Is(err, authpkg.ErrTokenDataNotFound) {
-		return apperrors.NewAuth(
-			"未登录，请先执行 dws auth login",
-			apperrors.WithReason("not_authenticated"),
-			apperrors.WithHint("运行 'dws auth login' 完成登录后重试"),
-			apperrors.WithActions("dws auth login"),
-			apperrors.WithCause(err),
-		)
-	}
-	// Keychain, parse, permission, lock, and refresh failures are real local or
-	// network errors. Preserve their cause instead of disguising them as logout.
-	return fmt.Errorf("resolve access token: %w", err)
+	cachedRuntimeTokenMu.Lock()
+	cachedRuntimeTokens[cacheKey] = token
+	cachedRuntimeTokenMu.Unlock()
+	return token
 }
 
 // generateExecutionID returns a random 16-char hex string used to correlate
@@ -883,7 +871,9 @@ func generateExecutionID() string {
 // ResetRuntimeTokenCache clears the cached token, forcing a reload on next access.
 // This should be called after login/logout operations.
 func ResetRuntimeTokenCache() {
-	runtimeTokenManager.Invalidate()
+	cachedRuntimeTokenMu.Lock()
+	defer cachedRuntimeTokenMu.Unlock()
+	cachedRuntimeTokens = map[string]string{}
 }
 
 func newRuntimeContentScanner() safety.Scanner {

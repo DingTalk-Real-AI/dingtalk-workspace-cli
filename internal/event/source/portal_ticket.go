@@ -39,15 +39,14 @@ const (
 // normal mode uses portal-side managed credentials; custom mode asks portal to
 // open the user connection with the caller-provided clientId/clientSecret.
 type PortalTicketConfig struct {
-	TicketURL           string
-	AccessToken         string
-	AccessTokenProvider AccessTokenProvider
-	SourceID            string
-	Mode                string
-	ClientID            string
-	ClientSecret        string
-	UserAgent           string
-	HTTPClient          *http.Client
+	TicketURL    string
+	AccessToken  string
+	SourceID     string
+	Mode         string
+	ClientID     string
+	ClientSecret string
+	UserAgent    string
+	HTTPClient   *http.Client
 }
 
 var portalWriteMessage = func(conn *websocket.Conn, messageType int, data []byte) error {
@@ -61,8 +60,8 @@ func (c *PortalTicketConfig) Valid() error {
 	if strings.TrimSpace(c.TicketURL) == "" {
 		return errors.New("source: portal ticket URL is required")
 	}
-	if c.AccessTokenProvider == nil && strings.TrimSpace(c.AccessToken) == "" {
-		return errors.New("source: portal access token or provider is required")
+	if strings.TrimSpace(c.AccessToken) == "" {
+		return errors.New("source: portal access token is required")
 	}
 	if strings.TrimSpace(c.SourceID) == "" {
 		return errors.New("source: portal sourceId is required")
@@ -162,10 +161,6 @@ type portalStreamTicket struct {
 }
 
 func requestPortalTicket(ctx context.Context, cfg *PortalTicketConfig) (portalStreamTicket, error) {
-	accessToken, err := resolveSourceAccessToken(ctx, cfg.AccessTokenProvider, cfg.AccessToken, "source: portal ticket")
-	if err != nil {
-		return portalStreamTicket{}, err
-	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
@@ -189,7 +184,7 @@ func requestPortalTicket(ctx context.Context, cfg *PortalTicketConfig) (portalSt
 	if ua := strings.TrimSpace(cfg.UserAgent); ua != "" {
 		req.Header.Set("User-Agent", ua)
 	}
-	req.Header.Set("x-user-access-token", accessToken)
+	req.Header.Set("x-user-access-token", cfg.AccessToken)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

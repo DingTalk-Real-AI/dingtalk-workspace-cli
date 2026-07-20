@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -396,11 +397,9 @@ func TestSkillInstallRequiresAuth(t *testing.T) {
 	configDir := filepath.Join(tempDir, "config")
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	t.Cleanup(CloseFileLogger)
-	originalResolveToken := skillResolveAccessToken
-	skillResolveAccessToken = func(context.Context, string, string) (string, error) {
-		return "", authpkg.ErrTokenDataNotFound
-	}
-	t.Cleanup(func() { skillResolveAccessToken = originalResolveToken })
+	originalLoadToken := skillLoadTokenData
+	skillLoadTokenData = func(string) (*authpkg.TokenData, error) { return nil, errors.New("missing") }
+	t.Cleanup(func() { skillLoadTokenData = originalLoadToken })
 
 	// Ensure the config directory exists but has no token
 	if err := os.MkdirAll(configDir, 0755); err != nil {
@@ -680,11 +679,16 @@ func TestSkillSearchUsesSourceQueryAndKeepsScopesCompat(t *testing.T) {
 	configDir := filepath.Join(t.TempDir(), "config")
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	t.Cleanup(CloseFileLogger)
-	originalResolveToken := skillResolveAccessToken
-	skillResolveAccessToken = func(context.Context, string, string) (string, error) {
-		return "test-token", nil
+	originalLoadToken := skillLoadTokenData
+	skillLoadTokenData = func(string) (*authpkg.TokenData, error) {
+		return &authpkg.TokenData{
+			AccessToken:  "test-token",
+			RefreshToken: "refresh-token",
+			ExpiresAt:    time.Now().Add(time.Hour),
+			RefreshExpAt: time.Now().Add(24 * time.Hour),
+		}, nil
 	}
-	t.Cleanup(func() { skillResolveAccessToken = originalResolveToken })
+	t.Cleanup(func() { skillLoadTokenData = originalLoadToken })
 
 	var gotSources []string
 	var gotScopes []string

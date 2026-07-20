@@ -34,10 +34,6 @@ func (g fakeAccessTokenGetter) GetAccessToken(context.Context) (string, error) {
 	return g.token, g.err
 }
 
-func (g fakeAccessTokenGetter) ForceRefreshRejectedToken(context.Context, string) (string, error) {
-	return g.token, g.err
-}
-
 type fakeLegacyTokenGetter struct {
 	token string
 	err   error
@@ -216,16 +212,14 @@ func TestCrossPlatformCoverageConfigAndTokenSeamsCoverage(t *testing.T) {
 	if _, err := resolveAccessTokenFromDir(context.Background(), "unused"); !errors.Is(err, authpkg.ErrTokenDecryption) {
 		t.Fatalf("decryption error = %v", err)
 	}
-	newAccessTokenProvider = func(string) accessTokenGetter {
-		return fakeAccessTokenGetter{err: authpkg.ErrTokenDataNotFound}
-	}
+	newAccessTokenProvider = func(string) accessTokenGetter { return fakeAccessTokenGetter{err: errors.New("missing")} }
 	newLegacyTokenManager = func(string) legacyTokenGetter { return fakeLegacyTokenGetter{token: " legacy "} }
 	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); err != nil || got != "legacy" {
 		t.Fatalf("legacy token = %q, %v", got, err)
 	}
 	authpkg.SetRuntimeProfile("corp:user")
 	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
-	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); got != "" || !errors.Is(err, authpkg.ErrTokenDataNotFound) {
+	if got, err := resolveAccessTokenFromDir(context.Background(), "unused"); got != "" || err == nil || err.Error() != "missing" {
 		t.Fatalf("explicit profile fallback = token %q error %v, want profile error", got, err)
 	}
 	authpkg.SetRuntimeProfile("")
@@ -252,10 +246,10 @@ func TestCrossPlatformCoverageConfigAndTokenSeamsCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageForceRefreshAndStdioFailureCoverage(t *testing.T) {
-	oldLoad, oldFactory := loadRefreshTokenData, newRefreshProvider
+	oldMark, oldFactory := markAccessTokenStale, newRefreshProvider
 	oldStop := stopStdio
 	t.Cleanup(func() {
-		loadRefreshTokenData, newRefreshProvider = oldLoad, oldFactory
+		markAccessTokenStale, newRefreshProvider = oldMark, oldFactory
 		stopStdio = oldStop
 		stdioMu.Lock()
 		stdioClients = make(map[string]*transport.StdioClient)
@@ -263,13 +257,11 @@ func TestCrossPlatformCoverageForceRefreshAndStdioFailureCoverage(t *testing.T) 
 	})
 	fail := errors.New("failure")
 	_ = oldFactory(t.TempDir())
-	loadRefreshTokenData = func(string) (*authpkg.TokenData, error) { return nil, fail }
+	markAccessTokenStale = func(string) error { return fail }
 	if _, err := ForceRefreshAccessToken(context.Background(), "config"); !errors.Is(err, fail) {
-		t.Fatalf("load rejected token error = %v", err)
+		t.Fatalf("mark stale error = %v", err)
 	}
-	loadRefreshTokenData = func(string) (*authpkg.TokenData, error) {
-		return &authpkg.TokenData{AccessToken: "rejected"}, nil
-	}
+	markAccessTokenStale = func(string) error { return nil }
 	for _, tc := range []struct {
 		getter fakeAccessTokenGetter
 		want   string
@@ -278,7 +270,7 @@ func TestCrossPlatformCoverageForceRefreshAndStdioFailureCoverage(t *testing.T) 
 		{getter: fakeAccessTokenGetter{token: "  "}, want: "empty"},
 		{getter: fakeAccessTokenGetter{token: " refreshed "}},
 	} {
-		newRefreshProvider = func(string) rejectedAccessTokenRefresher { return tc.getter }
+		newRefreshProvider = func(string) accessTokenGetter { return tc.getter }
 		got, err := ForceRefreshAccessToken(context.Background(), "config")
 		if tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
 			t.Fatalf("refresh error = %v, want %q", err, tc.want)

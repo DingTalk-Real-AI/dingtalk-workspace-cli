@@ -63,10 +63,9 @@ func (i Identity) Key() string {
 }
 
 type Client struct {
-	BaseURL             string
-	HTTPClient          *http.Client
-	Identity            Identity
-	AccessTokenProvider func(context.Context) (string, error)
+	BaseURL    string
+	HTTPClient *http.Client
+	Identity   Identity
 }
 
 type CreateSubscriptionRequest struct {
@@ -338,9 +337,8 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	if c == nil {
 		return errors.New("personal event: nil client")
 	}
-	accessToken, err := c.resolveAccessToken(ctx)
-	if err != nil {
-		return err
+	if c.Identity.AccessToken == "" {
+		return errors.New("personal event: access token is required")
 	}
 	u := strings.TrimRight(c.BaseURL, "/") + path
 	if len(q) > 0 {
@@ -360,7 +358,7 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	if err != nil {
 		return fmt.Errorf("personal event: create request: %w", err)
 	}
-	c.decorate(req, accessToken)
+	c.decorate(req)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -426,26 +424,9 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	return json.Unmarshal(data, out)
 }
 
-func (c *Client) resolveAccessToken(ctx context.Context) (string, error) {
-	if c.AccessTokenProvider != nil {
-		token, err := c.AccessTokenProvider(ctx)
-		if err != nil {
-			return "", fmt.Errorf("personal event: resolve access token: %w", err)
-		}
-		if token = strings.TrimSpace(token); token != "" {
-			return token, nil
-		}
-		return "", errors.New("personal event: access token provider returned empty token")
-	}
-	if token := strings.TrimSpace(c.Identity.AccessToken); token != "" {
-		return token, nil
-	}
-	return "", errors.New("personal event: access token is required")
-}
-
-func (c *Client) decorate(req *http.Request, accessToken string) {
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-user-access-token", accessToken)
+func (c *Client) decorate(req *http.Request) {
+	req.Header.Set("Authorization", "Bearer "+c.Identity.AccessToken)
+	req.Header.Set("x-user-access-token", c.Identity.AccessToken)
 	req.Header.Set("X-DWS-Client-Id", c.Identity.ClientID)
 	req.Header.Set("X-DWS-Source-Id", c.Identity.SourceID)
 	if c.Identity.CorpID != "" {

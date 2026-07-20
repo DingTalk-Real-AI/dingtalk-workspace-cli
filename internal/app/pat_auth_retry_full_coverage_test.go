@@ -52,41 +52,39 @@ func TestCrossPlatformCoveragePATRetryRemainingPureAndWaitCoverage(t *testing.T)
 
 	oldTimeout := patAuthorizationTimeout
 	oldInterval := patAuthorizationPollInterval
-	oldResolve := patResolveAccessToken
+	oldLoad := patLoadTokenData
 	t.Cleanup(func() {
 		patAuthorizationTimeout = oldTimeout
 		patAuthorizationPollInterval = oldInterval
-		patResolveAccessToken = oldResolve
+		patLoadTokenData = oldLoad
 	})
 	patAuthorizationTimeout = 50 * time.Millisecond
 	patAuthorizationPollInterval = time.Millisecond
-	patResolveAccessToken = func(context.Context, string, string) (string, error) {
-		return "token", nil
+	patLoadTokenData = func(string) (*authpkg.TokenData, error) {
+		return &authpkg.TokenData{AccessToken: "token", ExpiresAt: time.Now().Add(time.Hour)}, nil
 	}
 	out.Reset()
-	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || !ok {
+	if !WaitForPatAuthorization(context.Background(), "", &out) {
 		t.Fatal("valid token did not authorize")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	out.Reset()
-	if ok, err := WaitForPatAuthorization(ctx, "", &out); ok || !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancelled authorization = %v, %v", ok, err)
+	if WaitForPatAuthorization(ctx, "", &out) {
+		t.Fatal("cancelled authorization succeeded")
 	}
 	patAuthorizationTimeout = time.Millisecond
 	patAuthorizationPollInterval = time.Hour
 	out.Reset()
-	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || ok {
-		t.Fatalf("timed out authorization = %v, %v", ok, err)
+	if WaitForPatAuthorization(context.Background(), "", &out) {
+		t.Fatal("timed out authorization succeeded")
 	}
 	patAuthorizationTimeout = 5 * time.Millisecond
 	patAuthorizationPollInterval = time.Millisecond
-	patResolveAccessToken = func(context.Context, string, string) (string, error) {
-		return "", authpkg.ErrTokenDataNotFound
-	}
+	patLoadTokenData = func(string) (*authpkg.TokenData, error) { return nil, nil }
 	out.Reset()
-	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || ok || !strings.Contains(out.String(), "等待授权中") {
-		t.Fatalf("invalid-token polling = %v, %v, output %q", ok, err, out.String())
+	if WaitForPatAuthorization(context.Background(), "", &out) || !strings.Contains(out.String(), "等待授权中") {
+		t.Fatalf("invalid-token polling output = %q", out.String())
 	}
 }
 
@@ -111,12 +109,12 @@ func TestCrossPlatformCoveragePATRetryRemainingOrchestrationCoverage(t *testing.
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
 	scope := &PatScopeError{OriginalError: "missing", Identity: "user", ErrorType: "missing_scope", Message: "missing", Hint: "login", MissingScope: "calendar:read"}
-	patWaitForAuthorization = func(context.Context, string, io.Writer) (bool, error) { return false, nil }
+	patWaitForAuthorization = func(context.Context, string, io.Writer) bool { return false }
 	if _, err := retryWithPatAuthRetry(context.Background(), runnerCoverageFallback{}, executor.Invocation{}, scope, t.TempDir(), io.Discard); err == nil {
 		t.Fatal("PAT retry timeout succeeded")
 	}
 	wantErr := errors.New("runner failed")
-	patWaitForAuthorization = func(context.Context, string, io.Writer) (bool, error) { return true, nil }
+	patWaitForAuthorization = func(context.Context, string, io.Writer) bool { return true }
 	if _, err := retryWithPatAuthRetry(context.Background(), runnerCoverageFallback{err: wantErr}, executor.Invocation{}, scope, t.TempDir(), io.Discard); !errors.Is(err, wantErr) {
 		t.Fatalf("authorized retry = %v", err)
 	}
@@ -217,15 +215,15 @@ func patRaw(flowID, clientID, secret string) string {
 func TestCrossPlatformCoveragePATRetryRemainingPollAndBrowserCoverage(t *testing.T) {
 	oldDo := patPollHTTPDo
 	oldRequest := patPollNewRequest
-	oldResolve := patResolveAccessToken
+	oldLoad := patLoadTokenData
 	oldBrowser := patBrowserOpenCommand
 	t.Cleanup(func() {
 		patPollHTTPDo = oldDo
 		patPollNewRequest = oldRequest
-		patResolveAccessToken = oldResolve
+		patLoadTokenData = oldLoad
 		patBrowserOpenCommand = oldBrowser
 	})
-	patResolveAccessToken = func(context.Context, string, string) (string, error) { return "token", nil }
+	patLoadTokenData = func(string) (*authpkg.TokenData, error) { return &authpkg.TokenData{AccessToken: "token"}, nil }
 	cancelled, cancelNow := context.WithCancel(context.Background())
 	cancelNow()
 	if status, _, err := pollPatDeviceFlowWithInterval(cancelled, "flow", t.TempDir(), io.Discard, 0); err != nil || status != authpkg.StatusCancelled {

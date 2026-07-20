@@ -47,10 +47,8 @@ func (m *Manager) GetToken() (string, string, error) {
 		}
 		return token, "file", nil
 	}
-	if err != nil && !os.IsNotExist(err) {
-		return "", "", fmt.Errorf("load legacy token: %w", err)
-	}
-	return "", "", fmt.Errorf("%s: %w", i18n.T("未找到认证信息，请运行 dws auth login"), ErrTokenDataNotFound)
+
+	return "", "", fmt.Errorf("%s", i18n.T("未找到认证信息，请运行 dws auth login"))
 }
 
 func (m *Manager) GetMCPURL() (string, error) {
