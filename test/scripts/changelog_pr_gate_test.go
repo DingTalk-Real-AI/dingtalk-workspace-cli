@@ -401,7 +401,7 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 
 	admission := readWorkflow(".github/workflows/ci.yml")
 	for _, want := range []string{
-		"name: Code Admission — PR 合入门禁",
+		"name: CI",
 		"files.length === 1",
 		"files[0].filename === 'CHANGELOG.md'",
 		"files[0].status === 'modified'",
@@ -417,6 +417,10 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"mode=--fast-path",
 		`"$mode" "$PR_BASE_SHA" HEAD`,
 		"needs.lint.outputs.platform_sensitive == 'true'",
+		`COVERAGE_TARGET: "100"`,
+		`COVERAGE_ENFORCE_OVERALL: "false"`,
+		`COVERAGE_OVERALL_TOLERANCE: "0"`,
+		`COVERAGE_ADDITIONAL_DIFF_PROFILE=coverage-shortcut.txt`,
 	} {
 		if !strings.Contains(admission, want) {
 			t.Errorf("Code Admission workflow missing contract %q", want)
@@ -449,6 +453,31 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	}
 	if strings.Contains(admission, "paths-ignore:") {
 		t.Error("Code Admission must not suppress required contexts with paths-ignore")
+	}
+
+	notification := readWorkflow(".github/workflows/notify-wukong.yml")
+	if !strings.Contains(notification, "- CI") {
+		t.Error("Wukong notification must follow the renamed CI workflow")
+	}
+	if strings.Contains(notification, "Code Admission — PR 合入门禁") {
+		t.Error("Wukong notification still follows the retired workflow display name")
+	}
+
+	coverageGate := readWorkflow("scripts/policy/check-coverage-gate.sh")
+	if !strings.Contains(coverageGate, `TARGET="${COVERAGE_TARGET:-100}"`) {
+		t.Error("coverage gate must default to 100% changed-code coverage")
+	}
+	if !strings.Contains(coverageGate, `OVERALL_TOLERANCE="${COVERAGE_OVERALL_TOLERANCE:-0}"`) {
+		t.Error("coverage gate must reject any reported overall regression")
+	}
+	if !strings.Contains(coverageGate, `--baseline-profile "$BASELINE_PROFILE"`) {
+		t.Error("coverage gate must evaluate the merge-base profile with the candidate checker")
+	}
+	if strings.Contains(coverageGate, `--overall-profile "$ADDITIONAL_DIFF_PROFILE"`) {
+		t.Error("supporting changed-code coverage must not inflate candidate overall coverage")
+	}
+	if strings.Contains(coverageGate, `go tool cover -func="$BASELINE_PROFILE"`) {
+		t.Error("coverage baseline must not use a different coverage calculator")
 	}
 
 	aiBehavior := readWorkflow(".github/workflows/ai-behavior-check.yml")

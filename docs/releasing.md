@@ -2,7 +2,7 @@
 
 发布只走一条链路：本地脚本负责封板、验证并推送 annotated tag；GitHub Actions 负责构建和发布最终产物。不要直接运行 `goreleaser release`，也不要手工补打或移动 tag。
 
-发布前必须完成平台治理：目标 GitHub 仓库已启用 immutable releases，`main` 精确要求 `Code Admission — PR 合入门禁` 的九个 context：`Lint`、`Test`、`Coverage`、`Policy`、`Edition`、`Interface Integrity`、`AI Behavior`、`CLI Smoke`、`Mock MCP`，操作机已安装并登录 `gh`。本地脚本会在封 tag 前通过 API 检查 immutable releases、当前 SHA 的全部九个 context 和在途 Release；`v*` tag ruleset 仍需仓库管理员预先配置并由操作人确认。
+发布前必须完成平台治理：目标 GitHub 仓库已启用 immutable releases，`main` 精确要求 `CI` workflow 的九个 context：`Lint`、`Test`、`Coverage`、`Policy`、`Edition`、`Interface Integrity`、`AI Behavior`、`CLI Smoke`、`Mock MCP`，操作机已安装并登录 `gh`。本地脚本会在封 tag 前通过 API 检查 immutable releases、当前 SHA 的全部九个 context 和在途 Release；`v*` tag ruleset 仍需仓库管理员预先配置并由操作人确认。
 
 ## 日常只用一个入口
 
