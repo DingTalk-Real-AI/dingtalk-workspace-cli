@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"io"
@@ -73,6 +74,7 @@ var (
 	rootPluginLoadHooks             = (*plugin.Plugin).LoadHooks
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
+	rootBuildPluginProductCommand   = buildPluginProductCommand
 )
 
 // Execute runs the root command and returns the process exit code.
@@ -399,20 +401,22 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	root.AddCommand(newLegacyPublicCommands(runner, patCaller)...)
 	root.AddCommand(newLegacyHiddenCommands(runner)...)
 
-	// --- Plugin loading: runs AFTER legacy commands so plugin endpoints can
-	// be appended on top of the static endpoint registry.
-	pluginCmds := rootLoadPlugins(engine, runner)
-	if len(pluginCmds) > 0 {
-		addPluginCommandsSafe(root, pluginCmds)
-	}
-
 	// PAT authorization commands (open-source core)
 	pat.RegisterCommands(root, patCaller)
 
+	// Hardcoded products register first (RegisterProducts completes arbitration
+	// and establishes the final command tree).
 	if fn := edition.Get().RegisterExtraCommands; fn != nil {
 		caller := newToolCallerAdapter(runner, flags)
 		fn(root, caller)
 		deduplicateCommands(root)
+	}
+
+	// --- Plugin loading: runs AFTER hardcoded products so plugin subcommands
+	// are merged into the already-established command tree.
+	pluginCmds := rootLoadPlugins(engine, runner)
+	if len(pluginCmds) > 0 {
+		addPluginCommandsSafe(root, pluginCmds)
 	}
 	hideNonDirectRuntimeCommands(root)
 	configureRootHelp(root)
@@ -631,12 +635,14 @@ var reservedCommands = map[string]bool{
 	"schema": true, "mcp": true, "help": true,
 }
 
-// addPluginCommandsSafe registers plugin commands with conflict detection.
+// addPluginCommandsSafe registers plugin commands with conflict detection and
+// subcommand merging.
 //
 // Rules:
 //   - Plugin vs reserved (auth/plugin/cache/...) → reject, warn
 //   - Plugin vs plugin (same name)               → reject later one, warn
-//   - Plugin vs Market dynamic command            → allow, plugin wins
+//   - Plugin vs existing (hardcoded/Market)       → merge plugin's subcommands
+//     into the existing command (existing subcommands take precedence)
 func addPluginCommandsSafe(root *cobra.Command, pluginCmds []*cobra.Command) {
 	// Build index of existing commands before plugin registration.
 	existing := make(map[string]bool)
@@ -664,20 +670,42 @@ func addPluginCommandsSafe(root *cobra.Command, pluginCmds []*cobra.Command) {
 		}
 		pluginSeen[name] = true
 
-		// Rule 3: plugin vs Market — plugin wins, remove the old one.
+		// Rule 3: existing same-name command — merge plugin subcommands into it.
 		if existing[name] {
-			for _, old := range root.Commands() {
-				if old.Name() == name {
-					root.RemoveCommand(old)
-					slog.Debug("plugin: overriding Market command",
-						"command", name)
-					break
+			if target := findByName(root, name); target != nil {
+				for _, sub := range cmd.Commands() {
+					if !hasSubCommand(target, sub.Name()) {
+						target.AddCommand(sub)
+					}
 				}
+				slog.Debug("plugin: merged subcommands into existing command",
+					"command", name)
+				continue
 			}
 		}
 
 		root.AddCommand(cmd)
 	}
+}
+
+// hasSubCommand reports whether parent has a subcommand with the given name.
+func hasSubCommand(parent *cobra.Command, name string) bool {
+	for _, sub := range parent.Commands() {
+		if sub.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// findByName finds a direct child command of root by name.
+func findByName(root *cobra.Command, name string) *cobra.Command {
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == name {
+			return cmd
+		}
+	}
+	return nil
 }
 
 // deduplicateCommands removes duplicate top-level commands, keeping the last
@@ -811,7 +839,7 @@ func CloseFileLogger() {
 // loadPlugins registers versioned plugin manifests, stdio clients, hooks, and
 // skills. It deliberately does not initialize MCP transports or call
 // tools/list while constructing the command tree.
-func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
+func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
 	// 0a. Inject plugin config values from settings.json as environment
@@ -847,10 +875,19 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 
 	allPlugins := append(userPlugins, devPlugins...)
 
+	var pluginCmds []*cobra.Command
+	seen := make(map[string]bool)
+
 	// 3. Register HTTP descriptors and authentication from the manifest.
 	for _, p := range allPlugins {
 		for _, srv := range rootPluginDescriptors(p) {
 			rootRegisterPluginHTTPServer(srv)
+			if cmd := rootBuildPluginProductCommand(srv, runner); cmd != nil {
+				if !seen[cmd.Name()] {
+					seen[cmd.Name()] = true
+					pluginCmds = append(pluginCmds, cmd)
+				}
+			}
 		}
 	}
 
@@ -858,7 +895,13 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 	// started and initialized only when a command is actually executed.
 	for _, p := range allPlugins {
 		for _, sc := range rootPluginStdioClients(p, userCtx) {
-			rootRegisterStdioManifest(p, sc)
+			desc := rootRegisterStdioManifest(p, sc)
+			if cmd := rootBuildPluginProductCommand(desc, runner); cmd != nil {
+				if !seen[cmd.Name()] {
+					seen[cmd.Name()] = true
+					pluginCmds = append(pluginCmds, cmd)
+				}
+			}
 		}
 	}
 
@@ -890,7 +933,166 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 		)
 	}
 
-	return nil
+	return pluginCmds
+}
+
+// buildPluginProductCommand builds a Cobra command tree from a plugin's
+// ServerDescriptor CLI overlay. It uses static metadata only — no tools/list
+// or subprocess start happens here. Each declared tool becomes a subcommand
+// that dispatches via helper_invocation to the correct endpoint at runtime.
+func buildPluginProductCommand(desc mcptypes.ServerDescriptor, runner executor.Runner) *cobra.Command {
+	overlay := desc.CLI
+	cmdName := strings.TrimSpace(overlay.Command)
+	if cmdName == "" {
+		cmdName = strings.TrimSpace(overlay.ID)
+	}
+	if cmdName == "" || overlay.Skip {
+		return nil
+	}
+
+	productID := strings.TrimSpace(overlay.ID)
+	if productID == "" {
+		productID = cmdName
+	}
+
+	root := &cobra.Command{
+		Use:               cmdName,
+		Short:             desc.Description,
+		Aliases:           nonEmptyAliases(overlay.Aliases),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	// Build tool subcommands from static CLI overlay declarations.
+	addedTools := make(map[string]bool)
+	groupCmds := make(map[string]*cobra.Command)
+
+	for _, tool := range overlay.Tools {
+		toolName := strings.TrimSpace(tool.Name)
+		if toolName == "" || addedTools[toolName] {
+			continue
+		}
+		addedTools[toolName] = true
+		root.AddCommand(newPluginToolLeaf(productID, toolName, toolName, "", runner))
+	}
+
+	// ToolOverrides: use cliName for display, group for hierarchy, skip hidden.
+	for mcpToolName, override := range overlay.ToolOverrides {
+		mcpToolName = strings.TrimSpace(mcpToolName)
+		if mcpToolName == "" || addedTools[mcpToolName] {
+			continue
+		}
+		if strings.TrimSpace(override.ServerOverride) != "" {
+			continue // belongs to another server
+		}
+		if override.Hidden {
+			continue
+		}
+		addedTools[mcpToolName] = true
+
+		cliName := strings.TrimSpace(override.CLIName)
+		if cliName == "" {
+			cliName = mcpToolName
+		}
+
+		leaf := newPluginToolLeaf(productID, mcpToolName, cliName, override.Description, runner)
+
+		groupName := strings.TrimSpace(override.Group)
+		if groupName == "" {
+			root.AddCommand(leaf)
+			continue
+		}
+
+		grp, ok := groupCmds[groupName]
+		if !ok {
+			groupDesc := ""
+			if overlay.Groups != nil {
+				if meta, exists := overlay.Groups[groupName]; exists {
+					groupDesc = meta.Description
+				}
+			}
+			grp = &cobra.Command{
+				Use:               groupName,
+				Short:             groupDesc,
+				DisableAutoGenTag: true,
+				RunE: func(cmd *cobra.Command, _ []string) error {
+					return cmd.Help()
+				},
+			}
+			root.AddCommand(grp)
+			groupCmds[groupName] = grp
+		}
+		grp.AddCommand(leaf)
+	}
+
+	return root
+}
+
+// newPluginToolLeaf builds a single tool leaf command that dispatches to the
+// given product + tool via the runtime runner.
+func newPluginToolLeaf(productID, mcpToolName, cliName, description string, runner executor.Runner) *cobra.Command {
+	short := description
+	if short == "" {
+		short = fmt.Sprintf("调用 %s.%s", productID, mcpToolName)
+	}
+	return &cobra.Command{
+		Use:                cliName,
+		Short:              short,
+		DisableAutoGenTag:  true,
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			params := parsePluginToolArgs(args)
+			inv := executor.NewHelperInvocation(
+				productID+"."+mcpToolName,
+				productID,
+				mcpToolName,
+				params,
+			)
+			result, err := runner.Run(cmd.Context(), inv)
+			if err != nil {
+				return err
+			}
+			return writePluginResult(cmd, result)
+		},
+	}
+}
+
+// parsePluginToolArgs converts positional args into a params map.
+// Supports: key=value pairs or bare positional args.
+func parsePluginToolArgs(args []string) map[string]any {
+	params := make(map[string]any, len(args))
+	for i, arg := range args {
+		if k, v, ok := strings.Cut(arg, "="); ok {
+			params[k] = v
+		} else {
+			params[fmt.Sprintf("arg%d", i)] = arg
+		}
+	}
+	return params
+}
+
+// writePluginResult outputs the execution result to stdout.
+func writePluginResult(cmd *cobra.Command, result executor.Result) error {
+	if result.Response == nil {
+		return nil
+	}
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(result.Response)
+}
+
+// nonEmptyAliases filters out empty strings from an alias slice.
+func nonEmptyAliases(aliases []string) []string {
+	var out []string
+	for _, a := range aliases {
+		if strings.TrimSpace(a) != "" {
+			out = append(out, strings.TrimSpace(a))
+		}
+	}
+	return out
 }
 
 func registerPluginHTTPServer(srv mcptypes.ServerDescriptor) {

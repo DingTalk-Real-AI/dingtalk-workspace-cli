@@ -61,3 +61,4 @@ func MarkGroup(cmd *cobra.Command) {
 func IsGroup(cmd *cobra.Command) bool {
 	return cmd != nil && cmd.Annotations[KindAnnotation] == KindGroup
 }
+

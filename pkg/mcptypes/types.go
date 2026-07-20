@@ -21,6 +21,7 @@ type CLIOverlay struct {
 	Skip          bool                       `json:"skip"`
 	Tools         []CLITool                  `json:"tools"`
 	ToolOverrides map[string]CLIToolOverride `json:"toolOverrides,omitempty"`
+	Groups        map[string]GroupMeta       `json:"groups,omitempty"`
 }
 
 type CLITool struct {
@@ -28,7 +29,17 @@ type CLITool struct {
 }
 
 type CLIToolOverride struct {
-	ServerOverride string `json:"serverOverride,omitempty"`
+	ServerOverride string         `json:"serverOverride,omitempty"`
+	CLIName        string         `json:"cliName,omitempty"`
+	Group          string         `json:"group,omitempty"`
+	Description    string         `json:"description,omitempty"`
+	Hidden         bool           `json:"hidden,omitempty"`
+	IsSensitive    bool           `json:"isSensitive,omitempty"`
+	Flags          map[string]any `json:"flags,omitempty"`
+}
+
+type GroupMeta struct {
+	Description string `json:"description,omitempty"`
 }
 
 func OverlayFromJSON(data json.RawMessage) CLIOverlay {

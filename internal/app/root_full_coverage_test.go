@@ -240,6 +240,7 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	oldHooks := rootPluginLoadHooks
 	oldSync := rootPluginSyncSkills
 	oldToken := rootAuthLoadTokenData
+	oldBuildCmd := rootBuildPluginProductCommand
 	t.Cleanup(func() {
 		rootPluginInjectConfigEnv = oldInject
 		rootPluginLoadUser = oldUser
@@ -251,6 +252,7 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 		rootPluginLoadHooks = oldHooks
 		rootPluginSyncSkills = oldSync
 		rootAuthLoadTokenData = oldToken
+		rootBuildPluginProductCommand = oldBuildCmd
 	})
 
 	p1 := &plugin.Plugin{Manifest: plugin.Manifest{Name: "one"}}
@@ -294,10 +296,176 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	}
 	synced := false
 	rootPluginSyncSkills = func([]*plugin.Plugin) { synced = true }
+
+	// Case 1: no CLI overlay in descriptors → buildPluginProductCommand returns nil → no commands
 	if got := loadPlugins(pipeline.NewEngine(), runnerCoverageFallback{}); got != nil {
-		t.Fatalf("loaded plugin commands = %#v", got)
+		t.Fatalf("empty overlay: expected nil commands, got %d", len(got))
 	}
 	if httpCount != 3 || stdioCount != 1 || !synced {
 		t.Fatalf("registered http=%d stdio=%d synced=%v", httpCount, stdioCount, synced)
+	}
+
+	// Case 2: descriptors with CLIOverlay + ToolOverrides → buildPluginProductCommand returns commands
+	httpCount, stdioCount, synced = 0, 0, false
+	rootPluginDescriptors = func(p *plugin.Plugin) []mcptypes.ServerDescriptor {
+		if p == p1 {
+			return []mcptypes.ServerDescriptor{{
+				Key:      "http-with-cli",
+				Endpoint: "https://example.test",
+				CLI: mcptypes.CLIOverlay{
+					ID:      "myproduct",
+					Command: "myproduct",
+					Tools:   []mcptypes.CLITool{{Name: "list"}},
+					ToolOverrides: map[string]mcptypes.CLIToolOverride{
+						"raw_tool": {CLIName: "friendly", Description: "A friendly tool"},
+					},
+				},
+			}}
+		}
+		return nil
+	}
+	rootPluginStdioClients = func(*plugin.Plugin, *plugin.UserContext) []plugin.StdioServerClient { return nil }
+	got := loadPlugins(pipeline.NewEngine(), runnerCoverageFallback{})
+	if len(got) != 1 {
+		t.Fatalf("CLI overlay: expected 1 command, got %d", len(got))
+	}
+	if got[0].Name() != "myproduct" {
+		t.Fatalf("CLI overlay: expected command name 'myproduct', got %q", got[0].Name())
+	}
+	// Verify both 'list' (from Tools) and 'friendly' (cliName of raw_tool) are subcommands
+	if !hasSubCommand(got[0], "list") {
+		t.Fatal("expected 'list' subcommand from Tools")
+	}
+	if !hasSubCommand(got[0], "friendly") {
+		t.Fatal("expected 'friendly' subcommand from ToolOverrides cliName")
+	}
+	if hasSubCommand(got[0], "raw_tool") {
+		t.Fatal("raw_tool should not appear as subcommand; it should use cliName 'friendly'")
+	}
+}
+
+// TestAddPluginCommandsSafeMerge verifies that addPluginCommandsSafe merges
+// plugin subcommands into an existing same-name command.
+func TestAddPluginCommandsSafeMerge(t *testing.T) {
+	// Setup: root has a "conference" command with subcommand "meeting"
+	root := &cobra.Command{Use: "root"}
+	existingConf := &cobra.Command{Use: "conference", Run: func(*cobra.Command, []string) {}}
+	existingConf.AddCommand(&cobra.Command{Use: "meeting", Run: func(*cobra.Command, []string) {}})
+	root.AddCommand(existingConf)
+
+	// Plugin provides a "conference" command with subcommand "plugin_tool"
+	pluginConf := &cobra.Command{Use: "conference"}
+	pluginConf.AddCommand(&cobra.Command{Use: "plugin_tool", Run: func(*cobra.Command, []string) {}})
+
+	addPluginCommandsSafe(root, []*cobra.Command{pluginConf})
+
+	// Verify: root's "conference" should have both "meeting" and "plugin_tool"
+	conf := findByName(root, "conference")
+	if conf == nil {
+		t.Fatal("conference command not found on root")
+	}
+	if !hasSubCommand(conf, "meeting") {
+		t.Fatal("expected subcommand 'meeting' to remain")
+	}
+	if !hasSubCommand(conf, "plugin_tool") {
+		t.Fatal("expected subcommand 'plugin_tool' to be merged")
+	}
+	// Verify duplicate subcommands are not merged again
+	pluginConf2 := &cobra.Command{Use: "conference"}
+	pluginConf2.AddCommand(&cobra.Command{Use: "meeting", Run: func(*cobra.Command, []string) {}})
+	addPluginCommandsSafe(root, []*cobra.Command{pluginConf2})
+	// "meeting" should still appear only once (hasSubCommand checks existence, count stays 2)
+	subs := conf.Commands()
+	count := 0
+	for _, s := range subs {
+		if s.Name() == "meeting" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 'meeting' subcommand, got %d", count)
+	}
+
+	// Verify group commands participate in merge: plugin provides a "conference"
+	// with a group subcommand "camera" containing "open". It should merge into
+	// the existing conference command.
+	pluginConf3 := &cobra.Command{Use: "conference"}
+	grpCmd := &cobra.Command{Use: "camera", Run: func(*cobra.Command, []string) {}}
+	grpCmd.AddCommand(&cobra.Command{Use: "open", Run: func(*cobra.Command, []string) {}})
+	pluginConf3.AddCommand(grpCmd)
+	addPluginCommandsSafe(root, []*cobra.Command{pluginConf3})
+
+	// conference should now have meeting, plugin_tool, camera
+	if !hasSubCommand(conf, "camera") {
+		t.Fatal("expected 'camera' group command to be merged into conference")
+	}
+	cameraCmd := findByName(conf, "camera")
+	if cameraCmd == nil || !hasSubCommand(cameraCmd, "open") {
+		t.Fatal("expected 'open' subcommand under merged 'camera'")
+	}
+}
+
+// TestBuildPluginProductCommandGrouping tests that buildPluginProductCommand
+// correctly handles groups, hidden tools, cliName overrides, and fallback names.
+func TestBuildPluginProductCommandGrouping(t *testing.T) {
+	desc := mcptypes.ServerDescriptor{
+		Description: "test product",
+		CLI: mcptypes.CLIOverlay{
+			ID:      "testprod",
+			Command: "testprod",
+			Groups: map[string]mcptypes.GroupMeta{
+				"grp1": {Description: "Group One"},
+			},
+			ToolOverrides: map[string]mcptypes.CLIToolOverride{
+				"mcp_tool_a":            {CLIName: "alpha", Description: "Alpha tool"},
+				"mcp_tool_b":            {CLIName: "beta", Group: "grp1", Description: "Beta tool"},
+				"mcp_tool_c":            {CLIName: "gamma", Group: "grp1", Description: "Gamma tool"},
+				"mcp_tool_hidden":       {CLIName: "secret", Hidden: true},
+				"mcp_tool_other_server": {ServerOverride: "other-server"},
+				"no_cli_name":           {Description: "fallback name"},
+			},
+		},
+	}
+
+	cmd := buildPluginProductCommand(desc, runnerCoverageFallback{})
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+
+	// Verify top-level subcommands: alpha, grp1, no_cli_name (uses raw tool name as fallback)
+	if !hasSubCommand(cmd, "alpha") {
+		t.Error("expected 'alpha' as direct subcommand (cliName of mcp_tool_a)")
+	}
+	if !hasSubCommand(cmd, "grp1") {
+		t.Error("expected 'grp1' group command")
+	}
+	if !hasSubCommand(cmd, "no_cli_name") {
+		t.Error("expected 'no_cli_name' as fallback (no cliName set)")
+	}
+
+	// Verify hidden and other_server tools are not exposed
+	if hasSubCommand(cmd, "secret") {
+		t.Error("hidden tool 'secret' should not be exposed")
+	}
+	if hasSubCommand(cmd, "mcp_tool_hidden") {
+		t.Error("hidden tool raw name should not be exposed")
+	}
+	if hasSubCommand(cmd, "mcp_tool_other_server") {
+		t.Error("other server tool should not be exposed")
+	}
+
+	// Verify grp1 subcommands
+	grp := findByName(cmd, "grp1")
+	if grp == nil {
+		t.Fatal("grp1 not found")
+	}
+	if grp.Short != "Group One" {
+		t.Errorf("grp1 Short = %q, want %q", grp.Short, "Group One")
+	}
+	if !hasSubCommand(grp, "beta") {
+		t.Error("expected 'beta' under grp1")
+	}
+	if !hasSubCommand(grp, "gamma") {
+		t.Error("expected 'gamma' under grp1")
 	}
 }
