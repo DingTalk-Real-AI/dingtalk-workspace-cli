@@ -2,7 +2,7 @@
 
 发布只走一条链路：本地脚本负责封板、验证并推送 annotated tag；GitHub Actions 负责构建和发布最终产物。不要直接运行 `goreleaser release`，也不要手工补打或移动 tag。
 
-发布前必须完成平台治理：目标 GitHub 仓库已启用 immutable releases，`main` 要求 `CI Gate`，操作机已安装并登录 `gh`。本地脚本会在封 tag 前通过 API 检查 immutable releases、当前 SHA 的 `CI Gate` 和在途 Release；`v*` tag ruleset 仍需仓库管理员预先配置并由操作人确认。
+发布前必须完成平台治理：目标 GitHub 仓库已启用 immutable releases，`main` 精确要求 `Code Admission — PR 合入门禁` 的九个 context：`Lint`、`Test`、`Coverage`、`Policy`、`Edition`、`Interface Integrity`、`AI Behavior`、`CLI Smoke`、`Mock MCP`，操作机已安装并登录 `gh`。本地脚本会在封 tag 前通过 API 检查 immutable releases、当前 SHA 的全部九个 context 和在途 Release；`v*` tag ruleset 仍需仓库管理员预先配置并由操作人确认。
 
 ## 日常只用一个入口
 
@@ -45,7 +45,7 @@ dws-release v1.2.3-beta.1
 dws-release v1.2.3-beta.1
 ```
 
-预检包含测试、策略检查、旧正式版命令树兼容检查、全平台打包、npm 安装验证，以及 macOS 环境下的 Homebrew 安装验证。它还会从默认分支触发一次无发布权限的 `Release governance preflight`，用正式流水线相同的身份检查 `CI Gate` 和 immutable releases。通过后会在当前 Git worktree 的私有 Git 状态目录写入一个有效期六小时的证明，绑定版本、精确 commit、发布仓库、beta/stable 基线和远端 `main`：
+预检包含测试、策略检查、旧正式版命令树兼容检查、全平台打包、npm 安装验证，以及 macOS 环境下的 Homebrew 安装验证。它还会从默认分支触发一次无发布权限的 `Release governance preflight`，用正式流水线相同的身份检查该精确 commit 的九个 Code Admission context 和 immutable releases。通过后会在当前 Git worktree 的私有 Git 状态目录写入一个有效期六小时的证明，绑定版本、精确 commit、发布仓库、beta/stable 基线和远端 `main`：
 
 ```bash
 dws-release v1.2.3-beta.1 --publish
@@ -125,10 +125,10 @@ Homebrew 当前只属于本机预检/手工公式通道：预检会在当前 mac
 
 仓库管理员还需要在 GitHub 平台配置以下不可由脚本替代的规则：
 
-- `main` 必须要求精确的 `CI Gate`；tag workflow 也会通过 Checks API 再确认该封板 SHA 已通过。
+- `main` 必须精确要求 `Lint`、`Test`、`Coverage`、`Policy`、`Edition`、`Interface Integrity`、`AI Behavior`、`CLI Smoke`、`Mock MCP` 九个 Code Admission context；tag workflow 也会通过 Checks API 再确认该封板 SHA 上九项全部成功。
 - 必须启用 immutable releases；它只保护启用后发布的 release，因此应在第一次使用新流水线前配置。为 `v*` 增加 tag ruleset，限制创建权限，并在 release 发布前保护 tag 的短暂窗口。
 - 配置 `RELEASE_GOVERNANCE_TOKEN` Actions secret，只授予目标仓库 `Administration: read`；内置 `GITHUB_TOKEN` 不具备 immutable-releases API 所需的仓库治理权限。每次本地预检和 tag workflow 都使用这一个身份进行 fail-closed 验证。
 - 单独配置 `HOMEBREW_PR_TOKEN`，优先使用仅授权本仓库且具备 `Contents: write`、`Pull requests: write` 的 fine-grained PAT；若组织策略不允许该账号使用 fine-grained PAT，则回退到仅带 `public_repo` scope 的专用 classic PAT。治理预检和 tag contract 会验证 token 身份、classic scope，并用 `[skip ci]` 临时分支和 draft PR 完成真实写权限 canary，随后立即关闭 PR、删除分支；任何清理失败都会 fail closed。门禁也会拒绝与治理 token 复用。
 - 创建 `release-recovery` environment，只允许受保护分支，设置 required reviewer、禁止自审并关闭管理员绕过。workflow 会读取 environment 的 required-reviewer、prevent-self-review 和 protected-branch 规则；规则缺失时紧急恢复会失败，正常 beta/stable tag 发布不受影响。
 
-immutable releases 或 `CI Gate` 缺失时，发布脚本会自动拒绝封 tag。tag ruleset 可能来自组织层，脚本不自动推断其最终作用范围；管理员确认不能省略，脚本约定也不能替代平台强制。
+immutable releases，或任一 Code Admission context 缺失、未成功时，发布脚本会自动拒绝封 tag。tag ruleset 可能来自组织层，脚本不自动推断其最终作用范围；管理员确认不能省略，脚本约定也不能替代平台强制。

@@ -16,7 +16,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: dws-release [version] [options]
        dws-release config [--remote <name>]
-       dws-release recover <version> [--failed-run <run-id>] [--remote <name>]
+       dws-release recover <version> [--failed-run <run-id>] [--failed-attempt <attempt>] [--remote <name>]
 
 With no arguments, starts an interactive release guide. For a version that has
 no CHANGELOG section yet, prepares the template and stops. Otherwise, runs the
@@ -200,11 +200,17 @@ recover_release() {
   case "$recovery_version" in -h|--help) usage; exit 0 ;; esac
   shift
   recovery_failed_run=""
+  recovery_failed_attempt=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --failed-run)
         [ "$#" -ge 2 ] || die_usage '--failed-run requires a workflow run ID'
         recovery_failed_run="$2"
+        shift 2
+        ;;
+      --failed-attempt)
+        [ "$#" -ge 2 ] || die_usage '--failed-attempt requires a run attempt'
+        recovery_failed_attempt="$2"
         shift 2
         ;;
       --remote)
@@ -223,6 +229,9 @@ recover_release() {
   set -- "$recovery_version" --remote "$REMOTE"
   if [ -n "$recovery_failed_run" ]; then
     set -- "$@" --failed-run "$recovery_failed_run"
+  fi
+  if [ -n "$recovery_failed_attempt" ]; then
+    set -- "$@" --failed-attempt "$recovery_failed_attempt"
   fi
   exec "$SCRIPT_DIR/recover-release.sh" "$@"
 }

@@ -259,7 +259,25 @@ func TestReleaseGitHubAssetSetIsExact(t *testing.T) {
 	}
 	binDir := t.TempDir()
 	fakeGH := filepath.Join(binDir, "gh")
-	mustWriteFile(t, fakeGH, []byte("#!/bin/sh\nset -eu\nprintf '%s\\n' \"$GH_ASSETS\"\n"), 0o755)
+	mustWriteFile(t, fakeGH, []byte(`#!/bin/sh
+set -eu
+case "${1:-}" in
+  release)
+    [ "${2:-}" = "view" ] || exit 2
+    [ "${GH_DRAFT:-false}" = "true" ] || exit 1
+    printf '123\n'
+    ;;
+  api)
+    printf '%s\n' "$*" >> "$GH_LOG"
+    case "$*" in
+      *tag_name*) printf '%s\n' "$GH_RELEASE_TAG" ;;
+      *assets*name*) printf '%s\n' "$GH_ASSETS" ;;
+      *) exit 2 ;;
+    esac
+    ;;
+  *) exit 2 ;;
+esac
+`), 0o755)
 	exact := strings.Join([]string{
 		"dws-windows-arm64.zip",
 		"dws-linux-amd64.tar.gz",
@@ -271,22 +289,217 @@ func TestReleaseGitHubAssetSetIsExact(t *testing.T) {
 		"dws-darwin-arm64.tar.gz",
 	}, "\n")
 	script := filepath.Join(sourceRoot, "scripts", "release", "verify-github-release-assets.sh")
-	run := func(assets string) (string, error) {
+	run := func(assets string, draft bool, releaseTag, releaseID string) (string, string, error) {
+		draftValue := "false"
+		if draft {
+			draftValue = "true"
+		}
+		logPath := filepath.Join(t.TempDir(), "gh.log")
 		cmd := exec.Command("sh", script, "v1.2.3")
 		cmd.Env = []string{
 			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 			"HOME=" + t.TempDir(),
 			"GITHUB_REPOSITORY=owner/repo",
 			"GH_ASSETS=" + assets,
+			"GH_DRAFT=" + draftValue,
+			"GH_LOG=" + logPath,
+			"GH_RELEASE_TAG=" + releaseTag,
+			"DWS_GITHUB_RELEASE_ID=" + releaseID,
 		}
 		output, err := cmd.CombinedOutput()
-		return string(output), err
+		log, readErr := os.ReadFile(logPath)
+		if readErr != nil && !os.IsNotExist(readErr) {
+			t.Fatalf("ReadFile(%s) error = %v", logPath, readErr)
+		}
+		return string(output), string(log), err
 	}
-	if output, err := run(exact); err != nil {
+	if output, _, err := run(exact, false, "v1.2.3", ""); err != nil {
 		t.Fatalf("exact GitHub assets rejected: %v\n%s", err, output)
 	}
-	if output, err := run(exact + "\nmalware.exe"); err == nil || !strings.Contains(output, "exactly the supported assets") {
+	if output, log, err := run(exact, true, "v1.2.3", ""); err != nil {
+		t.Fatalf("exact Draft GitHub assets rejected: %v\n%s", err, output)
+	} else if !strings.Contains(log, "repos/owner/repo/releases/123") ||
+		strings.Contains(log, "repos/owner/repo/releases/tags/v1.2.3") {
+		t.Fatalf("Draft verification did not use the release ID endpoint:\n%s", log)
+	}
+	if output, _, err := run(exact+"\nmalware.exe", false, "v1.2.3", ""); err == nil || !strings.Contains(output, "exactly the supported assets") {
 		t.Fatalf("extra GitHub asset was not rejected: err=%v\n%s", err, output)
+	}
+	if output, _, err := run(exact, true, "v9.9.9", ""); err == nil || !strings.Contains(output, "ID/tag mismatch") {
+		t.Fatalf("wrong Draft release ID target was not rejected: err=%v\n%s", err, output)
+	}
+	if output, _, err := run(exact, false, "v1.2.3", "invalid"); err == nil || !strings.Contains(output, "invalid GitHub Release ID") {
+		t.Fatalf("invalid explicit release ID was not rejected: err=%v\n%s", err, output)
+	}
+}
+
+func TestReleaseGitHubAssetsDownloadByExactReleaseID(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	fakeGH := filepath.Join(binDir, "gh")
+	mustWriteFile(t, fakeGH, []byte(`#!/bin/sh
+set -eu
+[ "${1:-}" = "api" ] || exit 2
+shift
+
+accept=""
+endpoint=""
+query=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H)
+      accept="${2:-}"
+      shift 2
+      ;;
+    --jq)
+      query="${2:-}"
+      shift 2
+      ;;
+    repos/*)
+      endpoint="$1"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+printf '%s|%s|%s\n' "$accept" "$endpoint" "$query" >> "$GH_LOG"
+
+case "$accept" in
+  *application/octet-stream*)
+    case "$endpoint" in
+      repos/owner/repo/releases/assets/*) ;;
+      *) exit 31 ;;
+    esac
+    asset_id="${endpoint##*/}"
+    asset_name="$(
+      awk -F '	' -v id="$asset_id" '
+        $1 == id { print $2; found = 1 }
+        END { if (!found) exit 1 }
+      ' "$GH_ASSET_ROWS"
+    )" || exit 32
+    printf 'asset-bytes:%s:%s\n' "$asset_id" "$asset_name"
+    exit 0
+    ;;
+esac
+
+[ "$endpoint" = "repos/owner/repo/releases/$GH_EXPECTED_RELEASE_ID" ] || exit 33
+case "$query" in
+  '.tag_name')
+    printf '%s\n' "$GH_RELEASE_TAG"
+    ;;
+  '.assets[].name')
+    cut -f 2 "$GH_ASSET_ROWS"
+    ;;
+  '.assets[] | [.id, .name] | @tsv')
+    cat "$GH_ASSET_ROWS"
+    ;;
+  *)
+    exit 34
+    ;;
+esac
+`), 0o755)
+
+	type releaseAsset struct {
+		id   string
+		name string
+	}
+	assets := []releaseAsset{
+		{id: "1008", name: "dws-windows-arm64.zip"},
+		{id: "1003", name: "dws-darwin-arm64.tar.gz"},
+		{id: "1001", name: "checksums.txt"},
+		{id: "1005", name: "dws-linux-arm64.tar.gz"},
+		{id: "1002", name: "dws-darwin-amd64.tar.gz"},
+		{id: "1007", name: "dws-windows-amd64.zip"},
+		{id: "1004", name: "dws-linux-amd64.tar.gz"},
+		{id: "1006", name: "dws-skills.zip"},
+	}
+	rowsFor := func(items []releaseAsset) string {
+		var rows []string
+		for _, asset := range items {
+			rows = append(rows, asset.id+"\t"+asset.name)
+		}
+		return strings.Join(rows, "\n") + "\n"
+	}
+	script := filepath.Join(sourceRoot, "scripts", "release", "download-github-release-assets.sh")
+	type runResult struct {
+		output string
+		log    string
+		dest   string
+		err    error
+	}
+	run := func(items []releaseAsset, releaseTag, releaseID string) runResult {
+		runDir := t.TempDir()
+		rowsPath := filepath.Join(runDir, "assets.tsv")
+		logPath := filepath.Join(runDir, "gh.log")
+		dest := filepath.Join(runDir, "download")
+		mustWriteFile(t, rowsPath, []byte(rowsFor(items)), 0o644)
+		cmd := exec.Command("sh", script, "v1.2.3", dest)
+		cmd.Env = []string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"GITHUB_REPOSITORY=owner/repo",
+			"DWS_GITHUB_RELEASE_ID=" + releaseID,
+			"GH_ASSET_ROWS=" + rowsPath,
+			"GH_EXPECTED_RELEASE_ID=456",
+			"GH_LOG=" + logPath,
+			"GH_RELEASE_TAG=" + releaseTag,
+		}
+		output, runErr := cmd.CombinedOutput()
+		log, readErr := os.ReadFile(logPath)
+		if readErr != nil && !os.IsNotExist(readErr) {
+			t.Fatalf("ReadFile(%s) error = %v", logPath, readErr)
+		}
+		return runResult{
+			output: string(output),
+			log:    string(log),
+			dest:   dest,
+			err:    runErr,
+		}
+	}
+
+	success := run(assets, "v1.2.3", "456")
+	if success.err != nil {
+		t.Fatalf("exact GitHub Release download was rejected: %v\n%s", success.err, success.output)
+	}
+	if strings.Contains(success.log, "releases/tags/") {
+		t.Fatalf("download fell back to a tag endpoint:\n%s", success.log)
+	}
+	if got := strings.Count(success.log, "application/octet-stream"); got != len(assets) {
+		t.Fatalf("asset download count = %d, want %d\nlog:\n%s", got, len(assets), success.log)
+	}
+	for _, asset := range assets {
+		wantEndpoint := "repos/owner/repo/releases/assets/" + asset.id
+		if !strings.Contains(success.log, wantEndpoint) {
+			t.Errorf("asset %s was not downloaded by ID %s\nlog:\n%s", asset.name, asset.id, success.log)
+		}
+		data, readErr := os.ReadFile(filepath.Join(success.dest, asset.name))
+		if readErr != nil {
+			t.Errorf("ReadFile(%s) error = %v", asset.name, readErr)
+			continue
+		}
+		want := fmt.Sprintf("asset-bytes:%s:%s\n", asset.id, asset.name)
+		if string(data) != want {
+			t.Errorf("%s bytes = %q, want %q", asset.name, data, want)
+		}
+	}
+
+	extra := append(append([]releaseAsset{}, assets...), releaseAsset{id: "1009", name: "malware.exe"})
+	if result := run(extra, "v1.2.3", "456"); result.err == nil || !strings.Contains(result.output, "exactly the supported assets") {
+		t.Fatalf("extra GitHub Release asset was not rejected: err=%v\n%s", result.err, result.output)
+	}
+	if result := run(assets[:len(assets)-1], "v1.2.3", "456"); result.err == nil || !strings.Contains(result.output, "exactly the supported assets") {
+		t.Fatalf("missing GitHub Release asset was not rejected: err=%v\n%s", result.err, result.output)
+	}
+	if result := run(assets, "v9.9.9", "456"); result.err == nil || !strings.Contains(result.output, "ID/tag mismatch") {
+		t.Fatalf("wrong GitHub Release tag was not rejected: err=%v\n%s", result.err, result.output)
+	}
+	if result := run(assets, "v1.2.3", "invalid"); result.err == nil || !strings.Contains(result.output, "invalid GitHub Release ID") {
+		t.Fatalf("invalid GitHub Release ID was not rejected: err=%v\n%s", result.err, result.output)
 	}
 }
 

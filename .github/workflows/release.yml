@@ -1,5 +1,5 @@
 name: Release
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.workflow }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.event_name == 'workflow_dispatch' && inputs.repair_gitee_version != '' && format('Release Gitee repair {0}', inputs.repair_gitee_version) || github.workflow }}
 
 on:
   push:
@@ -9,6 +9,10 @@ on:
     inputs:
       repair_npm_version:
         description: "Recover npm for a public immutable release without moving latest/beta"
+        required: false
+        type: string
+      repair_gitee_version:
+        description: "Mirror an existing public immutable release's assets to Gitee"
         required: false
         type: string
       governance_preflight_commit:
@@ -35,6 +39,10 @@ on:
         description: "Failed exact-tag Release workflow run ID"
         required: false
         type: string
+      recover_failed_run_attempt:
+        description: "Failed attempt number within the exact-tag Release workflow run"
+        required: false
+        type: string
       recover_release_nonce:
         description: "Unique identifier for this protected recovery request"
         required: false
@@ -47,9 +55,9 @@ on:
 permissions:
   contents: read
 
-# Queue governance checks, tag releases, protected recoveries, and npm repairs
-# behind one publication lock. The local entrypoint also refuses to tag while
-# a Release run is active.
+# Queue governance checks, tag releases, protected recoveries, and channel
+# repairs behind one publication lock. The local entrypoint also refuses to tag
+# while a Release run is active.
 concurrency:
   group: dws-release-publication
   queue: max
@@ -66,31 +74,38 @@ jobs:
         id: mode
         env:
           REPAIR_NPM_VERSION: ${{ inputs.repair_npm_version }}
+          REPAIR_GITEE_VERSION: ${{ inputs.repair_gitee_version }}
           GOVERNANCE_COMMIT: ${{ inputs.governance_preflight_commit }}
           GOVERNANCE_NONCE: ${{ inputs.governance_preflight_nonce }}
           RECOVER_VERSION: ${{ inputs.recover_release_version }}
           RECOVER_TAG_OBJECT: ${{ inputs.recover_release_tag_object }}
           RECOVER_COMMIT: ${{ inputs.recover_release_commit }}
           RECOVER_FAILED_RUN_ID: ${{ inputs.recover_failed_run_id }}
+          RECOVER_FAILED_RUN_ATTEMPT: ${{ inputs.recover_failed_run_attempt }}
           RECOVER_NONCE: ${{ inputs.recover_release_nonce }}
           RECOVER_CONFIRMATION: ${{ inputs.recover_release_confirmation }}
         run: |
           set -eu
-          repair=0
+          npm_repair=0
+          gitee_repair=0
           governance=0
           recovery=0
-          test -z "$REPAIR_NPM_VERSION" || repair=1
+          test -z "$REPAIR_NPM_VERSION" || npm_repair=1
+          test -z "$REPAIR_GITEE_VERSION" || gitee_repair=1
           if test -n "$GOVERNANCE_COMMIT" || test -n "$GOVERNANCE_NONCE"; then governance=1; fi
           if test -n "$RECOVER_VERSION" || test -n "$RECOVER_TAG_OBJECT" || \
              test -n "$RECOVER_COMMIT" || test -n "$RECOVER_FAILED_RUN_ID" || \
+             test -n "$RECOVER_FAILED_RUN_ATTEMPT" || \
              test -n "$RECOVER_NONCE" || \
              test -n "$RECOVER_CONFIRMATION"; then recovery=1; fi
-          test $((repair + governance + recovery)) -eq 1 || {
+          test $((npm_repair + gitee_repair + governance + recovery)) -eq 1 || {
             echo "workflow_dispatch must select exactly one release mode" >&2
             exit 1
           }
-          if test "$repair" -eq 1; then
+          if test "$npm_repair" -eq 1; then
             echo "mode=repair_npm" >> "$GITHUB_OUTPUT"
+          elif test "$gitee_repair" -eq 1; then
+            echo "mode=repair_gitee" >> "$GITHUB_OUTPUT"
           elif test "$governance" -eq 1; then
             if test -z "$GOVERNANCE_COMMIT" || test -z "$GOVERNANCE_NONCE"; then
               echo "governance preflight requires both commit and nonce" >&2
@@ -100,6 +115,7 @@ jobs:
           else
             if test -z "$RECOVER_VERSION" || test -z "$RECOVER_TAG_OBJECT" || \
               test -z "$RECOVER_COMMIT" || test -z "$RECOVER_FAILED_RUN_ID" || \
+              test -z "$RECOVER_FAILED_RUN_ATTEMPT" || \
               test -z "$RECOVER_NONCE" || test -z "$RECOVER_CONFIRMATION"; then
                 echo "release recovery requires every recovery input" >&2
                 exit 1
@@ -118,6 +134,10 @@ jobs:
             }
             printf '%s\n' "$RECOVER_FAILED_RUN_ID" | grep -Eq '^[1-9][0-9]*$' || {
               echo "recover_failed_run_id must be a positive run ID" >&2
+              exit 1
+            }
+            printf '%s\n' "$RECOVER_FAILED_RUN_ATTEMPT" | grep -Eq '^[1-9][0-9]*$' || {
+              echo "recover_failed_run_attempt must be a positive attempt number" >&2
               exit 1
             }
             printf '%s\n' "$RECOVER_NONCE" | grep -Eq "^${RECOVER_COMMIT}-[0-9]+-[0-9]+$" || {
@@ -215,26 +235,56 @@ jobs:
             exit 1
           }
 
-      - name: Require successful CI Gate on the preflight commit
+      - name: Require successful Code Admission contexts on the preflight commit
         uses: actions/github-script@v7
         env:
           PREFLIGHT_COMMIT: ${{ inputs.governance_preflight_commit }}
         with:
           script: |
             const { owner, repo } = context.repo;
-            const { data } = await github.rest.checks.listForRef({
+            const sha = process.env.PREFLIGHT_COMMIT;
+            const requiredContexts = [
+              "Lint",
+              "Test",
+              "Coverage",
+              "Policy",
+              "Edition",
+              "Interface Integrity",
+              "AI Behavior",
+              "CLI Smoke",
+              "Mock MCP",
+            ];
+            const runs = await github.paginate(github.rest.checks.listForRef, {
               owner,
               repo,
-              ref: process.env.PREFLIGHT_COMMIT,
-              check_name: "CI Gate",
+              ref: sha,
               filter: "latest",
               per_page: 100,
             });
-            const passed = data.check_runs.some(
-              (run) => run.name === "CI Gate" && run.conclusion === "success",
-            );
-            if (!passed) {
-              core.setFailed(`CI Gate has not succeeded for ${process.env.PREFLIGHT_COMMIT}`);
+            const latestByName = new Map();
+            for (const run of runs) {
+              if (run.head_sha !== sha || !requiredContexts.includes(run.name)) {
+                continue;
+              }
+              const current = latestByName.get(run.name);
+              if (!current || run.id > current.id) {
+                latestByName.set(run.name, run);
+              }
+            }
+            const missing = requiredContexts.filter((name) => !latestByName.has(name));
+            const nonSuccess = requiredContexts.flatMap((name) => {
+              const run = latestByName.get(name);
+              if (!run || run.conclusion === "success") {
+                return [];
+              }
+              return [`${name}=${run.conclusion || run.status || "unknown"}`];
+            });
+            if (missing.length > 0 || nonSuccess.length > 0) {
+              core.setFailed(
+                `Code Admission contexts are not all successful for ${sha}; ` +
+                `missing: ${missing.length > 0 ? missing.join(", ") : "none"}; ` +
+                `non-success: ${nonSuccess.length > 0 ? nonSuccess.join(", ") : "none"}`,
+              );
             }
 
       - name: Check out trusted preflight tooling
@@ -290,7 +340,7 @@ jobs:
 
   release-contract:
     needs: [dispatch-contract, authorize-recovery]
-    if: ${{ always() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success')) }}
+    if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -317,6 +367,7 @@ jobs:
           RECOVER_TAG_OBJECT: ${{ inputs.recover_release_tag_object }}
           RECOVER_COMMIT: ${{ inputs.recover_release_commit }}
           RECOVER_FAILED_RUN_ID: ${{ inputs.recover_failed_run_id }}
+          RECOVER_FAILED_RUN_ATTEMPT: ${{ inputs.recover_failed_run_attempt }}
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -325,6 +376,7 @@ jobs:
             let commit = context.sha;
             let expectedTagObject = "";
             let failedRunId = "";
+            let failedRunAttempt = "";
             if (isRecovery) {
               if (
                 context.payload.repository.full_name !== "DingTalk-Real-AI/dingtalk-workspace-cli" ||
@@ -337,6 +389,7 @@ jobs:
               commit = process.env.RECOVER_COMMIT;
               expectedTagObject = process.env.RECOVER_TAG_OBJECT;
               failedRunId = process.env.RECOVER_FAILED_RUN_ID;
+              failedRunAttempt = process.env.RECOVER_FAILED_RUN_ATTEMPT;
               if (!/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-beta\.[1-9]\d*)?$/.test(version)) {
                 core.setFailed(`invalid recovery release version: ${version}`);
                 return;
@@ -347,6 +400,10 @@ jobs:
               }
               if (!/^[1-9]\d*$/.test(failedRunId)) {
                 core.setFailed("recover_failed_run_id must be a positive workflow run ID");
+                return;
+              }
+              if (!/^[1-9]\d*$/.test(failedRunAttempt)) {
+                core.setFailed("recover_failed_run_attempt must be a positive run attempt");
                 return;
               }
             }
@@ -383,13 +440,19 @@ jobs:
                 core.setFailed(`${version} commit is not contained in ${defaultBranch}`);
                 return;
               }
-              const failedRun = await github.rest.actions.getWorkflowRun({
-                owner,
-                repo,
-                run_id: Number(failedRunId),
-              });
+              const failedRun = await github.request(
+                "GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}",
+                {
+                  owner,
+                  repo,
+                  run_id: Number(failedRunId),
+                  attempt_number: Number(failedRunAttempt),
+                },
+              );
               const run = failedRun.data;
               if (
+                run.id !== Number(failedRunId) ||
+                run.run_attempt !== Number(failedRunAttempt) ||
                 run.repository.full_name !== `${owner}/${repo}` ||
                 run.path !== ".github/workflows/release.yml" ||
                 run.event !== "push" ||
@@ -398,7 +461,9 @@ jobs:
                 run.head_branch !== version ||
                 run.head_sha !== commit
               ) {
-                core.setFailed(`run ${failedRunId} is not the failed exact-tag Release run for ${version}`);
+                core.setFailed(
+                  `run ${failedRunId} attempt ${failedRunAttempt} is not the failed exact-tag Release attempt for ${version}`,
+                );
                 return;
               }
               try {
@@ -467,26 +532,56 @@ jobs:
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
-      - name: Require successful CI Gate on the sealed commit
+      - name: Require successful Code Admission contexts on the sealed commit
         uses: actions/github-script@v7
         env:
           RELEASE_COMMIT: ${{ steps.target.outputs.release_commit }}
         with:
           script: |
             const { owner, repo } = context.repo;
-            const { data } = await github.rest.checks.listForRef({
+            const sha = process.env.RELEASE_COMMIT;
+            const requiredContexts = [
+              "Lint",
+              "Test",
+              "Coverage",
+              "Policy",
+              "Edition",
+              "Interface Integrity",
+              "AI Behavior",
+              "CLI Smoke",
+              "Mock MCP",
+            ];
+            const runs = await github.paginate(github.rest.checks.listForRef, {
               owner,
               repo,
-              ref: process.env.RELEASE_COMMIT,
-              check_name: "CI Gate",
+              ref: sha,
               filter: "latest",
               per_page: 100,
             });
-            const passed = data.check_runs.some(
-              (run) => run.name === "CI Gate" && run.conclusion === "success",
-            );
-            if (!passed) {
-              core.setFailed(`CI Gate has not succeeded for ${process.env.RELEASE_COMMIT}`);
+            const latestByName = new Map();
+            for (const run of runs) {
+              if (run.head_sha !== sha || !requiredContexts.includes(run.name)) {
+                continue;
+              }
+              const current = latestByName.get(run.name);
+              if (!current || run.id > current.id) {
+                latestByName.set(run.name, run);
+              }
+            }
+            const missing = requiredContexts.filter((name) => !latestByName.has(name));
+            const nonSuccess = requiredContexts.flatMap((name) => {
+              const run = latestByName.get(name);
+              if (!run || run.conclusion === "success") {
+                return [];
+              }
+              return [`${name}=${run.conclusion || run.status || "unknown"}`];
+            });
+            if (missing.length > 0 || nonSuccess.length > 0) {
+              core.setFailed(
+                `Code Admission contexts are not all successful for ${sha}; ` +
+                `missing: ${missing.length > 0 ? missing.join(", ") : "none"}; ` +
+                `non-success: ${nonSuccess.length > 0 ? nonSuccess.join(", ") : "none"}`,
+              );
             }
 
       - name: Require delivered previous stable baseline
@@ -622,7 +717,7 @@ jobs:
 
   release:
     name: Build signed release artifacts
-    if: ${{ needs.release-contract.result == 'success' }}
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' }}
     needs: [release-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -686,7 +781,7 @@ jobs:
       - name: Install archive tooling
         run: sudo apt-get update && sudo apt-get install -y zip unzip
 
-      - name: Multi Profile E2E
+      - name: Multi-profile E2E
         run: bash scripts/dev/test-multi-profile-e2e.sh
 
       - name: Install rcodesign (sign darwin binaries from Linux)
@@ -788,7 +883,7 @@ jobs:
 
   verify-darwin-signatures:
     name: Verify Apple Developer ID signatures
-    if: ${{ needs.release.result == 'success' }}
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' }}
     needs: [release-contract, release]
     runs-on: macos-latest
     timeout-minutes: 10
@@ -816,7 +911,7 @@ jobs:
 
   publish-release:
     name: Publish immutable GitHub Release
-    if: ${{ needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
     needs: [release-contract, release, verify-darwin-signatures]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -903,6 +998,7 @@ jobs:
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
       - name: Publish or reuse immutable GitHub Release
+        id: publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
@@ -915,9 +1011,36 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
+          release_id=""
           if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
-            is_draft="$(gh release view "$RELEASE_VERSION" --json isDraft --jq .isDraft)"
-            is_prerelease="$(gh release view "$RELEASE_VERSION" --json isPrerelease --jq .isPrerelease)"
+            release_id="$(
+              gh release view "$RELEASE_VERSION" \
+                --json databaseId \
+                --jq .databaseId
+            )"
+            printf '%s\n' "$release_id" | grep -Eq '^[1-9][0-9]*$' || {
+              echo "Existing GitHub Release has an invalid database ID: $release_id" >&2
+              exit 1
+            }
+            resolved_tag="$(
+              gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+                --jq .tag_name
+            )"
+            test "$resolved_tag" = "$RELEASE_VERSION" || {
+              echo "GitHub Release ID $release_id targets $resolved_tag, not $RELEASE_VERSION." >&2
+              exit 1
+            }
+            is_draft="$(
+              gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+                --jq .draft
+            )"
+            is_prerelease="$(
+              gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+                --jq .prerelease
+            )"
             if [ "$is_prerelease" != "$expected_prerelease" ]; then
               echo "Existing release channel does not match $RELEASE_CHANNEL." >&2
               exit 1
@@ -925,14 +1048,18 @@ jobs:
             if [ "$is_draft" = "false" ]; then
               is_immutable="$(
                 gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
-                  "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
+                  "repos/$GITHUB_REPOSITORY/releases/$release_id" \
                   --jq .immutable
               )"
               if [ "$is_immutable" != "true" ]; then
                 echo "Published release is mutable; refusing to reuse its assets." >&2
                 exit 1
               fi
-              remote_body="$(gh release view "$RELEASE_VERSION" --json body --jq .body)"
+              remote_body="$(
+                gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+                  "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+                  --jq .body
+              )"
               local_body="$(cat "$RUNNER_TEMP/release-notes.md")"
               if [ "$remote_body" != "$local_body" ]; then
                 echo "Published release notes differ from the sealed CHANGELOG." >&2
@@ -950,11 +1077,9 @@ jobs:
               fi
               published_dir="$RUNNER_TEMP/published-release"
               mkdir -p "$published_dir"
-              gh release download "$RELEASE_VERSION" \
-                --dir "$published_dir" \
-                --pattern 'dws-*' \
-                --pattern 'checksums.txt' \
-                --clobber
+              DWS_GITHUB_RELEASE_ID="$release_id" \
+                "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh" \
+                "$RELEASE_VERSION" "$published_dir"
               DWS_PACKAGE_DIST_DIR="$published_dir" \
                 ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
               for asset in "$published_dir"/dws-* "$published_dir"/checksums.txt; do
@@ -967,12 +1092,10 @@ jobs:
               DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
                 DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
                 ./scripts/release/stage-npm-package.sh "$RELEASE_VERSION"
+              echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
               echo "Published GitHub Release is immutable and verified; reusing its exact assets."
               exit 0
             fi
-            gh release edit "$RELEASE_VERSION" \
-              --title "$RELEASE_VERSION" \
-              --notes-file "$RUNNER_TEMP/release-notes.md"
           else
             # shellcheck disable=SC2086
             gh release create "$RELEASE_VERSION" \
@@ -981,6 +1104,63 @@ jobs:
               --title "$RELEASE_VERSION" \
               --notes-file "$RUNNER_TEMP/release-notes.md" \
               $prerelease_flag
+            release_id="$(
+              gh release view "$RELEASE_VERSION" \
+                --json databaseId \
+                --jq .databaseId
+            )"
+          fi
+          printf '%s\n' "$release_id" | grep -Eq '^[1-9][0-9]*$' || {
+            echo "Draft GitHub Release has an invalid database ID: $release_id" >&2
+            exit 1
+          }
+          resolved_tag="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              --jq .tag_name
+          )"
+          test "$resolved_tag" = "$RELEASE_VERSION" || {
+            echo "Draft GitHub Release ID $release_id targets $resolved_tag, not $RELEASE_VERSION." >&2
+            exit 1
+          }
+          gh api --method PATCH \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f tag_name="$RELEASE_VERSION" \
+            -f target_commitish="$RELEASE_COMMIT" \
+            -f name="$RELEASE_VERSION" \
+            -f body="$(cat "$RUNNER_TEMP/release-notes.md")" \
+            -F draft=true \
+            -F prerelease="$expected_prerelease" \
+            >/dev/null
+          draft_state="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              --jq '[.tag_name, .draft, .prerelease] | @tsv'
+          )"
+          test "$draft_state" = "$(printf '%s\ttrue\t%s' "$RELEASE_VERSION" "$expected_prerelease")" || {
+            echo "Draft GitHub Release identity or channel changed before upload." >&2
+            exit 1
+          }
+          draft_body="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              --jq .body
+          )"
+          local_body="$(cat "$RUNNER_TEMP/release-notes.md")"
+          test "$draft_body" = "$local_body" || {
+            echo "Draft GitHub Release notes differ from the sealed CHANGELOG." >&2
+            exit 1
+          }
+          if [ "$IS_RECOVERY" = "true" ]; then
+            recovery_marker="<!-- dws-release-recovery run=$GITHUB_RUN_ID tag-object=$RELEASE_TAG_OBJECT commit=$RELEASE_COMMIT -->"
+            case "$draft_body" in
+              *"$recovery_marker"*) ;;
+              *)
+                echo "Draft GitHub Release is not bound to this exact recovery run." >&2
+                exit 1
+                ;;
+            esac
           fi
           gh release upload "$RELEASE_VERSION" \
             dist/dws-*.tar.gz \
@@ -988,15 +1168,24 @@ jobs:
             dist/dws-skills.zip \
             dist/checksums.txt \
             --clobber
-          ./scripts/release/verify-github-release-assets.sh "$RELEASE_VERSION"
+          uploaded_release_id="$(
+            gh release view "$RELEASE_VERSION" \
+              --json databaseId \
+              --jq .databaseId
+          )"
+          test "$uploaded_release_id" = "$release_id" || {
+            echo "GitHub Release identity changed during upload: $release_id -> $uploaded_release_id" >&2
+            exit 1
+          }
+          DWS_GITHUB_RELEASE_ID="$release_id" \
+            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-release-assets.sh" \
+            "$RELEASE_VERSION"
           sealed_upload="$RUNNER_TEMP/sealed-upload"
           rm -rf "$sealed_upload"
           mkdir -p "$sealed_upload"
-          gh release download "$RELEASE_VERSION" \
-            --dir "$sealed_upload" \
-            --pattern 'dws-*' \
-            --pattern 'checksums.txt' \
-            --clobber
+          DWS_GITHUB_RELEASE_ID="$release_id" \
+            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh" \
+            "$RELEASE_VERSION" "$sealed_upload"
           DWS_PACKAGE_DIST_DIR="$sealed_upload" \
             ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
           for remote_asset in "$sealed_upload"/dws-* "$sealed_upload"/checksums.txt; do
@@ -1006,23 +1195,76 @@ jobs:
               exit 1
             }
           done
-          gh release edit "$RELEASE_VERSION" --draft=false
+          gh api --method PATCH \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f name="$RELEASE_VERSION" \
+            -f body="$(cat "$RUNNER_TEMP/release-notes.md")" \
+            -F prerelease="$expected_prerelease" \
+            -F draft=false \
+            >/dev/null
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
       - name: Require immutable published GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ steps.publish.outputs.release_id }}
+          RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
         run: |
           set -eu
-          immutable="$(
-            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
-              "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
-              --jq .immutable
-          )"
-          test "$immutable" = true || {
-            echo "GitHub Release is not immutable; refusing downstream publication." >&2
+          expected_prerelease=false
+          if [ "$RELEASE_CHANNEL" = "prerelease" ]; then expected_prerelease=true; fi
+          printf '%s\n' "$RELEASE_ID" | grep -Eq '^[1-9][0-9]*$' || {
+            echo "Published GitHub Release has an invalid database ID: $RELEASE_ID" >&2
             exit 1
           }
-          ./scripts/release/verify-github-release-assets.sh "$RELEASE_VERSION"
+          release_state="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              --jq '[.tag_name, .draft, .prerelease, .immutable] | @tsv'
+          )"
+          test "$release_state" = "$(printf '%s\tfalse\t%s\ttrue' "$RELEASE_VERSION" "$expected_prerelease")" || {
+            echo "GitHub Release ID $RELEASE_ID is not the exact public immutable $RELEASE_VERSION release." >&2
+            exit 1
+          }
+          immutable_body="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              --jq .body
+          )"
+          local_body="$(cat "$RUNNER_TEMP/release-notes.md")"
+          test "$immutable_body" = "$local_body" || {
+            echo "Immutable GitHub Release notes differ from the sealed CHANGELOG." >&2
+            exit 1
+          }
+          if [ "$IS_RECOVERY" = "true" ]; then
+            recovery_marker="<!-- dws-release-recovery run=$GITHUB_RUN_ID tag-object=$RELEASE_TAG_OBJECT commit=$RELEASE_COMMIT -->"
+            case "$immutable_body" in
+              *"$recovery_marker"*) ;;
+              *)
+                echo "Immutable GitHub Release is not bound to this exact recovery run." >&2
+                exit 1
+                ;;
+            esac
+          fi
+          DWS_GITHUB_RELEASE_ID="$RELEASE_ID" \
+            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-release-assets.sh" \
+            "$RELEASE_VERSION"
+          immutable_dir="$RUNNER_TEMP/immutable-release"
+          rm -rf "$immutable_dir"
+          mkdir -p "$immutable_dir"
+          DWS_GITHUB_RELEASE_ID="$RELEASE_ID" \
+            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh" \
+            "$RELEASE_VERSION" "$immutable_dir"
+          DWS_PACKAGE_DIST_DIR="$immutable_dir" \
+            ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
+          for immutable_asset in "$immutable_dir"/dws-* "$immutable_dir"/checksums.txt; do
+            sealed_asset="dist/$(basename "$immutable_asset")"
+            cmp -s "$sealed_asset" "$immutable_asset" || {
+              echo "Immutable GitHub asset differs from this run's sealed bytes: $(basename "$immutable_asset")" >&2
+              exit 1
+            }
+          done
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
@@ -1055,7 +1297,7 @@ jobs:
 
   publish-channels:
     name: Publish npm and mirrors
-    if: ${{ needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}
     needs: [release-contract, publish-release]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1286,7 +1528,7 @@ jobs:
 
   mirror-gitee-release:
     name: Mirror immutable release to Gitee
-    if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
+    if: ${{ !cancelled() && vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
     needs: [release-contract, release, publish-channels]
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1621,3 +1863,294 @@ jobs:
         run: npm publish "$RUNNER_TEMP/dingtalk-workspace-cli-repair.tgz" --access public --tag backfill --ignore-scripts --registry=https://registry.npmjs.org
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  release-delivery-gate:
+    name: Release delivery gate
+    if: ${{ !cancelled() }}
+    needs:
+      - dispatch-contract
+      - authorize-recovery
+      - governance-preflight
+      - release-contract
+      - release
+      - verify-darwin-signatures
+      - publish-release
+      - publish-channels
+      - mirror-gitee-release
+      - repair-npm
+      - repair-gitee
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Require the selected release mode to finish
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_MODE: ${{ needs.dispatch-contract.outputs.mode }}
+          GITEE_FALLBACK_ENABLED: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK }}
+          DISPATCH_RESULT: ${{ needs.dispatch-contract.result }}
+          AUTHORIZE_RECOVERY_RESULT: ${{ needs.authorize-recovery.result }}
+          GOVERNANCE_PREFLIGHT_RESULT: ${{ needs.governance-preflight.result }}
+          RELEASE_CONTRACT_RESULT: ${{ needs.release-contract.result }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          DARWIN_SIGNATURE_RESULT: ${{ needs.verify-darwin-signatures.result }}
+          PUBLISH_RELEASE_RESULT: ${{ needs.publish-release.result }}
+          PUBLISH_CHANNELS_RESULT: ${{ needs.publish-channels.result }}
+          MIRROR_GITEE_RESULT: ${{ needs.mirror-gitee-release.result }}
+          REPAIR_NPM_RESULT: ${{ needs.repair-npm.result }}
+          REPAIR_GITEE_RESULT: ${{ needs.repair-gitee.result }}
+        run: |
+          set -eu
+          require_result() {
+            job="$1"
+            actual="$2"
+            expected="$3"
+            test "$actual" = "$expected" || {
+              echo "$job result is $actual, expected $expected" >&2
+              exit 1
+            }
+          }
+          require_publication() {
+            require_result release-contract "$RELEASE_CONTRACT_RESULT" success
+            require_result release "$RELEASE_RESULT" success
+            require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success
+            require_result publish-release "$PUBLISH_RELEASE_RESULT" success
+            require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success
+            if test "$GITEE_FALLBACK_ENABLED" = true; then
+              require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" success
+            else
+              require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
+            fi
+          }
+          case "$EVENT_NAME:$DISPATCH_MODE" in
+            push:)
+              require_result dispatch-contract "$DISPATCH_RESULT" skipped
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
+              require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              require_publication
+              ;;
+            workflow_dispatch:recover_release)
+              require_result dispatch-contract "$DISPATCH_RESULT" success
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" success
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
+              require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              require_publication
+              ;;
+            workflow_dispatch:governance_preflight)
+              require_result dispatch-contract "$DISPATCH_RESULT" success
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" success
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
+              require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release "$RELEASE_RESULT" skipped
+              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
+              require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
+              require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
+              require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              ;;
+            workflow_dispatch:repair_npm)
+              require_result dispatch-contract "$DISPATCH_RESULT" success
+              require_result repair-npm "$REPAIR_NPM_RESULT" success
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
+              require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release "$RELEASE_RESULT" skipped
+              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
+              require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
+              require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
+              require_result repair-gitee "$REPAIR_GITEE_RESULT" skipped
+              ;;
+            workflow_dispatch:repair_gitee)
+              require_result dispatch-contract "$DISPATCH_RESULT" success
+              require_result repair-gitee "$REPAIR_GITEE_RESULT" success
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
+              require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release "$RELEASE_RESULT" skipped
+              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
+              require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
+              require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
+              require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              ;;
+            *)
+              echo "unsupported release mode: event=$EVENT_NAME mode=$DISPATCH_MODE" >&2
+              exit 1
+              ;;
+          esac
+  # Mirror an existing public immutable release's assets to Gitee on demand. The
+  # push-triggered mirror-gitee-release job depends on the same run's finalized
+  # dist artifact, so a tag that was already published (including one delivered
+  # by a recovery dispatch) cannot reuse it. This dispatch path re-derives the
+  # asset set from the immutable GitHub Release itself and mirrors it. The
+  # release tag and asset checksums remain the sealed authority boundary.
+  repair-gitee:
+    name: Mirror an existing immutable release to Gitee
+    needs: dispatch-contract
+    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'repair_gitee' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate repair version
+        working-directory: tooling
+        env:
+          VERSION: ${{ inputs.repair_gitee_version }}
+        run: |
+          set -eu
+          . ./scripts/release/release-lib.sh
+          if ! release_is_stable_version "$VERSION" && ! release_is_prerelease_version "$VERSION"; then
+            echo "Invalid release version: $VERSION" >&2
+            exit 2
+          fi
+
+      - name: Verify immutable release authority
+        id: authority
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ inputs.repair_gitee_version }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const version = process.env.VERSION;
+            const ref = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: `tags/${version}`,
+            });
+            if (ref.data.object.type !== "tag") {
+              core.setFailed(`${version} is not an annotated tag`);
+              return;
+            }
+            const tag = await github.rest.git.getTag({
+              owner,
+              repo,
+              tag_sha: ref.data.object.sha,
+            });
+            if (tag.data.tag !== version || tag.data.object.type !== "commit") {
+              core.setFailed(`${version} does not resolve to one annotated commit tag`);
+              return;
+            }
+            const commitSha = tag.data.object.sha;
+            const defaultBranch = context.payload.repository.default_branch;
+            const branch = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: defaultBranch,
+            });
+            const comparison = await github.rest.repos.compareCommitsWithBasehead({
+              owner,
+              repo,
+              basehead: `${commitSha}...${branch.data.commit.sha}`,
+            });
+            if (!["ahead", "identical"].includes(comparison.data.status)) {
+              core.setFailed(`${version} is not contained in ${defaultBranch}`);
+              return;
+            }
+            const release = await github.rest.repos.getReleaseByTag({
+              owner,
+              repo,
+              tag: version,
+            });
+            if (
+              release.data.tag_name !== version ||
+              release.data.draft ||
+              !release.data.immutable
+            ) {
+              core.setFailed(`${version} is not a public immutable GitHub Release`);
+              return;
+            }
+            const expectedPrerelease = version.includes("-beta.");
+            if (release.data.prerelease !== expectedPrerelease) {
+              core.setFailed(`${version} prerelease metadata does not match its version`);
+              return;
+            }
+            const expectedAssets = new Set([
+              "dws-darwin-amd64.tar.gz",
+              "dws-darwin-arm64.tar.gz",
+              "dws-linux-amd64.tar.gz",
+              "dws-linux-arm64.tar.gz",
+              "dws-windows-amd64.zip",
+              "dws-windows-arm64.zip",
+              "dws-skills.zip",
+              "checksums.txt",
+            ]);
+            const assetNames = release.data.assets.map((asset) => asset.name);
+            if (
+              assetNames.length !== expectedAssets.size ||
+              assetNames.some((name) => !expectedAssets.has(name)) ||
+              new Set(assetNames).size !== expectedAssets.size
+            ) {
+              core.setFailed(`${version} does not contain the exact release asset set`);
+              return;
+            }
+            core.setOutput("commit_sha", commitSha);
+            core.setOutput("tag_object", ref.data.object.sha);
+
+      - name: Fetch and verify sealed release tag
+        working-directory: tooling
+        env:
+          VERSION: ${{ inputs.repair_gitee_version }}
+          RELEASE_COMMIT: ${{ steps.authority.outputs.commit_sha }}
+          RELEASE_TAG_OBJECT: ${{ steps.authority.outputs.tag_object }}
+        run: |
+          set -eu
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+          ./scripts/release/verify-github-tag-authority.sh \
+            "$VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
+      - name: Require successful Release workflow delivery
+        working-directory: tooling
+        env:
+          VERSION: ${{ inputs.repair_gitee_version }}
+          RELEASE_COMMIT: ${{ steps.authority.outputs.commit_sha }}
+          DWS_RELEASE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/release/verify-release-workflow-delivery.sh \
+            "$VERSION" "$RELEASE_COMMIT"
+
+      - name: Download and verify immutable GitHub Release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.repair_gitee_version }}
+        run: |
+          set -eu
+          mkdir -p dist
+          gh release download "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-release-artifacts.sh" "$VERSION"
+
+      - name: Mirror release to Gitee (China)
+        timeout-minutes: 100
+        working-directory: tooling
+        run: |
+          "$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-gitee.sh"
+        env:
+          VERSION: ${{ inputs.repair_gitee_version }}
+          DIST_DIR: ${{ github.workspace }}/dist
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USER: ${{ secrets.GITEE_USER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          DWS_REQUIRE_GITEE: "1"

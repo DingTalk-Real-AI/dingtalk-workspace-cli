@@ -1,4 +1,4 @@
-name: CI
+name: Code Admission — PR 合入门禁
 
 on:
   push:
@@ -18,48 +18,136 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      changelog_only: ${{ steps.classify.outputs.changelog_only }}
+      changelog_changed: ${{ steps.classify.outputs.changelog_changed }}
+      platform_sensitive: ${{ steps.classify.outputs.platform_sensitive }}
     steps:
+      - name: Classify pull request scope
+        id: classify
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let changelogOnly = false;
+            let changelogChanged = false;
+            let platformSensitive = context.eventName === 'push';
+            let files = [];
+
+            if (context.eventName === 'pull_request') {
+              const expectedHead = context.payload.pull_request.head.sha;
+              const expectedBase = context.payload.pull_request.base.sha;
+              const assertCurrentRevision = async (phase) => {
+                const { data: pull } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                });
+                if (pull.head.sha !== expectedHead || pull.base.sha !== expectedBase) {
+                  throw new Error(
+                    `Pull request revision changed during ${phase}: ` +
+                    `expected base/head ${expectedBase}/${expectedHead}, ` +
+                    `got ${pull.base.sha}/${pull.head.sha}`
+                  );
+                }
+                return pull;
+              };
+
+              const before = await assertCurrentRevision('pre-classification');
+              files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                per_page: 100,
+              });
+              const after = await assertCurrentRevision('post-classification');
+              if (
+                before.changed_files !== files.length ||
+                after.changed_files !== files.length
+              ) {
+                throw new Error(
+                  `Pull request file list is incomplete: API reports ` +
+                  `${after.changed_files} changed files, pagination returned ${files.length}`
+                );
+              }
+
+              changelogOnly =
+                files.length === 1 &&
+                files[0].filename === 'CHANGELOG.md' &&
+                files[0].status === 'modified' &&
+                !files[0].previous_filename;
+              changelogChanged = files.some(
+                ({ filename, previous_filename }) =>
+                  filename === 'CHANGELOG.md' ||
+                  previous_filename === 'CHANGELOG.md'
+              );
+
+              const isPlatformSensitive = (filename) =>
+                typeof filename === 'string' &&
+                (
+                  filename.startsWith('internal/auth/') ||
+                  filename.startsWith('internal/keychain/') ||
+                  /_(darwin|windows|linux|unix)\.go$/.test(filename) ||
+                  filename.startsWith('scripts/release/') ||
+                  filename.startsWith('scripts/install') ||
+                  filename.startsWith('Formula/') ||
+                  filename.startsWith('build/npm/') ||
+                  filename === '.goreleaser.yaml' ||
+                  filename === '.github/workflows/release.yml'
+                );
+              platformSensitive = files.some(
+                ({ filename, previous_filename }) =>
+                  isPlatformSensitive(filename) ||
+                  isPlatformSensitive(previous_filename)
+              );
+            }
+
+            core.setOutput('changelog_only', String(changelogOnly));
+            core.setOutput('changelog_changed', String(changelogChanged));
+            core.setOutput('platform_sensitive', String(platformSensitive));
+            await core.summary
+              .addHeading('Code Admission scope')
+              .addRaw(`- Event: \`${context.eventName}\`\n`)
+              .addRaw(`- Exact modified CHANGELOG only: \`${changelogOnly}\`\n`)
+              .addRaw(`- CHANGELOG touched: \`${changelogChanged}\`\n`)
+              .addRaw(`- Native-platform risk paths touched: \`${platformSensitive}\`\n`)
+              .addRaw(`- Changed files: \`${files.length}\`\n`)
+              .write();
+
+      - name: Record CHANGELOG-only fast path
+        if: steps.classify.outputs.changelog_only == 'true'
+        run: echo "Lint is satisfied by the trusted CHANGELOG-only Policy path." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
+        if: steps.classify.outputs.changelog_only != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Go
+        if: steps.classify.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Format Check
+        if: steps.classify.outputs.changelog_only != 'true'
         run: |
           unformatted="$(find cmd internal test scripts/policy -name '*.go' -print0 | xargs -0r gofmt -l)"
           test -z "$unformatted" || (printf '%s\n' "$unformatted" && exit 1)
 
       - name: Go Vet
+        if: steps.classify.outputs.changelog_only != 'true'
         run: go vet ./...
 
-      # golangci-lint temporarily disabled: v1.64.8 built with Go 1.24 is incompatible with Go 1.25
-      # - name: golangci-lint
-      #   uses: golangci/golangci-lint-action@v6
-      #   with:
-      #     version: v1.64.8
-      #     args: ./...
-
-  actionlint:
-    name: Actionlint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
       - name: Check GitHub Actions workflows
+        if: steps.classify.outputs.changelog_only != 'true'
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
   test-race:
     name: "Test (race: ${{ matrix.shard }})"
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -116,6 +204,8 @@ jobs:
 
   test-release-scripts:
     name: Test (release scripts)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -133,25 +223,85 @@ jobs:
       - name: Test release scripts
         run: go test -v -count=1 -timeout=5m ./test/scripts
 
+  test-cross-platform:
+    name: Test (cross-platform compile)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Compile supported operating systems
+        shell: bash
+        run: |
+          set -eu
+          for target in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            output="$RUNNER_TEMP/dws-${goos}-${goarch}"
+            if [ "$goos" = windows ]; then
+              output="${output}.exe"
+            fi
+            printf 'compile %s/%s\n' "$goos" "$goarch"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -o "$output" ./cmd
+          done
+
   test:
     name: Test
     needs:
+      - lint
       - test-race
       - test-release-scripts
-    if: ${{ always() }}
+      - test-cross-platform
+      - test-darwin
+      - test-windows
+    if: ${{ always() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
       - name: Verify test shards
         env:
+          CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
+          PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           RACE_RESULT: ${{ needs.test-race.result }}
           RELEASE_SCRIPTS_RESULT: ${{ needs.test-release-scripts.result }}
+          CROSS_PLATFORM_RESULT: ${{ needs.test-cross-platform.result }}
+          DARWIN_RESULT: ${{ needs.test-darwin.result }}
+          WINDOWS_RESULT: ${{ needs.test-windows.result }}
         run: |
           failed=0
+          if [ "$CHANGELOG_ONLY" = true ]; then
+            for shard in \
+              "race shards:$RACE_RESULT" \
+              "release scripts:$RELEASE_SCRIPTS_RESULT" \
+              "cross-platform compile:$CROSS_PLATFORM_RESULT" \
+              "macOS native:$DARWIN_RESULT" \
+              "Windows native:$WINDOWS_RESULT"
+            do
+              name="${shard%%:*}"
+              result="${shard#*:}"
+              printf '%s: %s\n' "$name" "$result"
+              if [ "$result" != skipped ]; then
+                failed=1
+              fi
+            done
+            test "$failed" -eq 0
+            exit
+          fi
+
           for shard in \
             "race shards:$RACE_RESULT" \
-            "release scripts:$RELEASE_SCRIPTS_RESULT"
+            "release scripts:$RELEASE_SCRIPTS_RESULT" \
+            "cross-platform compile:$CROSS_PLATFORM_RESULT"
           do
             name="${shard%%:*}"
             result="${shard#*:}"
@@ -160,10 +310,28 @@ jobs:
               failed=1
             fi
           done
+
+          native_expected=skipped
+          if [ "$PLATFORM_SENSITIVE" = true ]; then
+            native_expected=success
+          fi
+          for native in \
+            "macOS native:$DARWIN_RESULT" \
+            "Windows native:$WINDOWS_RESULT"
+          do
+            name="${native%%:*}"
+            result="${native#*:}"
+            printf '%s: %s\n' "$name" "$result"
+            if [ "$result" != "$native_expected" ]; then
+              failed=1
+            fi
+          done
           test "$failed" -eq 0
 
   test-darwin:
     name: Test (macOS auth/keychain)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
@@ -180,6 +348,8 @@ jobs:
 
   test-windows:
     name: Test (Windows)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -202,6 +372,8 @@ jobs:
 
   coverage-darwin:
     name: Coverage (macOS)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -244,6 +416,8 @@ jobs:
 
   coverage-windows:
     name: Coverage (Windows)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -288,6 +462,8 @@ jobs:
 
   coverage-current:
     name: Coverage (current)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -321,6 +497,8 @@ jobs:
 
   coverage-supporting:
     name: Coverage (supporting)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -358,6 +536,8 @@ jobs:
 
   coverage-baseline:
     name: Coverage (baseline)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -421,20 +601,35 @@ jobs:
   coverage:
     name: Coverage
     needs:
+      - lint
       - coverage-current
       - coverage-supporting
       - coverage-baseline
-    if: ${{ always() }}
+      - coverage-darwin
+      - coverage-windows
+    if: ${{ always() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Verify coverage profile jobs
         env:
+          CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
+          PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           CURRENT_RESULT: ${{ needs.coverage-current.result }}
           SUPPORTING_RESULT: ${{ needs.coverage-supporting.result }}
           BASELINE_RESULT: ${{ needs.coverage-baseline.result }}
+          DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
+          WINDOWS_RESULT: ${{ needs.coverage-windows.result }}
         run: |
           failed=0
+          expected=success
+          native_expected=skipped
+          if [ "$CHANGELOG_ONLY" = true ]; then
+            expected=skipped
+          elif [ "$PLATFORM_SENSITIVE" = true ]; then
+            native_expected=success
+          fi
+
           for profile in \
             "current:$CURRENT_RESULT" \
             "supporting:$SUPPORTING_RESULT" \
@@ -443,24 +638,42 @@ jobs:
             name="${profile%%:*}"
             result="${profile#*:}"
             printf '%s: %s\n' "$name" "$result"
-            if [ "$result" != "success" ]; then
+            if [ "$result" != "$expected" ]; then
+              failed=1
+            fi
+          done
+
+          for native in \
+            "macOS native:$DARWIN_RESULT" \
+            "Windows native:$WINDOWS_RESULT"
+          do
+            name="${native%%:*}"
+            result="${native#*:}"
+            printf '%s: %s\n' "$name" "$result"
+            if [ "$CHANGELOG_ONLY" = true ]; then
+              native_expected=skipped
+            fi
+            if [ "$result" != "$native_expected" ]; then
               failed=1
             fi
           done
           test "$failed" -eq 0
 
       - name: Check out repository
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Resolve authoritative coverage base
+        if: needs.lint.outputs.changelog_only != 'true'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -478,33 +691,39 @@ jobs:
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
       - name: Download current coverage profile
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-current-profile
           path: .
 
       - name: Download supporting coverage profiles
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-supporting-profiles
           path: .
 
       - name: Download baseline coverage profile
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-baseline-profile
           path: .
 
       - name: Enforce coverage gate
+        if: needs.lint.outputs.changelog_only != 'true'
         env:
           COVERAGE_TARGET: "80"
           COVERAGE_ENFORCE_OVERALL: "false"
         run: COVERAGE_ADDITIONAL_PROFILE=coverage-shortcut.txt make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
 
       - name: Generate coverage report
+        if: needs.lint.outputs.changelog_only != 'true'
         run: go tool cover -html=coverage.txt -o coverage.html
 
       - name: Upload coverage artifact
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -516,44 +735,114 @@ jobs:
             coverage.html
 
   policy:
-    name: Policy Check
+    name: Policy
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
+      - name: Verify pull request merge revision
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD^1)" = "$PR_BASE_SHA" || {
+            echo "checked-out merge first parent does not match event base" >&2
+            exit 1
+          }
+          test "$(git rev-parse HEAD^2)" = "$PR_HEAD_SHA" || {
+            echo "checked-out merge second parent does not match event head" >&2
+            exit 1
+          }
+
+      - name: Validate changed CHANGELOG content
+        if: github.event_name == 'pull_request'
+        env:
+          CLASSIFIED_CHANGELOG_CHANGED: ${{ needs.lint.outputs.changelog_changed }}
+          CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eu
+          merge_changelog_changed=false
+          if git diff --no-ext-diff --find-renames --name-status \
+            "$PR_BASE_SHA" HEAD |
+            awk -F '\t' '
+              {
+                for (field = 2; field <= NF; field++) {
+                  if ($field == "CHANGELOG.md") found = 1
+                }
+              }
+              END { exit !found }
+            '
+          then
+            merge_changelog_changed=true
+          fi
+          test "$merge_changelog_changed" = "$CLASSIFIED_CHANGELOG_CHANGED" || {
+            echo "Files API and synthetic merge tree disagree on CHANGELOG scope" >&2
+            exit 1
+          }
+          if [ "$merge_changelog_changed" != true ]; then
+            exit 0
+          fi
+
+          mode=--content-only
+          if [ "$CHANGELOG_ONLY" = true ]; then
+            mode=--fast-path
+          fi
+          ./scripts/policy/check-changelog-pr.sh \
+            "$mode" "$PR_BASE_SHA" HEAD
+
+      - name: Record CHANGELOG-only fast path
+        if: needs.lint.outputs.changelog_only == 'true'
+        run: |
+          echo "Only the base-equivalent CHANGELOG validator ran; full Policy resumes on main." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make build
 
       - name: Policy
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make policy
 
   interface-integrity:
     name: Interface Integrity
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out repository
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Build
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make build
 
       - name: Resolve authoritative compatibility merge-base
+        if: needs.lint.outputs.changelog_only != 'true'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -578,6 +867,7 @@ jobs:
           echo "COMPATIBILITY_STABLE_REF=$stable_ref" >> "$GITHUB_ENV"
 
       - name: Check historical commands and help compatibility
+        if: needs.lint.outputs.changelog_only != 'true'
         run: |
           make authoritative-interface-integrity \
             BASE_REF="$COMPATIBILITY_BASE_REF"
@@ -587,143 +877,89 @@ jobs:
           fi
 
       - name: Check complete Schema compatibility
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make schema-compatibility BASE_REF="$COMPATIBILITY_BASE_REF"
 
       - name: Check skill command references
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make skill-command-integrity
+
+      - name: Record CHANGELOG-only fast path
+        if: needs.lint.outputs.changelog_only == 'true'
+        run: echo "Interface Integrity is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"
 
   cli-smoke:
     name: CLI Smoke
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out repository
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Go
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Build
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make build
 
       - name: Check public top-level commands
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make cli-smoke
 
+      - name: Record CHANGELOG-only fast path
+        if: needs.lint.outputs.changelog_only == 'true'
+        run: echo "CLI Smoke is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"
+
   mock-mcp-smoke:
-    name: Mock MCP Smoke
+    name: Mock MCP
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out repository
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Go
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Check HTTP and stdio MCP transport
+        if: needs.lint.outputs.changelog_only != 'true'
         run: make mock-mcp-smoke
 
+      - name: Record CHANGELOG-only fast path
+        if: needs.lint.outputs.changelog_only == 'true'
+        run: echo "Mock MCP is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"
+
   edition-tests:
-    name: Edition Contract Tests
+    name: Edition
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out repository
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Go
+        if: needs.lint.outputs.changelog_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Run edition contract tests
+        if: needs.lint.outputs.changelog_only != 'true'
         run: go test -v -count=1 ./pkg/editiontest/...
 
-  ci-gate:
-    name: CI Gate
-    needs:
-      - lint
-      - actionlint
-      - test
-      - test-darwin
-      - test-windows
-      - coverage
-      - coverage-darwin
-      - coverage-windows
-      - policy
-      - interface-integrity
-      - cli-smoke
-      - mock-mcp-smoke
-      - edition-tests
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Verify required checks
-        env:
-          LINT_RESULT: ${{ needs.lint.result }}
-          ACTIONLINT_RESULT: ${{ needs.actionlint.result }}
-          TEST_RESULT: ${{ needs.test.result }}
-          TEST_DARWIN_RESULT: ${{ needs.test-darwin.result }}
-          TEST_WINDOWS_RESULT: ${{ needs.test-windows.result }}
-          COVERAGE_RESULT: ${{ needs.coverage.result }}
-          COVERAGE_DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
-          COVERAGE_WINDOWS_RESULT: ${{ needs.coverage-windows.result }}
-          POLICY_RESULT: ${{ needs.policy.result }}
-          INTERFACE_INTEGRITY_RESULT: ${{ needs.interface-integrity.result }}
-          CLI_SMOKE_RESULT: ${{ needs.cli-smoke.result }}
-          MOCK_MCP_SMOKE_RESULT: ${{ needs.mock-mcp-smoke.result }}
-          EDITION_TESTS_RESULT: ${{ needs.edition-tests.result }}
-        run: |
-          failed=0
-          for check in \
-            "Lint:$LINT_RESULT" \
-            "Actionlint:$ACTIONLINT_RESULT" \
-            "Test:$TEST_RESULT" \
-            "Test (macOS auth/keychain):$TEST_DARWIN_RESULT" \
-            "Test (Windows):$TEST_WINDOWS_RESULT" \
-            "Coverage:$COVERAGE_RESULT" \
-            "Coverage (macOS):$COVERAGE_DARWIN_RESULT" \
-            "Coverage (Windows):$COVERAGE_WINDOWS_RESULT" \
-            "Policy Check:$POLICY_RESULT" \
-            "Interface Integrity:$INTERFACE_INTEGRITY_RESULT" \
-            "CLI Smoke:$CLI_SMOKE_RESULT" \
-            "Mock MCP Smoke:$MOCK_MCP_SMOKE_RESULT" \
-            "Edition Contract Tests:$EDITION_TESTS_RESULT"
-          do
-            name="${check%%:*}"
-            result="${check#*:}"
-            printf '%s: %s\n' "$name" "$result"
-            if [ "$result" != "success" ]; then
-              failed=1
-            fi
-          done
-          test "$failed" -eq 0
-
-  notify-downstream:
-    name: Notify Wukong Overlay
-    needs: [ci-gate]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions: {}
-    steps:
-      - name: Trigger downstream CI
-        run: |
-          # Trigger internal GitLab CI pipeline via webhook.
-          # WUKONG_TRIGGER_TOKEN is a repository secret.
-          if [ -n "${{ secrets.WUKONG_TRIGGER_TOKEN }}" ]; then
-            curl --fail --silent --show-error \
-              -X POST \
-              -F "token=${{ secrets.WUKONG_TRIGGER_TOKEN }}" \
-              -F "ref=main" \
-              -F "variables[UPSTREAM_SHA]=${{ github.sha }}" \
-              "${{ secrets.WUKONG_TRIGGER_URL }}"
-            echo "Downstream CI triggered."
-          else
-            echo "No WUKONG_TRIGGER_TOKEN configured, skipping downstream notification."
-          fi
+      - name: Record CHANGELOG-only fast path
+        if: needs.lint.outputs.changelog_only == 'true'
+        run: echo "Edition is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"

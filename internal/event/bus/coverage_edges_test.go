@@ -377,9 +377,11 @@ func TestCrossPlatformCoverageDaemonMethodEdges(t *testing.T) {
 	d.conns.Store("not-a-conn", struct{}{})
 	d.conns.Store(&queryConn{}, struct{}{})
 	d.consumerWG.Add(1)
-	d.shutdown()
+	acceptDone := make(chan struct{})
+	close(acceptDone)
+	d.shutdown(acceptDone)
 	d.consumerWG.Done()
-	d.shutdown()
+	d.shutdown(acceptDone)
 
 	pr, pw, err := os.Pipe()
 	if err != nil {

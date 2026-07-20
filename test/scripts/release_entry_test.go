@@ -38,11 +38,11 @@ func newReleaseEntryFixture(t *testing.T) *releaseEntryFixture {
 func TestDWSReleaseEntryRoutesProtectedRecovery(t *testing.T) {
 	f := newReleaseEntryFixture(t)
 	f.configureRemote(t, "origin")
-	output, err := f.run(t, nil, "recover", "v1.0.1-beta.1", "--failed-run", "12345")
+	output, err := f.run(t, nil, "recover", "v1.0.1-beta.1", "--failed-run", "12345", "--failed-attempt", "2")
 	if err != nil {
 		t.Fatalf("dws-release recovery route error = %v\noutput:\n%s", err, output)
 	}
-	want := "recover\tv1.0.1-beta.1\t--remote\torigin\t--failed-run\t12345\n"
+	want := "recover\tv1.0.1-beta.1\t--remote\torigin\t--failed-run\t12345\t--failed-attempt\t2\n"
 	if got := f.callLog(t); got != want {
 		t.Fatalf("recovery delegate calls = %q, want %q", got, want)
 	}

@@ -1,133 +1,152 @@
-# Pull request quality gates
+# Code Admission — PR 合入门禁
 
-The repository defines five focused checks in addition to its existing CI:
+The pull-request admission layer has exactly nine required external contexts:
 
-- **Interface Integrity** enforces backwards compatibility. Every historical
-  command path and alias must still resolve, every historical command must
-  still render `-h`, and historical flags must keep their type and shorthand.
-  New commands, aliases, and flags are allowed. The same job compares the full
-  complete `dws schema --all` contract with the PR merge-base, blocking removed
-  products/tools/parameters, incompatible parameter or interface mappings,
-  constraint drift, and safety-semantic drift. It also checks that executable
-  `dws ...` references in `skills/**/*.md` resolve to real commands.
-  Help compatibility covers command/alias/flag spelling, flag type and
-  shorthand; descriptive prose may evolve without breaking the gate.
-- **Coverage** runs unit tests on every pull request and prints both overall and
-  changed-code statement coverage. During the migration to the 80% repository
-  target, overall coverage may not regress from a profile generated from the
-  merge-base with the same test command, while changed production Go
-  statements must meet 80%. Linux, Windows, and macOS each generate a native
-  coverage profile for changed packages and enforce the threshold against
-  changed files buildable on that platform, so build-tagged source cannot be
-  hidden by an Ubuntu-only profile. Overall non-regression allows 0.1 percentage point of measurement
-  variance to avoid failing unchanged code on test-path noise. Set
-  `COVERAGE_ENFORCE_OVERALL=true` once repository coverage reaches 80% to make
-  the overall target fail closed as well.
-  CI generates the candidate, supporting, and merge-base profiles on three
-  independent runners, then downloads all profiles into the aggregate
-  `Coverage` job and applies the same fail-closed gate. The split changes only
-  scheduling: the tested packages, profile contents, merge-base comparison,
-  and final coverage thresholds remain unchanged.
-- **CLI Smoke** builds the release binary, reads the root command list from the
-  structured Interface contract, and renders offline help for every public
-  top-level command. It rejects Cobra's unknown-command root-help fallback and
-  fails when the checked-in development fixture is stale.
-- **Mock MCP Smoke** runs the existing HTTP and stdio MCP lifecycle tests
-  (`Initialize -> ListTools -> CallTool`).
-- **AI Behavior Check** applies to pull requests labeled `ai-generated`. It
-  limits the change to 30 files and blocks release/CI infrastructure changes,
-  including policy implementations and the checked-in Interface fixture.
-  It uses `pull_request_target` without checking out PR code, so the policy
-  cannot be bypassed by changing the workflow in the same pull request. The
-  evaluator writes an `AI Behavior Check` commit status to the PR head SHA so
-  GitHub rulesets can require it.
+| Required context | Contract |
+|---|---|
+| `Lint` | Stable PR revision classification, formatting, `go vet`, and Actionlint |
+| `Test` | Race/unit/release-script tests plus fast cross-platform compilation |
+| `Coverage` | Overall non-regression and changed-code coverage |
+| `Policy` | Repository policy and the fail-closed CHANGELOG contract |
+| `Edition` | Edition contract tests |
+| `Interface Integrity` | CLI, Schema, Skill, and stable-release compatibility |
+| `AI Behavior` | Base-owned policy for PRs labeled `ai-generated` |
+| `CLI Smoke` | Offline help for every public top-level command |
+| `Mock MCP` | HTTP and stdio MCP lifecycle smoke tests |
 
-## Running the compatibility gates
+The workflow display name is `Code Admission — PR 合入门禁`. Parallel helper
+jobs may implement `Test` and `Coverage`, but they are not ruleset contexts.
+Do not require an aggregate alias or a downstream integration check in place of
+the nine contracts above.
 
-Run:
+`AI Behavior` is evaluated by a `pull_request_target` workflow that never
+checks out or executes PR code. It writes the exact `AI Behavior` status to the
+current PR head. Its Files API read is bracketed by base/head revision checks,
+so a synchronize race fails closed. The same workflow supplies a successful
+`AI Behavior` check run on protected `main` pushes for release governance.
+
+## Exact CHANGELOG-only fast path
+
+A pull request qualifies only when GitHub reports exactly one changed file,
+that file is an in-place modification of `CHANGELOG.md`, and the base and head
+both retain it as a regular non-executable `100644` blob. Add, delete, rename,
+symlink, executable-mode, and second-file changes do not qualify.
+
+`Lint` classifies the Files API result only after verifying that the API's base
+and head equal the event revision both before and after pagination. `Policy`
+checks out GitHub's PR merge ref and verifies its parents:
+
+```text
+HEAD^1 = pull_request.base.sha
+HEAD^2 = pull_request.head.sha
+```
+
+It then runs:
+
+```sh
+./scripts/policy/check-changelog-pr.sh \
+  --fast-path "$PR_BASE_SHA" HEAD
+```
+
+Because the verified PR diff contains only `CHANGELOG.md`, the validator and
+its policy dependencies in that merge tree are byte-for-byte the current base
+versions. Validation targets the synthetic merge tree, not the feature-branch
+tree, so a stale branch cannot supply an older validator or combine with newer
+base notes into an invalid final CHANGELOG.
+
+All nine admission contexts are still emitted and must succeed. Expensive
+implementation helpers are skipped; the named contexts record that their code
+surface is unaffected. After merge, the protected `main` push executes the
+full admission suite.
+
+Any PR that touches `CHANGELOG.md` but also changes another file runs the same
+content contract in `Policy` with `--content-only`. That mode permits the
+second file but still rejects invalid dates or versions, missing bullets,
+placeholder `TODO`/`TBD`, unmanaged-section changes, and unsafe tree modes.
+Adding a second file therefore cannot bypass CHANGELOG validation.
+
+## Platform and downstream boundaries
+
+Ordinary PRs run the primary Linux assurance plus fast Darwin/Windows compile
+checks. Full native macOS/Windows tests and platform coverage run on a PR only
+when its diff touches auth, keychain, OS-specific Go files, installers,
+packaging, Formulae, or release automation. Protected `main` pushes run the
+complete native matrix.
+
+Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
+`Main Integration — 主干集成` workflow and runs only after a push to `main` (or
+an explicit manual dispatch). A failing downstream run remains a real
+regression and must be repaired, but it must not be represented by a synthetic
+successful PR check.
+
+```mermaid
+flowchart TB
+  PR["Pull request"] --> ADMISSION["Code Admission — PR 合入门禁"]
+  ADMISSION --> L["Lint"]
+  ADMISSION --> T["Test"]
+  ADMISSION --> C["Coverage"]
+  ADMISSION --> P["Policy"]
+  ADMISSION --> E["Edition"]
+  ADMISSION --> I["Interface Integrity"]
+  ADMISSION --> A["AI Behavior"]
+  ADMISSION --> S["CLI Smoke"]
+  ADMISSION --> M["Mock MCP"]
+  ADMISSION --> MAIN["Protected main"]
+  MAIN --> NATIVE["Full native platform matrix"]
+  MAIN --> E2E["Multi-profile E2E"]
+  MAIN --> RELEASE["Release delivery"]
+```
+
+## Running focused gates locally
+
+Run the contracts relevant to the change:
 
 ```sh
 make build
+make policy
 make interface-integrity
 make authoritative-interface-integrity BASE_REF=<merge-base>
 make schema-compatibility BASE_REF=<merge-base>
 make skill-command-integrity
 make cli-smoke
-# Run on the corresponding native runner with its generated profile:
-make coverage-gate-platform BASE_REF=<merge-base> PROFILE=<coverage-profile>
+make mock-mcp-smoke
+go test -v -count=1 ./pkg/editiontest/...
 ```
 
-`make coverage-gate` is the enforcement step, not a profile generator. It
-expects the candidate, policy, shortcut, and merge-base profiles
-(`coverage.txt`, `coverage-policy.txt`, `coverage-shortcut.txt`, and
-`coverage-base.txt`) produced by the parallel CI profile jobs. A clean local
-checkout can reproduce the Linux/overall CI gate sequentially with:
+For an exact CHANGELOG-only branch:
 
 ```sh
 base_ref=$(git merge-base HEAD origin/main)
-root=$(pwd)
-base_worktree=$(mktemp -d "${TMPDIR:-/tmp}/dws-coverage-base.XXXXXX")
-rmdir "$base_worktree"
-cleanup() { git worktree remove --force "$base_worktree" >/dev/null 2>&1 || true; }
-trap cleanup EXIT HUP INT TERM
-
-go test -count=1 -p 1 -coverprofile=coverage.txt -covermode=atomic \
-  ./ ./cmd/... ./internal/... ./skills/...
-go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic \
-  ./pkg/... ./scripts/policy/...
-go test -count=1 \
-  -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
-  -coverpkg=./internal/app,./internal/helpers,./internal/shortcut/... \
-  -coverprofile=coverage-shortcut.txt \
-  -covermode=atomic \
-  ./internal/app ./internal/helpers ./internal/shortcut/...
-git worktree add --detach "$base_worktree" "$base_ref"
-(
-  cd "$base_worktree"
-  go test -count=1 -p 1 \
-    -coverprofile="$root/coverage-base.txt" -covermode=atomic \
-    ./ ./cmd/... ./internal/... ./skills/...
-)
-COVERAGE_ADDITIONAL_PROFILE=coverage-shortcut.txt \
-  make coverage-gate BASE_REF="$base_ref"
+./scripts/policy/check-changelog-pr.sh --fast-path "$base_ref" HEAD
 ```
 
-The native-platform target likewise expects `PROFILE` to have already been
-generated on that operating system. CI owns those generation steps; copying
-only either enforcement command into a clean checkout is intentionally an
-incomplete invocation.
+`make coverage-gate` is an enforcement step, not a profile generator. CI
+generates the candidate, supporting, merge-base, and (when risk-selected)
+native profiles before the aggregate `Coverage` context evaluates them.
 
-CI derives the authoritative Interface snapshots from both the PR merge-base
-and the latest reachable stable release tag. The complete Schema snapshot comes
-from the PR merge-base, which contains the registry-first Schema introduced on
-`main`. The candidate branch cannot bless a breaking change by editing a
-fixture. Schema additions are allowed; historical products, tools, parameters,
-parameter mappings, positional execution fields, constraints, and safety
-semantics remain protected. Positional descriptions are documentation and may
-change without breaking compatibility.
-
-`make update-interface-baseline` still extends the local checked-in Interface
-fixture used by `make interface-integrity`. Updates are monotonic: they add new
-commands and flags without removing history.
-
-For an intentional compatibility reset at a major-version boundary, run
-`make reset-interface-baseline`. This replaces all CLI compatibility history
-with the current command tree and must receive explicit human review.
+Compatibility checks derive authoritative Interface snapshots from the PR
+merge-base and the latest reachable stable release. The candidate cannot bless
+a breaking change by editing a fixture. Schema additions are allowed;
+historical products, tools, parameters, mappings, positional execution fields,
+constraints, and safety semantics remain protected.
 
 ## Required GitHub repository settings
 
-Create a ruleset for `main` that requires pull requests and code-owner review,
-then mark these aggregate status checks as required:
+The `main` quality ruleset must enable strict required-status-check policy
+(`strict_required_status_checks_policy=true`) so a PR is revalidated whenever
+`main` advances. It must require these exact contexts and no legacy aliases:
 
-- `CI Gate`
-- `Multi Profile E2E`
-- `AI Behavior Check`
+- `Lint`
+- `Test`
+- `Coverage`
+- `Policy`
+- `Edition`
+- `Interface Integrity`
+- `AI Behavior`
+- `CLI Smoke`
+- `Mock MCP`
 
-`CI Gate` fails closed unless every first-layer CI job succeeds, including
-lint, tests, native Linux/Windows/macOS coverage, policy,
-Interface/Schema/Skill integrity, and smoke tests. Requiring the aggregate
-check keeps repository rules stable when an internal job is renamed or split.
-
-The `ai-generated` label must be applied by the PR-creation automation or by a
-maintainer; GitHub cannot infer reliably whether a human-authored PR contains
-AI-generated code.
+Do not require helper jobs, `Multi-profile E2E`, or an aggregate admission
+alias. Update ruleset contexts only after the new names have appeared on the
+protected branch, so a rename cannot silently remove enforcement or leave an
+unproducible required context.
