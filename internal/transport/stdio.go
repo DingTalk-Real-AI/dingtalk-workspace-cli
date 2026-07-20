@@ -43,6 +43,8 @@ type StdioClient struct {
 	nextID  int64
 	started bool
 
+	envUpdatedAfterStart bool // Start() 后是否有 env 变化
+
 	lifecycleMu sync.Mutex
 	initialized bool
 	initResult  InitializeResult
@@ -72,10 +74,7 @@ func (s *StdioClient) Start(ctx context.Context) error {
 	cmd := stdioCommandContext(ctx, s.command, s.args...)
 
 	// Build environment: inherit current env + merge plugin-specific vars.
-	cmd.Env = os.Environ()
-	for k, v := range s.env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.Env = mergeEnv(os.Environ(), s.env)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -104,6 +103,7 @@ func (s *StdioClient) Start(ctx context.Context) error {
 	s.stdout = bufio.NewReaderSize(stdout, 64*1024)
 	s.stderr = stderr
 	s.started = true
+	s.envUpdatedAfterStart = false
 
 	// Drain stderr in background for debug logging.
 	go s.drainStderr()
@@ -277,6 +277,30 @@ func (s *StdioClient) call(ctx context.Context, method string, params any, resul
 	}
 }
 
+// UpdateEnvIfDifferent updates an env var for the subprocess. Returns true if the value changed.
+func (s *StdioClient) UpdateEnvIfDifferent(key, value string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.env == nil {
+		s.env = make(map[string]string)
+	}
+	if s.env[key] == value {
+		return false
+	}
+	s.env[key] = value
+	if s.started {
+		s.envUpdatedAfterStart = true
+	}
+	return true
+}
+
+// NeedsRestart reports whether env has diverged since the last Start.
+func (s *StdioClient) NeedsRestart() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.envUpdatedAfterStart
+}
+
 // drainStderr reads stderr in the background and logs lines at debug level.
 func (s *StdioClient) drainStderr() {
 	scanner := bufio.NewScanner(s.stderr)
@@ -286,4 +310,35 @@ func (s *StdioClient) drainStderr() {
 			slog.Debug("stdio: subprocess stderr", "command", s.command, "line", line)
 		}
 	}
+}
+
+// mergeEnv replaces existing keys in base with overrides, appends new ones.
+func mergeEnv(base []string, overrides map[string]string) []string {
+	if len(overrides) == 0 {
+		return base
+	}
+	merged := make(map[string]bool, len(overrides))
+	result := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range base {
+		key := envKey(entry)
+		if val, ok := overrides[key]; ok {
+			result = append(result, key+"="+val)
+			merged[key] = true
+		} else {
+			result = append(result, entry)
+		}
+	}
+	for k, v := range overrides {
+		if !merged[k] {
+			result = append(result, k+"="+v)
+		}
+	}
+	return result
+}
+
+func envKey(entry string) string {
+	if i := strings.IndexByte(entry, '='); i >= 0 {
+		return entry[:i]
+	}
+	return entry
 }

@@ -824,11 +824,17 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 	tokenData, _ := rootAuthLoadTokenData(defaultConfigDir())
 	var userCtx *plugin.UserContext
 	if tokenData != nil {
-		// Inject user context if either UserID or CorpID is present.
-		if tokenData.UserID != "" || tokenData.CorpID != "" {
+		accessToken := tokenData.AccessToken
+		if accessToken == "" {
+			if resolved, err := resolveAccessTokenFromDir(context.Background(), defaultConfigDir()); err == nil {
+				accessToken = resolved
+			}
+		}
+		if tokenData.UserID != "" || tokenData.CorpID != "" || accessToken != "" {
 			userCtx = &plugin.UserContext{
 				UserID: tokenData.UserID,
 				CorpID: tokenData.CorpID,
+				Token:  accessToken,
 			}
 		}
 	}

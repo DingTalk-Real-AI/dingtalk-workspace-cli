@@ -732,6 +732,31 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	return executor.Result{Invocation: invocation, Response: response}, nil
 }
 
+// ensureStdioClientStarted resolves the latest token, injects env vars,
+// and ensures the subprocess is initialized (restarting if env changed).
+func ensureStdioClientStarted(ctx context.Context, client *transport.StdioClient) error {
+	if td, _ := rootAuthLoadTokenData(defaultConfigDir()); td != nil {
+		accessToken := td.AccessToken
+		if accessToken == "" {
+			if resolved, err := resolveAccessTokenFromDir(ctx, defaultConfigDir()); err == nil {
+				accessToken = resolved
+			}
+		}
+		if accessToken != "" {
+			client.UpdateEnvIfDifferent("DWS_TOKEN", accessToken)
+		}
+		client.UpdateEnvIfDifferent("DWS_USER_ID", td.UserID)
+		client.UpdateEnvIfDifferent("DWS_CORP_ID", td.CorpID)
+	}
+
+	if client.NeedsRestart() {
+		if err := client.Stop(); err != nil {
+			return err
+		}
+	}
+	return client.EnsureInitialized(ctx)
+}
+
 // executeStdioInvocation dispatches a tool call through a local StdioClient
 // subprocess instead of the HTTP transport. This is used for plugin stdio
 // servers whose endpoints use the stdio:// scheme.
@@ -760,7 +785,7 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 		callCtx, cancel = context.WithTimeout(ctx, time.Duration(r.globalFlags.Timeout)*time.Second)
 		defer cancel()
 	}
-	if err := runnerStdioEnsureInitialized(client, callCtx); err != nil {
+	if err := ensureStdioClientStarted(callCtx, client); err != nil {
 		return executor.Result{}, apperrors.NewAPI(
 			fmt.Sprintf("stdio initialize failed: %v", err),
 			apperrors.WithOperation("initialize"),

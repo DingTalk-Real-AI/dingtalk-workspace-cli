@@ -29,6 +29,7 @@ import (
 type UserContext struct {
 	UserID string
 	CorpID string
+	Token  string
 }
 
 // StdioServerClient pairs a transport.StdioClient with its server key.
@@ -57,15 +58,15 @@ func (p *Plugin) StdioClients(uc *UserContext) []StdioServerClient {
 		}
 
 		// Expand ${DWS_PLUGIN_ROOT} in command and args.
-		command = expandPluginVars(command, p.Root)
+		command = expandWithContext(command, p.Root, uc)
 		args := make([]string, len(srv.Args))
 		for i, a := range srv.Args {
-			args[i] = expandPluginVars(a, p.Root)
+			args[i] = expandWithContext(a, p.Root, uc)
 		}
 
 		env := make(map[string]string)
 		for k, v := range srv.Env {
-			env[k] = expandPluginVars(v, p.Root)
+			env[k] = expandWithContext(v, p.Root, uc)
 		}
 		env["DWS_PLUGIN_ROOT"] = p.Root
 		env["DWS_PLUGIN_DATA"] = filepath.Join(filepath.Dir(filepath.Dir(p.Root)), "data", p.Manifest.Name)
@@ -77,6 +78,9 @@ func (p *Plugin) StdioClients(uc *UserContext) []StdioServerClient {
 			}
 			if uc.CorpID != "" {
 				env["DWS_CORP_ID"] = uc.CorpID
+			}
+			if uc.Token != "" {
+				env["DWS_TOKEN"] = uc.Token
 			}
 		}
 
@@ -93,6 +97,32 @@ func expandPluginVars(s, root string) string {
 	dataDir := filepath.Join(filepath.Dir(filepath.Dir(root)), "data")
 	s = strings.ReplaceAll(s, "${DWS_PLUGIN_DATA}", dataDir)
 	return os.Expand(s, os.Getenv)
+}
+
+// expandWithContext resolves plugin variables with UserContext fallback for DWS_TOKEN.
+func expandWithContext(s, root string, uc *UserContext) string {
+	s = strings.ReplaceAll(s, "${DWS_PLUGIN_ROOT}", root)
+	dataDir := filepath.Join(filepath.Dir(filepath.Dir(root)), "data")
+	s = strings.ReplaceAll(s, "${DWS_PLUGIN_DATA}", dataDir)
+	return os.Expand(s, func(key string) string {
+		if uc != nil {
+			switch key {
+			case "DWS_TOKEN":
+				if uc.Token != "" {
+					return uc.Token
+				}
+			case "DWS_USER_ID":
+				if uc.UserID != "" {
+					return uc.UserID
+				}
+			case "DWS_CORP_ID":
+				if uc.CorpID != "" {
+					return uc.CorpID
+				}
+			}
+		}
+		return os.Getenv(key)
+	})
 }
 
 // ToServerDescriptors converts a loaded plugin's MCP servers into
