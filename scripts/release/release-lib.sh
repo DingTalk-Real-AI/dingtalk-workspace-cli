@@ -130,8 +130,7 @@ release_extract_changelog() {
       print
       if ($0 ~ /[^[:space:]]/) meaningful = 1
       if ($0 ~ /^- /) bullet = 1
-      lowered = tolower($0)
-      if (lowered ~ /todo|tbd/) placeholder = 1
+      if ($0 ~ /(^|[^[:alnum:]_])(TODO|TBD)([^[:alnum:]_]|$)/) placeholder = 1
     }
     END {
       if (found != 1) exit 41

@@ -1,8 +1,9 @@
-name: Multi Profile E2E
+name: Main Integration — 主干集成
 
 on:
-  pull_request:
   push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -14,7 +15,7 @@ concurrency:
 
 jobs:
   multi-profile-e2e:
-    name: Multi Profile E2E
+    name: Multi-profile E2E
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -36,7 +37,7 @@ jobs:
           mkdir -p .tmp-bin
           bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir | tee "$MULTI_PROFILE_E2E_LOG"
           {
-            echo "### Multi Profile E2E"
+            echo "### Multi-profile E2E"
             echo "- Command: \`bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir\`"
             echo "- Scope: isolated auth/profile storage, profile switch/use, one-shot profile override, CSV multi-profile aggregation, legacy migration"
             echo "- Result: passed"

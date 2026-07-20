@@ -1,8 +1,11 @@
-name: AI Behavior Check
+name: Code Admission — AI Behavior
 
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -11,7 +14,7 @@ permissions:
 
 jobs:
   ai-behavior-check:
-    name: AI Behavior Policy Evaluator
+    name: AI Behavior
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -21,75 +24,107 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const sha = context.payload.pull_request.head.sha;
+            const pullRequest = context.payload.pull_request;
+            const sha = context.eventName === 'push' ? context.sha : pullRequest.head.sha;
             const setStatus = (state, description) =>
               github.rest.repos.createCommitStatus({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 sha,
                 state,
-                context: 'AI Behavior Check',
+                context: 'AI Behavior',
                 description,
               });
 
             await setStatus('pending', 'Evaluating AI-generated PR boundaries');
 
-            const labels = context.payload.pull_request.labels.map(({ name }) => name);
-            if (!labels.includes('ai-generated')) {
-              await setStatus('success', 'Not labeled ai-generated');
-              core.notice('Not an ai-generated PR; no AI-only policy applied.');
+            if (context.eventName === 'push') {
+              await setStatus('success', 'Not applicable to the protected main push');
+              core.notice('AI Behavior is a PR policy; the main push context is sealed.');
               return;
             }
 
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              per_page: 100,
-            });
+            try {
+              const expectedHead = pullRequest.head.sha;
+              const expectedBase = pullRequest.base.sha;
+              const currentPull = async (phase) => {
+                const { data: pull } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                });
+                if (pull.head.sha !== expectedHead || pull.base.sha !== expectedBase) {
+                  throw new Error(
+                    `Pull request revision changed during ${phase}: ` +
+                    `expected base/head ${expectedBase}/${expectedHead}, ` +
+                    `got ${pull.base.sha}/${pull.head.sha}`
+                  );
+                }
+                return pull;
+              };
 
-            const maxChangedFiles = 30;
-            if (files.length > maxChangedFiles) {
+              const before = await currentPull('pre-policy check');
+              const labels = before.labels.map(({ name }) => name);
+              if (!labels.includes('ai-generated')) {
+                await setStatus('success', 'Not labeled ai-generated');
+                core.notice('Not an ai-generated PR; no AI-only policy applied.');
+                return;
+              }
+
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                per_page: 100,
+              });
+              await currentPull('post-policy check');
+
+              const maxChangedFiles = 30;
+              if (files.length > maxChangedFiles) {
+                await setStatus(
+                  'failure',
+                  `Changes ${files.length} files; limit is ${maxChangedFiles}`
+                );
+                core.setFailed(
+                  `AI-generated PR changes ${files.length} files; limit is ${maxChangedFiles}.`
+                );
+                return;
+              }
+
+              const isProtectedPath = (filename) =>
+                typeof filename === 'string' &&
+                (
+                  filename.startsWith('.github/workflows/') ||
+                  filename.startsWith('scripts/policy/') ||
+                  filename.startsWith('scripts/release/') ||
+                  filename === 'test/fixtures/cli-interface-baseline.txt' ||
+                  filename === '.goreleaser.yaml' ||
+                  filename === 'Makefile'
+                );
+              const protectedPaths = [...new Set(
+                files
+                  .flatMap(({ filename, previous_filename }) => [filename, previous_filename])
+                  .filter(isProtectedPath)
+              )];
+
+              if (protectedPaths.length > 0) {
+                await setStatus('failure', 'Modifies protected release/CI infrastructure');
+                core.setFailed(
+                  'AI-generated PR modifies protected release/CI infrastructure:\n' +
+                  protectedPaths.map((filename) => `  - ${filename}`).join('\n') +
+                  '\nSplit these changes into a human-owned PR with explicit review.'
+                );
+                return;
+              }
+
               await setStatus(
-                'failure',
-                `Changes ${files.length} files; limit is ${maxChangedFiles}`
+                'success',
+                `Passed with ${files.length} changed files (limit ${maxChangedFiles})`
               );
-              core.setFailed(
-                `AI-generated PR changes ${files.length} files; limit is ${maxChangedFiles}.`
+              core.notice(
+                `AI behavior check passed (${files.length} changed files; limit ${maxChangedFiles}).`
               );
-              return;
+            } catch (error) {
+              await setStatus('error', 'Could not evaluate the exact pull request revision');
+              throw error;
             }
-
-            const isProtectedPath = (filename) =>
-              typeof filename === 'string' &&
-              (
-                filename.startsWith('.github/workflows/') ||
-                filename.startsWith('scripts/policy/') ||
-                filename.startsWith('scripts/release/') ||
-                filename === 'test/fixtures/cli-interface-baseline.txt' ||
-                filename === '.goreleaser.yaml' ||
-                filename === 'Makefile'
-              );
-            const protectedPaths = [...new Set(
-              files
-                .flatMap(({ filename, previous_filename }) => [filename, previous_filename])
-                .filter(isProtectedPath)
-            )];
-
-            if (protectedPaths.length > 0) {
-              await setStatus('failure', 'Modifies protected release/CI infrastructure');
-              core.setFailed(
-                'AI-generated PR modifies protected release/CI infrastructure:\n' +
-                protectedPaths.map((filename) => `  - ${filename}`).join('\n') +
-                '\nSplit these changes into a human-owned PR with explicit review.'
-              );
-              return;
-            }
-
-            await setStatus(
-              'success',
-              `Passed with ${files.length} changed files (limit ${maxChangedFiles})`
-            );
-            core.notice(
-              `AI behavior check passed (${files.length} changed files; limit ${maxChangedFiles}).`
-            );

@@ -43,3 +43,38 @@
 - `skills/`: bundled agent skills (mono/ and multi/ layouts)
 - `test/`: CLI, integration, contract, unit, and skill E2E tests
 - `scripts/`: install scripts, policy checks, and CI helpers
+
+## Quality Pipeline
+
+Quality enforcement is layered so a pull request receives fast, deterministic
+admission feedback without pretending that downstream integration has already
+run.
+
+```mermaid
+flowchart TB
+  PR["Pull request"] --> CA["Code Admission — PR 合入门禁"]
+  subgraph CA_CHECKS["Nine required contexts"]
+    L["Lint"]
+    T["Test"]
+    C["Coverage"]
+    P["Policy"]
+    E["Edition"]
+    I["Interface Integrity"]
+    A["AI Behavior"]
+    S["CLI Smoke"]
+    M["Mock MCP"]
+  end
+  CA --> CA_CHECKS
+  CA_CHECKS --> MAIN["Protected main"]
+  MAIN --> MP["Main Integration — 主干集成<br/>Multi-profile E2E"]
+  MAIN --> PLATFORM["Risk-selected / release native platform validation"]
+  MP --> RELEASE["Release delivery"]
+  PLATFORM --> RELEASE
+```
+
+Complete Multi-profile E2E and the ordinary full native-platform matrix are
+downstream of PR admission. PRs still run primary-environment assurance and
+fast cross-platform compilation; auth, keychain, OS-specific, installer, and
+release changes additionally select native platform tests before merge. See
+[`docs/ci-pr-gates.md`](ci-pr-gates.md) for the exact context and ruleset
+contract.
