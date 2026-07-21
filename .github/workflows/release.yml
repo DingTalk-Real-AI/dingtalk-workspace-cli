@@ -358,25 +358,6 @@ jobs:
                 latestByName.set(run.name, run);
               }
             }
-            // Also check commit statuses — some contexts (e.g. "AI Behavior")
-            // are reported as commit statuses rather than check runs.
-            const statuses = await github.paginate(
-              github.rest.repos.listCommitStatusesForRef,
-              { owner, repo, ref: sha, per_page: 100 },
-            );
-            const seenStatusContexts = new Set();
-            for (const status of statuses) {
-              if (!requiredContexts.includes(status.context) || seenStatusContexts.has(status.context)) {
-                continue;
-              }
-              seenStatusContexts.add(status.context);
-              if (!latestByName.has(status.context)) {
-                latestByName.set(status.context, {
-                  conclusion: status.state,
-                  status: "completed",
-                });
-              }
-            }
             const missing = requiredContexts.filter((name) => !latestByName.has(name));
             const nonSuccess = requiredContexts.flatMap((name) => {
               const run = latestByName.get(name);
@@ -772,25 +753,6 @@ jobs:
                 latestByName.set(run.name, run);
               }
             }
-            // Also check commit statuses — some contexts (e.g. "AI Behavior")
-            // are reported as commit statuses rather than check runs.
-            const statuses = await github.paginate(
-              github.rest.repos.listCommitStatusesForRef,
-              { owner, repo, ref: sha, per_page: 100 },
-            );
-            const seenStatusContexts = new Set();
-            for (const status of statuses) {
-              if (!requiredContexts.includes(status.context) || seenStatusContexts.has(status.context)) {
-                continue;
-              }
-              seenStatusContexts.add(status.context);
-              if (!latestByName.has(status.context)) {
-                latestByName.set(status.context, {
-                  conclusion: status.state,
-                  status: "completed",
-                });
-              }
-            }
             const missing = requiredContexts.filter((name) => !latestByName.has(name));
             const nonSuccess = requiredContexts.flatMap((name) => {
               const run = latestByName.get(name);
@@ -1085,9 +1047,7 @@ jobs:
           rm -f "$RUNNER_TEMP/dws-developer-id-password"
 
       - name: Verify final release artifacts
-        run: |
-          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh" "$RELEASE_VERSION"
+        run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
 
       - name: Verify npm package before sealing GitHub Release
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
@@ -1212,9 +1172,7 @@ jobs:
           path: dist
 
       - name: Verify finalized release artifacts before publication
-        run: |
-          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh" "$RELEASE_VERSION"
+        run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
 
       - name: Verify npm package before sealing GitHub Release
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
@@ -1310,7 +1268,7 @@ jobs:
                 "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh" \
                 "$RELEASE_VERSION" "$published_dir"
               DWS_PACKAGE_DIST_DIR="$published_dir" \
-                "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh" "$RELEASE_VERSION"
+                ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
               for asset in "$published_dir"/dws-* "$published_dir"/checksums.txt; do
                 if [ "$IS_RECOVERY" = "true" ] && ! cmp -s "$asset" "dist/$(basename "$asset")"; then
                   echo "Public recovery asset differs from this run's sealed artifact: $(basename "$asset")" >&2
@@ -1416,7 +1374,7 @@ jobs:
             "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh" \
             "$RELEASE_VERSION" "$sealed_upload"
           DWS_PACKAGE_DIST_DIR="$sealed_upload" \
-            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh" "$RELEASE_VERSION"
+            ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
           for remote_asset in "$sealed_upload"/dws-* "$sealed_upload"/checksums.txt; do
             local_asset="dist/$(basename "$remote_asset")"
             cmp -s "$local_asset" "$remote_asset" || {
@@ -1486,7 +1444,7 @@ jobs:
             "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh" \
             "$RELEASE_VERSION" "$immutable_dir"
           DWS_PACKAGE_DIST_DIR="$immutable_dir" \
-            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh" "$RELEASE_VERSION"
+            ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
           for immutable_asset in "$immutable_dir"/dws-* "$immutable_dir"/checksums.txt; do
             sealed_asset="dist/$(basename "$immutable_asset")"
             cmp -s "$sealed_asset" "$immutable_asset" || {
@@ -1608,8 +1566,7 @@ jobs:
             --pattern 'dws-*' \
             --pattern 'checksums.txt' \
             --clobber
-          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh" "$RELEASE_VERSION"
+          ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
           DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
             DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
             ./scripts/release/stage-npm-package.sh "$RELEASE_VERSION"

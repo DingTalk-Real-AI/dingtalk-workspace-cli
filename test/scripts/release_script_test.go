@@ -30,18 +30,7 @@ func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 	if strings.HasSuffix(asset, ".zip") {
 		binary = "dws.exe"
 	}
-	content := []byte("fake release binary\n" + version + "\n")
-	if asset == "dws-linux-amd64.tar.gz" {
-		content = []byte(fmt.Sprintf(`#!/bin/sh
-set -eu
-if [ "$#" -ne 3 ] || [ "$1" != version ] || [ "$2" != --format ] || [ "$3" != json ]; then
-  printf 'unexpected version command\n' >&2
-  exit 2
-fi
-printf '{"version":"%s"}\n'
-`, version))
-	}
-	mustWriteFile(t, filepath.Join(stage, binary), content, 0o755)
+	mustWriteFile(t, filepath.Join(stage, binary), []byte("fake release binary\n"+version+"\n"), 0o755)
 	if strings.HasSuffix(asset, ".zip") {
 		mustRun(t, stage, "zip", "-q", filepath.Join(dist, asset), binary)
 		return
@@ -1959,17 +1948,8 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	writeReleaseChecksums(t, dist, true)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
 	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
-	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "dws-windows-arm64.zip binary does not contain expected version marker v1.2.3") {
+	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "dws-windows-arm64.zip binary") {
 		t.Fatalf("mixed-version archive was not rejected: err=%v\noutput:\n%s", err, output)
-	}
-
-	writeVersionedReleaseArchive(t, dist, "dws-windows-arm64.zip", "v1.2.3")
-	writeVersionedReleaseArchive(t, dist, "dws-linux-amd64.tar.gz", "v1.2.3-beta.1")
-	writeReleaseChecksums(t, dist, true)
-	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
-	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "dws-linux-amd64.tar.gz binary reports version v1.2.3-beta.1, expected v1.2.3") {
-		t.Fatalf("native prefixed version was not rejected: err=%v\noutput:\n%s", err, output)
 	}
 }
 

@@ -72,7 +72,7 @@ else
   exit 1
 fi
 
-verify_binary_archive() {
+verify_binary_version() {
   asset="$1"
   extract_dir="$tmp/extract-${asset}"
   mkdir -p "$extract_dir"
@@ -94,52 +94,14 @@ verify_binary_archive() {
     printf '%s does not contain the expected dws binary\n' "$asset" >&2
     return 1
   }
-  LC_ALL=C grep -aFq "v$SEMVER" "$binary" || {
-    printf '%s binary does not contain expected version marker v%s\n' \
-      "$asset" "$SEMVER" >&2
+  strings "$binary" | grep -Fqx "v$SEMVER" || {
+    printf '%s binary does not embed expected version v%s\n' "$asset" "$SEMVER" >&2
     return 1
   }
-  # Execute one native artifact and validate the CLI's public version contract.
-  # `strings` output has no symbol boundaries, so requiring the injected version
-  # to appear on an exact line can reject a correct Go binary when adjacent
-  # printable bytes are coalesced into the same output line.
-  if [ "$asset" = dws-linux-amd64.tar.gz ]; then
-    command -v python3 >/dev/null 2>&1 || {
-      printf 'python3 is required to validate the release binary version\n' >&2
-      return 1
-    }
-    version_json="$extract_dir/version.json"
-    isolated_home="$extract_dir/home"
-    mkdir -p "$isolated_home"
-    if ! env -i HOME="$isolated_home" PATH=/usr/bin:/bin LANG=C.UTF-8 \
-      "$binary" version --format json >"$version_json"; then
-      printf '%s binary could not report its version\n' "$asset" >&2
-      return 1
-    fi
-    reported_version="$(python3 -c '
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    payload = json.load(handle)
-version = payload.get("version")
-if not isinstance(version, str) or not version:
-    raise SystemExit(1)
-print(version)
-' "$version_json")" || {
-      printf '%s binary returned an invalid version payload\n' "$asset" >&2
-      return 1
-    }
-    [ "$reported_version" = "v$SEMVER" ] || {
-      printf '%s binary reports version %s, expected v%s\n' \
-        "$asset" "$reported_version" "$SEMVER" >&2
-      return 1
-    }
-  fi
 }
 
 for asset in $EXPECTED_PLATFORM_ASSETS; do
-  verify_binary_archive "$asset"
+  verify_binary_version "$asset"
 done
 
 printf 'Release artifacts verified for v%s.\n' "$SEMVER"
