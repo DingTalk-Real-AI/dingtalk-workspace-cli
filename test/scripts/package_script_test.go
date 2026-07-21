@@ -46,6 +46,29 @@ var expectedReleaseAdmissionContexts = []string{
 	"Mock MCP",
 }
 
+func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-package-managers.sh"))
+	if err != nil {
+		t.Fatalf("Abs(verify-package-managers.sh) error = %v", err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	script := string(data)
+	for _, binary := range []string{`"$vendor_bin"`, `"$prefix/bin/dws"`} {
+		want := `LC_ALL=C grep -aFq "v$EXPECTED_VERSION" ` + binary
+		if !strings.Contains(script, want) {
+			t.Errorf("package-manager verifier is missing raw binary marker check %q", want)
+		}
+	}
+	if strings.Contains(script, `strings "$vendor_bin"`) || strings.Contains(script, `strings "$prefix/bin/dws"`) {
+		t.Fatal("package-manager verifier still requires the version marker to occupy a strings(1) line")
+	}
+}
+
 func seedDistArchive(t *testing.T, path string) {
 	t.Helper()
 	file, err := os.Create(path)
