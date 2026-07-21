@@ -1,13 +1,12 @@
 #!/bin/sh
 set -eu
 
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+cd "$ROOT"
+
 # ── Format check ──────────────────────────────────────────
-unformatted="$(find cmd internal test -name '*.go' -print0 2>/dev/null | xargs -0r gofmt -l)"
-if [ -n "$unformatted" ]; then
-  echo "$unformatted"
-  echo "Go files are not formatted. Run 'make fmt'." >&2
-  exit 1
-fi
+echo "Running gofmt check..."
+make format-check
 
 # ── go vet (built-in) ────────────────────────────────────
 echo "Running go vet..."

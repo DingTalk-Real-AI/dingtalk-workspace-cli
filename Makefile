@@ -1,12 +1,14 @@
 GO ?= go
+DWS_PACKAGE_VERSION ?= 0.0.0-test
 REMOTE ?=
 PUBLISH ?= 0
 YES ?= 0
 DWS_POLICY_TMPDIR ?= $(CURDIR)/.worktrees/policy-tmp
 POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
+GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test test-plan lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -14,8 +16,10 @@ help:
 	@printf "Available targets:\n"
 	@printf "  make build         - Build the dws CLI binary\n"
 	@printf "  make test          - Run the Go test suite\n"
-	@printf "  make lint          - Run formatting checks and golangci-lint when available\n"
-	@printf "  make fmt           - Format Go source files\n"
+	@printf "  make test-plan     - Verify every default Go package belongs to one CI test shard\n"
+	@printf "  make lint          - Run formatting checks, go vet, and staticcheck\n"
+	@printf "  make format-check  - Check all repository Go source files with gofmt\n"
+	@printf "  make fmt           - Format all repository Go source files\n"
 	@printf "  make policy        - Check the built dws plus open-source and Schema policies\n"
 	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
 	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
@@ -45,13 +49,32 @@ rebuild:
 	@./scripts/dev/build.sh
 
 test:
-	@./test/scripts/run_all_tests.sh --timeout 5m
+	@DWS_PACKAGE_VERSION="$(DWS_PACKAGE_VERSION)" $(GO) test -count=1 -timeout=10m ./...
+
+test-plan:
+	@./scripts/ci/test-packages.sh verify
 
 lint:
 	@./scripts/dev/lint.sh
 
+format-check:
+	@set -eu; \
+	go_files="$$(mktemp "$${TMPDIR:-/tmp}/dws-go-files.XXXXXX")"; \
+	trap 'rm -f "$$go_files"' EXIT HUP INT TERM; \
+	$(GO_SOURCE_LIST) > "$$go_files"; \
+	unformatted="$$(xargs -0 sh -c 'if [ "$$#" -gt 0 ]; then exec gofmt -l -- "$$@"; fi' sh < "$$go_files")"; \
+	if [ -n "$$unformatted" ]; then \
+		printf '%s\n' "$$unformatted"; \
+		printf '%s\n' "Go files are not formatted. Run 'make fmt'." >&2; \
+		exit 1; \
+	fi
+
 fmt:
-	@find cmd internal test scripts/policy -name '*.go' -print0 2>/dev/null | xargs -0r gofmt -w
+	@set -eu; \
+	go_files="$$(mktemp "$${TMPDIR:-/tmp}/dws-go-files.XXXXXX")"; \
+	trap 'rm -f "$$go_files"' EXIT HUP INT TERM; \
+	$(GO_SOURCE_LIST) > "$$go_files"; \
+	xargs -0 sh -c 'if [ "$$#" -gt 0 ]; then exec gofmt -w -- "$$@"; fi' sh < "$$go_files"
 
 policy:
 	@mkdir -p "$(POLICY_GOTMPDIR)"
