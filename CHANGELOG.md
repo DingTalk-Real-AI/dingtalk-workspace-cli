@@ -28,7 +28,7 @@ This release promotes the validated `v1.0.53-beta.7` baseline to stable. It adds
 - **Authentication and credential reliability** — organization-policy denials stop before mutation or polling, long-running clients reload and refresh access tokens consistently, concurrent credential writes are atomic, and Windows portable-auth commands fail before reading or writing unsupported credential bundles.
 - **Command validation and compatibility** — invalid Sheet/task targets fail locally, IM shortcuts preserve AI-tag and alias compatibility, and Aitable import uploads require and forward a positive file size.
 - **Release publication reliability** — GitHub draft publication is bound to one verified release ID and exact assets, preflight uses isolated installer worktrees, guarded local tags remain compatible, cloud planning fingerprints the actual allocated release refs, and npm channel verification waits for bounded registry propagation without moving tags.
-- **Package-manager version verification** (#735) — npm-vendored and Homebrew-installed binaries are now verified by searching their raw bytes for the injected version marker, so a correctly versioned stable binary is no longer rejected when the short version marker coalesces with adjacent printable linker metadata; incorrect or missing markers still fail closed.
+- **Package-manager version verification** (#735) — npm-vendored, Homebrew-installed, and packaged release binaries are now verified by searching their raw bytes for the injected version marker, so a correctly versioned stable binary is no longer rejected when the short version marker coalesces with adjacent printable linker metadata; incorrect or missing markers still fail closed.
 
 ## [1.0.53-beta.7] - 2026-07-21
 
