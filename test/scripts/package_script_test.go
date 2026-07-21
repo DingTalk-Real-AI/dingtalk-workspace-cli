@@ -903,6 +903,57 @@ func TestReleaseWorkflowAcceptsGuardedLocalTagMetadata(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowRequiresOSSOnlyWhenMirrorIsEnabled(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	releaseContract := releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n")
+	targetAuthority := releaseWorkflowSection(
+		t,
+		releaseContract,
+		"      - name: Resolve and verify exact release target\n",
+		"\n      - name: Check out repository\n",
+	)
+	ossStep := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: Sync release artifacts to China OSS mirror\n",
+		"\n  mirror-gitee-release:\n",
+	)
+
+	for _, required := range []string{
+		`if: ${{ needs.release-contract.outputs.oss_mirror == 'enabled' }}`,
+		`run: ./scripts/release/sync-to-oss.sh`,
+		`DWS_REQUIRE_OSS: "1"`,
+	} {
+		if !strings.Contains(ossStep, required) {
+			t.Errorf("opt-in OSS publication is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		`OSS_MIRROR: ${{ vars.ENABLE_OSS_MIRROR == 'true' && 'enabled' || 'deferred' }}`,
+		`OSS-Mirror: ${ossMirror}`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("immutable OSS release policy is missing %q", required)
+		}
+	}
+	if strings.Contains(ossStep, "vars.ENABLE_OSS_MIRROR") {
+		t.Error("channel publication must use the immutable tag policy, not the current repository variable")
+	}
+	for _, required := range []string{
+		`const ossMirror = tagFields.has("OSS-Mirror")`,
+		`? tagFields.get("OSS-Mirror")`,
+		`: "enabled";`,
+		`!["enabled", "deferred"].includes(ossMirror)`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(targetAuthority, required) {
+			t.Errorf("release target OSS policy authority is missing %q", required)
+		}
+	}
+}
+
 func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
@@ -916,6 +967,12 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		t.Fatal("release workflow channel repair job is missing its end marker")
 	}
 	repair := workflow[start : start+end]
+	authority := releaseWorkflowSection(
+		t,
+		repair,
+		"      - name: Verify immutable release authority\n",
+		"\n      - name: Require sealed OSS policy for repair\n",
+	)
 	tagAuthority := releaseWorkflowSection(
 		t,
 		repair,
@@ -964,6 +1021,8 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		"assetNames.length !== expectedAssets.size",
 		"new Set(assetNames).size !== expectedAssets.size",
 		`core.setOutput("tag_object", ref.data.object.sha)`,
+		"Require sealed OSS policy for repair",
+		"OSS repair is unavailable because this immutable release deferred the OSS channel.",
 		`ref: ${{ steps.authority.outputs.commit_sha }}`,
 		"path: release-source",
 		"verify-github-tag-authority.sh",
@@ -993,6 +1052,25 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		if !strings.Contains(repair, required) {
 			t.Errorf("channel repair authority is missing %q", required)
 		}
+	}
+	for _, required := range []string{
+		`const tagFields = new Map();`,
+		`const ossMirror = tagFields.has("OSS-Mirror")`,
+		`? tagFields.get("OSS-Mirror")`,
+		`: "enabled";`,
+		`!["enabled", "deferred"].includes(ossMirror)`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(authority, required) {
+			t.Errorf("channel repair tag policy authority is missing %q", required)
+		}
+	}
+	npmRepair := releaseWorkflowSection(t, workflow, "  repair-npm:\n", "\n  release-delivery-gate:\n")
+	if strings.Contains(npmRepair, `const ossMirror`) || strings.Contains(npmRepair, `core.setOutput("oss_mirror"`) {
+		t.Error("npm repair must not parse or export the channel-only OSS policy")
+	}
+	if strings.Contains(repair, "ENABLE_OSS_MIRROR") {
+		t.Error("OSS repair must use the immutable tag policy, not the current repository variable")
 	}
 	for _, asset := range []string{
 		"dws-darwin-amd64.tar.gz",
