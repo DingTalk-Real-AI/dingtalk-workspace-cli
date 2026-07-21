@@ -884,6 +884,25 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowAcceptsGuardedLocalTagMetadata(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+
+	for _, required := range []string{
+		`const cloudOnlyKeys = [`,
+		`const cloudKeys = ["Channel", ...cloudOnlyKeys];`,
+		`const hasAnyCloudMetadata = cloudOnlyKeys.some((key) => tagFields.has(key));`,
+		`const isCloudSeal = cloudKeys.every((key) => tagFields.has(key));`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("local tag metadata compatibility is missing %q", required)
+		}
+	}
+	if strings.Contains(workflow, `const hasAnyCloudMetadata = cloudKeys.some((key) => tagFields.has(key));`) {
+		t.Error("Channel-only guarded local tags must not be classified as partial cloud seals")
+	}
+}
+
 func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)

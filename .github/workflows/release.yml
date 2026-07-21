@@ -541,8 +541,7 @@ jobs:
               }
               tagFields.set(key, line.slice(separator + 2));
             }
-            const cloudKeys = [
-              "Channel",
+            const cloudOnlyKeys = [
               "Release-Run",
               "Release-Run-Attempt",
               "Requested-By",
@@ -551,7 +550,8 @@ jobs:
               "Workflow-Commit",
               "Allocation-Fingerprint",
             ];
-            const hasAnyCloudMetadata = cloudKeys.some((key) => tagFields.has(key));
+            const cloudKeys = ["Channel", ...cloudOnlyKeys];
+            const hasAnyCloudMetadata = cloudOnlyKeys.some((key) => tagFields.has(key));
             const isCloudSeal = cloudKeys.every((key) => tagFields.has(key));
             if (hasAnyCloudMetadata && !isCloudSeal) {
               core.setFailed(`${version} contains incomplete cloud seal metadata`);

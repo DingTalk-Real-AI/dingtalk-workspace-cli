@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **Guarded local release compatibility** — The tag-push Release workflow now accepts the `Channel`-only annotated tags created by the guarded local release entry while continuing to reject any partial cloud-only seal metadata.
+
 ## [1.0.53-beta.5] - 2026-07-21
 
 This beta validates long-running access-token recovery and the faster, recoverable guarded release path introduced after v1.0.53-beta.4.
