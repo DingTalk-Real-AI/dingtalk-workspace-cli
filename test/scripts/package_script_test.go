@@ -1948,6 +1948,23 @@ printf '%s\n' "$*" >> "$SLEEP_CALL_LOG"
 	}
 }
 
+func TestReleaseWorkflowUsesTrustedArtifactVerifierForRecovery(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	trusted := `"$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh"`
+	if got := strings.Count(workflow, trusted); got != 6 {
+		t.Fatalf("trusted artifact verifier call count = %d, want 6", got)
+	}
+	workspaceDist := `DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \` + "\n" +
+		`            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-artifacts.sh"`
+	if got := strings.Count(workflow, workspaceDist); got != 3 {
+		t.Fatalf("workspace dist-bound trusted verifier call count = %d, want 3", got)
+	}
+	if strings.Contains(workflow, "./scripts/release/verify-release-artifacts.sh") {
+		t.Fatal("release workflow still executes the sealed tag's artifact verifier")
+	}
+}
+
 func TestReleaseStaysDraftUntilFinalizedAssetDigestsMatch(t *testing.T) {
 	t.Parallel()
 
