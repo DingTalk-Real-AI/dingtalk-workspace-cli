@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "source_hash": "sha256:de587cba5051dd4c2715353012d8d9f2a7c5208a0c6dee4ea703cfc97b7351f0",
+  "source_hash": "sha256:d3982371ebe60d745b300ec66d6c15528a2d1ba915d211b57eec78e59d724364",
   "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
-  "source_files": 150,
+  "source_files": 151,
   "hint_files": 46,
   "hint_products": 39,
   "hint_tools": 1296,
@@ -36,8 +36,8 @@
     "tools_with_avoid_when": 572,
     "tools_with_examples": 572,
     "tools_with_interface_mode": 572,
-    "unmatched_skill_tools": 120,
-    "unreviewed_skill_tools": 7
+    "unmatched_skill_tools": 131,
+    "unreviewed_skill_tools": 18
   },
   "source_products": [
     "agoal",
@@ -58,6 +58,7 @@
     "event",
     "extension",
     "generate-topic-report",
+    "hrbrain",
     "live",
     "mail",
     "meeting-followup",
@@ -77,6 +78,7 @@
     "conference",
     "extension",
     "generate-topic-report",
+    "hrbrain",
     "meeting-followup",
     "template-based-generation",
     "write-doc"
@@ -160,7 +162,7 @@
     {
       "tool_path": "calendar participant delete",
       "source": "skills/mono/SKILL.md",
-      "line": 143,
+      "line": 145,
       "candidates": [
         "calendar attendee delete",
         "calendar event delete",
@@ -2865,6 +2867,141 @@
         "status": "stale",
         "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
       }
+    },
+    {
+      "tool_path": "hrbrain talent-pool list",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 42,
+      "candidates": [
+        "aitable base list",
+        "aitable field list",
+        "aitable form field list"
+      ]
+    },
+    {
+      "tool_path": "hrbrain talent-pool detail",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 43,
+      "candidates": [
+        "oa approval detail"
+      ]
+    },
+    {
+      "tool_path": "hrbrain talent-pool employees",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 44
+    },
+    {
+      "tool_path": "hrbrain profile metadata",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 47
+    },
+    {
+      "tool_path": "hrbrain profile query",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 48,
+      "candidates": [
+        "aitable record query",
+        "minutes tag query"
+      ]
+    },
+    {
+      "tool_path": "hrbrain search employees",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 60
+    },
+    {
+      "tool_path": "hrbrain search fields",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 61,
+      "candidates": [
+        "contact user profile fields"
+      ]
+    },
+    {
+      "tool_path": "hrbrain talent-pool list",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 67,
+      "candidates": [
+        "aitable base list",
+        "aitable field list",
+        "aitable form field list"
+      ]
+    },
+    {
+      "tool_path": "hrbrain talent-pool list",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 68,
+      "candidates": [
+        "aitable base list",
+        "aitable field list",
+        "aitable form field list"
+      ]
+    },
+    {
+      "tool_path": "hrbrain talent-pool detail",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 69,
+      "candidates": [
+        "oa approval detail"
+      ]
+    },
+    {
+      "tool_path": "hrbrain talent-pool employees",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 70
+    },
+    {
+      "tool_path": "hrbrain profile metadata",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 73
+    },
+    {
+      "tool_path": "hrbrain profile query",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 74,
+      "candidates": [
+        "aitable record query",
+        "minutes tag query"
+      ]
+    },
+    {
+      "tool_path": "hrbrain profile labels",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 79
+    },
+    {
+      "tool_path": "hrbrain profile career",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 80
+    },
+    {
+      "tool_path": "hrbrain profile performance",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 81
+    },
+    {
+      "tool_path": "hrbrain search employees",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 84
+    },
+    {
+      "tool_path": "hrbrain search employees",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 85
+    },
+    {
+      "tool_path": "hrbrain search fields",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 88,
+      "candidates": [
+        "contact user profile fields"
+      ]
+    },
+    {
+      "tool_path": "hrbrain search employees-structured",
+      "source": "skills/mono/references/products/hrbrain.md",
+      "line": 89
     },
     {
       "tool_path": "mail mailbox profile",
