@@ -943,6 +943,11 @@ esac
 	if output, err := run(); err != nil || !strings.Contains(output, "cloud release run 42") {
 		t.Fatalf("tag-bound cloud delivery was rejected: err=%v\noutput:\n%s", err, output)
 	}
+	if output, err := runWithArgs(
+		[]string{"--channel-repair", "oss", tag, commit},
+	); err != nil || !strings.Contains(output, "cloud release run 42") {
+		t.Fatalf("OSS repair could not use a successful release with the mirror enabled: err=%v\noutput:\n%s", err, output)
+	}
 	if output, err := run("RUN_ACTOR=renamed-release-user"); err != nil ||
 		!strings.Contains(output, "cloud release run 42") {
 		t.Fatalf("cloud delivery broke after a harmless login rename: err=%v\noutput:\n%s", err, output)

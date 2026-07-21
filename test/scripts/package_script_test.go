@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -636,6 +637,33 @@ func releaseWorkflowSection(t *testing.T, workflow, startMarker, endMarker strin
 	return workflow[start : start+len(startMarker)+end]
 }
 
+func releaseWorkflowRunScript(t *testing.T, workflow, stepName, nextStepName string) string {
+	t.Helper()
+	section := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: "+stepName+"\n",
+		"\n      - name: "+nextStepName+"\n",
+	)
+	const runMarker = "        run: |\n"
+	start := strings.Index(section, runMarker)
+	if start == -1 {
+		t.Fatalf("release workflow step %q is missing a run block", stepName)
+	}
+
+	lines := strings.Split(section[start+len(runMarker):], "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "          ") {
+			t.Fatalf("release workflow step %q has an unexpected run indentation: %q", stepName, line)
+		}
+		lines[i] = strings.TrimPrefix(line, "          ")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
@@ -836,7 +864,8 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 		"persist-credentials: false",
 		`refs/remotes/origin/main)" = "$GITHUB_SHA`,
 		"next-release-version.sh",
-		"refs/tags/withdrawn/v",
+		`'refs/tags/v*' 'refs/tags/withdrawn/v*'`,
+		"release ref manifest is empty after fetching allocated tags",
 		"refs_fingerprint",
 		"Validate the candidate release contract before sealing",
 		"release-contract.sh",
@@ -849,6 +878,9 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 	}
 	if strings.Contains(plan, "contents: write") {
 		t.Error("cloud release planning must remain read-only")
+	}
+	if strings.Contains(plan, "refs/tags/v refs/tags/withdrawn/v") {
+		t.Error("cloud release planning must use wildcard ref patterns that match the seal API prefixes")
 	}
 
 	for _, required := range []string{
@@ -884,6 +916,136 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 	}
 }
 
+func TestReleaseFingerprintRefPatternsMatchAllAllocatedTags(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	mustRun(t, repo, "git", "config", "user.name", "Release Fingerprint Test")
+	mustRun(t, repo, "git", "config", "user.email", "release-fingerprint@example.com")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("fixture\n"), 0o644)
+	mustRun(t, repo, "git", "add", "tracked")
+	mustRun(t, repo, "git", "commit", "-m", "fixture")
+
+	allocatedTags := []string{
+		"v1.0.52",
+		"v1.0.53-beta.5",
+		"withdrawn/v1.0.51",
+	}
+	for _, tag := range allocatedTags {
+		mustRun(t, repo, "git", "tag", "-a", tag, "-m", "Release "+tag)
+	}
+	mustRun(t, repo, "git", "tag", "-a", "release/v1.0.52", "-m", "unrelated namespace")
+	legacy := exec.Command(
+		"git", "for-each-ref", "--format=%(refname)=%(objectname)",
+		"refs/tags/v", "refs/tags/withdrawn/v",
+	)
+	legacy.Dir = repo
+	legacyOutput, err := legacy.CombinedOutput()
+	if err != nil {
+		t.Fatalf("legacy git for-each-ref error = %v\noutput:\n%s", err, legacyOutput)
+	}
+	if strings.TrimSpace(string(legacyOutput)) != "" {
+		t.Fatalf("legacy component patterns unexpectedly matched flat release refs:\n%s", legacyOutput)
+	}
+
+	cmd := exec.Command(
+		"git", "for-each-ref", "--format=%(refname)=%(objectname)",
+		"refs/tags/v*", "refs/tags/withdrawn/v*",
+	)
+	cmd.Dir = repo
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git for-each-ref error = %v\noutput:\n%s", err, output)
+	}
+	got := strings.Split(strings.TrimSpace(string(output)), "\n")
+	sort.Strings(got)
+
+	want := make([]string, 0, len(allocatedTags))
+	for _, tag := range allocatedTags {
+		object := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/"+tag))
+		want = append(want, "refs/tags/"+tag+"="+object)
+	}
+	sort.Strings(want)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("release ref set differs from the seal API set\ngot:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	workflowDigest := sha256.Sum256([]byte(strings.Join(got, "\n") + "\n"))
+	sealDigest := sha256.Sum256([]byte(strings.Join(want, "\n") + "\n"))
+	if workflowDigest != sealDigest {
+		t.Fatalf("release ref fingerprint differs from seal fingerprint: workflow=%x seal=%x", workflowDigest, sealDigest)
+	}
+}
+
+func TestReleaseWorkflowAcceptsGuardedLocalTagMetadata(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+
+	for _, required := range []string{
+		`const cloudOnlyKeys = [`,
+		`const cloudKeys = ["Channel", ...cloudOnlyKeys];`,
+		`const hasAnyCloudMetadata = cloudOnlyKeys.some((key) => tagFields.has(key));`,
+		`const isCloudSeal = cloudKeys.every((key) => tagFields.has(key));`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("local tag metadata compatibility is missing %q", required)
+		}
+	}
+	if strings.Contains(workflow, `const hasAnyCloudMetadata = cloudKeys.some((key) => tagFields.has(key));`) {
+		t.Error("Channel-only guarded local tags must not be classified as partial cloud seals")
+	}
+}
+
+func TestReleaseWorkflowRequiresOSSOnlyWhenMirrorIsEnabled(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	releaseContract := releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n")
+	targetAuthority := releaseWorkflowSection(
+		t,
+		releaseContract,
+		"      - name: Resolve and verify exact release target\n",
+		"\n      - name: Check out repository\n",
+	)
+	ossStep := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: Sync release artifacts to China OSS mirror\n",
+		"\n  mirror-gitee-release:\n",
+	)
+
+	for _, required := range []string{
+		`if: ${{ needs.release-contract.outputs.oss_mirror == 'enabled' }}`,
+		`run: ./scripts/release/sync-to-oss.sh`,
+		`DWS_REQUIRE_OSS: "1"`,
+	} {
+		if !strings.Contains(ossStep, required) {
+			t.Errorf("opt-in OSS publication is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		`OSS_MIRROR: ${{ vars.ENABLE_OSS_MIRROR == 'true' && 'enabled' || 'deferred' }}`,
+		`OSS-Mirror: ${ossMirror}`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("immutable OSS release policy is missing %q", required)
+		}
+	}
+	if strings.Contains(ossStep, "vars.ENABLE_OSS_MIRROR") {
+		t.Error("channel publication must use the immutable tag policy, not the current repository variable")
+	}
+	for _, required := range []string{
+		`const ossMirror = tagFields.has("OSS-Mirror")`,
+		`? tagFields.get("OSS-Mirror")`,
+		`: "enabled";`,
+		`!["enabled", "deferred"].includes(ossMirror)`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(targetAuthority, required) {
+			t.Errorf("release target OSS policy authority is missing %q", required)
+		}
+	}
+}
+
 func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
@@ -897,6 +1059,12 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		t.Fatal("release workflow channel repair job is missing its end marker")
 	}
 	repair := workflow[start : start+end]
+	authority := releaseWorkflowSection(
+		t,
+		repair,
+		"      - name: Verify immutable release authority\n",
+		"\n      - name: Require sealed OSS policy for repair\n",
+	)
 	tagAuthority := releaseWorkflowSection(
 		t,
 		repair,
@@ -945,6 +1113,8 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		"assetNames.length !== expectedAssets.size",
 		"new Set(assetNames).size !== expectedAssets.size",
 		`core.setOutput("tag_object", ref.data.object.sha)`,
+		"Require sealed OSS policy for repair",
+		"OSS repair is unavailable because this immutable release deferred the OSS channel.",
 		`ref: ${{ steps.authority.outputs.commit_sha }}`,
 		"path: release-source",
 		"verify-github-tag-authority.sh",
@@ -974,6 +1144,25 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		if !strings.Contains(repair, required) {
 			t.Errorf("channel repair authority is missing %q", required)
 		}
+	}
+	for _, required := range []string{
+		`const tagFields = new Map();`,
+		`const ossMirror = tagFields.has("OSS-Mirror")`,
+		`? tagFields.get("OSS-Mirror")`,
+		`: "enabled";`,
+		`!["enabled", "deferred"].includes(ossMirror)`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(authority, required) {
+			t.Errorf("channel repair tag policy authority is missing %q", required)
+		}
+	}
+	npmRepair := releaseWorkflowSection(t, workflow, "  repair-npm:\n", "\n  release-delivery-gate:\n")
+	if strings.Contains(npmRepair, `const ossMirror`) || strings.Contains(npmRepair, `core.setOutput("oss_mirror"`) {
+		t.Error("npm repair must not parse or export the channel-only OSS policy")
+	}
+	if strings.Contains(repair, "ENABLE_OSS_MIRROR") {
+		t.Error("OSS repair must use the immutable tag policy, not the current repository variable")
 	}
 	for _, asset := range []string{
 		"dws-darwin-amd64.tar.gz",
@@ -1629,6 +1818,133 @@ func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
 	}
 	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
 		t.Error("Homebrew beta Formula PRs must use the dedicated token so their CI is triggered")
+	}
+}
+
+func TestReleaseWorkflowWaitsForNPMDistTagPropagation(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	script := releaseWorkflowRunScript(
+		t,
+		workflow,
+		"Verify npm channel delivery",
+		"Sync release artifacts to China OSS mirror",
+	)
+
+	tests := []struct {
+		name        string
+		sequence    string
+		wantSuccess bool
+		wantCalls   int
+		wantSleeps  int
+		wantOutput  string
+	}{
+		{
+			name:        "stale beta converges to target",
+			sequence:    "1.0.53-beta.6\n1.0.53-beta.6\n1.0.53-beta.7\n",
+			wantSuccess: true,
+			wantCalls:   3,
+			wantSleeps:  2,
+		},
+		{
+			name:       "stale beta never converges",
+			sequence:   "1.0.53-beta.6\n",
+			wantCalls:  12,
+			wantSleeps: 11,
+			wantOutput: "still reports older v1.0.53-beta.6 after 12 attempts",
+		},
+		{
+			name:       "permanent registry error fails immediately",
+			sequence:   "__NPM_ERROR__\n",
+			wantCalls:  1,
+			wantSleeps: 0,
+			wantOutput: "permanent npm registry error",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			fakeBin := filepath.Join(root, "bin")
+			if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+				t.Fatalf("MkdirAll(%s) error = %v", fakeBin, err)
+			}
+			sequencePath := filepath.Join(root, "sequence")
+			statePath := filepath.Join(root, "state")
+			npmLogPath := filepath.Join(root, "npm.log")
+			sleepLogPath := filepath.Join(root, "sleep.log")
+			mustWriteFile(t, sequencePath, []byte(test.sequence), 0o644)
+			mustWriteFile(t, filepath.Join(fakeBin, "npm"), []byte(`#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$NPM_CALL_LOG"
+test "$*" = "view dingtalk-workspace-cli dist-tags.beta --registry=https://registry.npmjs.org --prefer-online" || {
+  echo "unexpected npm mutation: $*" >&2
+  exit 97
+}
+call=0
+if test -f "$NPM_STATE"; then call="$(cat "$NPM_STATE")"; fi
+call=$((call + 1))
+printf '%s\n' "$call" > "$NPM_STATE"
+value="$(sed -n "${call}p" "$NPM_SEQUENCE")"
+if test -z "$value"; then value="$(tail -n 1 "$NPM_SEQUENCE")"; fi
+if test "$value" = "__NPM_ERROR__"; then
+  echo "permanent npm registry error" >&2
+  exit 42
+fi
+printf '%s\n' "$value"
+`), 0o755)
+			mustWriteFile(t, filepath.Join(fakeBin, "sleep"), []byte(`#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$SLEEP_CALL_LOG"
+`), 0o755)
+
+			repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+			if err != nil {
+				t.Fatalf("Abs(repository root) error = %v", err)
+			}
+			cmd := exec.Command("sh", "-c", script)
+			cmd.Dir = repoRoot
+			cmd.Env = append(os.Environ(),
+				"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"NPM_TAG=beta",
+				"SEMVER=1.0.53-beta.7",
+				"NPM_SEQUENCE="+sequencePath,
+				"NPM_STATE="+statePath,
+				"NPM_CALL_LOG="+npmLogPath,
+				"SLEEP_CALL_LOG="+sleepLogPath,
+			)
+			output, runErr := cmd.CombinedOutput()
+			if test.wantSuccess && runErr != nil {
+				t.Fatalf("npm delivery verification error = %v\noutput:\n%s", runErr, output)
+			}
+			if !test.wantSuccess && runErr == nil {
+				t.Fatalf("npm delivery verification unexpectedly succeeded\noutput:\n%s", output)
+			}
+			if test.wantOutput != "" && !strings.Contains(string(output), test.wantOutput) {
+				t.Errorf("npm delivery verification output is missing %q:\n%s", test.wantOutput, output)
+			}
+
+			npmLog, err := os.ReadFile(npmLogPath)
+			if err != nil {
+				t.Fatalf("ReadFile(%s) error = %v", npmLogPath, err)
+			}
+			npmCalls := strings.Split(strings.TrimSpace(string(npmLog)), "\n")
+			if got := len(npmCalls); got != test.wantCalls {
+				t.Errorf("npm view call count = %d, want %d; log:\n%s", got, test.wantCalls, npmLog)
+			}
+			if strings.Contains(string(npmLog), "dist-tag add") || strings.Contains(string(npmLog), "publish") {
+				t.Errorf("delivery verification must remain read-only; log:\n%s", npmLog)
+			}
+
+			sleepCalls := 0
+			if sleepLog, err := os.ReadFile(sleepLogPath); err == nil {
+				sleepCalls = len(strings.Fields(string(sleepLog)))
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("ReadFile(%s) error = %v", sleepLogPath, err)
+			}
+			if sleepCalls != test.wantSleeps {
+				t.Errorf("sleep call count = %d, want %d", sleepCalls, test.wantSleeps)
+			}
+		})
 	}
 }
 
