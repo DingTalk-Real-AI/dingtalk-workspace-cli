@@ -559,6 +559,13 @@ func isMessageReceiveEvent(eventKey string) bool {
 	}
 }
 
+// SupportsMessageFilter reports whether --query/--filter-json describe a
+// stable message payload for this event. Action and group lifecycle events do
+// not expose the same filter fields.
+func SupportsMessageFilter(eventKey string) bool {
+	return isMessageReceiveEvent(eventKey)
+}
+
 func IsSchemaPending(err error) bool {
 	var pending *SchemaPendingError
 	return errors.As(err, &pending)

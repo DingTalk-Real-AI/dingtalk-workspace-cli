@@ -511,6 +511,14 @@ dws event consume user_im_group_member_added --group <openConversationId> -f ndj
 dws event consume user_im_group_member_exited --group <openConversationId> -f ndjson
 dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 
+# Listen for multiple events for the same user in one process
+dws event consume \
+  user_im_message_receive_o2o \
+  user_im_message_read_o2o \
+  user_im_message_recall_o2o \
+  --user <userId> \
+  -f ndjson
+
 # Inspect local consumers and cancel a subscription
 dws event status
 dws event stop <subscribe_id>
@@ -522,6 +530,7 @@ For one-to-one and specified-sender events, use exactly one target identity: `--
 |---------|---------|
 | Managed lifecycle | `consume` creates or reuses the personal subscription; `stop` cancels it and cleans local state |
 | Shared connection | Consumers for the same user share one local bus and cloud connection |
+| Multi-event process | One consume process can listen for compatible events for the same target while retaining one subscription per event |
 | Subscription isolation | Normal consumers match both event type and `subscribe_id` |
 | Agent-friendly output | Stream events are written to stdout as NDJSON; status and diagnostics use stderr |
 | Observability | `status` shows remote subscriptions, the personal bus, and local consumers |

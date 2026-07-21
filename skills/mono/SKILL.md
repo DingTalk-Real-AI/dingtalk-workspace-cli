@@ -118,6 +118,8 @@ cli_version: ">=1.0.15"
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
 用户提到"监听有人@我/监听单聊或群消息/监听所有单聊或群消息/监听某人发送的消息/监听消息已读/监听消息撤回/监听消息贴表情或表情回应/监听群改名或群解散/订阅个人 IM 事件/实时接收钉钉事件/个人事件流/event consume user_im_message_*/监听并自动回复消息/驱动 Agent 处理消息" → `event`
 
+事件监听中，同一目标、同一过滤条件的多个兼容事件优先生成一个 `dws event consume <event_key> [event_key...]`；不同用户、不同群或不同过滤条件拆成多个 consume 进程。
+
 关键区分: aitable(数据表格) vs todo(待办任务)
 关键区分: report(钉钉日志/日报周报) vs todo(待办任务)
 关键区分: chat send-by-bot(机器人身份发消息) vs send-by-webhook(自定义机器人Webhook告警)

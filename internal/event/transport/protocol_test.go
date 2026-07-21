@@ -28,14 +28,16 @@ func TestFrameType_StableWireValues(t *testing.T) {
 	// change. The test value list is duplicated here on purpose so a
 	// reviewer renaming a constant is forced to also update the test.
 	wants := map[FrameType]string{
-		FrameTypeHello:       "hello",
-		FrameTypeHelloAck:    "hello_ack",
-		FrameTypeEvent:       "event",
-		FrameTypeHeartbeat:   "heartbeat",
-		FrameTypeSourceState: "source_state",
-		FrameTypeBye:         "bye",
-		FrameTypeStatusReq:   "status_req",
-		FrameTypeStatusResp:  "status_resp",
+		FrameTypeHello:            "hello",
+		FrameTypeHelloAck:         "hello_ack",
+		FrameTypeEvent:            "event",
+		FrameTypeHeartbeat:        "heartbeat",
+		FrameTypeSourceState:      "source_state",
+		FrameTypeBye:              "bye",
+		FrameTypeStatusReq:        "status_req",
+		FrameTypeStatusResp:       "status_resp",
+		FrameTypeConsumerStopReq:  "consumer_stop_req",
+		FrameTypeConsumerStopResp: "consumer_stop_resp",
 	}
 	for ft, want := range wants {
 		if string(ft) != want {
@@ -46,14 +48,38 @@ func TestFrameType_StableWireValues(t *testing.T) {
 
 func TestHelloRole_StableWireValues(t *testing.T) {
 	wants := map[HelloRole]string{
-		HelloRoleConsumer: "",
-		HelloRoleStatus:   "status",
-		HelloRoleStop:     "stop",
+		HelloRoleConsumer:     "",
+		HelloRoleStatus:       "status",
+		HelloRoleStop:         "stop",
+		HelloRoleConsumerStop: "consumer_stop",
 	}
 	for r, want := range wants {
 		if string(r) != want {
 			t.Errorf("HelloRole wire value drift: %v != %q", r, want)
 		}
+	}
+}
+
+func TestConsumerStopFrames_Roundtrip(t *testing.T) {
+	inReq := ConsumerStopReq{
+		Type:         FrameTypeConsumerStopReq,
+		SubscribeIDs: []string{"sub-a", "sub-b"},
+	}
+	var outReq ConsumerStopReq
+	roundTrip(t, inReq, &outReq)
+	if outReq.Type != FrameTypeConsumerStopReq || strings.Join(outReq.SubscribeIDs, ",") != "sub-a,sub-b" {
+		t.Fatalf("request roundtrip = %#v", outReq)
+	}
+
+	inResp := ConsumerStopResp{
+		Type:     FrameTypeConsumerStopResp,
+		Stopped:  []string{"sub-a"},
+		NotFound: []string{"sub-b"},
+	}
+	var outResp ConsumerStopResp
+	roundTrip(t, inResp, &outResp)
+	if outResp.Type != FrameTypeConsumerStopResp || strings.Join(outResp.Stopped, ",") != "sub-a" || strings.Join(outResp.NotFound, ",") != "sub-b" {
+		t.Fatalf("response roundtrip = %#v", outResp)
 	}
 }
 

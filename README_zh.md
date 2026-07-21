@@ -505,6 +505,14 @@ dws event consume user_im_group_member_added --group <openConversationId> -f ndj
 dws event consume user_im_group_member_exited --group <openConversationId> -f ndjson
 dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 
+# 一个进程监听同一用户的多个事件
+dws event consume \
+  user_im_message_receive_o2o \
+  user_im_message_read_o2o \
+  user_im_message_recall_o2o \
+  --user <userId> \
+  -f ndjson
+
 # 查看本地 consume，并取消指定订阅
 dws event status
 dws event stop <subscribe_id>
@@ -516,6 +524,7 @@ dws event stop <subscribe_id>
 |------|------|
 | 自动编排 | `consume` 创建或复用个人订阅，`stop` 取消订阅并清理本地状态 |
 | 共享连接 | 同一用户的多个 consumer 共享本地 bus 和云端长连接 |
+| 多事件进程 | 同一目标的兼容事件可由一个 consume 进程监听，每个事件仍有独立订阅 |
 | 订阅隔离 | 正常 consumer 同时按事件类型和 `subscribe_id` 匹配 |
 | Agent 友好输出 | Stream 事件写入 stdout，连接状态和诊断信息写入 stderr |
 | 状态可观测 | `status` 同时显示服务端订阅、personal bus 和本地 consumers |

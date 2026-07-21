@@ -160,6 +160,44 @@ dws event consume user_im_group_disbanded \
   -f ndjson
 ```
 
+## Multi-event consume
+
+同一目标、同一过滤条件需要监听多个事件时，把多个 event key 作为位置参数放在同一个命令中：
+
+```bash
+# 同一用户的消息接收、已读和撤回
+dws event consume \
+  user_im_message_receive_o2o \
+  user_im_message_read_o2o \
+  user_im_message_recall_o2o \
+  --user test-user-001 \
+  -f ndjson
+
+# 同一群的消息和群生命周期
+dws event consume \
+  user_im_message_receive_group \
+  user_im_group_updated \
+  user_im_group_disbanded \
+  --group cidxxxxxxxx \
+  -f ndjson
+```
+
+- 用户类事件共享一个 `--user` 或 `--open-dingtalk-id`；群类事件共享一个 `--group`；无目标事件可加入用户类、群类或仅由无目标事件组成的组合。
+- 用户类与群类不能混在一个命令中。不同用户、不同群或不同过滤条件要启动多个 consume 进程。
+- `--query` / `--filter-json` 只有在全部事件都是消息接收事件时才能共享使用。动作事件和群生命周期事件不能混用消息过滤。
+- `--duration`、`--max-events`、输出格式、route 和 output-dir 对整个命令生效；多事件不支持 `--subscribe-id`、`--rule`、`--event-types`、`--filter`、`--foreground`、`--force`、`--debug-raw-events`。
+- 每个事件仍有独立服务端订阅和 `subscribe_id`。用 `dws event stop <subscribe_id> --yes` 可只移除一个监听，其余继续运行；移除最后一个后前台进程退出。
+
+多事件启动时，stderr 先逐条输出订阅信息，全部 IPC consumer 就绪后才输出整体 ready：
+
+```text
+[event] subscription event_key=<key> subscribe_id=<id>
+[event] subscription event_key=<key> subscribe_id=<id>
+[event] ready event_count=2 bus_pid=<pid>
+```
+
+只有整体 ready 出现后才开始处理 stdout。启动中任一订阅或 IPC 建联失败时，本次已创建的订阅会统一回滚。
+
 ## Self-test triggers
 
 | 事件码 | 自测参数 | 触发方式 |
@@ -181,7 +219,7 @@ dws event consume user_im_group_disbanded \
 | `user_im_group_member_exited` | `--group <openConversationId> --duration 10m -f ndjson` | 让一名测试成员主动退出测试群 |
 | `user_im_group_disbanded` | `--group <openConversationId> --duration 10m -f ndjson` | 确认是可销毁测试群后再解散；该操作不可逆 |
 
-stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 表示本地 consume 已连接到事件 bus；父进程等这行再读 stdout。stdout 每行是一个扁平事件 JSON。
+单事件以 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 为就绪标志；多事件以 `[event] ready event_count=<n> bus_pid=<pid>` 为整体就绪标志。父进程等对应 ready 行后再处理 stdout。stdout 每行是一个扁平事件 JSON。
 
 ## Runtime flags
 
@@ -193,11 +231,11 @@ stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscr
 | `--duration <duration>` | 到时退出，例如 `30s`、`10m` |
 | `--output-dir <dir>` | 每个事件写入一个文件 |
 | `--route '<regex>=dir:<path>'` | 按事件类型路由到目录 |
-| `--subscribe-id <id>` | 复用已有个人订阅 |
+| `--subscribe-id <id>` | 单事件模式复用已有个人订阅；多事件不支持 |
 | `--ephemeral` | 即使复用已有订阅，也在 consume 退出时取消订阅 |
 | `--query <csv>` | 按消息正文关键词过滤，逗号分隔 |
 | `--filter-json <json>` | 使用个人事件 Filter DSL 过滤 |
-| `--debug-raw-events` | 联调用：绕过本地过滤，输出当前 personal stream 实际收到的可解析事件 |
+| `--debug-raw-events` | 单事件联调用：绕过本地过滤，输出当前 personal stream 实际收到的可解析事件 |
 
 正常 Agent 消费不要使用 `--debug-raw-events`。它会输出当前连接收到的所有可解析事件，只用于判断服务端是否推到了本机连接。
 
@@ -278,7 +316,7 @@ dws event status --event user_im_group_member_exited
 dws event status --event user_im_group_disbanded
 ```
 
-`status` 同时展示服务端 `Subscriptions` 和本地 `Consumers`。`Consumers` 表里的 PID、事件码、`subscribe_id`、received/dropped 计数用于确认当前前台 consume 是否还挂在 personal bus 上。
+`status` 同时展示服务端 `Subscriptions` 和本地 `Consumers`。`Consumers` 表里的 PID、事件码、`subscribe_id`、received/dropped 计数用于确认当前前台 consume 是否还挂在 personal bus 上。同一个多事件前台进程会显示多行 consumer，PID 相同但 event key 和 `subscribe_id` 不同。
 
 停止指定订阅：
 
@@ -294,11 +332,11 @@ dws event stop --all --dry-run
 dws event stop --all --yes
 ```
 
-裸 `dws event stop` 不会取消订阅。本次 consume 新建的订阅会在 SIGTERM、Ctrl+C、stdin EOF、duration 或 max-events 等干净退出时自动取消；通过 `--subscribe-id` 复用的订阅默认保留。需要从外部取消时，使用事件输出或 `status` 里的 `subscribe_id`，先执行 `dws event stop <subscribe_id> --dry-run`，确认预览后再加 `--yes`。不要使用 `kill -9`，它会跳过清理。
+裸 `dws event stop` 不会取消订阅。本次 consume 新建的订阅会在 SIGTERM、Ctrl+C、stdin EOF、duration 或 max-events 等干净退出时自动取消；通过 `--subscribe-id` 复用的订阅默认保留。多事件进程中，停止一个 `subscribe_id` 只移除对应逻辑 consumer，其余事件继续监听；最后一个被移除时进程退出。需要从外部取消时，使用事件输出或 `status` 里的 `subscribe_id`，先执行 `dws event stop <subscribe_id> --dry-run`，确认预览后再加 `--yes`。不要使用 `kill -9`，它会跳过清理。
 
 ## Troubleshooting
 
-- 没有输出：先确认 stderr 已出现 `[event] ready event_key=... bus_pid=... subscribe_id=...`。
+- 没有输出：单事件确认 stderr 已出现 `ready event_key=...`；多事件确认已出现 `ready event_count=...`，不要把某条 `subscription` 行误认为整体就绪。
 - 参数缺失：所有 o2o 事件必须有对端 ID，所有 group 事件必须有 openConversationId。
 - 收到非预期消息：检查 stdout 的 `subscribe_id` 是否等于当前命令创建/复用的订阅 ID。
 - 需要判断服务端是否推到当前连接：临时加 `--debug --debug-raw-events`，排查后去掉。

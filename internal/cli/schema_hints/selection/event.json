@@ -9,13 +9,14 @@
   },
   "tools": {
     "event.consume": {
-      "agent_summary": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+      "agent_summary": "订阅并持续消费一个或多个兼容的个人事件，输出 NDJSON 事件流",
       "use_when": [
         "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
         "用户明确要求监听当前身份的所有单聊或所有群消息",
         "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
         "需要监听指定群的标题变更、成员进退群或群解散事件",
-        "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
+        "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标",
+        "同一目标、同一过滤条件需要同时监听多个兼容事件"
       ],
       "avoid_when": [
         "只查历史聊天记录时用 chat 查询命令",
@@ -23,7 +24,7 @@
       ],
       "examples": [
         "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-        "dws event consume user_im_group_member_added --group cid-example --max-events 1 --format ndjson"
+        "dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --max-events 2 --format ndjson"
       ],
       "reviewed": true,
       "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",

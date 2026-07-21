@@ -14,7 +14,7 @@
 | Command | Purpose |
 |---|---|
 | `dws event schema <event_key>` | 查看事件参数和输出字段 schema |
-| `dws event consume <event_key> [flags]` | 阻塞消费，事件写到 stdout，用 `-f ndjson` |
+| `dws event consume <event_key> [event_key...] [flags]` | 阻塞消费一个或多个兼容事件，事件写到 stdout，用 `-f ndjson` |
 | `dws event status --event <event_key>` | 查看个人订阅、bus、本地 consume |
 | `dws event stop <subscribe_id> --dry-run` / `--yes` | 先预览，再确认取消订阅并停止对应本地消费 |
 | `dws event stop --all --dry-run` / `--yes` | 先预览，再确认清理当前身份下全部个人订阅 |
@@ -67,6 +67,8 @@
 | "监听有人退出 XX 群" | 先解析群 ID，再 consume `user_im_group_member_exited --group <id>` |
 | "监听 XX 群解散" | 先解析群 ID，再 consume `user_im_group_disbanded --group <id>`；破坏性自测只能用测试群 |
 | "监听并自动回复某人的单聊消息" | 先解析对端 userId，再启动 o2o consume；不要写轮询脚本 |
+| "同时监听同一人的单聊、已读和撤回" | 一个 consume 放入 3 个 event key，共享同一个 `--user` |
+| "同时监听同一群的消息、改名和解散" | 一个 consume 放入 3 个 event key，共享同一个 `--group` |
 | "查看个人消息事件 schema" | `dws event schema <event_key>` |
 | "看个人事件订阅状态" | `dws event status --event <event_key>` |
 | "停止这个个人事件订阅" | `dws event stop <subscribe_id> --dry-run`，确认后改用 `--yes` |
@@ -79,7 +81,7 @@
 
 1. 从用户意图选择事件码；人名或群名先解析成必填 ID。
 2. 需要了解字段时运行 `dws event schema <event_key>`，读取 `schema.properties`；`jq_root_path` 当前固定为 `.`。
-3. 启动 `dws event consume <event_key> ... -f ndjson`，等待 stderr 出现 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 后开始处理 stdout，不要用 `sleep` 猜测。
+3. 启动 `dws event consume <event_key> [event_key...] ... -f ndjson`。单事件等待 `ready event_key=...`；多事件记录每条 `subscription event_key=... subscribe_id=...`，再等待整体 `ready event_count=...`。不要用 `sleep` 猜测。
 4. stdout 每行是一个结构化事件 JSON；消息和动作事件读取顶层业务字段，群生命周期事件只读取公共字段和 `payload` 中实际存在的字段。
 5. 需要确认监听状态时运行 `dws event status --event <event_key>`，查看 `Subscriptions` 和 `Consumers`。
 6. 任务完成后优雅结束 consume；本次新建的订阅会自动取消。复用已有订阅或需要从外部主动取消时，先运行 `dws event stop <subscribe_id> --dry-run`，向用户确认后再以 `--yes` 执行；自测可在 consume 加 `--max-events` 或 `--duration` 自动退出。
@@ -126,6 +128,26 @@ dws event consume user_im_group_member_exited --group <openConversationId> -f nd
 dws event consume user_im_group_disbanded --group <openConversationId> -f ndjson
 ```
 
+同一目标、同一过滤条件的兼容事件优先使用一个多事件命令：
+
+```bash
+dws event consume \
+  user_im_message_receive_o2o \
+  user_im_message_read_o2o \
+  user_im_message_recall_o2o \
+  --user test-user-001 \
+  -f ndjson
+
+dws event consume \
+  user_im_message_receive_group \
+  user_im_group_updated \
+  user_im_group_disbanded \
+  --group <openConversationId> \
+  -f ndjson
+```
+
+用户类事件共享 `--user` 或 `--open-dingtalk-id`，群类事件共享 `--group`，无目标事件可加入任一组合。用户类与群类、不同目标或不同过滤条件要拆成多个进程。多事件共享 `--query` / `--filter-json` 时，所选事件必须全部是消息接收事件。
+
 上述所有 `*_o2o` 命令和 `user_im_message_receive_user` 都可将 `--user <userId>` 替换为 `--open-dingtalk-id <openDingtalkId>`，但两个参数不能同时使用。
 
 ```bash
@@ -141,11 +163,11 @@ dws event stop --all --yes
 
 ## Subprocess contract
 
-- 就绪：连上后 stderr 打 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`，父进程等这行再读 stdout。不要 `--quiet`（会抑制它）。
+- 就绪：单事件等待 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`；多事件等待 `[event] ready event_count=<n> bus_pid=<pid>`，并保存此前每条 `[event] subscription ...` 的 subscribe ID。不要 `--quiet`。
 - 退出：末行 `[event] exited — received N event(s) in Xs (reason: limit|timeout|signal|bus_shutdown)`；受控退出码 0，失败非 0 且无 exited 行、有 Error 行。
 - stdin 关闭 = 停机：仅当 stdin 是管道且未设 `--max-events/--duration` 时生效；交互终端和 `< /dev/null` 不触发。用管道 stdin 又要常驻就喂 `< <(tail -f /dev/null)`。
 - 订阅清理：本次新建的订阅任意退出即自动退订；`--subscribe-id` 复用的保留；`--ephemeral` 强制退订。优雅停用 SIGTERM、关 stdin，或外部先预览 `dws event stop <subscribe_id> --dry-run`、确认后加 `--yes`。不要 `kill -9`（跳过退订、泄漏服务端订阅）。
-- 一 consume 一 event_key；监听 N 个就起 N 个 consume，共用一个 bus。
+- 一个 consume 可监听多个兼容 event key，每个事件仍有独立订阅和 consumer，共用一个 bus、远程连接及输出。`event stop <subscribe_id>` 只移除目标事件，最后一个被移除后进程退出。
 
 ## Output parsing
 

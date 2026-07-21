@@ -62,6 +62,7 @@ type commonConsumeOptions struct {
 type personalConsumeOptions struct {
 	Common           commonConsumeOptions
 	EventKey         string
+	EventKeys        []string
 	DebugRawEvents   bool
 	SubscribeID      string
 	Rule             string
@@ -121,6 +122,7 @@ var (
 	personalRemoveRunStates             = personal.RemoveRunStates
 	personalLoadRunStates               = personal.LoadRunStates
 	personalConsumeRun                  = consume.Run
+	personalConsumeRunMany              = consume.RunMany
 	personalValidateConsumeConfig       = consume.ValidateConfig
 	personalValidateNoOutputConflict    = consume.ValidateNoOutputConflict
 	personalNewStreamSource             = newPersonalStreamSource
@@ -129,6 +131,7 @@ var (
 	personalQueryEntry                  = busctl.QueryEntry
 	personalQueryStatus                 = busctl.QueryStatus
 	personalStopBus                     = busctl.Stop
+	personalStopConsumers               = busctl.StopConsumers
 	personalFindProcess                 = os.FindProcess
 	personalSignalProcess               = (*os.Process).Signal
 	personalResolveAuxiliaryAccessToken = ResolveAuxiliaryAccessToken
@@ -203,6 +206,21 @@ func renderPersonalSchema(w io.Writer, def personal.Definition, format string) e
 }
 
 func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) error {
+	keys := dedupePersonalEventKeys(opts.EventKeys)
+	if len(keys) == 0 && strings.TrimSpace(opts.EventKey) != "" {
+		keys = []string{strings.TrimSpace(opts.EventKey)}
+	}
+	if len(keys) <= 1 {
+		if len(keys) == 1 {
+			opts.EventKey = keys[0]
+		}
+		return runPersonalEventConsumeSingle(c, opts)
+	}
+	opts.EventKeys = keys
+	return runPersonalEventConsumeMany(c, opts)
+}
+
+func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions) error {
 	ctx := c.Context()
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return err
@@ -364,6 +382,264 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		cleanup()
 	}
 	return err
+}
+
+type personalMultiSubscription struct {
+	Sub      *personal.Subscription
+	EventKey string
+	RuleType string
+}
+
+func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) error {
+	plans, err := preparePersonalMultiOptions(opts)
+	if err != nil {
+		return fmt.Errorf("event consume --as user: %w", err)
+	}
+	ctx := c.Context()
+	configDir := defaultConfigDir()
+	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
+	if err != nil {
+		return fmt.Errorf("event consume --as user: %w", err)
+	}
+	identityHash := dwsevent.IdentityHash(identity.Key())
+	editionName := editionNameOrDefault()
+	workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+	ipcEndpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+	routes, err := consume.ParseRoutes(opts.Common.RoutesRaw)
+	if err != nil {
+		return fmt.Errorf("event consume --as user: %w", err)
+	}
+	rawFormat := ""
+	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
+		rawFormat = opts.Common.FormatRaw
+	}
+	normalised, fellback := consume.NormalizeFormat(rawFormat)
+	if fellback && !opts.Common.Quiet {
+		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
+	}
+
+	baseCfg := consume.Config{
+		WorkDir:        workDir,
+		IPCEndpoint:    ipcEndpoint,
+		ClientID:       identity.ClientID,
+		SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, personalEventStreamTicketURL(opts.StreamTicketURL, configDir)),
+		Compact:        opts.Common.Compact,
+		MaxEvents:      opts.Common.MaxEvents,
+		Duration:       opts.Common.Duration,
+		Format:         normalised,
+		OutputDir:      opts.Common.OutputDir,
+		Routes:         routes,
+		Projector:      personalEventProjector(false),
+		Stdout:         c.OutOrStdout(),
+		Stderr:         c.ErrOrStderr(),
+		Quiet:          opts.Common.Quiet,
+	}
+	applyEventConsumeStdin(&baseCfg, opts.Common.MaxEvents, opts.Common.Duration, c.InOrStdin())
+	if err := personalValidateConsumeConfig(baseCfg); err != nil {
+		return err
+	}
+	if o := c.Flags().Lookup("output"); o != nil && o.Changed {
+		if err := personalValidateNoOutputConflict(baseCfg, o.Value.String()); err != nil {
+			return err
+		}
+	}
+	if opts.Common.DryRun {
+		printPersonalMultiDryRun(c.ErrOrStderr(), baseCfg, plans)
+		return nil
+	}
+
+	client := personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	created := make([]personalMultiSubscription, 0, len(plans))
+	cleanup := func() {
+		ids := make([]string, 0, len(created))
+		for i := len(created) - 1; i >= 0; i-- {
+			id := strings.TrimSpace(created[i].Sub.SubscribeID)
+			if id == "" {
+				continue
+			}
+			ids = append(ids, id)
+			if err := personalDeleteSubscription(client, context.Background(), id); err != nil {
+				fmt.Fprintf(c.ErrOrStderr(), "WARN: failed to clean personal subscription %s: %v\n", id, err)
+			}
+		}
+		if len(ids) > 0 {
+			if err := personalRemoveRunStates(workDir, ids); err != nil {
+				fmt.Fprintf(c.ErrOrStderr(), "WARN: failed to clean personal event run state: %v\n", err)
+			}
+		}
+	}
+	seenSubscribeIDs := make(map[string]struct{}, len(plans))
+	for _, plan := range plans {
+		sub, eventKey, ruleType, err := personalEnsureSubscription(ctx, client, identity, plan)
+		if err != nil {
+			cleanup()
+			return fmt.Errorf("event consume --as user: create subscription for %s: %w", plan.EventKey, err)
+		}
+		if sub == nil {
+			cleanup()
+			return fmt.Errorf("event consume --as user: server returned an empty subscription for %s", plan.EventKey)
+		}
+		id := strings.TrimSpace(sub.SubscribeID)
+		if id == "" {
+			cleanup()
+			return fmt.Errorf("event consume --as user: server returned empty subscribe_id for %s", plan.EventKey)
+		}
+		if _, exists := seenSubscribeIDs[id]; exists {
+			_ = personalDeleteSubscription(client, context.Background(), id)
+			cleanup()
+			return fmt.Errorf("event consume --as user: server returned duplicate subscribe_id %s", id)
+		}
+		seenSubscribeIDs[id] = struct{}{}
+		item := personalMultiSubscription{Sub: sub, EventKey: eventKey, RuleType: ruleType}
+		created = append(created, item)
+		if err := personalUpsertRunState(workDir, personal.RunState{
+			SubscribeID:  id,
+			EventKey:     eventKey,
+			RuleType:     ruleType,
+			ClientID:     identity.ClientID,
+			SourceID:     identity.SourceID,
+			IdentityHash: identityHash,
+		}); err != nil {
+			cleanup()
+			return fmt.Errorf("event consume --as user: save run state for %s: %w", eventKey, err)
+		}
+	}
+	defer cleanup()
+
+	specs := make([]consume.ConsumerSpec, 0, len(created))
+	for _, item := range created {
+		specs = append(specs, consume.ConsumerSpec{
+			EventKey:         item.EventKey,
+			EventTypes:       []string{item.EventKey},
+			SubscribeID:      item.Sub.SubscribeID,
+			ReadySubscribeID: item.Sub.SubscribeID,
+		})
+	}
+	if err := personalConsumeRunMany(ctx, baseCfg, specs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsumeOptions, error) {
+	if strings.TrimSpace(opts.SubscribeID) != "" {
+		return nil, errors.New("--subscribe-id is not supported when consuming multiple events")
+	}
+	if strings.TrimSpace(opts.Rule) != "" {
+		return nil, errors.New("--rule is not supported when consuming multiple events")
+	}
+	if len(opts.Common.EventTypes) > 0 {
+		return nil, errors.New("--event-types is not supported when consuming multiple events; use event_key positionals")
+	}
+	if strings.TrimSpace(opts.Common.Filter) != "" {
+		return nil, errors.New("--filter is not supported when consuming multiple events; use event_key positionals")
+	}
+	if opts.Common.Foreground || opts.Common.Force {
+		return nil, errors.New("--foreground/--force are not supported when consuming multiple events")
+	}
+	if opts.DebugRawEvents {
+		return nil, errors.New("--debug-raw-events is not supported when consuming multiple events")
+	}
+
+	keys := dedupePersonalEventKeys(opts.EventKeys)
+	if len(keys) < 2 {
+		return nil, errors.New("multiple event keys are required")
+	}
+	hasUserScope := false
+	hasGroupScope := false
+	for _, eventKey := range keys {
+		def, ok := personal.Lookup(eventKey)
+		if !ok {
+			return nil, fmt.Errorf("unknown personal event key %q", eventKey)
+		}
+		if !def.Public {
+			return nil, personal.PublicAvailabilityError(eventKey)
+		}
+		switch def.RuleType {
+		case "singleChat", "sender":
+			hasUserScope = true
+		case "group":
+			hasGroupScope = true
+		}
+		if (strings.TrimSpace(opts.QueryCSV) != "" || strings.TrimSpace(opts.FilterJSON) != "") && !personal.SupportsMessageFilter(eventKey) {
+			return nil, fmt.Errorf("--query/--filter-json require all selected events to be message receive events; %s is not", eventKey)
+		}
+	}
+	if hasUserScope && hasGroupScope {
+		return nil, errors.New("user-scoped and group-scoped events cannot be consumed in one command")
+	}
+	userID := strings.TrimSpace(opts.UserID)
+	openID := strings.TrimSpace(opts.OpenDingTalkID)
+	groupID := strings.TrimSpace(opts.GroupID)
+	if userID != "" && openID != "" {
+		return nil, errors.New("--user and --open-dingtalk-id are mutually exclusive")
+	}
+	switch {
+	case hasUserScope:
+		if groupID != "" {
+			return nil, errors.New("--group cannot be used with user-scoped events")
+		}
+		if userID == "" && openID == "" {
+			return nil, errors.New("one of --user or --open-dingtalk-id is required for the selected events")
+		}
+	case hasGroupScope:
+		if userID != "" || openID != "" {
+			return nil, errors.New("--user/--open-dingtalk-id cannot be used with group-scoped events")
+		}
+		if groupID == "" {
+			return nil, errors.New("--group is required for the selected events")
+		}
+	default:
+		if userID != "" || openID != "" || groupID != "" {
+			return nil, errors.New("the selected events do not use --user, --open-dingtalk-id, or --group")
+		}
+	}
+
+	plans := make([]personalConsumeOptions, 0, len(keys))
+	for _, eventKey := range keys {
+		def, _ := personal.Lookup(eventKey)
+		plan := opts
+		plan.EventKey = eventKey
+		plan.EventKeys = nil
+		switch def.RuleType {
+		case "at", "all":
+			plan.UserID = ""
+			plan.OpenDingTalkID = ""
+			plan.GroupID = ""
+		case "singleChat", "sender":
+			plan.GroupID = ""
+		case "group":
+			plan.UserID = ""
+			plan.OpenDingTalkID = ""
+		}
+		if err := validatePersonalSubscriptionOptions(plan); err != nil {
+			return nil, err
+		}
+		plans = append(plans, plan)
+	}
+	return plans, nil
+}
+
+func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalConsumeOptions) {
+	preview := cfg
+	preview.EventTypes = make([]string, 0, len(plans))
+	for _, plan := range plans {
+		preview.EventTypes = append(preview.EventTypes, plan.EventKey)
+	}
+	consume.PrintDryRun(w, preview)
+	for i, plan := range plans {
+		ruleType, ruleParam, _ := personal.BuildRuleParam(plan.EventKey, personal.RuleOptions{
+			UserID: plan.UserID, OpenDingTalkID: plan.OpenDingTalkID, GroupID: plan.GroupID,
+		})
+		_, filter, _ := personal.BuildFilter(plan.FilterJSON, plan.QueryCSV)
+		ruleJSON, _ := personal.CanonicalJSON(ruleParam)
+		fmt.Fprintf(w, "  subscription[%d]  : event_key=%s rule_type=%s rule_param=%s",
+			i, plan.EventKey, ruleType, ruleJSON)
+		if filter != "" {
+			fmt.Fprintf(w, " filter=%s", filter)
+		}
+		fmt.Fprintln(w)
+	}
 }
 
 func personalEventProjector(debugRawEvents bool) consume.Projector {
@@ -623,7 +899,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	if err := personalRemoveRunStates(workDir, subscribeIDs); err != nil {
 		return fmt.Errorf("event stop --as user: update local state: %w", err)
 	}
-	if err := interruptPersonalConsumers(ipcEndpoint, subscribeIDs); err != nil {
+	if err := stopPersonalConsumers(c.ErrOrStderr(), ipcEndpoint, subscribeIDs); err != nil {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: failed to stop matching local consume process: %v\n", err)
 	}
 
@@ -709,6 +985,17 @@ func interruptPersonalConsumers(ipcEndpoint string, subscribeIDs []string) error
 		signalled[consumer.PID] = struct{}{}
 	}
 	return nil
+}
+
+func stopPersonalConsumers(w io.Writer, ipcEndpoint string, subscribeIDs []string) error {
+	if _, err := personalStopConsumers(ipcEndpoint, subscribeIDs); err == nil {
+		return nil
+	} else if !errors.Is(err, busctl.ErrConsumerStopUnsupported) {
+		return err
+	} else {
+		fmt.Fprintf(w, "WARN: running bus does not support targeted consumer stop; falling back to process signal: %v\n", err)
+	}
+	return interruptPersonalConsumers(ipcEndpoint, subscribeIDs)
 }
 
 func printPersonalStopResult(w io.Writer, subscribeIDs []string, single bool, busState string) {
@@ -886,6 +1173,23 @@ func firstNonEmptyPersonalString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func dedupePersonalEventKeys(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func personalEventControlBaseURL(raw, configDir string) string {

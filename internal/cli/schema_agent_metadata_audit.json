@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:439ebfeebd676bc71635e2636e0693df2ee1203971b0d75782177c081cbf6b08",
+  "source_hash": "sha256:133caac4de1116339e76a890f55bb0befbf0e13430cec8c0ace0cf0575564cf3",
   "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
   "source_files": 150,
   "hint_files": 46,
@@ -36,8 +36,8 @@
     "tools_with_avoid_when": 572,
     "tools_with_examples": 572,
     "tools_with_interface_mode": 572,
-    "unmatched_skill_tools": 120,
-    "unreviewed_skill_tools": 7
+    "unmatched_skill_tools": 122,
+    "unreviewed_skill_tools": 9
   },
   "source_products": [
     "agoal",
@@ -160,7 +160,7 @@
     {
       "tool_path": "calendar participant delete",
       "source": "skills/mono/SKILL.md",
-      "line": 143,
+      "line": 145,
       "candidates": [
         "calendar attendee delete",
         "calendar event delete",
@@ -2865,6 +2865,26 @@
         "status": "stale",
         "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
       }
+    },
+    {
+      "tool_path": "event consume user_im_message_receive_o2o user_im_message_read_o2o user_im_message_recall_o2o",
+      "source": "skills/mono/references/products/event.md",
+      "line": 134,
+      "candidates": [
+        "event consume",
+        "event list",
+        "event schema"
+      ]
+    },
+    {
+      "tool_path": "event consume user_im_message_receive_group user_im_group_updated user_im_group_disbanded",
+      "source": "skills/mono/references/products/event.md",
+      "line": 141,
+      "candidates": [
+        "event consume",
+        "event list",
+        "event schema"
+      ]
     },
     {
       "tool_path": "mail mailbox profile",

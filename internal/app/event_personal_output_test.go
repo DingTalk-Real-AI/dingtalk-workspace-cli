@@ -609,6 +609,14 @@ func TestEventConsumeCobraSchemaIncludesOpenDingTalkID(t *testing.T) {
 		t.Fatalf("schema constraint %s = %#v, missing %#v", field, groups, want)
 	}
 	assertJSONConstraintGroup("require_one_of", []string{"event_key", "subscribe-id"})
+	positionals, ok := doc["positionals"].([]any)
+	if !ok || len(positionals) != 1 {
+		t.Fatalf("schema positionals = %#v", doc["positionals"])
+	}
+	eventKey, ok := positionals[0].(map[string]any)
+	if !ok || eventKey["name"] != "event_key" || eventKey["variadic"] != true {
+		t.Fatalf("event_key positional = %#v, want variadic", positionals[0])
+	}
 }
 
 func TestPersonalEventSchemaRejectsTableFormat(t *testing.T) {
