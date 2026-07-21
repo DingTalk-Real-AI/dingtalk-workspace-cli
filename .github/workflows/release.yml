@@ -2481,13 +2481,16 @@ jobs:
             value="$(sed -n "s/^$key=//p" "$allocation")"
             printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
           done
-          refs_fingerprint="$(
-            git for-each-ref --format='%(refname)=%(objectname)' \
-              refs/tags/v refs/tags/withdrawn/v \
-              | LC_ALL=C sort \
-              | sha256sum \
-              | awk '{print $1}'
-          )"
+          refs_unsorted="$RUNNER_TEMP/release-refs.unsorted"
+          refs_manifest="$RUNNER_TEMP/release-refs"
+          git for-each-ref --format='%(refname)=%(objectname)' \
+            'refs/tags/v*' 'refs/tags/withdrawn/v*' > "$refs_unsorted"
+          LC_ALL=C sort "$refs_unsorted" > "$refs_manifest"
+          test -s "$refs_manifest" || {
+            echo "release ref manifest is empty after fetching allocated tags" >&2
+            exit 1
+          }
+          refs_fingerprint="$(sha256sum "$refs_manifest" | awk '{print $1}')"
           echo "release_commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           echo "refs_fingerprint=$refs_fingerprint" >> "$GITHUB_OUTPUT"
           case "$OSS_MIRROR" in enabled|deferred) ;; *) exit 1 ;; esac

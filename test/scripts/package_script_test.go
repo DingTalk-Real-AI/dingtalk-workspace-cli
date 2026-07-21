@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -836,7 +837,8 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 		"persist-credentials: false",
 		`refs/remotes/origin/main)" = "$GITHUB_SHA`,
 		"next-release-version.sh",
-		"refs/tags/withdrawn/v",
+		`'refs/tags/v*' 'refs/tags/withdrawn/v*'`,
+		"release ref manifest is empty after fetching allocated tags",
 		"refs_fingerprint",
 		"Validate the candidate release contract before sealing",
 		"release-contract.sh",
@@ -849,6 +851,9 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 	}
 	if strings.Contains(plan, "contents: write") {
 		t.Error("cloud release planning must remain read-only")
+	}
+	if strings.Contains(plan, "refs/tags/v refs/tags/withdrawn/v") {
+		t.Error("cloud release planning must use wildcard ref patterns that match the seal API prefixes")
 	}
 
 	for _, required := range []string{
@@ -881,6 +886,66 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 		if strings.Contains(seal, forbidden) {
 			t.Errorf("write-capable cloud seal must not contain %q", forbidden)
 		}
+	}
+}
+
+func TestReleaseFingerprintRefPatternsMatchAllAllocatedTags(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	mustRun(t, repo, "git", "config", "user.name", "Release Fingerprint Test")
+	mustRun(t, repo, "git", "config", "user.email", "release-fingerprint@example.com")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("fixture\n"), 0o644)
+	mustRun(t, repo, "git", "add", "tracked")
+	mustRun(t, repo, "git", "commit", "-m", "fixture")
+
+	allocatedTags := []string{
+		"v1.0.52",
+		"v1.0.53-beta.5",
+		"withdrawn/v1.0.51",
+	}
+	for _, tag := range allocatedTags {
+		mustRun(t, repo, "git", "tag", "-a", tag, "-m", "Release "+tag)
+	}
+	mustRun(t, repo, "git", "tag", "-a", "release/v1.0.52", "-m", "unrelated namespace")
+	legacy := exec.Command(
+		"git", "for-each-ref", "--format=%(refname)=%(objectname)",
+		"refs/tags/v", "refs/tags/withdrawn/v",
+	)
+	legacy.Dir = repo
+	legacyOutput, err := legacy.CombinedOutput()
+	if err != nil {
+		t.Fatalf("legacy git for-each-ref error = %v\noutput:\n%s", err, legacyOutput)
+	}
+	if strings.TrimSpace(string(legacyOutput)) != "" {
+		t.Fatalf("legacy component patterns unexpectedly matched flat release refs:\n%s", legacyOutput)
+	}
+
+	cmd := exec.Command(
+		"git", "for-each-ref", "--format=%(refname)=%(objectname)",
+		"refs/tags/v*", "refs/tags/withdrawn/v*",
+	)
+	cmd.Dir = repo
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git for-each-ref error = %v\noutput:\n%s", err, output)
+	}
+	got := strings.Split(strings.TrimSpace(string(output)), "\n")
+	sort.Strings(got)
+
+	want := make([]string, 0, len(allocatedTags))
+	for _, tag := range allocatedTags {
+		object := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/"+tag))
+		want = append(want, "refs/tags/"+tag+"="+object)
+	}
+	sort.Strings(want)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("release ref set differs from the seal API set\ngot:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	workflowDigest := sha256.Sum256([]byte(strings.Join(got, "\n") + "\n"))
+	sealDigest := sha256.Sum256([]byte(strings.Join(want, "\n") + "\n"))
+	if workflowDigest != sealDigest {
+		t.Fatalf("release ref fingerprint differs from seal fingerprint: workflow=%x seal=%x", workflowDigest, sealDigest)
 	}
 }
 

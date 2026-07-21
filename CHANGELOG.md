@@ -17,6 +17,7 @@ This beta validates guarded local release compatibility and tag-bound OSS deferr
 ### Fixed
 
 - **Guarded local release compatibility** — The tag-push Release workflow now accepts the `Channel`-only annotated tags created by the guarded local release entry while continuing to reject any partial cloud-only seal metadata.
+- **Cloud release tag allocation fingerprint** — Release planning now fingerprints the actual `v*` and `withdrawn/v*` refs fetched from GitHub, matching the seal job's API view instead of hashing an empty non-wildcard ref prefix and rejecting every publish before tag creation.
 
 ## [1.0.53-beta.5] - 2026-07-21
 
