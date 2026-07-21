@@ -3144,14 +3144,20 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   # message-id: 从 dws chat message list 返回的 openMessageId
   # open-conversation-id: 从 dws chat search 获取 openConversationId`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "type", "resource-id", "message-id", "open-conversation-id", "output"); err != nil {
+			if err := validateRequiredFlags(cmd, "type", "resource-id", "open-conversation-id", "output"); err != nil {
+				return err
+			}
+			// --message-id is required, but accept the natural aliases agents
+			// reach for (the message-list output field is openMessageId, so
+			// --msg-id / --open-message-id are common guesses).
+			if err := validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id"); err != nil {
 				return err
 			}
 
 			resourceType := mustGetFlag(cmd, "type")
 			resourceID := mustGetFlag(cmd, "resource-id")
 			conversationID := mustGetFlag(cmd, "open-conversation-id")
-			messageID := mustGetFlag(cmd, "message-id")
+			messageID := flagOrFallback(cmd, "message-id", "msg-id", "open-message-id")
 			outputPath := mustGetFlag(cmd, "output")
 
 			switch resourceType {
@@ -3225,7 +3231,13 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageDownloadMediaCmd.Flags().String("open-conversation-id", "", "会话 openConversationId (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("open-conversation-id")
 	chatMessageDownloadMediaCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
-	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("message-id")
+	// Hidden aliases: agents routinely pass --msg-id / --open-message-id since
+	// the message-list output exposes the field as openMessageId/msgId. Accept
+	// them transparently instead of failing with "unknown flag".
+	chatMessageDownloadMediaCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageDownloadMediaCmd.Flags().MarkHidden("msg-id")
+	chatMessageDownloadMediaCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageDownloadMediaCmd.Flags().MarkHidden("open-message-id")
 	chatMessageDownloadMediaCmd.Flags().String("output", "", "本地保存路径，文件或目录 (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("output")
 

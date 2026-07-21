@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 // AtMe: pull the messages that recently @-mentioned ME across chats in one step.
@@ -91,12 +92,7 @@ var AtMe = shortcut.Shortcut{
 		}
 		results := make([]map[string]any, 0, len(items))
 		for _, m := range items {
-			results = append(results, map[string]any{
-				"sender":       atMeSender(m),
-				"time":         atMeTime(m),
-				"text":         atMeText(m),
-				"conversation": atMeConversation(m),
-			})
+			results = append(results, atMeProject(m))
 		}
 		return rt.Output(map[string]any{"messages": results})
 	},
@@ -194,28 +190,62 @@ func atMeToMaps(arr []any) []map[string]any {
 	return out
 }
 
+// atMeProject reshapes one @me message into {sender, time, text, conversation},
+// running text through the shared chatmsg cleaning (card/auto-reply JSON →
+// readable, ciphertext → marker) and recursively expanding any forwarded chat
+// record under "forwarded".
+func atMeProject(m map[string]any) map[string]any {
+	row := map[string]any{
+		"sender":       atMeSender(m),
+		"time":         atMeTime(m),
+		"text":         atMeCleanText(m),
+		"conversation": atMeConversation(m),
+	}
+	if forwarded := chatmsg.Forwarded(m, atMeProject); len(forwarded) > 0 {
+		row["forwarded"] = forwarded
+	}
+	return row
+}
+
+// atMeCleanText runs atMeText's extraction through chatmsg.CleanText so
+// card/auto-reply JSON and ciphertext render readable instead of leaking raw.
+func atMeCleanText(m map[string]any) any {
+	if s, ok := atMeText(m).(string); ok {
+		return chatmsg.CleanText(s)
+	}
+	return atMeText(m)
+}
+
 // atMeSender reads a message's sender display name/id, tolerating the common
-// sender keys the gateway may use (including a nested sender object).
+// sender keys the gateway may use (including a nested sender object). The literal
+// string "null" (carried by forwarded sub-messages) and the empty string are
+// both treated as absent so they never surface as the speaker.
 func atMeSender(m map[string]any) any {
+	norm := func(v any) string {
+		if s := atMeString(v); s != "" && s != "null" {
+			return s
+		}
+		return ""
+	}
 	for _, key := range []string{"senderName", "sender_name", "senderNick", "fromName", "senderStaffName"} {
-		if v := atMeString(m[key]); v != "" {
+		if v := norm(m[key]); v != "" {
 			return v
 		}
 	}
 	for _, key := range []string{"sender", "from", "senderUser"} {
 		if nested, ok := m[key].(map[string]any); ok {
 			for _, k2 := range []string{"name", "nick", "userName", "staffName", "displayName"} {
-				if v := atMeString(nested[k2]); v != "" {
+				if v := norm(nested[k2]); v != "" {
 					return v
 				}
 			}
 		}
-		if v := atMeString(m[key]); v != "" {
+		if v := norm(m[key]); v != "" {
 			return v
 		}
 	}
 	for _, key := range []string{"senderId", "sender_id", "senderUserId", "senderStaffId", "openDingTalkId"} {
-		if v := atMeString(m[key]); v != "" {
+		if v := norm(m[key]); v != "" {
 			return v
 		}
 	}
