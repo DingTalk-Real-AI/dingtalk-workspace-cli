@@ -112,6 +112,14 @@ func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T
 	}
 }
 
+func TestValidatePersonalEventOutputModeAllowsFlattenStructuredFormats(t *testing.T) {
+	for _, format := range []consume.Format{consume.FormatNDJSON, consume.FormatJSON, consume.FormatPretty, consume.FormatCompact} {
+		if err := validatePersonalEventOutputMode(true, false, format); err != nil {
+			t.Fatalf("validatePersonalEventOutputMode(true, false, %q) error = %v", format, err)
+		}
+	}
+}
+
 func TestEventConsumeFlattenFlagIsForwarded(t *testing.T) {
 	oldRun := eventRunPersonalConsume
 	t.Cleanup(func() { eventRunPersonalConsume = oldRun })

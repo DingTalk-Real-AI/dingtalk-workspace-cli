@@ -400,9 +400,6 @@ func transportEnvelopeSchema(eventKey string) map[string]any {
 	for i := 0; i < eventType.NumField(); i++ {
 		field := eventType.Field(i)
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
-		if name == "" || name == "-" {
-			continue
-		}
 		property := map[string]any{"type": schemaType(field.Type)}
 		switch name {
 		case "type":
