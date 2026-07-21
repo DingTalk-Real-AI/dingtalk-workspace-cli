@@ -127,6 +127,34 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 	}
 }
 
+func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "mono", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		parts := strings.SplitN(string(content), "---", 3)
+		if len(parts) != 3 {
+			t.Fatalf("%s missing YAML frontmatter", path)
+		}
+		frontmatter := parts[1]
+		for _, required := range []string{"个人 IM 事件", "群成员加入", "群成员退出"} {
+			if !strings.Contains(frontmatter, required) {
+				t.Errorf("%s frontmatter missing event discovery trigger %q", path, required)
+			}
+		}
+	}
+}
+
 func hasAny(s string, needles []string) bool {
 	for _, needle := range needles {
 		if strings.Contains(s, needle) {
