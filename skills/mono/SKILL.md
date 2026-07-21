@@ -84,6 +84,7 @@ cli_version: ">=1.0.15"
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载                        | [drive.md](./references/products/drive.md)                     |
+| `hrbrain`         | 组织大脑：人才池管理/员工档案查询（元数据/批量数据/标签/职业历程/绩效）/人才搜索（简单条件与高级结构化搜索） | [hrbrain.md](./references/products/hrbrain.md)                 |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
 | `pat`             | PAT 行为授权：浏览器策略/scope 预览/一次性、会话或永久授权                    | [pat.md](./references/products/pat.md)                         |
@@ -108,6 +109,7 @@ cli_version: ">=1.0.15"
 用户提到"DING/紧急消息/电话提醒" → `ding`
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
 用户提到"云盘/文件存储/文件上传下载/文件夹" → `drive`
+用户提到"人才池/储备干部池/员工档案/职业历程/绩效记录/员工标签/组织大脑/人才搜索" → `hrbrain`
 用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
 用户提到"审批/请假/报销/出差/加班/同意/拒绝/撤销审批" → `oa`
