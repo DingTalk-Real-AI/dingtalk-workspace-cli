@@ -24,6 +24,7 @@ TOMBSTONE="withdrawn/${VERSION}"
 GITEE_API="${GITEE_API:-https://gitee.com/api/v5}"
 GITEE_REPO="${GITEE_REPO:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 OSS_PREFIX="${OSS_PREFIX:-dws}"
+OSS_ENABLED=""
 DELIVERY_VERIFIER="${DWS_DELIVERY_VERIFIER:-$SCRIPT_DIR/verify-release-workflow-delivery.sh}"
 STABLE_DELIVERY_VERIFIER="${DWS_STABLE_DELIVERY_VERIFIER:-$SCRIPT_DIR/verify-delivered-stable.sh}"
 GITHUB_DOWNLOAD_HELPER="${DWS_GITHUB_DOWNLOAD_HELPER:-$SCRIPT_DIR/download-github-release-assets.sh}"
@@ -404,6 +405,7 @@ prepare_tombstone_message() {
     printf 'Original-Commit: %s\n' "$TARGET_COMMIT"
     printf 'Original-Release-ID: %s\n' "$TARGET_RELEASE_ID"
     printf 'Channel: %s\n' "$CHANNEL"
+    printf 'OSS-Mirror: %s\n' "$TARGET_OSS_MODE"
     printf 'Reason-SHA256: %s\n' "$reason_sha"
     printf 'Reason: %s\n' "$REASON"
     printf 'Requested-By: %s\n' "$GITHUB_ACTOR"
@@ -414,7 +416,7 @@ prepare_tombstone_message() {
 verify_existing_tombstone() {
   local reason_sha="$1" ref_sha tombstone_json parsed status
   local actual_target original_tag_object original_commit original_release_id
-  local tombstone_channel tombstone_version tombstone_reason_sha tombstone_reason
+  local tombstone_channel tombstone_version tombstone_oss_mode tombstone_reason_sha tombstone_reason
   set +e
   ref_sha="$(
     github_optional \
@@ -478,6 +480,9 @@ if not re.fullmatch(r"[1-9][0-9]*", fields["Original-Release-ID"]):
     raise SystemExit(1)
 if not re.fullmatch(r"[0-9a-f]{64}", fields["Reason-SHA256"]):
     raise SystemExit(1)
+oss_mode = fields.get("OSS-Mirror", "enabled")
+if oss_mode not in {"enabled", "deferred"}:
+    raise SystemExit(1)
 print("\t".join((
     obj["sha"],
     fields["Original-Tag-Object"],
@@ -485,6 +490,7 @@ print("\t".join((
     fields["Original-Release-ID"],
     fields["Channel"],
     fields["Version"],
+    oss_mode,
     fields["Reason-SHA256"],
     fields["Reason"],
 )))' "$TOMBSTONE"
@@ -495,11 +501,13 @@ print("\t".join((
   original_release_id="$(printf '%s\n' "$parsed" | cut -f4)"
   tombstone_channel="$(printf '%s\n' "$parsed" | cut -f5)"
   tombstone_version="$(printf '%s\n' "$parsed" | cut -f6)"
-  tombstone_reason_sha="$(printf '%s\n' "$parsed" | cut -f7)"
-  tombstone_reason="$(printf '%s\n' "$parsed" | cut -f8-)"
+  tombstone_oss_mode="$(printf '%s\n' "$parsed" | cut -f7)"
+  tombstone_reason_sha="$(printf '%s\n' "$parsed" | cut -f8)"
+  tombstone_reason="$(printf '%s\n' "$parsed" | cut -f9-)"
   [ "$actual_target" = "$original_commit" ] &&
     [ "$tombstone_version" = "$VERSION" ] &&
     [ "$tombstone_channel" = "$CHANNEL" ] &&
+    [ "$tombstone_oss_mode" = "${TARGET_OSS_MODE:-$tombstone_oss_mode}" ] &&
     [ "$tombstone_reason_sha" = "$reason_sha" ] &&
     [ "$tombstone_reason" = "$REASON" ] ||
     err "existing tombstone $TOMBSTONE has different immutable withdrawal metadata"
@@ -515,6 +523,7 @@ print("\t".join((
   TARGET_TAG_OBJECT="$original_tag_object"
   TARGET_COMMIT="$original_commit"
   TARGET_RELEASE_ID="$original_release_id"
+  TARGET_OSS_MODE="$tombstone_oss_mode"
 }
 
 create_tombstone() {
@@ -1000,14 +1009,6 @@ for command in git gh npm curl python3 awk sed grep sort unzip ruby cmp cut; do
 done
 need_env GITHUB_TOKEN "${GITHUB_TOKEN:-}"
 need_env NODE_AUTH_TOKEN "${NODE_AUTH_TOKEN:-}"
-need_env OSS_ACCESS_KEY_ID "${OSS_ACCESS_KEY_ID:-}"
-need_env OSS_ACCESS_KEY_SECRET "${OSS_ACCESS_KEY_SECRET:-}"
-need_env OSS_ENDPOINT "${OSS_ENDPOINT:-}"
-need_env OSS_BUCKET "${OSS_BUCKET:-}"
-case "$OSS_PREFIX" in
-  ''|/*|*'..'*|*'//'*) err "OSS_PREFIX must be a non-empty safe relative prefix" ;;
-  *[!A-Za-z0-9._/-]*) err "OSS_PREFIX contains unsupported characters" ;;
-esac
 
 validate_context
 git fetch --force --tags origin
@@ -1018,6 +1019,7 @@ TARGET_COMMIT=""
 TARGET_RELEASE_ID=""
 TARGET_TAG_EXISTS=false
 TARGET_RELEASE_EXISTS=false
+TARGET_OSS_MODE=""
 
 set +e
 remote_tag_object="$(
@@ -1038,6 +1040,8 @@ case "$remote_tag_status" in
       err "$VERSION must be an annotated GitHub release tag"
     printf '%s\n' "$TARGET_COMMIT" | grep -Eq '^[0-9a-f]{40}$' ||
       err "could not resolve the release commit for $VERSION"
+    TARGET_OSS_MODE="$("$SCRIPT_DIR/release-tag-oss-mode.sh" "$VERSION")" ||
+      err "could not resolve immutable OSS policy for $VERSION"
     ;;
   4) ;;
   *) err "could not inspect the authoritative GitHub tag $VERSION" ;;
@@ -1084,6 +1088,22 @@ if [ "$TARGET_TAG_EXISTS" != true ] || [ "$TARGET_RELEASE_EXISTS" != true ]; the
   say "Resuming withdrawal for $VERSION from exact permanent tombstone metadata."
 fi
 
+case "$TARGET_OSS_MODE" in
+  enabled)
+    OSS_ENABLED=true
+    need_env OSS_ACCESS_KEY_ID "${OSS_ACCESS_KEY_ID:-}"
+    need_env OSS_ACCESS_KEY_SECRET "${OSS_ACCESS_KEY_SECRET:-}"
+    need_env OSS_ENDPOINT "${OSS_ENDPOINT:-}"
+    need_env OSS_BUCKET "${OSS_BUCKET:-}"
+    case "$OSS_PREFIX" in
+      ''|/*|*'..'*|*'//'*) err "OSS_PREFIX must be a non-empty safe relative prefix" ;;
+      *[!A-Za-z0-9._/-]*) err "OSS_PREFIX contains unsupported characters" ;;
+    esac
+    ;;
+  deferred) OSS_ENABLED=false ;;
+  *) err "could not resolve immutable OSS policy for $VERSION" ;;
+esac
+
 [ "$(npm_exact_version "$VERSION" || true)" = "${VERSION#v}" ] ||
   err "npm exact version ${PACKAGE_NAME}@${VERSION#v} is not published"
 if [ "$TARGET_TAG_EXISTS" = true ] && [ "$TARGET_RELEASE_EXISTS" = true ]; then
@@ -1109,23 +1129,28 @@ NPM_POINTER_BEFORE="$(
 [ -n "$NPM_POINTER_BEFORE" ] || err "npm $NPM_TAG is empty"
 require_safe_channel_pointer "v$NPM_POINTER_BEFORE" "$CHANNEL"
 
-ensure_ossutil
-if [ -z "${OSS_REGION:-}" ]; then
-  OSS_REGION="$(
-    printf '%s' "$OSS_ENDPOINT" |
-      sed -n 's#^\(https\{0,1\}://\)\{0,1\}oss-\([a-z0-9-]*[a-z0-9]\)\.aliyuncs\.com.*#\2#p' |
-      sed 's#-internal$##'
-  )"
-fi
-[ -n "$OSS_REGION" ] || err "could not derive OSS_REGION; set it explicitly"
-export OSS_REGION
-if [ "$CHANNEL" = stable ]; then
-  OSS_POINTER_NAME=latest.txt
+if [ "$OSS_ENABLED" = true ]; then
+  ensure_ossutil
+  if [ -z "${OSS_REGION:-}" ]; then
+    OSS_REGION="$(
+      printf '%s' "$OSS_ENDPOINT" |
+        sed -n 's#^\(https\{0,1\}://\)\{0,1\}oss-\([a-z0-9-]*[a-z0-9]\)\.aliyuncs\.com.*#\2#p' |
+        sed 's#-internal$##'
+    )"
+  fi
+  [ -n "$OSS_REGION" ] || err "could not derive OSS_REGION; set it explicitly"
+  export OSS_REGION
+  if [ "$CHANNEL" = stable ]; then
+    OSS_POINTER_NAME=latest.txt
+  else
+    OSS_POINTER_NAME=beta.txt
+  fi
+  OSS_POINTER_BEFORE="$(read_oss_pointer "$OSS_POINTER_NAME")"
+  require_safe_channel_pointer "$OSS_POINTER_BEFORE" "$CHANNEL"
 else
-  OSS_POINTER_NAME=beta.txt
+  OSS_POINTER_NAME=""
+  say "OSS mirroring is disabled; no OSS rollback is required."
 fi
-OSS_POINTER_BEFORE="$(read_oss_pointer "$OSS_POINTER_NAME")"
-require_safe_channel_pointer "$OSS_POINTER_BEFORE" "$CHANNEL"
 
 GITEE_ENABLED="${DWS_GITEE_ENABLED:-false}"
 case "$GITEE_ENABLED" in
@@ -1168,8 +1193,12 @@ create_tombstone
 update_homebrew
 update_github_release
 update_npm_channel
-ensure_oss_rollback
-update_oss_channel "$OSS_POINTER_NAME"
+if [ "$OSS_ENABLED" = true ]; then
+  ensure_oss_rollback
+  update_oss_channel "$OSS_POINTER_NAME"
+else
+  say "OSS did not contain $VERSION because mirroring was disabled; no mirror mutation was needed."
+fi
 if [ "$GITEE_ENABLED" = true ]; then
   ensure_gitee_rollback
   withdraw_gitee

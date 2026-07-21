@@ -82,6 +82,11 @@ func TestWithdrawReleaseScriptDeletesProblemReleaseLastAndUsesPermanentTombstone
 		`github_api --method PATCH`,
 		`npm deprecate "${PACKAGE_NAME}@${VERSION#v}"`,
 		`npm dist-tag add "${PACKAGE_NAME}@${ROLLBACK_VERSION#v}"`,
+		`TARGET_OSS_MODE="$("$SCRIPT_DIR/release-tag-oss-mode.sh" "$VERSION")"`,
+		`printf 'OSS-Mirror: %s\n' "$TARGET_OSS_MODE"`,
+		`oss_mode = fields.get("OSS-Mirror", "enabled")`,
+		`if [ "$OSS_ENABLED" = true ]; then`,
+		`*) err "could not resolve immutable OSS policy for $VERSION" ;;`,
 		`"$OSSUTIL" rm -rf`,
 		`curl -fsS -X DELETE`,
 		`git push "$GITEE_GIT_REMOTE" ":refs/tags/${VERSION}"`,
@@ -114,7 +119,7 @@ func TestWithdrawReleaseScriptDeletesProblemReleaseLastAndUsesPermanentTombstone
 	tombstone := strings.LastIndex(script, "\ncreate_tombstone\n")
 	githubMutation := strings.LastIndex(script, "\nupdate_github_release\n")
 	npmMutation := strings.LastIndex(script, "\nupdate_npm_channel\n")
-	ossMutation := strings.LastIndex(script, "\nupdate_oss_channel ")
+	ossMutation := strings.LastIndex(script, `update_oss_channel "$OSS_POINTER_NAME"`)
 	homebrewGate := strings.LastIndex(script, "\nupdate_homebrew\n")
 	githubDelete := strings.LastIndex(script, "\ndelete_github_release_and_tag\n")
 	if tombstone < 0 || githubMutation < 0 || npmMutation < 0 || ossMutation < 0 ||
@@ -125,6 +130,122 @@ func TestWithdrawReleaseScriptDeletesProblemReleaseLastAndUsesPermanentTombstone
 		githubMutation < npmMutation && npmMutation < ossMutation && ossMutation < githubDelete) {
 		t.Fatalf("unsafe withdrawal order: tombstone=%d github-mark=%d npm=%d oss=%d homebrew=%d github-delete=%d",
 			tombstone, githubMutation, npmMutation, ossMutation, homebrewGate, githubDelete)
+	}
+}
+
+func TestReleaseTagOSSModeIsImmutableAndFailClosed(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "release-tag-oss-mode.sh"))
+	if err != nil {
+		t.Fatalf("Abs(OSS mode script) error = %v", err)
+	}
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	mustRun(t, repo, "git", "config", "user.name", "OSS Mode Test")
+	mustRun(t, repo, "git", "config", "user.email", "oss-mode@example.com")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("fixture\n"), 0o644)
+	mustRun(t, repo, "git", "add", "tracked")
+	mustRun(t, repo, "git", "commit", "-m", "fixture")
+
+	tag := func(version, message string) {
+		t.Helper()
+		messagePath := filepath.Join(repo, version+".message")
+		mustWriteFile(t, messagePath, []byte(message), 0o644)
+		mustRun(t, repo, "git", "tag", "-a", version, "-F", messagePath)
+	}
+	tag("v1.0.1", "Release v1.0.1\n")
+	tag("v1.0.2", "Release v1.0.2\n\nOSS-Mirror: enabled\n")
+	tag("v1.0.3", "Release v1.0.3\n\nOSS-Mirror: deferred\n")
+	tag("v1.0.4", "Release v1.0.4\n\nOSS-Mirror: invalid\n")
+	tag("v1.0.5", "Release v1.0.5\n\nOSS-Mirror: enabled\nOSS-Mirror: deferred\n")
+	mustRun(t, repo, "git", "tag", "v1.0.6")
+	rawTag := func(version, message string) {
+		t.Helper()
+		commit := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD"))
+		payload := strings.Join([]string{
+			"object " + commit,
+			"type commit",
+			"tag " + version,
+			"tagger OSS Mode Test <oss-mode@example.com> 1700000000 +0000",
+			"",
+			message,
+		}, "\n")
+		cmd := exec.Command("git", "mktag")
+		cmd.Dir = repo
+		cmd.Stdin = strings.NewReader(payload)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git mktag %s error = %v\noutput:\n%s", version, err, output)
+		}
+		mustRun(t, repo, "git", "update-ref", "refs/tags/"+version, strings.TrimSpace(string(output)))
+	}
+	rawTag("v1.0.7", "Release v1.0.7\n\nOSS-Mirror: \n")
+	rawTag("v1.0.8", "Release v1.0.8\r\n\r\nOSS-Mirror: deferred\r\n")
+
+	for _, test := range []struct {
+		version string
+		want    string
+		ok      bool
+	}{
+		{version: "v1.0.1", want: "enabled", ok: true},
+		{version: "v1.0.2", want: "enabled", ok: true},
+		{version: "v1.0.3", want: "deferred", ok: true},
+		{version: "v1.0.4", want: "invalid OSS-Mirror metadata", ok: false},
+		{version: "v1.0.5", want: "duplicate OSS-Mirror metadata", ok: false},
+		{version: "v1.0.6", want: "must be annotated", ok: false},
+		{version: "v1.0.7", want: "invalid OSS-Mirror metadata", ok: false},
+		{version: "v1.0.8", want: "deferred", ok: true},
+	} {
+		t.Run(test.version, func(t *testing.T) {
+			cmd := exec.Command(scriptPath, test.version)
+			cmd.Dir = repo
+			output, err := cmd.CombinedOutput()
+			if test.ok && err != nil {
+				t.Fatalf("release-tag-oss-mode.sh error = %v\noutput:\n%s", err, output)
+			}
+			if !test.ok && err == nil {
+				t.Fatalf("release-tag-oss-mode.sh unexpectedly accepted %s", test.version)
+			}
+			if !strings.Contains(string(output), test.want) {
+				t.Fatalf("release-tag-oss-mode.sh output missing %q:\n%s", test.want, output)
+			}
+		})
+	}
+}
+
+func TestWithdrawReleaseDefersOSSRequirementUntilImmutablePolicyResolution(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "withdraw-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(withdraw script) error = %v", err)
+	}
+	cmd := exec.Command("bash", scriptPath,
+		"v1.2.3",
+		"critical startup regression",
+		"WITHDRAW v1.2.3",
+	)
+	cmd.Env = append(os.Environ(),
+		"GITHUB_TOKEN=test-github-token",
+		"NODE_AUTH_TOKEN=test-npm-token",
+		"GITHUB_REPOSITORY=DingTalk-Real-AI/dingtalk-workspace-cli",
+		"GITHUB_REF_NAME=main",
+		"GITHUB_SHA="+strings.Repeat("a", 40),
+		"GITHUB_RUN_ID=1",
+		"GITHUB_ACTOR=test-operator",
+		"GITHUB_EVENT_DEFAULT_BRANCH=main",
+		"GITHUB_ACTIONS=false",
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("withdraw-release.sh unexpectedly ran outside GitHub Actions:\n%s", output)
+	}
+	if !strings.Contains(string(output), "withdrawal may run only inside GitHub Actions") {
+		t.Fatalf("withdrawal did not reach the protected execution gate before resolving OSS policy:\n%s", output)
+	}
+	if strings.Contains(string(output), "missing required environment variable OSS_") {
+		t.Fatalf("withdrawal required OSS credentials before resolving immutable tag policy:\n%s", output)
 	}
 }
 
@@ -180,6 +301,20 @@ func TestWithdrawReleaseRejectsInvalidInputsBeforeMutation(t *testing.T) {
 }
 
 func TestWithdrawReleaseRollsBackConfiguredChannelsAndStopsForHomebrewReview(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		ossDeferred bool
+	}{
+		{name: "legacy tag defaults OSS to enabled"},
+		{name: "deferred OSS survives tombstone retry", ossDeferred: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testWithdrawReleaseRollsBackConfiguredChannelsAndStopsForHomebrewReview(t, test.ossDeferred)
+		})
+	}
+}
+
+func testWithdrawReleaseRollsBackConfiguredChannelsAndStopsForHomebrewReview(t *testing.T, ossDeferred bool) {
 	root := t.TempDir()
 	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -188,6 +323,7 @@ func TestWithdrawReleaseRollsBackConfiguredChannelsAndStopsForHomebrewReview(t *
 
 	for _, rel := range []string{
 		"scripts/release/withdraw-release.sh",
+		"scripts/release/release-tag-oss-mode.sh",
 		"scripts/release/release-lib.sh",
 		"build/homebrew-release.rb.tmpl",
 	} {
@@ -236,6 +372,10 @@ cp "$DWS_FORMULA_SOURCE" "$MOCK_STATE/homebrew-formula"
 printf 'homebrew-pr %s %s\n' "$DWS_TAP_PR_TITLE" "$DWS_TAP_PR_BRANCH" >> "$CALL_LOG"
 exit 0
 `), 0o755)
+	mustWriteFile(t, filepath.Join(root, "scripts", "release", "unexpected-ossutil"), []byte(`#!/bin/sh
+printf 'unexpected-oss-call\n' >> "$CALL_LOG"
+exit 99
+`), 0o755)
 
 	stateDir := filepath.Join(root, "state")
 	fakeBin := filepath.Join(root, "bin")
@@ -262,7 +402,11 @@ end
 `), 0o644)
 	mustRun(t, root, "git", "add", "Formula/dingtalk-workspace-cli.rb")
 	mustRun(t, root, "git", "commit", "-m", "target")
-	mustRun(t, root, "git", "tag", "-a", "v1.0.52", "-m", "Release v1.0.52")
+	tagArgs := []string{"tag", "-a", "v1.0.52", "-m", "Release v1.0.52"}
+	if ossDeferred {
+		tagArgs = append(tagArgs, "-m", "OSS-Mirror: deferred")
+	}
+	mustRun(t, root, "git", tagArgs...)
 	targetCommit := strings.TrimSpace(mustOutput(t, root, "git", "rev-parse", "HEAD"))
 	targetTagObject := strings.TrimSpace(mustOutput(t, root, "git", "rev-parse", "refs/tags/v1.0.52"))
 
@@ -308,11 +452,6 @@ end
 		"GITHUB_EVENT_DEFAULT_BRANCH=main",
 		"GITHUB_TOKEN=github-token",
 		"NODE_AUTH_TOKEN=npm-token",
-		"OSS_ACCESS_KEY_ID=oss-id",
-		"OSS_ACCESS_KEY_SECRET=oss-secret",
-		"OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com",
-		"OSS_BUCKET=dws-test",
-		"OSSUTIL="+filepath.Join(fakeBin, "ossutil"),
 		"DWS_GITEE_ENABLED=true",
 		"GITEE_TOKEN=gitee-token",
 		"GITEE_USER=gitee-user",
@@ -326,6 +465,23 @@ end
 		"DWS_GITEE_SYNC_HELPER="+filepath.Join(root, "scripts", "release", "sync-gitee"),
 		"ORIGIN_GIT="+origin,
 	)
+	if ossDeferred {
+		withdrawEnv = append(withdrawEnv,
+			"OSS_ACCESS_KEY_ID=",
+			"OSS_ACCESS_KEY_SECRET=",
+			"OSS_ENDPOINT=",
+			"OSS_BUCKET=",
+			"OSSUTIL="+filepath.Join(root, "scripts", "release", "unexpected-ossutil"),
+		)
+	} else {
+		withdrawEnv = append(withdrawEnv,
+			"OSS_ACCESS_KEY_ID=oss-id",
+			"OSS_ACCESS_KEY_SECRET=oss-secret",
+			"OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com",
+			"OSS_BUCKET=dws-test",
+			"OSSUTIL="+filepath.Join(fakeBin, "ossutil"),
+		)
+	}
 	cmd.Env = withdrawEnv
 	output, err := cmd.CombinedOutput()
 	if err == nil {
@@ -338,9 +494,13 @@ end
 	assertFileEquals(t, filepath.Join(stateDir, "latest"), "v1.0.51")
 	assertFileEquals(t, filepath.Join(stateDir, "npm-latest"), "1.0.51")
 	assertFileContains(t, filepath.Join(stateDir, "npm-deprecated"), "WITHDRAWN v1.0.52")
-	assertFileEquals(t, filepath.Join(stateDir, "oss-latest"), "v1.0.51")
-	if _, err := os.Stat(filepath.Join(stateDir, "oss-removed")); err != nil {
-		t.Fatalf("OSS withdrawn prefix was not removed: %v", err)
+	if ossDeferred {
+		assertFileEquals(t, filepath.Join(stateDir, "oss-latest"), "v1.0.52")
+	} else {
+		assertFileEquals(t, filepath.Join(stateDir, "oss-latest"), "v1.0.51")
+		if _, err := os.Stat(filepath.Join(stateDir, "oss-removed")); err != nil {
+			t.Fatalf("OSS withdrawn prefix was not removed: %v", err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "gitee-release-v1.0.52")); !os.IsNotExist(err) {
 		t.Fatalf("Gitee release still exists, stat error = %v", err)
@@ -357,6 +517,11 @@ end
 	assertFileContains(t, filepath.Join(stateDir, "tombstone-message"), "Original-Commit: "+targetCommit)
 	assertFileContains(t, filepath.Join(stateDir, "tombstone-message"), "Original-Tag-Object: "+targetTagObject)
 	assertFileContains(t, filepath.Join(stateDir, "tombstone-message"), "Original-Release-ID: 52")
+	ossMode := "enabled"
+	if ossDeferred {
+		ossMode = "deferred"
+	}
+	assertFileContains(t, filepath.Join(stateDir, "tombstone-message"), "OSS-Mirror: "+ossMode)
 	assertFileContains(t, filepath.Join(stateDir, "tombstone-message"), "Reason: critical startup regression")
 	assertFileContains(t, callLog, "homebrew-pr revert: withdraw v1.0.52 and restore v1.0.51")
 
@@ -369,19 +534,48 @@ end
 	githubIndex := strings.Index(logText, "github-withdraw")
 	npmIndex := strings.Index(logText, "npm-deprecate")
 	ossIndex := strings.Index(logText, "oss-remove")
-	if tombstoneIndex < 0 || githubIndex < 0 || npmIndex < 0 || ossIndex < 0 {
+	if tombstoneIndex < 0 || githubIndex < 0 || npmIndex < 0 || (!ossDeferred && ossIndex < 0) {
 		t.Fatalf("missing mutation audit entries:\n%s", logText)
 	}
 	homebrewIndex := strings.Index(logText, "homebrew-pr")
-	if !(tombstoneIndex < homebrewIndex && homebrewIndex < githubIndex &&
-		githubIndex < npmIndex && npmIndex < ossIndex) {
+	if !(tombstoneIndex < homebrewIndex && homebrewIndex < githubIndex && githubIndex < npmIndex) ||
+		(!ossDeferred && npmIndex >= ossIndex) {
 		t.Fatalf("tombstone was not durable before channel mutations:\n%s", logText)
 	}
 	deleteReleaseIndex := strings.Index(logText, "github-delete-release")
 	deleteTagIndex := strings.Index(logText, "github-delete-tag")
+	channelsCompleteIndex := npmIndex
+	if !ossDeferred {
+		channelsCompleteIndex = ossIndex
+	}
 	if deleteReleaseIndex < 0 || deleteTagIndex < 0 || homebrewIndex < 0 ||
-		!(homebrewIndex < ossIndex && ossIndex < deleteReleaseIndex && deleteReleaseIndex < deleteTagIndex) {
+		!(homebrewIndex < channelsCompleteIndex && channelsCompleteIndex < deleteReleaseIndex && deleteReleaseIndex < deleteTagIndex) {
 		t.Fatalf("GitHub problem release was not removed before the Homebrew review pause:\n%s", logText)
+	}
+	if ossDeferred {
+		if strings.Contains(logText, "unexpected-oss-call") || ossIndex >= 0 {
+			t.Fatalf("deferred withdrawal invoked OSS tooling:\n%s", logText)
+		}
+		for _, want := range []string{
+			"OSS mirroring is disabled; no OSS rollback is required.",
+			"OSS did not contain v1.0.52 because mirroring was disabled",
+		} {
+			if !strings.Contains(string(output), want) {
+				t.Fatalf("deferred withdrawal output missing %q:\n%s", want, output)
+			}
+		}
+	}
+	if !ossDeferred {
+		tombstonePath := filepath.Join(stateDir, "tombstone-message")
+		tombstoneMessage, err := os.ReadFile(tombstonePath)
+		if err != nil {
+			t.Fatalf("ReadFile(legacy tombstone) error = %v", err)
+		}
+		legacyMessage := strings.Replace(string(tombstoneMessage), "OSS-Mirror: enabled\n", "", 1)
+		if legacyMessage == string(tombstoneMessage) {
+			t.Fatal("could not convert tombstone fixture to the legacy format")
+		}
+		mustWriteFile(t, tombstonePath, []byte(legacyMessage), 0o644)
 	}
 
 	mergedFormula, err := os.ReadFile(filepath.Join(stateDir, "homebrew-formula"))
@@ -419,6 +613,9 @@ end
 		if !strings.Contains(string(retryOutput), want) {
 			t.Fatalf("withdrawal retry output missing %q:\n%s", want, string(retryOutput))
 		}
+	}
+	if ossDeferred && !strings.Contains(string(retryOutput), "OSS mirroring is disabled; no OSS rollback is required.") {
+		t.Fatalf("deferred tombstone retry did not restore the sealed OSS policy:\n%s", retryOutput)
 	}
 	assertFileEquals(t, filepath.Join(stateDir, "latest"), "v1.0.51")
 	if _, err := os.Stat(filepath.Join(stateDir, "release-v1.0.52.json")); !os.IsNotExist(err) {
