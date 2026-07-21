@@ -421,6 +421,10 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		`COVERAGE_ENFORCE_OVERALL: "false"`,
 		`COVERAGE_OVERALL_TOLERANCE: "0"`,
 		`COVERAGE_ADDITIONAL_DIFF_PROFILE=coverage-shortcut.txt`,
+		"run: make test-plan",
+		"run: make format-check",
+		"./scripts/ci/test-packages.sh list",
+		`package_output="$(./scripts/ci/test-packages.sh list`,
 	} {
 		if !strings.Contains(admission, want) {
 			t.Errorf("Code Admission workflow missing contract %q", want)

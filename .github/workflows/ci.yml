@@ -130,11 +130,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Verify Test Package Plan
+        if: steps.classify.outputs.changelog_only != 'true'
+        run: make test-plan
+
       - name: Format Check
         if: steps.classify.outputs.changelog_only != 'true'
-        run: |
-          unformatted="$(find cmd internal test scripts/policy -name '*.go' -print0 | xargs -0r gofmt -l)"
-          test -z "$unformatted" || (printf '%s\n' "$unformatted" && exit 1)
+        run: make format-check
 
       - name: Go Vet
         if: steps.classify.outputs.changelog_only != 'true'
@@ -167,38 +169,20 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
-
       - name: Build
         if: ${{ matrix.shard == 'remaining' }}
         run: make build
 
       - name: Test shard with Race Detection
+        shell: bash
         env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
           TEST_SHARD: ${{ matrix.shard }}
         run: |
-          case "$TEST_SHARD" in
-            app)
-              packages=(./internal/app/...)
-              ;;
-            generators)
-              packages=(./internal/generator/...)
-              ;;
-            helpers)
-              packages=(./internal/helpers/...)
-              ;;
-            remaining)
-              mapfile -t packages < <(
-                go list ./cmd/... ./internal/... |
-                  grep -Ev '/internal/(app|generator|helpers)(/|$)'
-              )
-              ;;
-            *)
-              printf 'unknown test shard: %s\n' "$TEST_SHARD" >&2
-              exit 1
-              ;;
-          esac
+          set -euo pipefail
+          package_output="$(./scripts/ci/test-packages.sh list "$TEST_SHARD")"
+          test -n "$package_output"
+          mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
           go test -v -race -count=1 -timeout=10m "${packages[@]}"
 
@@ -207,7 +191,7 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -221,7 +205,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Test release scripts
-        run: go test -v -count=1 -timeout=5m ./test/scripts
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: |
+          set -euo pipefail
+          package_output="$(./scripts/ci/test-packages.sh list release-scripts)"
+          test -n "$package_output"
+          mapfile -t packages <<< "$package_output"
+          test "${#packages[@]}" -gt 0
+          go test -v -count=1 -timeout=10m "${packages[@]}"
 
   test-cross-platform:
     name: Test (cross-platform compile)
