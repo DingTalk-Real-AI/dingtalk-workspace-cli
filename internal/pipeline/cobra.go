@@ -53,7 +53,11 @@ func RunPreParse(root *cobra.Command, engine *Engine) {
 	}
 
 	ctx := &Context{
-		Args:      append([]string{}, rawArgs...),
+		Args: append([]string{}, rawArgs...),
+		// target.CommandPath() still carries the "dws" prefix; PreParse
+		// handlers that key off a command (e.g. the semantic-alias table)
+		// normalize it themselves, so the runtime key matches the build key.
+		Command:   target.CommandPath(),
 		FlagSpecs: flagInfos,
 	}
 

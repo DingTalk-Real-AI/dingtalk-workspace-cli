@@ -944,11 +944,20 @@ func newPipelineEngine() *pipeline.Engine {
 		// Register handler runs during command tree building.
 		handlers.RegisterHandler{},
 
-		// PreParse handlers run in order: alias → sticky → paramname.
-		// Alias normalises case first (--userId → --user-id), then
-		// sticky splits glued values (--limit100 → --limit 100), then
+		// PreParse handlers run in order: alias → semantic → sticky → paramname.
+		// Alias normalises case first (--userId → --user-id), then semantic
+		// resolves reviewed synonyms to the real flag (--keyword → --query),
+		// then sticky splits glued values (--limit100 → --limit 100), then
 		// paramname fixes near-miss typos (--limt → --limit).
 		handlers.AliasHandler{},
+		handlers.SemanticAliasHandler{
+			// Inject the build-time reduced alias table with native types so
+			// the handler package stays decoupled from cli.
+			Lookup: func(rawCommandPath string) (map[string]string, []string, []string, bool) {
+				e, ok := cli.LookupParamAlias(rawCommandPath)
+				return e.Aliases, e.Blocked, e.Ambiguous, ok
+			},
+		},
 		handlers.StickyHandler{},
 		handlers.ParamNameHandler{},
 

@@ -77,8 +77,11 @@ type Context struct {
 	// PreParse handlers may rewrite this in place.
 	Args []string
 
-	// Command is the resolved product.tool canonical path
-	// (available from PostParse onward).
+	// Command identifies the resolved command. RunPreParse fills it with
+	// Cobra's raw CommandPath() (e.g. "dws chat message send-by-bot") so
+	// PreParse handlers can key per-command tables; the PostParse pipeline
+	// fills it with the resolved product.tool canonical path. The two phases
+	// use independent Context instances, so the differing forms never mix.
 	Command string
 
 	// Params holds structured key→value parameters after Cobra
