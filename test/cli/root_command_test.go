@@ -14,8 +14,6 @@ import (
 // and their availability depends on the test environment's fixture data.
 
 func TestHiddenMCPHelpIsReachable(t *testing.T) {
-	t.Parallel()
-
 	cmd := app.NewRootCommand()
 	var out strings.Builder
 	cmd.SetOut(&out)
@@ -33,8 +31,6 @@ func TestHiddenMCPHelpIsReachable(t *testing.T) {
 }
 
 func TestSkillCommandIsRegistered(t *testing.T) {
-	t.Parallel()
-
 	root := app.NewRootCommand()
 
 	var found bool

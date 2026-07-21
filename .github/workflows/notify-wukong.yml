@@ -3,7 +3,7 @@ name: Main Integration — Wukong Overlay
 on:
   workflow_run:
     workflows:
-      - Code Admission — PR 合入门禁
+      - CI
     types:
       - completed
 

@@ -259,7 +259,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		return personalConsumeRun(ctx, cfg)
 	}
 
-	client := personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	sub, eventKey, ruleType, err := personalEnsureSubscription(ctx, client, identity, opts)
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
@@ -498,7 +498,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 	if status == "" || status == "all" {
 		status = ""
 	}
-	subs, err := personalListSubscriptions(personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity), ctx, personal.ListOptions{
+	subs, err := personalListSubscriptions(newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity), ctx, personal.ListOptions{
 		Status:      status,
 		EventKey:    opts.EventKey,
 		SubscribeID: opts.SubscribeID,
@@ -613,7 +613,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
-	client := personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	for _, id := range subscribeIDs {
 		if err := personalDeleteSubscription(client, ctx, id); err != nil {
 			return fmt.Errorf("event stop --as user: cancel subscription %s: %w", id, err)
@@ -723,7 +723,10 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 	if err != nil {
 		return personal.Identity{}, err
 	}
-	tokenData, _ := personalLoadTokenData(configDir)
+	tokenData, err := personalLoadTokenData(configDir)
+	if err != nil && !errors.Is(err, authpkg.ErrTokenDataNotFound) {
+		return personal.Identity{}, fmt.Errorf("load OAuth identity metadata: %w", err)
+	}
 	var corpID, userID, clientID, refreshToken string
 	if tokenData != nil {
 		corpID = tokenData.CorpID
@@ -767,6 +770,15 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 		ClientID:     clientID,
 		SourceID:     sourceID,
 	}, nil
+}
+
+func newPersonalEventControlClient(configDir, baseURL string, identity personal.Identity) *personal.Client {
+	identity.AccessToken = ""
+	client := personal.NewClient(baseURL, identity)
+	client.AccessTokenProvider = func(ctx context.Context) (string, error) {
+		return personalResolveAuxiliaryAccessToken(ctx, configDir, "")
+	}
+	return client
 }
 
 func personalTokenSubject(kind, token string) string {
@@ -817,7 +829,9 @@ func newPersonalStreamSource(ctx context.Context, opts personalStreamSourceOptio
 	}
 	_ = ctx
 	return source.NewPersonal(source.PersonalConfig{
-		AccessToken:  opts.Identity.AccessToken,
+		AccessTokenProvider: func(ctx context.Context) (string, error) {
+			return personalResolveAuxiliaryAccessToken(ctx, opts.ConfigDir, "")
+		},
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		SourceID:     opts.Identity.SourceID,

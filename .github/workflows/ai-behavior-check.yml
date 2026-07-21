@@ -95,6 +95,7 @@ jobs:
                 typeof filename === 'string' &&
                 (
                   filename.startsWith('.github/workflows/') ||
+                  filename.startsWith('scripts/ci/') ||
                   filename.startsWith('scripts/policy/') ||
                   filename.startsWith('scripts/release/') ||
                   filename === 'test/fixtures/cli-interface-baseline.txt' ||

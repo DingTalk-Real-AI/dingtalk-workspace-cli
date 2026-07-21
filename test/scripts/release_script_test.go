@@ -674,6 +674,257 @@ esac
 	}
 }
 
+func TestReleaseWorkflowDeliveryChannelRepairRequiresLatestAttemptCoreDelivery(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	fakeCurl := filepath.Join(binDir, "curl")
+	mustWriteFile(t, fakeCurl, []byte(`#!/bin/sh
+set -eu
+for argument in "$@"; do endpoint="$argument"; done
+case "$endpoint" in
+  *event=push*)
+    python3 - <<'PY'
+import json
+import os
+run = {
+    "id": 77,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "failure",
+    "head_branch": os.environ["TAG"],
+    "head_sha": os.environ["RELEASE_COMMIT"],
+    "path": os.environ.get("RUN_PATH", ".github/workflows/release.yml"),
+    "repository": {"full_name": os.environ.get("RUN_REPOSITORY", "owner/repo")},
+    "run_attempt": int(os.environ.get("RUN_ATTEMPT", "2")),
+}
+runs = [run]
+if os.environ.get("DUPLICATE_RUN") == "1":
+    duplicate = dict(run)
+    duplicate["id"] = 78
+    runs.append(duplicate)
+print(json.dumps({"workflow_runs": runs}))
+PY
+    ;;
+  *event=workflow_dispatch*)
+    printf '{"workflow_runs":[]}\n'
+    ;;
+  */actions/runs/77/attempts/2/jobs*)
+    python3 - <<'PY'
+import json
+import os
+
+commit = os.environ.get("JOB_SHA", os.environ["RELEASE_COMMIT"])
+core = [
+    "release-contract",
+    "Build signed release artifacts",
+    "Verify Apple Developer ID signatures",
+    "Publish immutable GitHub Release",
+]
+jobs = [{
+    "name": name,
+    "status": "completed",
+    "conclusion": (
+        os.environ.get("CORE_CONCLUSION", "success")
+        if name == os.environ.get("CORE_JOB", "Build signed release artifacts")
+        else "success"
+    ),
+    "head_sha": commit,
+    "steps": (
+        [{
+            "name": "Require immutable published GitHub Release",
+            "status": "completed",
+            "conclusion": os.environ.get("IMMUTABLE_STEP_CONCLUSION", "success"),
+        }]
+        if name == "Publish immutable GitHub Release"
+        else []
+    ),
+} for name in core]
+if os.environ.get("DUPLICATE_CORE") == "1":
+    jobs.append(dict(jobs[1]))
+required_steps = [
+    "Download and verify immutable GitHub Release",
+    "Verify immutable npm package without publication credentials",
+    "Inspect npm channel state",
+    "Verify npm channel delivery",
+]
+jobs.append({
+    "name": "Publish npm and mirrors",
+    "status": "completed",
+    "conclusion": os.environ.get("CHANNEL_JOB_CONCLUSION", "failure"),
+    "head_sha": commit,
+    "steps": [{
+        "name": name,
+        "status": "completed",
+        "conclusion": (
+            os.environ.get("CHANNEL_STEP_CONCLUSION", "success")
+            if name == os.environ.get("CHANNEL_STEP", "Verify npm channel delivery")
+            else "success"
+        ),
+    } for name in required_steps] + [{
+        "name": "Sync release artifacts to China OSS mirror",
+        "status": "completed",
+        "conclusion": os.environ.get("OSS_STEP_CONCLUSION", "failure"),
+    }],
+})
+jobs.extend([
+    {
+        "name": "Mirror immutable release to Gitee",
+        "status": "completed",
+        "conclusion": os.environ.get("GITEE_CONCLUSION", "skipped"),
+        "head_sha": commit,
+        "steps": [],
+    },
+    {
+        "name": "Release delivery gate",
+        "status": "completed",
+        "conclusion": os.environ.get("DELIVERY_GATE_CONCLUSION", "failure"),
+        "head_sha": commit,
+        "steps": [],
+    },
+])
+if os.environ.get("UNRELATED_FAILURE") == "1":
+    jobs.append({
+        "name": "Unrelated release job",
+        "status": "completed",
+        "conclusion": "failure",
+        "head_sha": commit,
+        "steps": [],
+    })
+print(json.dumps({"jobs": jobs}))
+PY
+    ;;
+  */actions/runs/77/*/jobs*)
+    echo "channel repair must inspect the exact latest run attempt" >&2
+    exit 91
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-release-workflow-delivery.sh")
+	tag := "v1.2.3-beta.1"
+	commit := strings.Repeat("a", 40)
+	run := func(args []string, overrides ...string) (string, error) {
+		cmd := exec.Command("sh", append([]string{script}, args...)...)
+		cmd.Env = append([]string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"DWS_RELEASE_OFFICIAL_REPOSITORY=owner/repo",
+			"TAG=" + tag,
+			"RELEASE_COMMIT=" + commit,
+		}, overrides...)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+	repairArgs := func(target string) []string {
+		return []string{"--channel-repair", target, tag, commit}
+	}
+
+	if output, err := run([]string{tag, commit}); err == nil ||
+		!strings.Contains(output, "did not deliver") {
+		t.Fatalf("strict delivery accepted a failed tag run: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(repairArgs("oss")); err != nil ||
+		!strings.Contains(output, "failed exact-tag push run 77") {
+		t.Fatalf("safe channel repair delivery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"CORE_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "required job 'Build signed release artifacts' did not succeed") {
+		t.Fatalf("failed core release job passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"CHANNEL_STEP_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "required channel step 'Verify npm channel delivery' did not succeed") {
+		t.Fatalf("failed npm delivery proof passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"DUPLICATE_CORE=1",
+	); err == nil || !strings.Contains(output, "expected exactly one latest-attempt job 'Build signed release artifacts'") {
+		t.Fatalf("duplicate latest-attempt core job passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"JOB_SHA="+strings.Repeat("b", 40),
+	); err == nil || !strings.Contains(output, "is not bound to "+commit) {
+		t.Fatalf("wrong-sha release jobs passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"UNRELATED_FAILURE=1",
+	); err == nil || !strings.Contains(output, "unrelated job 'Unrelated release job' failed") {
+		t.Fatalf("unrelated failed job passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"IMMUTABLE_STEP_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "immutable GitHub Release verification did not succeed") {
+		t.Fatalf("failed immutable release verification passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("gitee"),
+		"CHANNEL_JOB_CONCLUSION=success",
+		"OSS_STEP_CONCLUSION=success",
+		"GITEE_CONCLUSION=failure",
+	); err != nil || !strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("single failed Gitee mirror was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"CHANNEL_JOB_CONCLUSION=success",
+		"OSS_STEP_CONCLUSION=success",
+		"GITEE_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "OSS repair requires") {
+		t.Fatalf("Gitee-only failure was accepted as OSS evidence: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("gitee"),
+	); err != nil || !strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("skipped Gitee backfill was rejected after upstream OSS failure: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"GITEE_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "expected exactly one failed downstream channel job") {
+		t.Fatalf("two failed downstream channels passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"DELIVERY_GATE_CONCLUSION=success",
+	); err == nil || !strings.Contains(output, "must end in a failed delivery gate") {
+		t.Fatalf("successful terminal gate on a failed run passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"RUN_ATTEMPT=1",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("non-latest run attempt passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"RUN_REPOSITORY=other/repo",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("wrong-repository release run passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"RUN_PATH=.github/workflows/other.yml",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("wrong-workflow release run passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"DUPLICATE_RUN=1",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("ambiguous failed release runs passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
 func releaseChangelog(sections ...string) string {
 	text := "# Changelog\n\n## [Unreleased]\n\n"
 	for _, section := range sections {
@@ -1060,6 +1311,7 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 				"OSS_ACCESS_KEY_ID=test-key",
 				"OSS_ACCESS_KEY_SECRET=test-secret",
 				"OSS_ENDPOINT=https://oss.example.com",
+				"OSS_REGION=cn-test",
 				"OSS_BUCKET=test-bucket",
 				"OSS_PREFIX=dws",
 				"OSSUTIL="+fakeOSSUtil,
@@ -1130,6 +1382,7 @@ func TestReleaseMirrorFailsClosedWhenPointerCannotBeRead(t *testing.T) {
 				"OSS_ACCESS_KEY_ID=test-key",
 				"OSS_ACCESS_KEY_SECRET=test-secret",
 				"OSS_ENDPOINT=https://oss.example.com",
+				"OSS_REGION=cn-test",
 				"OSS_BUCKET=test-bucket",
 				"OSS_PREFIX=dws",
 				"OSSUTIL="+fakeOSSUtil,
@@ -1166,6 +1419,7 @@ func TestReleaseMirrorRepairsHistoricalAssetsWithoutMovingNewerPointer(t *testin
 		"OSS_ACCESS_KEY_ID=test-key",
 		"OSS_ACCESS_KEY_SECRET=test-secret",
 		"OSS_ENDPOINT=https://oss.example.com",
+		"OSS_REGION=cn-test",
 		"OSS_BUCKET=test-bucket",
 		"OSS_PREFIX=dws",
 		"OSSUTIL="+fakeOSSUtil,

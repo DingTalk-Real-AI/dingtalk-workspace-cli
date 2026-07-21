@@ -14,6 +14,7 @@
 package auth
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -34,7 +35,17 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(tmpDir)
 		panic("set " + keychain.StorageDirEnv + ": " + err.Error())
 	}
+	if err := os.Setenv(keychain.TestNamespaceEnv, tmpDir); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		panic("set " + keychain.TestNamespaceEnv + ": " + err.Error())
+	}
 	code := m.Run()
+	if err := keychain.RemoveAuthTokenEntries(keychain.Service); err != nil {
+		fmt.Fprintf(os.Stderr, "internal/auth keychain cleanup: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
 	_ = os.RemoveAll(tmpDir)
 	os.Exit(code)
 }

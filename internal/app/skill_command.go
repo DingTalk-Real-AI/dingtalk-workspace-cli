@@ -17,6 +17,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -36,25 +37,25 @@ import (
 )
 
 var (
-	skillLoadAccessToken   = loadSkillAccessToken
-	skillDownloadToTmp     = downloadSkillToTmpDir
-	skillHTTPDo            = func(client *http.Client, req *http.Request) (*http.Response, error) { return client.Do(req) }
-	skillNewRequest        = http.NewRequestWithContext
-	skillLoadTokenData     = authpkg.LoadTokenData
-	skillResolveTargetPath = resolveSkillTargetPath
-	skillFetchDownloadInfo = fetchSkillDownloadInfo
-	skillDownloadFile      = downloadSkillFile
-	skillExtractZip        = extractSkillZip
-	skillUserHomeDir       = os.UserHomeDir
-	skillMkdirTemp         = os.MkdirTemp
-	skillCreate            = os.Create
-	skillCreateTemp        = os.CreateTemp
-	skillRemoveAll         = os.RemoveAll
-	skillRemove            = os.Remove
-	skillMkdirAll          = os.MkdirAll
-	skillOpenFile          = os.OpenFile
-	skillCopy              = io.Copy
-	skillOpenZipFile       = func(file *zip.File) (io.ReadCloser, error) { return file.Open() }
+	skillLoadAccessToken    = loadSkillAccessToken
+	skillDownloadToTmp      = downloadSkillToTmpDir
+	skillHTTPDo             = func(client *http.Client, req *http.Request) (*http.Response, error) { return client.Do(req) }
+	skillNewRequest         = http.NewRequestWithContext
+	skillResolveAccessToken = ResolveAuxiliaryAccessToken
+	skillResolveTargetPath  = resolveSkillTargetPath
+	skillFetchDownloadInfo  = fetchSkillDownloadInfo
+	skillDownloadFile       = downloadSkillFile
+	skillExtractZip         = extractSkillZip
+	skillUserHomeDir        = os.UserHomeDir
+	skillMkdirTemp          = os.MkdirTemp
+	skillCreate             = os.Create
+	skillCreateTemp         = os.CreateTemp
+	skillRemoveAll          = os.RemoveAll
+	skillRemove             = os.Remove
+	skillMkdirAll           = os.MkdirAll
+	skillOpenFile           = os.OpenFile
+	skillCopy               = io.Copy
+	skillOpenZipFile        = func(file *zip.File) (io.ReadCloser, error) { return file.Open() }
 )
 
 func init() {
@@ -296,7 +297,7 @@ func newSkillAddHintCommand() *cobra.Command {
 
 func runSkillGet(cmd *cobra.Command, args []string) error {
 	skillID, _ := cmd.Flags().GetString("skill-id")
-	accessToken, err := skillLoadAccessToken()
+	accessToken, err := skillLoadAccessToken(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -319,7 +320,7 @@ func runSkillFind(cmd *cobra.Command, args []string) error {
 	if source == "" {
 		source, _ = cmd.Flags().GetString("scopes")
 	}
-	accessToken, err := skillLoadAccessToken()
+	accessToken, err := skillLoadAccessToken(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -388,7 +389,7 @@ func runSkillAdd(cmd *cobra.Command, args []string) error {
 		return apperrors.NewValidation(fmt.Sprintf("invalid target '%s': %v. Supported targets: %s", target, err, supportedTargets()))
 	}
 
-	accessToken, err := skillLoadAccessToken()
+	accessToken, err := skillLoadAccessToken(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -441,13 +442,16 @@ func runSkillAdd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func loadSkillAccessToken() (string, error) {
+func loadSkillAccessToken(ctx context.Context) (string, error) {
 	configDir := defaultConfigDir()
-	tokenData, err := skillLoadTokenData(configDir)
-	if err != nil || tokenData == nil || !tokenData.IsAccessTokenValid() {
+	token, err := skillResolveAccessToken(ctx, configDir, "")
+	if errors.Is(err, authpkg.ErrTokenDataNotFound) {
 		return "", skillAuthError()
 	}
-	return tokenData.AccessToken, nil
+	if err != nil {
+		return "", fmt.Errorf("resolve skill access token: %w", err)
+	}
+	return token, nil
 }
 
 func skillAuthError() error {
