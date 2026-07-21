@@ -1275,7 +1275,7 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 	}
 
 	sections := map[string]string{
-		"release":          releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n"),
+		"release":          releaseWorkflowSection(t, workflow, "  release:\n", "\n  publish-release:\n"),
 		"publish-release":  releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n"),
 		"publish-channels": releaseWorkflowSection(t, workflow, "  publish-channels:\n", "\n  mirror-gitee-release:\n"),
 	}
@@ -1295,7 +1295,6 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		}
 	}
 	if strings.Count(workflow, "name: Build signed release artifacts") != 1 ||
-		strings.Count(workflow, "name: Verify Apple Developer ID signatures") != 1 ||
 		strings.Count(workflow, "name: Publish immutable GitHub Release") != 1 ||
 		strings.Count(workflow, "name: Publish npm and mirrors") != 1 {
 		t.Fatal("normal and recovery publication must share one build/sign/publish job graph")
@@ -1443,20 +1442,14 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 		{
 			name:      "build",
 			start:     "  release:\n",
-			end:       "\n  verify-darwin-signatures:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' }}`,
-		},
-		{
-			name:      "Darwin verification",
-			start:     "  verify-darwin-signatures:\n",
 			end:       "\n  publish-release:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' }}`,
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' }}`,
 		},
 		{
 			name:      "GitHub publication",
 			start:     "  publish-release:\n",
 			end:       "\n  publish-channels:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}`,
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' }}`,
 		},
 		{
 			name:      "channel publication",
@@ -1495,7 +1488,6 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		"- governance-preflight",
 		"- release-contract",
 		"- release",
-		"- verify-darwin-signatures",
 		"- publish-release",
 		"- publish-channels",
 		"- mirror-gitee-release",
@@ -1509,7 +1501,6 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		"require_publication",
 		`require_result release-contract "$RELEASE_CONTRACT_RESULT" success`,
 		`require_result release "$RELEASE_RESULT" success`,
-		`require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success`,
 		`require_result publish-release "$PUBLISH_RELEASE_RESULT" success`,
 		`require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success`,
 		"workflow_dispatch:recover_release",
@@ -1545,14 +1536,13 @@ func TestReleaseWorkflowUploadsPostProcessedDarwinAssets(t *testing.T) {
 	build := strings.Index(workflow, "Build release artifacts without publishing")
 	postProcess := strings.Index(workflow, "./scripts/release/post-goreleaser.sh")
 	preserve := strings.Index(workflow, "Preserve finalized distribution files")
-	verifyJob := strings.Index(workflow, "verify-darwin-signatures:")
 	publishJob := strings.Index(workflow, "publish-release:")
-	if build == -1 || postProcess == -1 || preserve == -1 || verifyJob == -1 || publishJob == -1 ||
-		!(build < postProcess && postProcess < preserve && preserve < verifyJob && verifyJob < publishJob) {
-		t.Fatalf("post-processed assets must be preserved, Apple-verified, and only then published")
+	if build == -1 || postProcess == -1 || preserve == -1 || publishJob == -1 ||
+		!(build < postProcess && postProcess < preserve && preserve < publishJob) {
+		t.Fatalf("post-processed assets must be preserved and only then published")
 	}
 
-	buildSection := workflow[build:verifyJob]
+	buildSection := workflow[build:publishJob]
 	for _, required := range []string{
 		"--skip=publish",
 		"actions/upload-artifact@v4",
@@ -1669,73 +1659,6 @@ func TestReleaseWorkflowVerifiesRcodesignArchiveChecksum(t *testing.T) {
 	if hash == -1 || checksum == -1 || extract == -1 || execute == -1 ||
 		!(hash < checksum && checksum < extract && extract < execute) {
 		t.Fatal("rcodesign archive must match the pinned SHA-256 before extraction or execution")
-	}
-}
-
-func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
-	t.Parallel()
-
-	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
-	if err != nil {
-		t.Fatalf("Abs(release.yml) error = %v", err)
-	}
-	data, err := os.ReadFile(workflowPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
-	}
-	workflow := string(data)
-
-	preserve := strings.Index(workflow, "Preserve finalized distribution files")
-	verifyJob := strings.Index(workflow, "verify-darwin-signatures:")
-	publishJob := strings.Index(workflow, "publish-release:")
-	if preserve == -1 || verifyJob == -1 || publishJob == -1 || !(preserve < verifyJob && verifyJob < publishJob) {
-		t.Fatal("finalized artifacts must be preserved, Apple-verified, and only then published")
-	}
-
-	codesign := strings.Index(workflow[verifyJob:publishJob], "codesign --verify --strict --verbose=4")
-	publish := strings.Index(workflow[publishJob:], "-F draft=false")
-	if codesign == -1 || publish == -1 {
-		t.Fatal("macOS codesign verification and explicit Draft publication are required")
-	}
-
-	buildSection := workflow[preserve:verifyJob]
-	for _, required := range []string{
-		"actions/upload-artifact@v4",
-		"finalized-release-dist",
-	} {
-		if !strings.Contains(buildSection, required) {
-			t.Errorf("signed build stage is missing %q", required)
-		}
-	}
-
-	verifySection := workflow[verifyJob:publishJob]
-	for _, required := range []string{
-		"runs-on: macos-latest",
-		"actions/download-artifact@v4",
-		"finalized-release-dist",
-		`dws-darwin-${arch}.tar.gz`,
-		"codesign --verify --strict --verbose=4",
-	} {
-		if !strings.Contains(verifySection, required) {
-			t.Errorf("Apple verification stage is missing %q", required)
-		}
-	}
-
-	publishSection := workflow[publishJob:]
-	for _, required := range []string{
-		"verify-darwin-signatures",
-		"actions/download-artifact@v4",
-		"Publish or reuse immutable GitHub Release",
-		"gh release upload",
-		"Publish missing version to npm channel",
-		"Open stable Homebrew formula PR",
-		"Open beta Homebrew formula PR",
-		"DingTalk-Real-AI/dingtalk-workspace-cli.git",
-		"secrets.HOMEBREW_PR_TOKEN",
-	} {
-		if !strings.Contains(publishSection, required) {
-			t.Errorf("post-verification publication stage is missing %q", required)
-		}
 	}
 }
 

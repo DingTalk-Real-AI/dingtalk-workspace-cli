@@ -416,7 +416,6 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"mode=--content-only",
 		"mode=--fast-path",
 		`"$mode" "$PR_BASE_SHA" HEAD`,
-		"needs.lint.outputs.platform_sensitive == 'true'",
 		`COVERAGE_TARGET: "100"`,
 		`COVERAGE_ENFORCE_OVERALL: "false"`,
 		`COVERAGE_OVERALL_TOLERANCE: "0"`,

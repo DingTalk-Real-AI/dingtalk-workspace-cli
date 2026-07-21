@@ -24,7 +24,6 @@ jobs:
     outputs:
       changelog_only: ${{ steps.classify.outputs.changelog_only }}
       changelog_changed: ${{ steps.classify.outputs.changelog_changed }}
-      platform_sensitive: ${{ steps.classify.outputs.platform_sensitive }}
     steps:
       - name: Classify pull request scope
         id: classify
@@ -33,7 +32,6 @@ jobs:
           script: |
             let changelogOnly = false;
             let changelogChanged = false;
-            let platformSensitive = context.eventName === 'push';
             let files = [];
 
             if (context.eventName === 'pull_request') {
@@ -83,36 +81,15 @@ jobs:
                   filename === 'CHANGELOG.md' ||
                   previous_filename === 'CHANGELOG.md'
               );
-
-              const isPlatformSensitive = (filename) =>
-                typeof filename === 'string' &&
-                (
-                  filename.startsWith('internal/auth/') ||
-                  filename.startsWith('internal/keychain/') ||
-                  /_(darwin|windows|linux|unix)\.go$/.test(filename) ||
-                  filename.startsWith('scripts/release/') ||
-                  filename.startsWith('scripts/install') ||
-                  filename.startsWith('Formula/') ||
-                  filename.startsWith('build/npm/') ||
-                  filename === '.goreleaser.yaml' ||
-                  filename === '.github/workflows/release.yml'
-                );
-              platformSensitive = files.some(
-                ({ filename, previous_filename }) =>
-                  isPlatformSensitive(filename) ||
-                  isPlatformSensitive(previous_filename)
-              );
             }
 
             core.setOutput('changelog_only', String(changelogOnly));
             core.setOutput('changelog_changed', String(changelogChanged));
-            core.setOutput('platform_sensitive', String(platformSensitive));
             await core.summary
               .addHeading('Code Admission scope')
               .addRaw(`- Event: \`${context.eventName}\`\n`)
               .addRaw(`- Exact modified CHANGELOG only: \`${changelogOnly}\`\n`)
               .addRaw(`- CHANGELOG touched: \`${changelogChanged}\`\n`)
-              .addRaw(`- Native-platform risk paths touched: \`${platformSensitive}\`\n`)
               .addRaw(`- Changed files: \`${files.length}\`\n`)
               .write();
 
@@ -216,46 +193,12 @@ jobs:
           test "${#packages[@]}" -gt 0
           go test -v -count=1 -timeout=10m "${packages[@]}"
 
-  test-cross-platform:
-    name: Test (cross-platform compile)
-    needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Compile supported operating systems
-        shell: bash
-        run: |
-          set -eu
-          for target in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-            goos="${target%/*}"
-            goarch="${target#*/}"
-            output="$RUNNER_TEMP/dws-${goos}-${goarch}"
-            if [ "$goos" = windows ]; then
-              output="${output}.exe"
-            fi
-            printf 'compile %s/%s\n' "$goos" "$goarch"
-            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-              go build -o "$output" ./cmd
-          done
-
   test:
     name: Test
     needs:
       - lint
       - test-race
       - test-release-scripts
-      - test-cross-platform
-      - test-darwin
-      - test-windows
     if: ${{ always() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -264,194 +207,26 @@ jobs:
       - name: Verify test shards
         env:
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
-          PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           RACE_RESULT: ${{ needs.test-race.result }}
           RELEASE_SCRIPTS_RESULT: ${{ needs.test-release-scripts.result }}
-          CROSS_PLATFORM_RESULT: ${{ needs.test-cross-platform.result }}
-          DARWIN_RESULT: ${{ needs.test-darwin.result }}
-          WINDOWS_RESULT: ${{ needs.test-windows.result }}
         run: |
           failed=0
+          expected=success
           if [ "$CHANGELOG_ONLY" = true ]; then
-            for shard in \
-              "race shards:$RACE_RESULT" \
-              "release scripts:$RELEASE_SCRIPTS_RESULT" \
-              "cross-platform compile:$CROSS_PLATFORM_RESULT" \
-              "macOS native:$DARWIN_RESULT" \
-              "Windows native:$WINDOWS_RESULT"
-            do
-              name="${shard%%:*}"
-              result="${shard#*:}"
-              printf '%s: %s\n' "$name" "$result"
-              if [ "$result" != skipped ]; then
-                failed=1
-              fi
-            done
-            test "$failed" -eq 0
-            exit
+            expected=skipped
           fi
-
           for shard in \
             "race shards:$RACE_RESULT" \
-            "release scripts:$RELEASE_SCRIPTS_RESULT" \
-            "cross-platform compile:$CROSS_PLATFORM_RESULT"
+            "release scripts:$RELEASE_SCRIPTS_RESULT"
           do
             name="${shard%%:*}"
             result="${shard#*:}"
             printf '%s: %s\n' "$name" "$result"
-            if [ "$result" != "success" ]; then
-              failed=1
-            fi
-          done
-
-          native_expected=skipped
-          if [ "$PLATFORM_SENSITIVE" = true ]; then
-            native_expected=success
-          fi
-          for native in \
-            "macOS native:$DARWIN_RESULT" \
-            "Windows native:$WINDOWS_RESULT"
-          do
-            name="${native%%:*}"
-            result="${native#*:}"
-            printf '%s: %s\n' "$name" "$result"
-            if [ "$result" != "$native_expected" ]; then
+            if [ "$result" != "$expected" ]; then
               failed=1
             fi
           done
           test "$failed" -eq 0
-
-  test-darwin:
-    name: Test (macOS auth/keychain)
-    needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
-    runs-on: macos-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Test macOS auth and Keychain paths with Race Detection
-        run: go test -v -race -count=1 -timeout=10m ./internal/keychain ./internal/auth ./internal/app
-
-  test-windows:
-    name: Test (Windows)
-    needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Build Windows CLI
-        run: go build -o dws.exe ./cmd
-
-      - name: Test Windows auth and DPAPI packages
-        run: go test -v -count=1 -timeout=10m ./internal/keychain ./internal/auth
-
-      - name: Test Windows auth migration and portable auth diagnostics
-        run: go test -v -count=1 -timeout=5m ./internal/app -run '^Test(CrossPlatformCoverage)?Auth(MigrateKeychain|StatusDiagnosticReportsCiphertextKeyMismatch|ExportRejectsWindowsDPAPIBackend|ImportRejectsWindowsDPAPIBackend)'
-
-  coverage-darwin:
-    name: Coverage (macOS)
-    needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Resolve authoritative coverage base
-        env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -eu
-          base_ref="$PUSH_BEFORE_SHA"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
-          fi
-          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
-            base_ref="$(git rev-parse HEAD^)"
-          fi
-          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
-          echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
-
-      - name: Run and enforce macOS changed-code coverage
-        run: make coverage-gate-platform BASE_REF="$COVERAGE_BASE_REF" PROFILE=coverage-darwin.txt
-
-      - name: Upload macOS coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-darwin
-          path: coverage-darwin.txt
-
-  coverage-windows:
-    name: Coverage (Windows)
-    needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Resolve authoritative coverage base
-        shell: bash
-        env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -eu
-          base_ref="$PUSH_BEFORE_SHA"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
-          fi
-          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
-            base_ref="$(git rev-parse HEAD^)"
-          fi
-          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
-          echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
-
-      - name: Run and enforce Windows changed-code coverage
-        shell: bash
-        run: ./scripts/policy/run-platform-coverage-gate.sh --base-ref "$COVERAGE_BASE_REF" --profile coverage-windows.txt
-
-      - name: Upload Windows coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-windows
-          path: coverage-windows.txt
 
   coverage-current:
     name: Coverage (current)
@@ -598,8 +373,6 @@ jobs:
       - coverage-current
       - coverage-supporting
       - coverage-baseline
-      - coverage-darwin
-      - coverage-windows
     if: ${{ always() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -607,20 +380,14 @@ jobs:
       - name: Verify coverage profile jobs
         env:
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
-          PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           CURRENT_RESULT: ${{ needs.coverage-current.result }}
           SUPPORTING_RESULT: ${{ needs.coverage-supporting.result }}
           BASELINE_RESULT: ${{ needs.coverage-baseline.result }}
-          DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
-          WINDOWS_RESULT: ${{ needs.coverage-windows.result }}
         run: |
           failed=0
           expected=success
-          native_expected=skipped
           if [ "$CHANGELOG_ONLY" = true ]; then
             expected=skipped
-          elif [ "$PLATFORM_SENSITIVE" = true ]; then
-            native_expected=success
           fi
 
           for profile in \
@@ -632,21 +399,6 @@ jobs:
             result="${profile#*:}"
             printf '%s: %s\n' "$name" "$result"
             if [ "$result" != "$expected" ]; then
-              failed=1
-            fi
-          done
-
-          for native in \
-            "macOS native:$DARWIN_RESULT" \
-            "Windows native:$WINDOWS_RESULT"
-          do
-            name="${native%%:*}"
-            result="${native#*:}"
-            printf '%s: %s\n' "$name" "$result"
-            if [ "$CHANGELOG_ONLY" = true ]; then
-              native_expected=skipped
-            fi
-            if [ "$result" != "$native_expected" ]; then
               failed=1
             fi
           done

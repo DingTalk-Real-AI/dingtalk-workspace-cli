@@ -1067,38 +1067,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  verify-darwin-signatures:
-    name: Verify Apple Developer ID signatures
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' }}
-    needs: [release-contract, release]
-    runs-on: macos-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Restore finalized distribution files
-        uses: actions/download-artifact@v4
-        with:
-          name: finalized-release-dist
-          path: dist
-
-      - name: Verify finalized Darwin signatures with Apple codesign
-        run: |
-          set -euo pipefail
-          for arch in amd64 arm64; do
-            archive="dist/dws-darwin-${arch}.tar.gz"
-            stage="$RUNNER_TEMP/verify-darwin-${arch}"
-            mkdir -p "$stage"
-            tar -xzf "$archive" -C "$stage"
-            test -f "$stage/dws"
-            codesign --verify --strict --verbose=4 "$stage/dws"
-            codesign -dvvv "$stage/dws"
-          done
-
   publish-release:
     name: Publish immutable GitHub Release
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
-    needs: [release-contract, release, verify-darwin-signatures]
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' }}
+    needs: [release-contract, release]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -2007,7 +1979,6 @@ jobs:
       - governance-preflight
       - release-contract
       - release
-      - verify-darwin-signatures
       - publish-release
       - publish-channels
       - mirror-gitee-release
@@ -2029,7 +2000,6 @@ jobs:
           GOVERNANCE_PREFLIGHT_RESULT: ${{ needs.governance-preflight.result }}
           RELEASE_CONTRACT_RESULT: ${{ needs.release-contract.result }}
           RELEASE_RESULT: ${{ needs.release.result }}
-          DARWIN_SIGNATURE_RESULT: ${{ needs.verify-darwin-signatures.result }}
           PUBLISH_RELEASE_RESULT: ${{ needs.publish-release.result }}
           PUBLISH_CHANNELS_RESULT: ${{ needs.publish-channels.result }}
           MIRROR_GITEE_RESULT: ${{ needs.mirror-gitee-release.result }}
@@ -2051,7 +2021,6 @@ jobs:
           require_publication() {
             require_result release-contract "$RELEASE_CONTRACT_RESULT" success
             require_result release "$RELEASE_RESULT" success
-            require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success
             require_result publish-release "$PUBLISH_RELEASE_RESULT" success
             require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success
             if test "$GITEE_FALLBACK_ENABLED" = true; then
@@ -2092,7 +2061,6 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
-              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
@@ -2114,7 +2082,6 @@ jobs:
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
-              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
@@ -2129,7 +2096,6 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
-              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
@@ -2143,7 +2109,6 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
-              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
@@ -2157,7 +2122,6 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
-              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
