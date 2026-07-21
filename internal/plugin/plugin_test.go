@@ -74,6 +74,56 @@ func TestParseManifest(t *testing.T) {
 	}
 }
 
+func TestResolveCLIOverlayExternalFileIsRootContained(t *testing.T) {
+	root := t.TempDir()
+	overlayPath := filepath.Join(root, "overlay.json")
+	if err := os.WriteFile(overlayPath, []byte(`{
+		"id":"external-id",
+		"command":"external-command",
+		"toolOverrides":{"ping":{"cliName":"ping"}}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded := &Plugin{
+		Root: root,
+		Manifest: Manifest{
+			Name: "external-plugin",
+			MCPServers: map[string]*MCPServer{
+				"external": {
+					Type:     "streamable-http",
+					Endpoint: "https://example.invalid/mcp",
+					CLI:      json.RawMessage(`"overlay.json"`),
+				},
+			},
+		},
+	}
+	overlay, ok := loaded.ResolveCLIOverlay("external")
+	if !ok || overlay.ID != "external-id" || overlay.Command != "external-command" {
+		t.Fatalf("external overlay = (%#v, %v)", overlay, ok)
+	}
+	descriptors := loaded.ToServerDescriptors()
+	if len(descriptors) != 1 || descriptors[0].CLI.ID != "external-id" {
+		t.Fatalf("external HTTP descriptors = %#v", descriptors)
+	}
+
+	outside := filepath.Join(t.TempDir(), "outside-overlay.json")
+	if err := os.WriteFile(outside, []byte(`{"id":"escaped"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded.Manifest.MCPServers["external"].CLI = json.RawMessage(`"../outside-overlay.json"`)
+	if overlay, ok := loaded.ResolveCLIOverlay("external"); ok {
+		t.Fatalf("parent traversal resolved overlay %#v", overlay)
+	}
+
+	link := filepath.Join(root, "escaped-link.json")
+	if err := os.Symlink(outside, link); err == nil {
+		loaded.Manifest.MCPServers["external"].CLI = json.RawMessage(`"escaped-link.json"`)
+		if overlay, ok := loaded.ResolveCLIOverlay("external"); ok {
+			t.Fatalf("escaping symlink resolved overlay %#v", overlay)
+		}
+	}
+}
+
 func TestManifestValidate(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -219,8 +269,23 @@ func TestLoadAllSuppressesOptionalPluginValidationWarnings(t *testing.T) {
 
 func TestPluginToServerDescriptors(t *testing.T) {
 	cliOverlay, _ := json.Marshal(map[string]any{
-		"id":      "conference",
-		"command": "conference",
+		"id":          "conference",
+		"command":     "conference",
+		"description": "video conference",
+		"groups": map[string]any{
+			"camera": map[string]any{"description": "camera control"},
+		},
+		"toolOverrides": map[string]any{
+			"open_camera": map[string]any{
+				"cliName":     "open",
+				"group":       "camera",
+				"description": "open camera",
+				"isSensitive": true,
+				"flags": map[string]any{
+					"device_id": map[string]any{"description": "camera device"},
+				},
+			},
+		},
 	})
 
 	p := &Plugin{
@@ -261,6 +326,16 @@ func TestPluginToServerDescriptors(t *testing.T) {
 	}
 	if d.CLI.ID != "conference" {
 		t.Errorf("cli.id = %q, want conference", d.CLI.ID)
+	}
+	override := d.CLI.ToolOverrides["open_camera"]
+	if d.CLI.Description != "video conference" ||
+		d.CLI.Groups["camera"].Description != "camera control" ||
+		override.CLIName != "open" ||
+		override.Group != "camera" ||
+		override.Description != "open camera" ||
+		!override.IsSensitive ||
+		override.Flags["device_id"].Description != "camera device" {
+		t.Fatalf("CLI overlay command metadata was not preserved: %#v", d.CLI)
 	}
 }
 

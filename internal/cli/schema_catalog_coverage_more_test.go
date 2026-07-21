@@ -194,6 +194,23 @@ func TestCrossPlatformCoverageSchemaCatalogLookupAndConversionEdges(t *testing.T
 	}
 }
 
+func TestEmbeddedSchemaLookupAcceptsCompatibleCLIPathSeparators(t *testing.T) {
+	loaded := embeddedSchemaCatalog()
+	for _, path := range []string{
+		"dev app list",
+		"dev.app.list",
+		"dev/app/list",
+	} {
+		payload, err := schemaPayloadFromLoadedCatalog(loaded, []string{path})
+		if err != nil {
+			t.Fatalf("schemaPayloadFromLoadedCatalog(%q) error = %v", path, err)
+		}
+		if got := schemaString(payload["canonical_path"]); got != "dev.list_dev_app" {
+			t.Fatalf("schemaPayloadFromLoadedCatalog(%q) canonical_path = %q, want %q", path, got, "dev.list_dev_app")
+		}
+	}
+}
+
 type catalogHookSnapshot struct {
 	parameterBindings func(BoundCommandRegistry, SchemaRegistry) error
 	dryRun            func(SchemaRegistry) error

@@ -266,6 +266,26 @@ func TestCrossPlatformCoverageBuildGroupsByService(t *testing.T) {
 	}
 }
 
+func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
+	previous := append([]Shortcut(nil), allShortcuts...)
+	t.Cleanup(func() { allShortcuts = previous })
+	allShortcuts = nil
+	Register(
+		Shortcut{Service: "calendar", Command: "+builtin", Execute: noop},
+		Shortcut{Service: "calendar", Command: "+user", UserDefined: true, Execute: noop},
+	)
+
+	all := Commands()
+	if len(all) != 1 || len(all[0].Commands()) != 2 {
+		t.Fatalf("all shortcut commands = %#v", all)
+	}
+	builtins := BuiltInCommands()
+	if len(builtins) != 1 || len(builtins[0].Commands()) != 1 ||
+		builtins[0].Commands()[0].Name() != "+builtin" {
+		t.Fatalf("built-in shortcut commands = %#v", builtins)
+	}
+}
+
 func noop(_ *RuntimeContext) error { return nil }
 
 func TestCrossPlatformCoverageCallMCPWriteDataRejectsDryRun(t *testing.T) {

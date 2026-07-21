@@ -154,6 +154,35 @@ func TestSelectionExplicitEmptyListSurvivesFinalDelivery(t *testing.T) {
 	}
 }
 
+func TestCompatibleSchemaAliasSeparatorsSurviveFinalDelivery(t *testing.T) {
+	snapshot := schemaDeliveryTestSnapshot(schemaDeliveryTestTool{
+		Canonical: "sample.run",
+		CLIPath:   "sample category run",
+		Aliases:   []string{"sample legacy execute"},
+	})
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := decodeSchemaCatalogSnapshot(encoded)
+	if err != nil {
+		t.Fatalf("decodeSchemaCatalogSnapshot(): %v", err)
+	}
+	canonical, err := schemaPayloadFromLoadedCatalog(loaded, []string{"sample.run"})
+	if err != nil {
+		t.Fatalf("canonical query: %v", err)
+	}
+	for _, path := range []string{"sample legacy execute", "sample.legacy.execute", "sample/legacy/execute"} {
+		alias, aliasErr := schemaPayloadFromLoadedCatalog(loaded, []string{path})
+		if aliasErr != nil {
+			t.Fatalf("alias query %q: %v", path, aliasErr)
+		}
+		if problem := schemaAliasViewProblem(canonical, alias, "sample legacy execute"); problem != "" {
+			t.Fatalf("alias projection for %q: %s", path, problem)
+		}
+	}
+}
+
 func TestValidateSchemaDeliveryInvariantsAllowsOnlyEnvelopeHashes(t *testing.T) {
 	snapshot := schemaDeliveryTestSnapshot(schemaDeliveryTestTool{Canonical: "sample.run", CLIPath: "sample run"})
 	snapshot.SurfaceHash = "sha256:reviewed-command-registry"

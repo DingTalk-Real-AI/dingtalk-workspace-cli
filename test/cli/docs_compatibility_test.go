@@ -28,7 +28,7 @@ func TestDWSDocsCommandTreeCoverage(t *testing.T) {
 		t.Skip("no command paths parsed from docs/dws (directory may not exist)")
 	}
 
-	index := buildCommandIndex(app.NewRootCommand())
+	index := buildCommandIndex(app.NewSchemaSourceRootCommand())
 	missing := make([]string, 0)
 	for _, path := range docPaths {
 		if _, ok := index[path]; ok {
@@ -52,7 +52,7 @@ func TestDWSDocsLocalFlagsCoverage(t *testing.T) {
 	}
 	docLeafSet := leafCommandSet(docPaths)
 
-	index := buildCommandIndex(app.NewRootCommand())
+	index := buildCommandIndex(app.NewSchemaSourceRootCommand())
 	missing := make([]string, 0)
 	fallbackMatched := 0
 	explicitMatched := 0

@@ -56,9 +56,13 @@ var (
 
 // NewLoader creates a Loader with default paths.
 func NewLoader(cliVersion string) *Loader {
-	home, _ := pluginUserHomeDir()
+	configDir := strings.TrimSpace(os.Getenv("DWS_CONFIG_DIR"))
+	if configDir == "" {
+		home, _ := pluginUserHomeDir()
+		configDir = filepath.Join(home, ".dws")
+	}
 	return &Loader{
-		PluginsDir: filepath.Join(home, ".dws", "plugins"),
+		PluginsDir: filepath.Join(configDir, "plugins"),
 		CLIVersion: cliVersion,
 	}
 }

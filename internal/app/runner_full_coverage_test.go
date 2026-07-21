@@ -290,10 +290,12 @@ func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
 
 func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *testing.T) {
 	oldStdioInit := runnerStdioEnsureInitialized
+	oldStdioList := runnerStdioListTools
 	oldStdioCall := runnerStdioCallTool
 	oldEdition := edition.Get()
 	t.Cleanup(func() {
 		runnerStdioEnsureInitialized = oldStdioInit
+		runnerStdioListTools = oldStdioList
 		runnerStdioCallTool = oldStdioCall
 		edition.Override(oldEdition)
 		StopAllStdioClients()
@@ -309,6 +311,14 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 		t.Fatalf("stdio initialize error = %v", err)
 	}
 	runnerStdioEnsureInitialized = func(*transport.StdioClient, context.Context) error { return nil }
+	runnerStdioListTools = func(*transport.StdioClient, context.Context) (transport.ToolsListResult, error) {
+		return transport.ToolsListResult{
+			Tools: []transport.ToolDescriptor{{
+				Name:        "tool",
+				InputSchema: map[string]any{"type": "object"},
+			}},
+		}, nil
+	}
 	runnerStdioCallTool = func(*transport.StdioClient, context.Context, string, map[string]any) (transport.ToolCallResult, error) {
 		return transport.ToolCallResult{}, wantErr
 	}
@@ -326,6 +336,16 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 	}
 	if got, err := r.executeStdioInvocation(context.Background(), inv); err != nil || !got.Invocation.Implemented {
 		t.Fatalf("stdio success = %#v, %v", got, err)
+	}
+	RegisterStdioClient("plugin/server-key", client)
+	overlayIDInvocation := inv
+	overlayIDInvocation.CanonicalProduct = "overlay-id"
+	if got, err := r.executeInvocation(
+		context.Background(),
+		"stdio://plugin/server-key",
+		overlayIDInvocation,
+	); err != nil || !got.Invocation.Implemented {
+		t.Fatalf("stdio endpoint-key lookup = %#v, %v", got, err)
 	}
 
 	r.globalFlags.Token = " explicit "
