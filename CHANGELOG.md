@@ -6,6 +6,19 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.54] - 2026-07-21
+
+This release promotes the validated `v1.0.54-beta.1` baseline to stable. It restores the default transport envelope for personal event output with opt-in flattening, plus Schema CLI path and plugin overlay compatibility fixes.
+
+### Changed
+
+- **Personal event output compatibility** (#743) — `event consume` once again preserves the transport envelope by default for `ndjson`/`json`/`pretty`, while retaining the existing `compact` processor. New Agent workflows opt into the event-specific top-level DTO with `--flatten`, which is mutually exclusive with `-f raw` and `--debug-raw-events`; `event schema --flatten` describes that DTO, while the default schema describes `type/event_type/data/headers` and points to `.data | fromjson`.
+
+### Fixed
+
+- **Schema CLI path compatibility** (#738) — user-facing Schema lookups once again accept space-, dot-, and slash-separated CLI paths without weakening strict canonical identity resolution.
+- **Plugin CLI overlays** (#701) — installed plugins register their manifest-authored command trees again for HTTP and stdio servers, and a plugin may now replace a hidden compatibility fallback (for example `conference`) instead of being skipped as a distribution conflict.
+
 ## [1.0.54-beta.1] - 2026-07-21
 
 This beta validates the restored default transport envelope for personal event output with opt-in flattening, plus Schema CLI path and plugin overlay compatibility fixes, on top of the validated `v1.0.53-beta.7` baseline.
