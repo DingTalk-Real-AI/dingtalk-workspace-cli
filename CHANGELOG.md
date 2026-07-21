@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **Schema CLI path compatibility** — user-facing Schema lookups once again accept space-, dot-, and slash-separated CLI paths without weakening strict canonical identity resolution.
+
 ## [1.0.53] - 2026-07-21
 
 This release promotes the validated `v1.0.53-beta.7` baseline to stable. It adds enterprise onboarding, declarative shortcuts, Sheet/Aitable writes, multi-account profiles, and broader personal IM events, while hardening authentication and the guarded release path.

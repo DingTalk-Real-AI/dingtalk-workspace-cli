@@ -290,7 +290,7 @@ func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (
 		return payload, nil
 	}
 	raw := strings.TrimSpace(args[0])
-	if tool, ok := loaded.Index.Resolve(raw); ok {
+	if tool, ok := loaded.Index.ResolveQuery(raw); ok {
 		return schemaToolForResolvedPath(tool, raw).ToPayload()
 	}
 	tokens := splitSchemaPathTokens(raw)
