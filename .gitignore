@@ -54,3 +54,5 @@ test/dev_functional/results.jsonl
 /coverage-policy.txt
 /coverage.html
 dwsbin
+# stray compiled generator binary (source lives in internal/generator/cmd_param_aliases/)
+/cmd_param_aliases
