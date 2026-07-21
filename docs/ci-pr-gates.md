@@ -1,4 +1,4 @@
-# Code Admission — PR 合入门禁
+# CI — PR 合入门禁
 
 The pull-request admission layer has exactly nine required external contexts:
 
@@ -6,7 +6,7 @@ The pull-request admission layer has exactly nine required external contexts:
 |---|---|
 | `Lint` | Stable PR revision classification, formatting, `go vet`, and Actionlint |
 | `Test` | Race/unit/release-script tests plus fast cross-platform compilation |
-| `Coverage` | Overall non-regression and changed-code coverage |
+| `Coverage` | Overall non-regression and 100% changed-code coverage |
 | `Policy` | Repository policy and the fail-closed CHANGELOG contract |
 | `Edition` | Edition contract tests |
 | `Interface Integrity` | CLI, Schema, Skill, and stable-release compatibility |
@@ -14,7 +14,7 @@ The pull-request admission layer has exactly nine required external contexts:
 | `CLI Smoke` | Offline help for every public top-level command |
 | `Mock MCP` | HTTP and stdio MCP lifecycle smoke tests |
 
-The workflow display name is `Code Admission — PR 合入门禁`. Parallel helper
+The workflow display name is `CI`. Parallel helper
 jobs may implement `Test` and `Coverage`, but they are not ruleset contexts.
 Do not require an aggregate alias or a downstream integration check in place of
 the nine contracts above.
@@ -81,7 +81,7 @@ successful PR check.
 
 ```mermaid
 flowchart TB
-  PR["Pull request"] --> ADMISSION["Code Admission — PR 合入门禁"]
+  PR["Pull request"] --> ADMISSION["CI"]
   ADMISSION --> L["Lint"]
   ADMISSION --> T["Test"]
   ADMISSION --> C["Coverage"]
@@ -122,7 +122,13 @@ base_ref=$(git merge-base HEAD origin/main)
 
 `make coverage-gate` is an enforcement step, not a profile generator. CI
 generates the candidate, supporting, merge-base, and (when risk-selected)
-native profiles before the aggregate `Coverage` context evaluates them.
+native profiles before the aggregate `Coverage` context evaluates them. The
+aggregate and native gates require 100% coverage for changed executable Go
+statements. Overall coverage remains an unrounded, zero-tolerance merge-base
+non-regression check. Candidate and baseline profiles are evaluated by the
+same block-deduplicating checker; supporting policy and shortcut profiles
+contribute to changed-code coverage only. The checked-in badge is presentation
+only and is never read as a gate input.
 
 Compatibility checks derive authoritative Interface snapshots from the PR
 merge-base and the latest reachable stable release. The candidate cannot bless

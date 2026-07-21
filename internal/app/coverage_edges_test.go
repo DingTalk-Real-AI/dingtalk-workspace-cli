@@ -554,7 +554,7 @@ func TestCrossPlatformCoverageRecoveryRuntimeHTTP(t *testing.T) {
 	defer server.Close()
 	SetDynamicServers([]mcptypes.ServerDescriptor{{Endpoint: server.URL, CLI: mcptypes.CLIOverlay{ID: "devdoc", Tools: []mcptypes.CLITool{{Name: "search_open_platform_docs_rag"}}}}})
 	t.Cleanup(func() { SetDynamicServers(nil) })
-	runtime := &recoveryRuntime{transport: transport.NewClient(server.Client())}
+	runtime := &recoveryRuntime{transport: transport.NewClient(server.Client()), flags: &GlobalFlags{Token: "token"}}
 	got, err := runtime.Search(context.Background(), "query", recovery.RecoveryContext{ToolName: "search"})
 	if err != nil || got.DocSearch.Status != "success" || len(got.KBHits) == 0 {
 		t.Fatalf("recovery search = %#v %v", got, err)
@@ -1650,6 +1650,8 @@ func TestCrossPlatformCoveragePersonalSubscriptionAndSourceCoverage(t *testing.T
 }
 
 func TestCrossPlatformCoveragePersonalEventCommandRuntimeCoverage(t *testing.T) {
+	authpkg.SetRuntimeProfile("")
+	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
 	configDir := setupPersonalIdentityToken(t, &authpkg.TokenData{
 		AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour),
 		CorpID: "corp", UserID: "user", ClientID: "client",

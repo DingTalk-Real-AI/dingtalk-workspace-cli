@@ -8,8 +8,6 @@ import (
 )
 
 func TestRootHelpHidesRecoveredModules(t *testing.T) {
-	t.Parallel()
-
 	cmd := app.NewRootCommand()
 	var out strings.Builder
 	cmd.SetOut(&out)

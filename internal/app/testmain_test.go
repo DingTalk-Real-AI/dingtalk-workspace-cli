@@ -52,6 +52,10 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(tmpDir)
 		panic("set " + keychain.StorageDirEnv + ": " + err.Error())
 	}
+	if err := os.Setenv(keychain.TestNamespaceEnv, tmpDir); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		panic("set " + keychain.TestNamespaceEnv + ": " + err.Error())
+	}
 	if err := os.Setenv("DWS_CONFIG_DIR", filepath.Join(tmpDir, "config")); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		panic("set DWS_CONFIG_DIR: " + err.Error())
@@ -79,6 +83,12 @@ func TestMain(m *testing.M) {
 	StopAllStdioClients()
 	CloseAuditSink()
 	CloseFileLogger()
+	if err := keychain.RemoveAuthTokenEntries(keychain.Service); err != nil {
+		fmt.Fprintf(os.Stderr, "internal/app keychain cleanup: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
 	if err := os.RemoveAll(tmpDir); err != nil {
 		fmt.Fprintf(os.Stderr, "internal/app test cleanup %s: %v\n", tmpDir, err)
 		if code == 0 {

@@ -108,6 +108,22 @@ commit, and failed tag-push run all match; it then reuses the normal release
 jobs. Do not put publication secrets in temporary branches or create ad-hoc
 recovery workflows.
 
+If the immutable GitHub Release and npm package were delivered but a downstream
+China mirror failed, dispatch the normal `Release` workflow from the protected
+default branch with exactly one of `repair_gitee_version` or
+`repair_oss_version`. Channel repair accepts a failed exact-tag run only when
+its latest attempt completed the release contract, build, Apple signature,
+immutable GitHub publication, and npm delivery checks for the exact tagged
+commit. It then downloads and re-verifies the immutable assets before invoking
+only the selected mirror. An OSS repair requires the OSS step itself to be the
+recorded failure. A Gitee repair accepts either a failed Gitee job or a Gitee
+job that was skipped behind that OSS failure; the latter is an explicit Gitee
+backfill and does not claim that OSS has been repaired. Gitee repair requires
+`GITEE_TOKEN`, `GITEE_USER`, and `GITEE_REPO`; OSS repair requires
+`OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_ENDPOINT`, and `OSS_BUCKET`
+(with optional `OSS_PREFIX`) as Actions secrets. Missing credentials fail the
+selected repair closed.
+
 ## Handoff Checklist
 
 Before handoff, include:

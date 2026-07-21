@@ -17,11 +17,36 @@ package keychain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
+
+func TestCrossPlatformCoverageRegistryPathForServiceHonorsTestNamespace(t *testing.T) {
+	t.Setenv(TestNamespaceEnv, "")
+	defaultPath := registryPathForService("service")
+	if defaultPath != regRootPath+`\service` {
+		t.Fatalf("default registry path = %q, want historical path %q", defaultPath, regRootPath+`\service`)
+	}
+
+	t.Setenv(TestNamespaceEnv, t.TempDir())
+	firstPath := registryPathForService("service")
+
+	t.Setenv(TestNamespaceEnv, t.TempDir())
+	secondPath := registryPathForService("service")
+
+	if firstPath == defaultPath || secondPath == defaultPath {
+		t.Fatalf("isolated registry paths = %q, %q; want paths distinct from %q", firstPath, secondPath, defaultPath)
+	}
+	if firstPath == secondPath {
+		t.Fatalf("isolated registry paths collide: %q", firstPath)
+	}
+	if !strings.HasPrefix(firstPath, defaultPath+`\test-`) {
+		t.Fatalf("isolated registry path = %q, want prefix %q", firstPath, defaultPath+`\test-`)
+	}
+}
 
 func TestDeleteRegistryValuePropagatesFailure(t *testing.T) {
 	originalDelete := registryDeleteValue

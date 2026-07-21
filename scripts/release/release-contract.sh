@@ -91,7 +91,13 @@ if [ "$CONTEXT" = "local" ]; then
     printf 'release tag already exists locally: %s\n' "$VERSION" >&2
     exit 1
   fi
-  remote_tag="$(git ls-remote --tags "$REMOTE" "refs/tags/$VERSION" "refs/tags/$VERSION^{}")" || {
+  if git rev-parse --verify --quiet "refs/tags/withdrawn/$VERSION" >/dev/null; then
+    printf 'release version was withdrawn and can never be reused: %s\n' "$VERSION" >&2
+    exit 1
+  fi
+  remote_tag="$(git ls-remote --tags "$REMOTE" \
+    "refs/tags/$VERSION" "refs/tags/$VERSION^{}" \
+    "refs/tags/withdrawn/$VERSION" "refs/tags/withdrawn/$VERSION^{}")" || {
     printf 'could not query release tags from remote: %s\n' "$REMOTE" >&2
     exit 1
   }
@@ -100,6 +106,10 @@ if [ "$CONTEXT" = "local" ]; then
     exit 1
   }
 else
+  if git rev-parse --verify --quiet "refs/tags/withdrawn/$VERSION" >/dev/null; then
+    printf 'release version was withdrawn and can never be reused: %s\n' "$VERSION" >&2
+    exit 1
+  fi
   git rev-parse --verify --quiet "refs/tags/$VERSION^{commit}" >/dev/null || {
     printf 'CI release tag is not available: %s\n' "$VERSION" >&2
     exit 1
@@ -120,32 +130,58 @@ fi
 
 previous_stable=""
 previous_stable_commit=""
-for tag in $(git tag --list 'v*' --sort=-version:refname); do
+latest_allocated_stable=""
+for tag_ref in $(git for-each-ref --format='%(refname)' refs/tags); do
+  case "$tag_ref" in
+    refs/tags/withdrawn/*) tag="${tag_ref#refs/tags/withdrawn/}" ;;
+    refs/tags/*) tag="${tag_ref#refs/tags/}" ;;
+    *) continue ;;
+  esac
   [ "$tag" = "$VERSION" ] && continue
-  if release_is_stable_version "$tag"; then
-    previous_stable="$tag"
-    previous_stable_commit="$(git rev-parse "$tag^{commit}")"
-    break
+  release_is_stable_version "$tag" || continue
+  if [ -z "$latest_allocated_stable" ] ||
+    release_core_is_greater "$tag" "$latest_allocated_stable"; then
+    latest_allocated_stable="$tag"
   fi
 done
-if [ -n "$previous_stable" ] && ! release_core_is_greater "$VERSION" "$previous_stable"; then
-  printf 'release version %s must be greater than latest stable %s\n' "$VERSION" "$previous_stable" >&2
+if [ -n "$latest_allocated_stable" ] &&
+  ! release_core_is_greater "$VERSION" "$latest_allocated_stable"; then
+  printf 'release version %s must be greater than latest allocated stable %s\n' \
+    "$VERSION" "$latest_allocated_stable" >&2
   exit 1
 fi
+
+for tag in $(git tag --list 'v*' --sort=-version:refname); do
+  [ "$tag" = "$VERSION" ] && continue
+  release_is_stable_version "$tag" || continue
+  if git rev-parse --verify --quiet "refs/tags/withdrawn/$tag" >/dev/null; then
+    continue
+  fi
+  previous_stable="$tag"
+  previous_stable_commit="$(git rev-parse "$tag^{commit}")"
+  break
+done
 
 core_tag="$(release_core_tag "$VERSION")"
 if [ "$CHANNEL" = "prerelease" ]; then
   [ -z "$FROM_BETA" ] || { printf -- '--from-beta is only valid for stable releases\n' >&2; exit 1; }
-  if git rev-parse --verify --quiet "refs/tags/$core_tag" >/dev/null; then
+  if git rev-parse --verify --quiet "refs/tags/$core_tag" >/dev/null ||
+    git rev-parse --verify --quiet "refs/tags/withdrawn/$core_tag" >/dev/null; then
     printf 'cannot publish prerelease after stable tag exists: %s\n' "$core_tag" >&2
     exit 1
   fi
   previous_beta=""
-  for tag in $(git tag --list "$core_tag-beta.*" --sort=-version:refname); do
+  for tag_ref in $(git for-each-ref --format='%(refname)' \
+    "refs/tags/$core_tag-beta.*" "refs/tags/withdrawn/$core_tag-beta.*"); do
+    case "$tag_ref" in
+      refs/tags/withdrawn/*) tag="${tag_ref#refs/tags/withdrawn/}" ;;
+      refs/tags/*) tag="${tag_ref#refs/tags/}" ;;
+      *) continue ;;
+    esac
     [ "$tag" = "$VERSION" ] && continue
-    if release_is_prerelease_version "$tag"; then
+    release_is_prerelease_version "$tag" || continue
+    if [ -z "$previous_beta" ] || release_version_is_greater "$tag" "$previous_beta"; then
       previous_beta="$tag"
-      break
     fi
   done
   beta_number="$(release_beta_number "$VERSION")"
@@ -178,6 +214,10 @@ else
     printf 'stable version %s does not match beta baseline %s\n' "$VERSION" "$FROM_BETA" >&2
     exit 1
   }
+  if git rev-parse --verify --quiet "refs/tags/withdrawn/$FROM_BETA" >/dev/null; then
+    printf 'stable beta baseline was withdrawn: %s\n' "$FROM_BETA" >&2
+    exit 1
+  fi
   git rev-parse --verify --quiet "refs/tags/$FROM_BETA^{commit}" >/dev/null || {
     printf 'stable beta baseline is not available locally: %s\n' "$FROM_BETA" >&2
     exit 1

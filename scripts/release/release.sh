@@ -288,8 +288,12 @@ build_policy_binary() {
 }
 
 fetch_release_tags() {
-  git fetch --force "$REMOTE" '+refs/tags/v*:refs/tags/v*'
-  git fetch --force --no-tags "$OFFICIAL_TAGS_URL" '+refs/tags/v*:refs/tags/v*'
+  git fetch --force "$REMOTE" \
+    '+refs/tags/v*:refs/tags/v*' \
+    '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
+  git fetch --force --no-tags "$OFFICIAL_TAGS_URL" \
+    '+refs/tags/v*:refs/tags/v*' \
+    '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 }
 
 printf '==> Refreshing %s/%s and release tags\n' "$REMOTE" "$BRANCH"

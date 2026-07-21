@@ -52,7 +52,7 @@ run.
 
 ```mermaid
 flowchart TB
-  PR["Pull request"] --> CA["Code Admission — PR 合入门禁"]
+  PR["Pull request"] --> CA["CI"]
   subgraph CA_CHECKS["Nine required contexts"]
     L["Lint"]
     T["Test"]

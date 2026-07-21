@@ -11,6 +11,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 - **Wukong Drive and Sheet command parity** — adds Drive permission application and owner transfer, Drive document favorites, Sheet formula verification, and Sheet version save/list/revert commands. The new commands ship with reviewed Agent Schema, mono/multi Skill guidance, local validation and dangerous-operation guards; Aitable field/view/record writes also gain clearer runtime validation and recovery guidance.
 - **Unified asynchronous task flows** — adds `drive task get`, async submission modes for Doc export/import and Sheet export, and normalized task-result queries including `sheet export get`, while keeping existing synchronous behavior as the default.
 
+## [1.0.53-beta.5] - 2026-07-21
+
+This beta validates long-running access-token recovery and the faster, recoverable guarded release path introduced after v1.0.53-beta.4.
+
 ### Changed
 
 - **Fast guarded beta and stable releases** — successful local release checks now leave a six-hour proof bound to the exact version, commit, repository identity, remote `main`, and stable baseline, so the subsequent guarded `--publish` invocation revalidates authority without repeating tests and packaging. A default-branch governance smoke uses the same dedicated immutable-release credential as the tag workflow before any tag is allocated.
@@ -18,6 +22,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Fixed
 
+- **Long-running event authentication recovery** — personal and portal event streams resolve the current access token for every ticket request, refresh a server-rejected token with compare-and-refresh semantics, and reconnect with backoff when refresh is temporarily blocked by network failures, rate limits, or 5xx responses.
+- **Consistent access-token caching and errors** — runtime, recovery, Skill, PAT polling, and personal/portal event clients now resolve user access tokens through one expiry- and publication-aware manager, so long-running processes reload rotated credentials while keychain, refresh, parse, permission, and cancellation failures remain observable instead of being collapsed into “not authenticated.”
 - **Tag-push GitHub Release publication** — Draft publication now locks one GitHub Release database ID, verifies its exact tag, channel, notes, recovery marker, asset set, and uploaded bytes, then publishes and rechecks that same ID as immutable. Recovery runs use the trusted default-branch release helpers instead of the sealed tag's historical scripts, fixing the Draft-only `GET /releases/tags/{tag}` 404 without allowing the release identity to drift during recovery.
 - **Release preflight reliability** — source-mode installer tests now use isolated temporary checkouts and HOME directories instead of overwriting and deleting the real repository `dws` binary, release preflight explicitly rebuilds before policy checks, and the full-suite runner gives the growing script package a non-flaky five-minute per-suite budget.
 

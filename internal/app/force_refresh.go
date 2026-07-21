@@ -27,9 +27,13 @@ type accessTokenGetter interface {
 	GetAccessToken(context.Context) (string, error)
 }
 
+type rejectedAccessTokenRefresher interface {
+	ForceRefreshRejectedToken(context.Context, string) (string, error)
+}
+
 var (
-	markAccessTokenStale = authpkg.MarkAccessTokenStale
-	newRefreshProvider   = func(configDir string) accessTokenGetter {
+	loadRefreshTokenData = authpkg.LoadTokenData
+	newRefreshProvider   = func(configDir string) rejectedAccessTokenRefresher {
 		disc := slog.New(slog.NewTextHandler(io.Discard, nil))
 		provider := authpkg.NewOAuthProvider(configDir, disc)
 		configureOAuthProviderCompatibility(provider, configDir)
@@ -42,26 +46,33 @@ var (
 // server-side rejection (HTTP 401 or business code such as
 // TOKEN_VERIFIED_FAILED) on what locally appeared to be a still-valid token.
 //
-// Steps:
-//  1. MarkAccessTokenStale rewrites ExpiresAt to a past instant so
-//     OAuthProvider.GetAccessToken's fast-path will miss.
-//  2. NewOAuthProvider + GetAccessToken triggers lockedRefresh, which uses the
-//     existing dual-layer lock (process + file) to serialize concurrent
-//     refresh attempts across goroutines and processes.
-//  3. ResetRuntimeTokenCache clears the per-process sync.Once cache so the
-//     next resolveAuthToken call re-reads from disk.
-//
-// Existing OAuthProvider.GetAccessToken behaviour is unchanged; this helper
-// is the only entry point that orchestrates "force refresh" semantics.
+// It snapshots the current access token, then delegates to the OAuth
+// provider's dual-locked compare-and-refresh operation. If another caller has
+// already rotated the token, that newer token is reused without another
+// refresh request.
 func ForceRefreshAccessToken(ctx context.Context, configDir string) (string, error) {
 	if strings.TrimSpace(configDir) == "" {
 		return "", fmt.Errorf("config directory is empty")
 	}
-	if err := markAccessTokenStale(configDir); err != nil {
-		return "", fmt.Errorf("mark access token stale: %w", err)
+	data, err := loadRefreshTokenData(configDir)
+	if err != nil {
+		return "", err
+	}
+	if data == nil || strings.TrimSpace(data.AccessToken) == "" {
+		return "", fmt.Errorf("stored access token is empty")
+	}
+	return forceRefreshRejectedAccessToken(ctx, configDir, data.AccessToken)
+}
+
+func forceRefreshRejectedAccessToken(ctx context.Context, configDir, rejectedAccessToken string) (string, error) {
+	if strings.TrimSpace(configDir) == "" {
+		return "", fmt.Errorf("config directory is empty")
+	}
+	if strings.TrimSpace(rejectedAccessToken) == "" {
+		return "", fmt.Errorf("rejected access token is empty")
 	}
 	provider := newRefreshProvider(configDir)
-	tok, err := provider.GetAccessToken(ctx)
+	tok, err := provider.ForceRefreshRejectedToken(ctx, rejectedAccessToken)
 	if err != nil {
 		return "", err
 	}

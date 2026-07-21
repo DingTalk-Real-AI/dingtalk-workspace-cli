@@ -722,6 +722,6 @@ func isInvalidGrantError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(err.Error() + " " + httpStatusResponseBody(err))
 	return strings.Contains(msg, "invalid_grant") || (strings.Contains(msg, "code") && strings.Contains(msg, "expired"))
 }

@@ -20,8 +20,6 @@ type docsFlagCase struct {
 }
 
 func TestDWSDocsCommandTreeCoverage(t *testing.T) {
-	t.Parallel()
-
 	docPaths, _, err := parseDWSDocsCompatibility()
 	if err != nil {
 		t.Fatalf("parseDWSDocsCompatibility() error = %v", err)
@@ -45,8 +43,6 @@ func TestDWSDocsCommandTreeCoverage(t *testing.T) {
 }
 
 func TestDWSDocsLocalFlagsCoverage(t *testing.T) {
-	t.Parallel()
-
 	docPaths, docFlags, err := parseDWSDocsCompatibility()
 	if err != nil {
 		t.Fatalf("parseDWSDocsCompatibility() error = %v", err)

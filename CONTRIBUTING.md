@@ -36,8 +36,8 @@ Common repository checks already used here include:
 ./scripts/policy/check-open-source-assets.sh
 go test ./...
 make test
+make test-plan
 make lint
-bash test/scripts/run_all_tests.sh --jobs 8
 ./scripts/policy/check-generated-drift.sh
 ./scripts/policy/check-command-surface.sh --strict
 ./scripts/release/verify-package-managers.sh

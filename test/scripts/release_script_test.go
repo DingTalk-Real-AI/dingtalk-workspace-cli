@@ -141,6 +141,136 @@ func TestReleaseVersionOrdering(t *testing.T) {
 	}
 }
 
+func TestNextReleaseVersion(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	script := filepath.Join(sourceRoot, "scripts", "release", "next-release-version.sh")
+
+	newRepo := func(t *testing.T, tags ...string) string {
+		t.Helper()
+		root := t.TempDir()
+		mustRun(t, root, "git", "init", "-b", "main")
+		mustRun(t, root, "git", "config", "user.name", "Release Test")
+		mustRun(t, root, "git", "config", "user.email", "release-test@example.com")
+		mustWriteFile(t, filepath.Join(root, "seed.txt"), []byte("release allocator\n"), 0o644)
+		mustRun(t, root, "git", "add", "seed.txt")
+		mustRun(t, root, "git", "commit", "-m", "seed")
+		for _, tag := range tags {
+			mustRun(t, root, "git", "tag", "-a", tag, "-m", "Allocate "+tag)
+		}
+		return root
+	}
+	run := func(t *testing.T, root string, args ...string) (string, error) {
+		t.Helper()
+		commandArgs := append([]string{script, "--repo-root", root}, args...)
+		output, err := exec.Command("sh", commandArgs...).CombinedOutput()
+		return string(output), err
+	}
+
+	t.Run("continues highest open beta core", func(t *testing.T) {
+		root := newRepo(t,
+			"v1.0.52",
+			"v1.0.53-beta.1",
+			"v1.0.53-beta.2",
+			"v1.0.53-beta.3",
+			"v1.0.53-beta.4",
+		)
+		output, err := run(t, root, "--channel", "beta")
+		if err != nil {
+			t.Fatalf("next beta error = %v\noutput:\n%s", err, output)
+		}
+		want := "release_version=v1.0.53-beta.5\nfrom_beta=\nchannel=prerelease\nbase=v1.0.52\n"
+		if output != want {
+			t.Fatalf("next beta output:\ngot:\n%s\nwant:\n%s", output, want)
+		}
+	})
+
+	t.Run("withdrawn beta remains allocated", func(t *testing.T) {
+		root := newRepo(t,
+			"v1.0.52",
+			"v1.0.53-beta.4",
+			"withdrawn/v1.0.53-beta.5",
+		)
+		output, err := run(t, root, "--channel", "prerelease")
+		if err != nil {
+			t.Fatalf("next beta after withdrawal error = %v\noutput:\n%s", err, output)
+		}
+		if !strings.Contains(output, "release_version=v1.0.53-beta.6\n") {
+			t.Fatalf("withdrawn beta version was reused:\n%s", output)
+		}
+	})
+
+	t.Run("starts requested bumped beta core", func(t *testing.T) {
+		tests := []struct {
+			bump string
+			want string
+		}{
+			{bump: "patch", want: "v1.2.4-beta.1"},
+			{bump: "minor", want: "v1.3.0-beta.1"},
+			{bump: "major", want: "v2.0.0-beta.1"},
+		}
+		for _, test := range tests {
+			t.Run(test.bump, func(t *testing.T) {
+				root := newRepo(t, "v1.2.3")
+				output, err := run(t, root, "--channel", "beta", "--bump", test.bump)
+				if err != nil {
+					t.Fatalf("new beta line error = %v\noutput:\n%s", err, output)
+				}
+				if !strings.Contains(output, "release_version="+test.want+"\n") {
+					t.Fatalf("new beta line output:\n%s", output)
+				}
+			})
+		}
+	})
+
+	t.Run("promotes latest beta from highest open core", func(t *testing.T) {
+		root := newRepo(t,
+			"v1.0.0",
+			"v1.1.0-beta.3",
+			"v1.2.0-beta.1",
+			"v1.2.0-beta.2",
+		)
+		output, err := run(t, root, "--channel", "stable")
+		if err != nil {
+			t.Fatalf("stable allocation error = %v\noutput:\n%s", err, output)
+		}
+		want := "release_version=v1.2.0\nfrom_beta=v1.2.0-beta.2\nchannel=stable\nbase=v1.0.0\n"
+		if output != want {
+			t.Fatalf("stable allocation output:\ngot:\n%s\nwant:\n%s", output, want)
+		}
+	})
+
+	t.Run("withdrawn stable closes its core", func(t *testing.T) {
+		root := newRepo(t,
+			"v1.0.0",
+			"v1.0.1-beta.1",
+			"withdrawn/v1.0.1",
+		)
+		output, err := run(t, root, "--channel", "beta")
+		if err != nil {
+			t.Fatalf("beta after withdrawn stable error = %v\noutput:\n%s", err, output)
+		}
+		want := "release_version=v1.0.2-beta.1\nfrom_beta=\nchannel=prerelease\nbase=v1.0.1\n"
+		if output != want {
+			t.Fatalf("withdrawn stable allocation output:\ngot:\n%s\nwant:\n%s", output, want)
+		}
+	})
+
+	t.Run("withdrawn latest beta cannot be promoted", func(t *testing.T) {
+		root := newRepo(t,
+			"v1.0.0",
+			"v1.0.1-beta.1",
+			"withdrawn/v1.0.1-beta.2",
+		)
+		output, err := run(t, root, "--channel", "stable")
+		if err == nil || !strings.Contains(output, "latest beta v1.0.1-beta.2 is withdrawn") {
+			t.Fatalf("withdrawn beta promotion was not rejected: err=%v\noutput:\n%s", err, output)
+		}
+	})
+}
+
 func TestReleaseLibHelpersPreserveCallerVariables(t *testing.T) {
 	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -674,6 +804,425 @@ esac
 	}
 }
 
+func TestReleaseWorkflowDeliveryAcceptsOnlyTagBoundCloudRelease(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	fakeCurl := filepath.Join(binDir, "curl")
+	mustWriteFile(t, fakeCurl, []byte(`#!/bin/sh
+set -eu
+for argument in "$@"; do endpoint="$argument"; done
+case "$endpoint" in
+  *event=push*)
+    printf '{"workflow_runs":[]}\n'
+    ;;
+  */git/ref/tags/*)
+    printf '{"object":{"type":"tag","sha":"%s"}}\n' "$TAG_OBJECT"
+    ;;
+  */git/tags/*)
+    python3 - <<'PY'
+import json
+import os
+
+message = "\n".join([
+    f"Release {os.environ['TAG']}",
+    "",
+    "Channel: prerelease",
+    "Release-Run: 42",
+    "Release-Run-Attempt: 1",
+    "Requested-By: release-user",
+    "Requested-By-ID: 1234",
+    f"Sealed-Commit: {os.environ['RELEASE_COMMIT']}",
+    f"Workflow-Commit: {os.environ['RELEASE_COMMIT']}",
+    f"Allocation-Fingerprint: {'d' * 64}",
+])
+print(json.dumps({
+    "tag": os.environ["TAG"],
+    "message": message,
+    "object": {"type": "commit", "sha": os.environ["RELEASE_COMMIT"]},
+}))
+PY
+    ;;
+  */actions/runs/42/attempts/1/jobs*)
+    python3 - <<'PY'
+import json
+import os
+
+required = [
+    "Plan next cloud release",
+    "Seal cloud release tag",
+    "release-contract",
+    "Build signed release artifacts",
+    "Verify Apple Developer ID signatures",
+    "Publish immutable GitHub Release",
+    "Publish npm and mirrors",
+    "Release delivery gate",
+]
+if os.environ.get("MISSING_SEAL") == "1":
+    required.remove("Seal cloud release tag")
+jobs = []
+for name in required:
+    job = {
+        "name": name,
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": os.environ["RELEASE_COMMIT"],
+        "steps": [],
+    }
+    if name == "Seal cloud release tag":
+        job["steps"] = [{
+            "name": "Create one immutable annotated release tag",
+            "status": "completed",
+            "conclusion": "success",
+        }]
+    elif name == "Publish immutable GitHub Release":
+        job["steps"] = [{
+            "name": "Require immutable published GitHub Release",
+            "status": "completed",
+            "conclusion": "success",
+        }]
+        if os.environ.get("PUBLISH_RELEASE_FAILURE") == "1":
+            job["conclusion"] = "failure"
+    elif name == "Publish npm and mirrors":
+        job["conclusion"] = os.environ.get("CHANNEL_CONCLUSION", "success")
+    jobs.append(job)
+print(json.dumps({"jobs": jobs}))
+PY
+    ;;
+  */actions/runs/42/attempts/1)
+    python3 - <<'PY'
+import json
+import os
+print(json.dumps({
+    "id": 42,
+    "run_attempt": 1,
+    "repository": {"full_name": "owner/repo"},
+    "path": ".github/workflows/release.yml",
+    "event": "workflow_dispatch",
+    "status": "completed",
+    "conclusion": os.environ.get("RUN_CONCLUSION", "success"),
+    "head_branch": "main",
+    "head_sha": os.environ["RELEASE_COMMIT"],
+    "actor": {
+        "login": os.environ.get("RUN_ACTOR", "release-user"),
+        "id": int(os.environ.get("RUN_ACTOR_ID", "1234")),
+    },
+}))
+PY
+    ;;
+  *event=workflow_dispatch*)
+    printf '{"workflow_runs":[]}\n'
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-release-workflow-delivery.sh")
+	tag := "v1.2.3-beta.1"
+	commit := strings.Repeat("a", 40)
+	tagObject := strings.Repeat("b", 40)
+	runWithArgs := func(arguments []string, overrides ...string) (string, error) {
+		cmd := exec.Command("sh", script, tag, commit)
+		cmd.Args = append([]string{"sh", script}, arguments...)
+		cmd.Env = append([]string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"DWS_RELEASE_OFFICIAL_REPOSITORY=owner/repo",
+			"TAG=" + tag,
+			"TAG_OBJECT=" + tagObject,
+			"RELEASE_COMMIT=" + commit,
+		}, overrides...)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+	run := func(overrides ...string) (string, error) {
+		return runWithArgs([]string{tag, commit}, overrides...)
+	}
+
+	if output, err := run(); err != nil || !strings.Contains(output, "cloud release run 42") {
+		t.Fatalf("tag-bound cloud delivery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run("RUN_ACTOR=renamed-release-user"); err != nil ||
+		!strings.Contains(output, "cloud release run 42") {
+		t.Fatalf("cloud delivery broke after a harmless login rename: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run("RUN_ACTOR_ID=9999"); err == nil ||
+		!strings.Contains(output, "did not deliver") {
+		t.Fatalf("cloud delivery with the wrong stable actor ID passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run("MISSING_SEAL=1"); err == nil ||
+		!strings.Contains(output, "did not deliver") {
+		t.Fatalf("cloud delivery without the seal job passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := runWithArgs(
+		[]string{"--npm-repair", tag, commit},
+		"RUN_CONCLUSION=failure",
+		"CHANNEL_CONCLUSION=failure",
+	); err != nil || !strings.Contains(output, "npm-repair authority verified") {
+		t.Fatalf("npm repair could not use a sealed immutable release after npm failure: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := runWithArgs(
+		[]string{"--npm-repair", tag, commit},
+		"RUN_CONCLUSION=failure",
+		"CHANNEL_CONCLUSION=failure",
+		"PUBLISH_RELEASE_FAILURE=1",
+	); err == nil || strings.Contains(output, "npm-repair authority verified") {
+		t.Fatalf("npm repair accepted a failed immutable GitHub publication: err=%v\noutput:\n%s", err, output)
+	}
+}
+
+func TestReleaseWorkflowDeliveryChannelRepairRequiresLatestAttemptCoreDelivery(t *testing.T) {
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	binDir := t.TempDir()
+	fakeCurl := filepath.Join(binDir, "curl")
+	mustWriteFile(t, fakeCurl, []byte(`#!/bin/sh
+set -eu
+for argument in "$@"; do endpoint="$argument"; done
+case "$endpoint" in
+  *event=push*)
+    python3 - <<'PY'
+import json
+import os
+run = {
+    "id": 77,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "failure",
+    "head_branch": os.environ["TAG"],
+    "head_sha": os.environ["RELEASE_COMMIT"],
+    "path": os.environ.get("RUN_PATH", ".github/workflows/release.yml"),
+    "repository": {"full_name": os.environ.get("RUN_REPOSITORY", "owner/repo")},
+    "run_attempt": int(os.environ.get("RUN_ATTEMPT", "2")),
+}
+runs = [run]
+if os.environ.get("DUPLICATE_RUN") == "1":
+    duplicate = dict(run)
+    duplicate["id"] = 78
+    runs.append(duplicate)
+print(json.dumps({"workflow_runs": runs}))
+PY
+    ;;
+  *event=workflow_dispatch*)
+    printf '{"workflow_runs":[]}\n'
+    ;;
+  */actions/runs/77/attempts/2/jobs*)
+    python3 - <<'PY'
+import json
+import os
+
+commit = os.environ.get("JOB_SHA", os.environ["RELEASE_COMMIT"])
+core = [
+    "release-contract",
+    "Build signed release artifacts",
+    "Verify Apple Developer ID signatures",
+    "Publish immutable GitHub Release",
+]
+jobs = [{
+    "name": name,
+    "status": "completed",
+    "conclusion": (
+        os.environ.get("CORE_CONCLUSION", "success")
+        if name == os.environ.get("CORE_JOB", "Build signed release artifacts")
+        else "success"
+    ),
+    "head_sha": commit,
+    "steps": (
+        [{
+            "name": "Require immutable published GitHub Release",
+            "status": "completed",
+            "conclusion": os.environ.get("IMMUTABLE_STEP_CONCLUSION", "success"),
+        }]
+        if name == "Publish immutable GitHub Release"
+        else []
+    ),
+} for name in core]
+if os.environ.get("DUPLICATE_CORE") == "1":
+    jobs.append(dict(jobs[1]))
+required_steps = [
+    "Download and verify immutable GitHub Release",
+    "Verify immutable npm package without publication credentials",
+    "Inspect npm channel state",
+    "Verify npm channel delivery",
+]
+jobs.append({
+    "name": "Publish npm and mirrors",
+    "status": "completed",
+    "conclusion": os.environ.get("CHANNEL_JOB_CONCLUSION", "failure"),
+    "head_sha": commit,
+    "steps": [{
+        "name": name,
+        "status": "completed",
+        "conclusion": (
+            os.environ.get("CHANNEL_STEP_CONCLUSION", "success")
+            if name == os.environ.get("CHANNEL_STEP", "Verify npm channel delivery")
+            else "success"
+        ),
+    } for name in required_steps] + [{
+        "name": "Sync release artifacts to China OSS mirror",
+        "status": "completed",
+        "conclusion": os.environ.get("OSS_STEP_CONCLUSION", "failure"),
+    }],
+})
+jobs.extend([
+    {
+        "name": "Mirror immutable release to Gitee",
+        "status": "completed",
+        "conclusion": os.environ.get("GITEE_CONCLUSION", "skipped"),
+        "head_sha": commit,
+        "steps": [],
+    },
+    {
+        "name": "Release delivery gate",
+        "status": "completed",
+        "conclusion": os.environ.get("DELIVERY_GATE_CONCLUSION", "failure"),
+        "head_sha": commit,
+        "steps": [],
+    },
+])
+if os.environ.get("UNRELATED_FAILURE") == "1":
+    jobs.append({
+        "name": "Unrelated release job",
+        "status": "completed",
+        "conclusion": "failure",
+        "head_sha": commit,
+        "steps": [],
+    })
+print(json.dumps({"jobs": jobs}))
+PY
+    ;;
+  */actions/runs/77/*/jobs*)
+    echo "channel repair must inspect the exact latest run attempt" >&2
+    exit 91
+    ;;
+  *) exit 1 ;;
+esac
+`), 0o755)
+	script := filepath.Join(sourceRoot, "scripts", "release", "verify-release-workflow-delivery.sh")
+	tag := "v1.2.3-beta.1"
+	commit := strings.Repeat("a", 40)
+	run := func(args []string, overrides ...string) (string, error) {
+		cmd := exec.Command("sh", append([]string{script}, args...)...)
+		cmd.Env = append([]string{
+			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"HOME=" + t.TempDir(),
+			"DWS_RELEASE_OFFICIAL_REPOSITORY=owner/repo",
+			"TAG=" + tag,
+			"RELEASE_COMMIT=" + commit,
+		}, overrides...)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+	repairArgs := func(target string) []string {
+		return []string{"--channel-repair", target, tag, commit}
+	}
+
+	if output, err := run([]string{tag, commit}); err == nil ||
+		!strings.Contains(output, "did not deliver") {
+		t.Fatalf("strict delivery accepted a failed tag run: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(repairArgs("oss")); err != nil ||
+		!strings.Contains(output, "failed exact-tag push run 77") {
+		t.Fatalf("safe channel repair delivery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"CORE_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "required job 'Build signed release artifacts' did not succeed") {
+		t.Fatalf("failed core release job passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"CHANNEL_STEP_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "required channel step 'Verify npm channel delivery' did not succeed") {
+		t.Fatalf("failed npm delivery proof passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"DUPLICATE_CORE=1",
+	); err == nil || !strings.Contains(output, "expected exactly one latest-attempt job 'Build signed release artifacts'") {
+		t.Fatalf("duplicate latest-attempt core job passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"JOB_SHA="+strings.Repeat("b", 40),
+	); err == nil || !strings.Contains(output, "is not bound to "+commit) {
+		t.Fatalf("wrong-sha release jobs passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"UNRELATED_FAILURE=1",
+	); err == nil || !strings.Contains(output, "unrelated job 'Unrelated release job' failed") {
+		t.Fatalf("unrelated failed job passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"IMMUTABLE_STEP_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "immutable GitHub Release verification did not succeed") {
+		t.Fatalf("failed immutable release verification passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("gitee"),
+		"CHANNEL_JOB_CONCLUSION=success",
+		"OSS_STEP_CONCLUSION=success",
+		"GITEE_CONCLUSION=failure",
+	); err != nil || !strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("single failed Gitee mirror was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"CHANNEL_JOB_CONCLUSION=success",
+		"OSS_STEP_CONCLUSION=success",
+		"GITEE_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "OSS repair requires") {
+		t.Fatalf("Gitee-only failure was accepted as OSS evidence: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("gitee"),
+	); err != nil || !strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("skipped Gitee backfill was rejected after upstream OSS failure: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"GITEE_CONCLUSION=failure",
+	); err == nil || !strings.Contains(output, "expected exactly one failed downstream channel job") {
+		t.Fatalf("two failed downstream channels passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"DELIVERY_GATE_CONCLUSION=success",
+	); err == nil || !strings.Contains(output, "must end in a failed delivery gate") {
+		t.Fatalf("successful terminal gate on a failed run passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"RUN_ATTEMPT=1",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("non-latest run attempt passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"RUN_REPOSITORY=other/repo",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("wrong-repository release run passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"RUN_PATH=.github/workflows/other.yml",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("wrong-workflow release run passed: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(
+		repairArgs("oss"),
+		"DUPLICATE_RUN=1",
+	); err == nil || strings.Contains(output, "channel-repair authority verified") {
+		t.Fatalf("ambiguous failed release runs passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
 func releaseChangelog(sections ...string) string {
 	text := "# Changelog\n\n## [Unreleased]\n\n"
 	for _, section := range sections {
@@ -778,6 +1327,109 @@ func TestReleaseContractRejectsInvalidVersionChannelPairs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReleaseContractTreatsWithdrawnVersionsAsPermanentlyAllocated(t *testing.T) {
+	t.Run("continues after withdrawn beta", func(t *testing.T) {
+		r := newReleaseTestRepo(t)
+		section := "## [1.0.1-beta.3] - 2026-07-11\n\n### Changed\n\n- Replace the withdrawn beta.\n\n"
+		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
+		r.commitAndPush(t, "prepare replacement beta")
+		mustRun(t, r.root, "git", "tag", "-a", "v1.0.1-beta.1", "-m", "Release v1.0.1-beta.1")
+		mustRun(t, r.root, "git", "tag", "-a", "withdrawn/v1.0.1-beta.2", "-m", "Withdraw v1.0.1-beta.2")
+
+		output, err := runReleaseScript(t, r.root, r.contract,
+			"--repo-root", r.root,
+			"--channel", "prerelease",
+			"--version", "v1.0.1-beta.3",
+			"--remote", "origin",
+		)
+		if err != nil {
+			t.Fatalf("replacement beta was rejected: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("never reuses exact withdrawn version", func(t *testing.T) {
+		r := newReleaseTestRepo(t)
+		section := "## [1.0.1-beta.1] - 2026-07-11\n\n### Changed\n\n- Must not reuse this version.\n\n"
+		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
+		r.commitAndPush(t, "prepare withdrawn version")
+		mustRun(t, r.root, "git", "tag", "-a", "withdrawn/v1.0.1-beta.1", "-m", "Withdraw v1.0.1-beta.1")
+
+		output, err := runReleaseScript(t, r.root, r.contract,
+			"--repo-root", r.root,
+			"--channel", "prerelease",
+			"--version", "v1.0.1-beta.1",
+			"--remote", "origin",
+		)
+		if err == nil || !strings.Contains(output, "can never be reused") {
+			t.Fatalf("withdrawn version was reusable: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("withdrawn beta cannot be promoted", func(t *testing.T) {
+		r := newReleaseTestRepo(t)
+		r.seedBeta(t)
+		mustRun(t, r.root, "git", "tag", "-a", "withdrawn/v1.0.1-beta.1", "-m", "Withdraw v1.0.1-beta.1")
+		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(stableSection(), betaSection())), 0o644)
+		r.commitAndPush(t, "prepare blocked stable")
+
+		output, err := runReleaseScript(t, r.root, r.contract,
+			"--repo-root", r.root,
+			"--channel", "stable",
+			"--version", "v1.0.1",
+			"--from-beta", "v1.0.1-beta.1",
+			"--remote", "origin",
+		)
+		if err == nil || !strings.Contains(output, "beta baseline was withdrawn") {
+			t.Fatalf("withdrawn beta was promoted: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("withdrawn stable is a permanent version floor", func(t *testing.T) {
+		r := newReleaseTestRepo(t)
+		mustRun(t, r.root, "git", "tag", "-a", "withdrawn/v2.0.0", "-m", "Withdraw v2.0.0")
+		section := "## [1.1.0-beta.1] - 2026-07-11\n\n### Changed\n\n- Must remain above every allocated stable.\n\n"
+		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
+		r.commitAndPush(t, "prepare invalid lower beta")
+
+		output, err := runReleaseScript(t, r.root, r.contract,
+			"--repo-root", r.root,
+			"--channel", "prerelease",
+			"--version", "v1.1.0-beta.1",
+			"--remote", "origin",
+		)
+		if err == nil || !strings.Contains(output, "must be greater than latest allocated stable v2.0.0") {
+			t.Fatalf("release below withdrawn stable floor passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("tombstone excludes stale ordinary tag from delivered baseline", func(t *testing.T) {
+		r := newReleaseTestRepo(t)
+		mustRun(t, r.root, "git", "tag", "-a", "v1.0.1", "-m", "Release v1.0.1")
+		mustRun(t, r.root, "git", "tag", "-a", "withdrawn/v1.0.1", "-m", "Withdraw v1.0.1")
+		section := "## [1.0.2-beta.1] - 2026-07-11\n\n### Changed\n\n- Continue after the withdrawn stable.\n\n"
+		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
+		r.commitAndPush(t, "prepare beta after withdrawn stable")
+		metadata := filepath.Join(t.TempDir(), "metadata")
+
+		output, err := runReleaseScript(t, r.root, r.contract,
+			"--repo-root", r.root,
+			"--channel", "prerelease",
+			"--version", "v1.0.2-beta.1",
+			"--remote", "origin",
+			"--metadata-output", metadata,
+		)
+		if err != nil {
+			t.Fatalf("release after stale withdrawn tag failed: err=%v\noutput:\n%s", err, output)
+		}
+		assertFileContains(t, metadata, "previous_stable=v1.0.0")
+		if content, err := os.ReadFile(metadata); err != nil {
+			t.Fatalf("ReadFile(metadata) error = %v", err)
+		} else if strings.Contains(string(content), "previous_stable=v1.0.1") {
+			t.Fatalf("withdrawn stale tag remained the delivered baseline:\n%s", content)
+		}
+	})
 }
 
 func TestReleaseContractRejectsBadChangelogSections(t *testing.T) {
@@ -1060,6 +1712,7 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 				"OSS_ACCESS_KEY_ID=test-key",
 				"OSS_ACCESS_KEY_SECRET=test-secret",
 				"OSS_ENDPOINT=https://oss.example.com",
+				"OSS_REGION=cn-test",
 				"OSS_BUCKET=test-bucket",
 				"OSS_PREFIX=dws",
 				"OSSUTIL="+fakeOSSUtil,
@@ -1130,6 +1783,7 @@ func TestReleaseMirrorFailsClosedWhenPointerCannotBeRead(t *testing.T) {
 				"OSS_ACCESS_KEY_ID=test-key",
 				"OSS_ACCESS_KEY_SECRET=test-secret",
 				"OSS_ENDPOINT=https://oss.example.com",
+				"OSS_REGION=cn-test",
 				"OSS_BUCKET=test-bucket",
 				"OSS_PREFIX=dws",
 				"OSSUTIL="+fakeOSSUtil,
@@ -1166,6 +1820,7 @@ func TestReleaseMirrorRepairsHistoricalAssetsWithoutMovingNewerPointer(t *testin
 		"OSS_ACCESS_KEY_ID=test-key",
 		"OSS_ACCESS_KEY_SECRET=test-secret",
 		"OSS_ENDPOINT=https://oss.example.com",
+		"OSS_REGION=cn-test",
 		"OSS_BUCKET=test-bucket",
 		"OSS_PREFIX=dws",
 		"OSSUTIL="+fakeOSSUtil,
