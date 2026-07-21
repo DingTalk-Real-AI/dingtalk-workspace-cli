@@ -524,6 +524,9 @@ func TestSchemaRegistryIndexResolvesCanonicalCLIAndAlias(t *testing.T) {
 			t.Fatalf("ResolveQuery(%q) = %#v, %v", path, resolved.Identity, ok)
 		}
 	}
+	if _, ok := index.ResolveQuery("calendar.attendee.unknown"); ok {
+		t.Fatal("unknown dotted CLI path unexpectedly resolved")
+	}
 	if got := index.CanonicalPaths(); !reflect.DeepEqual(got, []string{"calendar.attendee_delete"}) {
 		t.Fatalf("CanonicalPaths() = %#v", got)
 	}
