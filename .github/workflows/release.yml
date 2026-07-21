@@ -438,6 +438,7 @@ jobs:
       release_version: ${{ steps.target.outputs.release_version }}
       release_commit: ${{ steps.target.outputs.release_commit }}
       release_tag_object: ${{ steps.target.outputs.release_tag_object }}
+      oss_mirror: ${{ steps.target.outputs.oss_mirror }}
       is_recovery: ${{ steps.target.outputs.is_recovery }}
       failed_run_id: ${{ steps.target.outputs.failed_run_id }}
       channel: ${{ steps.contract.outputs.channel }}
@@ -540,6 +541,13 @@ jobs:
                 return;
               }
               tagFields.set(key, line.slice(separator + 2));
+            }
+            const ossMirror = tagFields.has("OSS-Mirror")
+              ? tagFields.get("OSS-Mirror")
+              : "enabled";
+            if (!["enabled", "deferred"].includes(ossMirror)) {
+              core.setFailed(`${version} contains invalid OSS-Mirror metadata`);
+              return;
             }
             const cloudOnlyKeys = [
               "Release-Run",
@@ -655,6 +663,7 @@ jobs:
             core.setOutput("release_version", version);
             core.setOutput("release_commit", commit);
             core.setOutput("release_tag_object", tagObject);
+            core.setOutput("oss_mirror", ossMirror);
             core.setOutput("is_recovery", isRecovery ? "true" : "false");
             core.setOutput("failed_run_id", failedRunId);
 
@@ -1694,6 +1703,7 @@ jobs:
           echo "npm $NPM_TAG already supersedes this historical rerun at v$delivered."
 
       - name: Sync release artifacts to China OSS mirror
+        if: ${{ needs.release-contract.outputs.oss_mirror == 'enabled' }}
         run: ./scripts/release/sync-to-oss.sh
         env:
           VERSION: ${{ needs.release-contract.outputs.release_version }}
@@ -1703,7 +1713,7 @@ jobs:
           OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
           OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
-          DWS_REQUIRE_OSS: ${{ github.repository_owner == 'DingTalk-Real-AI' && '1' || '0' }}
+          DWS_REQUIRE_OSS: "1"
 
   mirror-gitee-release:
     name: Mirror immutable release to Gitee
@@ -2218,6 +2228,24 @@ jobs:
               core.setFailed(`${version} does not resolve to one annotated commit tag`);
               return;
             }
+            const tagFields = new Map();
+            for (const line of tag.data.message.split(/\r?\n/)) {
+              const separator = line.indexOf(": ");
+              if (separator < 1) continue;
+              const key = line.slice(0, separator);
+              if (tagFields.has(key)) {
+                core.setFailed(`${version} annotated tag contains duplicate ${key} metadata`);
+                return;
+              }
+              tagFields.set(key, line.slice(separator + 2));
+            }
+            const ossMirror = tagFields.has("OSS-Mirror")
+              ? tagFields.get("OSS-Mirror")
+              : "enabled";
+            if (!["enabled", "deferred"].includes(ossMirror)) {
+              core.setFailed(`${version} contains invalid OSS-Mirror metadata`);
+              return;
+            }
             const commitSha = tag.data.object.sha;
             const defaultBranch = context.payload.repository.default_branch;
             const branch = await github.rest.repos.getBranch({
@@ -2273,6 +2301,17 @@ jobs:
             }
             core.setOutput("commit_sha", commitSha);
             core.setOutput("tag_object", ref.data.object.sha);
+            core.setOutput("oss_mirror", ossMirror);
+
+      - name: Require sealed OSS policy for repair
+        if: ${{ needs.dispatch-contract.outputs.mode == 'repair_oss' }}
+        env:
+          OSS_MIRROR: ${{ steps.authority.outputs.oss_mirror }}
+        run: |
+          test "$OSS_MIRROR" = enabled || {
+            echo "OSS repair is unavailable because this immutable release deferred the OSS channel." >&2
+            exit 1
+          }
 
       - name: Check out sealed release source
         uses: actions/checkout@v4
@@ -2375,6 +2414,7 @@ jobs:
       from_beta: ${{ steps.allocate.outputs.from_beta }}
       base: ${{ steps.allocate.outputs.base }}
       refs_fingerprint: ${{ steps.allocate.outputs.refs_fingerprint }}
+      oss_mirror: ${{ steps.allocate.outputs.oss_mirror }}
     steps:
       - name: Validate official default-branch release request
         env:
@@ -2425,6 +2465,7 @@ jobs:
         env:
           REQUESTED_CHANNEL: ${{ inputs.release_channel }}
           REQUESTED_BUMP: ${{ inputs.release_bump }}
+          OSS_MIRROR: ${{ vars.ENABLE_OSS_MIRROR == 'true' && 'enabled' || 'deferred' }}
         run: |
           set -eu
           allocation="$RUNNER_TEMP/next-release-version"
@@ -2449,6 +2490,8 @@ jobs:
           )"
           echo "release_commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           echo "refs_fingerprint=$refs_fingerprint" >> "$GITHUB_OUTPUT"
+          case "$OSS_MIRROR" in enabled|deferred) ;; *) exit 1 ;; esac
+          echo "oss_mirror=$OSS_MIRROR" >> "$GITHUB_OUTPUT"
 
           release_version="$(sed -n 's/^release_version=//p' "$allocation")"
           from_beta="$(sed -n 's/^from_beta=//p' "$allocation")"
@@ -2459,6 +2502,7 @@ jobs:
             echo "- Version: \`$release_version\`"
             echo "- Channel: \`$channel\`"
             echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- OSS mirror: \`$OSS_MIRROR\`"
             if test -n "$from_beta"; then
               echo "- Promotes beta: \`$from_beta\`"
             fi
@@ -2474,6 +2518,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.allocate.outputs.release_version }}
           RELEASE_CHANNEL: ${{ steps.allocate.outputs.channel }}
           FROM_BETA: ${{ steps.allocate.outputs.from_beta }}
+          OSS_MIRROR: ${{ steps.allocate.outputs.oss_mirror }}
         run: |
           set -eu
           git config user.name "dws release cloud seal"
@@ -2482,6 +2527,7 @@ jobs:
             printf 'Release %s\n\n' "$RELEASE_VERSION"
             printf 'Channel: %s\n' "$RELEASE_CHANNEL"
             test -z "$FROM_BETA" || printf 'From-Beta: %s\n' "$FROM_BETA"
+            printf 'OSS-Mirror: %s\n' "$OSS_MIRROR"
           } > "$RUNNER_TEMP/candidate-tag-message"
           git tag -a "$RELEASE_VERSION" HEAD -F "$RUNNER_TEMP/candidate-tag-message"
           set -- \
@@ -2554,6 +2600,7 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.release-plan.outputs.channel }}
           FROM_BETA: ${{ needs.release-plan.outputs.from_beta }}
           REFS_FINGERPRINT: ${{ needs.release-plan.outputs.refs_fingerprint }}
+          OSS_MIRROR: ${{ needs.release-plan.outputs.oss_mirror }}
         with:
           script: |
             const crypto = require("crypto");
@@ -2565,6 +2612,7 @@ jobs:
             const channel = process.env.RELEASE_CHANNEL;
             const fromBeta = process.env.FROM_BETA;
             const expectedFingerprint = process.env.REFS_FINGERPRINT;
+            const ossMirror = process.env.OSS_MIRROR;
 
             if (
               context.payload.repository.full_name !== expectedRepository ||
@@ -2577,7 +2625,8 @@ jobs:
             if (
               !/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-beta\.[1-9]\d*)?$/.test(version) ||
               !/^[0-9a-f]{40}$/.test(commit) ||
-              !/^[0-9a-f]{64}$/.test(expectedFingerprint)
+              !/^[0-9a-f]{64}$/.test(expectedFingerprint) ||
+              !["enabled", "deferred"].includes(ossMirror)
             ) {
               core.setFailed("cloud release plan contains an invalid sealed identity");
               return;
@@ -2646,6 +2695,7 @@ jobs:
               "",
               `Channel: ${channel}`,
               ...(fromBeta ? [`From-Beta: ${fromBeta}`] : []),
+              `OSS-Mirror: ${ossMirror}`,
               `Release-Run: ${context.runId}`,
               `Release-Run-Attempt: ${process.env.GITHUB_RUN_ATTEMPT}`,
               `Requested-By: ${context.actor}`,

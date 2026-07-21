@@ -142,7 +142,7 @@ jobs:
             echo "- Workflow result: ${RESULT}"
             echo "- Success means every configured channel was verified and the permanent withdrawn/${VERSION} tombstone remains as the version-reuse barrier."
             echo "- Failure may occur before or after the tombstone/channel mutations; inspect the failed step and rerun the exact same inputs after fixing the cause."
-            echo "- The problem GitHub Release and original tag are removed after npm/OSS/Gitee rollback so GitHub installers stop resolving the bad version while the Homebrew rollback PR is reviewed."
+            echo "- The problem GitHub Release and original tag are removed after npm and every tag-enabled/configured mirror are rolled back, so GitHub installers stop resolving the bad version while the Homebrew rollback PR is reviewed."
             echo "- npm is deprecated rather than unpublished; already-installed clients cannot be remotely downgraded."
             echo "- If a Homebrew rollback PR was opened, this run remains failed until that PR is independently reviewed, merged, and the workflow is rerun."
           } >> "$GITHUB_STEP_SUMMARY"
