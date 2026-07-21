@@ -8,7 +8,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [1.0.53] - 2026-07-21
 
-This release promotes the sealed `v1.0.53-beta.6` contents to stable. It adds enterprise onboarding, declarative shortcuts, Sheet/Aitable writes, multi-account profiles, and broader personal IM events, while hardening authentication and the guarded release path.
+This release promotes the sealed `v1.0.53-beta.7` contents to stable. It adds enterprise onboarding, declarative shortcuts, Sheet/Aitable writes, multi-account profiles, and broader personal IM events, while hardening authentication and the guarded release path.
 
 ### Added
 
@@ -26,7 +26,15 @@ This release promotes the sealed `v1.0.53-beta.6` contents to stable. It adds en
 
 - **Authentication and credential reliability** — organization-policy denials stop before mutation or polling, long-running clients reload and refresh access tokens consistently, concurrent credential writes are atomic, and Windows portable-auth commands fail before reading or writing unsupported credential bundles.
 - **Command validation and compatibility** — invalid Sheet/task targets fail locally, IM shortcuts preserve AI-tag and alias compatibility, and Aitable import uploads require and forward a positive file size.
-- **Release publication reliability** — GitHub draft publication is bound to one verified release ID and exact assets, preflight uses isolated installer worktrees, guarded local tags remain compatible, and cloud planning fingerprints the actual allocated release refs.
+- **Release publication reliability** — GitHub draft publication is bound to one verified release ID and exact assets, preflight uses isolated installer worktrees, guarded local tags remain compatible, cloud planning fingerprints the actual allocated release refs, and npm channel verification waits for bounded registry propagation without moving tags.
+
+## [1.0.53-beta.7] - 2026-07-21
+
+This beta validates bounded npm channel verification after registry publication.
+
+### Fixed
+
+- **npm dist-tag eventual consistency** — Release delivery now tolerates a briefly stale `latest` or `beta` read after publishing by retrying only when npm reports a valid older version. Registry errors, invalid or incomparable tags, and channels that never converge still fail closed without moving any tag during verification.
 
 ## [1.0.53-beta.6] - 2026-07-21
 

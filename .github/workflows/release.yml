@@ -1694,13 +1694,28 @@ jobs:
         run: |
           set -eu
           . ./scripts/release/release-lib.sh
-          delivered="$(npm view dingtalk-workspace-cli "dist-tags.$NPM_TAG")"
-          if [ "$delivered" = "$SEMVER" ]; then exit 0; fi
-          release_version_is_greater "v$delivered" "v$SEMVER" || {
-            echo "npm $NPM_TAG=$delivered does not deliver or supersede v$SEMVER" >&2
-            exit 1
-          }
-          echo "npm $NPM_TAG already supersedes this historical rerun at v$delivered."
+          attempt=1
+          max_attempts=12
+          while :; do
+            delivered="$(npm view dingtalk-workspace-cli "dist-tags.$NPM_TAG" \
+              --registry=https://registry.npmjs.org --prefer-online)"
+            if [ "$delivered" = "$SEMVER" ]; then exit 0; fi
+            if release_version_is_greater "v$delivered" "v$SEMVER"; then
+              echo "npm $NPM_TAG already supersedes this historical rerun at v$delivered."
+              exit 0
+            fi
+            release_version_is_greater "v$SEMVER" "v$delivered" || {
+              echo "npm $NPM_TAG=$delivered cannot be reconciled with v$SEMVER" >&2
+              exit 1
+            }
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "npm $NPM_TAG still reports older v$delivered after $attempt attempts; expected v$SEMVER" >&2
+              exit 1
+            fi
+            echo "npm $NPM_TAG still reports older v$delivered; waiting for registry propagation ($attempt/$max_attempts)."
+            sleep 5
+            attempt=$((attempt + 1))
+          done
 
       - name: Sync release artifacts to China OSS mirror
         if: ${{ needs.release-contract.outputs.oss_mirror == 'enabled' }}

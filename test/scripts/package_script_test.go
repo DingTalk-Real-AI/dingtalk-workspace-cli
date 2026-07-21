@@ -637,6 +637,33 @@ func releaseWorkflowSection(t *testing.T, workflow, startMarker, endMarker strin
 	return workflow[start : start+len(startMarker)+end]
 }
 
+func releaseWorkflowRunScript(t *testing.T, workflow, stepName, nextStepName string) string {
+	t.Helper()
+	section := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: "+stepName+"\n",
+		"\n      - name: "+nextStepName+"\n",
+	)
+	const runMarker = "        run: |\n"
+	start := strings.Index(section, runMarker)
+	if start == -1 {
+		t.Fatalf("release workflow step %q is missing a run block", stepName)
+	}
+
+	lines := strings.Split(section[start+len(runMarker):], "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "          ") {
+			t.Fatalf("release workflow step %q has an unexpected run indentation: %q", stepName, line)
+		}
+		lines[i] = strings.TrimPrefix(line, "          ")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
@@ -1791,6 +1818,133 @@ func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
 	}
 	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
 		t.Error("Homebrew beta Formula PRs must use the dedicated token so their CI is triggered")
+	}
+}
+
+func TestReleaseWorkflowWaitsForNPMDistTagPropagation(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	script := releaseWorkflowRunScript(
+		t,
+		workflow,
+		"Verify npm channel delivery",
+		"Sync release artifacts to China OSS mirror",
+	)
+
+	tests := []struct {
+		name        string
+		sequence    string
+		wantSuccess bool
+		wantCalls   int
+		wantSleeps  int
+		wantOutput  string
+	}{
+		{
+			name:        "stale beta converges to target",
+			sequence:    "1.0.53-beta.6\n1.0.53-beta.6\n1.0.53-beta.7\n",
+			wantSuccess: true,
+			wantCalls:   3,
+			wantSleeps:  2,
+		},
+		{
+			name:       "stale beta never converges",
+			sequence:   "1.0.53-beta.6\n",
+			wantCalls:  12,
+			wantSleeps: 11,
+			wantOutput: "still reports older v1.0.53-beta.6 after 12 attempts",
+		},
+		{
+			name:       "permanent registry error fails immediately",
+			sequence:   "__NPM_ERROR__\n",
+			wantCalls:  1,
+			wantSleeps: 0,
+			wantOutput: "permanent npm registry error",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			fakeBin := filepath.Join(root, "bin")
+			if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+				t.Fatalf("MkdirAll(%s) error = %v", fakeBin, err)
+			}
+			sequencePath := filepath.Join(root, "sequence")
+			statePath := filepath.Join(root, "state")
+			npmLogPath := filepath.Join(root, "npm.log")
+			sleepLogPath := filepath.Join(root, "sleep.log")
+			mustWriteFile(t, sequencePath, []byte(test.sequence), 0o644)
+			mustWriteFile(t, filepath.Join(fakeBin, "npm"), []byte(`#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$NPM_CALL_LOG"
+test "$*" = "view dingtalk-workspace-cli dist-tags.beta --registry=https://registry.npmjs.org --prefer-online" || {
+  echo "unexpected npm mutation: $*" >&2
+  exit 97
+}
+call=0
+if test -f "$NPM_STATE"; then call="$(cat "$NPM_STATE")"; fi
+call=$((call + 1))
+printf '%s\n' "$call" > "$NPM_STATE"
+value="$(sed -n "${call}p" "$NPM_SEQUENCE")"
+if test -z "$value"; then value="$(tail -n 1 "$NPM_SEQUENCE")"; fi
+if test "$value" = "__NPM_ERROR__"; then
+  echo "permanent npm registry error" >&2
+  exit 42
+fi
+printf '%s\n' "$value"
+`), 0o755)
+			mustWriteFile(t, filepath.Join(fakeBin, "sleep"), []byte(`#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$SLEEP_CALL_LOG"
+`), 0o755)
+
+			repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+			if err != nil {
+				t.Fatalf("Abs(repository root) error = %v", err)
+			}
+			cmd := exec.Command("sh", "-c", script)
+			cmd.Dir = repoRoot
+			cmd.Env = append(os.Environ(),
+				"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"NPM_TAG=beta",
+				"SEMVER=1.0.53-beta.7",
+				"NPM_SEQUENCE="+sequencePath,
+				"NPM_STATE="+statePath,
+				"NPM_CALL_LOG="+npmLogPath,
+				"SLEEP_CALL_LOG="+sleepLogPath,
+			)
+			output, runErr := cmd.CombinedOutput()
+			if test.wantSuccess && runErr != nil {
+				t.Fatalf("npm delivery verification error = %v\noutput:\n%s", runErr, output)
+			}
+			if !test.wantSuccess && runErr == nil {
+				t.Fatalf("npm delivery verification unexpectedly succeeded\noutput:\n%s", output)
+			}
+			if test.wantOutput != "" && !strings.Contains(string(output), test.wantOutput) {
+				t.Errorf("npm delivery verification output is missing %q:\n%s", test.wantOutput, output)
+			}
+
+			npmLog, err := os.ReadFile(npmLogPath)
+			if err != nil {
+				t.Fatalf("ReadFile(%s) error = %v", npmLogPath, err)
+			}
+			npmCalls := strings.Split(strings.TrimSpace(string(npmLog)), "\n")
+			if got := len(npmCalls); got != test.wantCalls {
+				t.Errorf("npm view call count = %d, want %d; log:\n%s", got, test.wantCalls, npmLog)
+			}
+			if strings.Contains(string(npmLog), "dist-tag add") || strings.Contains(string(npmLog), "publish") {
+				t.Errorf("delivery verification must remain read-only; log:\n%s", npmLog)
+			}
+
+			sleepCalls := 0
+			if sleepLog, err := os.ReadFile(sleepLogPath); err == nil {
+				sleepCalls = len(strings.Fields(string(sleepLog)))
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("ReadFile(%s) error = %v", sleepLogPath, err)
+			}
+			if sleepCalls != test.wantSleeps {
+				t.Errorf("sleep call count = %d, want %d", sleepCalls, test.wantSleeps)
+			}
+		})
 	}
 }
 
