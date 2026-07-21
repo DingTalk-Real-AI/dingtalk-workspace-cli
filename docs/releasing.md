@@ -69,11 +69,11 @@ dws-release config --remote origin
 ```text
 main 上的候选代码 + beta CHANGELOG
   → vX.Y.Z-beta.N（预发验证）
-  → 只允许补正式 CHANGELOG，源码不得再变化
-  → vX.Y.Z（正式发布）
+  → 补正式 CHANGELOG；允许继续通过 PR 合入新 commit
+  → vX.Y.Z（正式发布，封板提交必须包含该 beta 提交）
 ```
 
-云端入口自动选择本次最新、已交付且未撤回的 beta；本地入口必须显式指定。流水线会比较两者：除 `CHANGELOG.md` 外只要有任何文件变化，就拒绝正式发布。这样预发测过的代码、命令树和正式发布的代码是同一份。
+云端入口自动选择本次最新、已交付且未撤回的 beta；本地入口必须显式指定。流水线要求该 beta 已成功交付、未撤回，且 beta 提交必须位于正式发布封板提交的历史中——不能跳过 beta 直接发正式版，但允许在 beta 之后把经过 review 合入 `main` 的 commit 一起发布。
 
 ## 预发发布
 
@@ -131,7 +131,7 @@ dws-release v1.2.3 --from-beta v1.2.3-beta.1 --publish
 ## CI/CD 保证
 
 - 只接受 `vX.Y.Z-beta.N` 和 `vX.Y.Z`，且新版本必须高于上一正式版。这里的“上一正式版”必须同时具备公开非草稿 GitHub Release 和同 tag/commit 的成功 Release workflow；只有 tag、没有交付成功的孤儿版本会阻断后续发布，要求走受保护恢复补齐。云端 tag 会固定 `Release-Run`、requester、commit 和版本分配指纹，交付验证按该精确 run/attempt 及完整 job graph 取证，不接受任意 `workflow_dispatch`。历史版本若曾通过专用 recovery workflow 完成交付，只能使用仓库内 `delivered-stable-recoveries.json` 中精确到 tag、commit、run、workflow SHA 与 attempt 的 reviewed 证据。
-- tag 必须是 annotated tag；本地脚本在推送前重新确认 HEAD 与远端 `main` 完全一致，CI 允许其后 `main` 前进，但要求封板提交仍位于 `main` 历史中。
+- tag 必须是 annotated tag；本地脚本要求封板提交已通过 PR 合入并包含在远端 `main` 历史中，发布只推送 tag。CI 允许其后 `main` 继续前进，但始终要求封板提交位于 `main` 历史中。
 - 日常 CI 和发布前都会对比“最新已交付正式版”的完整命令树；若长时间预检期间该 baseline 发生变化，会针对新的 baseline 重新比较。
 - GoReleaser 只构建；Darwin 重签、checksums 重算和 npm 安装验证通过后，才统一上传 GitHub Release 的最终产物。
 - 六个平台归档会逐个解包并核验二进制内嵌版本；公开资产集合、checksums 集合和 npm tarball integrity 都必须精确一致。npm tarball 固定由 npm `10.9.2` 打包，避免重跑时因 runner 自带 npm 漂移产生不同字节。

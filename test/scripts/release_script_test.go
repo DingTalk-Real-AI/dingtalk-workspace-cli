@@ -1494,12 +1494,12 @@ func TestReleaseContractRejectsDirtyOrUnsyncedMain(t *testing.T) {
 		"--version", "v1.0.1-beta.1",
 		"--remote", "origin",
 	)
-	if err == nil || !strings.Contains(output, "must exactly match origin/main") {
+	if err == nil || !strings.Contains(output, "must be contained in origin/main history") {
 		t.Fatalf("unsynced main was not blocked: err=%v\noutput:\n%s", err, output)
 	}
 }
 
-func TestReleaseContractStablePromotionAllowsOnlyChangelogDiff(t *testing.T) {
+func TestReleaseContractStablePromotionRequiresBetaAncestry(t *testing.T) {
 	t.Run("sealed", func(t *testing.T) {
 		r := newReleaseTestRepo(t)
 		r.seedBeta(t)
@@ -1518,12 +1518,12 @@ func TestReleaseContractStablePromotionAllowsOnlyChangelogDiff(t *testing.T) {
 		}
 	})
 
-	t.Run("source drift", func(t *testing.T) {
+	t.Run("commits after beta", func(t *testing.T) {
 		r := newReleaseTestRepo(t)
 		r.seedBeta(t)
 		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(stableSection(), betaSection())), 0o644)
-		mustWriteFile(t, filepath.Join(r.root, "drift.txt"), []byte("untested change\n"), 0o644)
-		r.commitAndPush(t, "drift after beta")
+		mustWriteFile(t, filepath.Join(r.root, "followup.txt"), []byte("merged after beta\n"), 0o644)
+		r.commitAndPush(t, "merge follow-up after beta")
 
 		output, err := runReleaseScript(t, r.root, r.contract,
 			"--repo-root", r.root,
@@ -1532,11 +1532,53 @@ func TestReleaseContractStablePromotionAllowsOnlyChangelogDiff(t *testing.T) {
 			"--from-beta", "v1.0.1-beta.1",
 			"--remote", "origin",
 		)
-		if err == nil {
-			t.Fatalf("drifted stable promotion unexpectedly passed:\n%s", output)
+		if err != nil {
+			t.Fatalf("stable promotion with commits after beta error = %v\noutput:\n%s", err, output)
 		}
-		if !strings.Contains(output, "only CHANGELOG.md may differ") || !strings.Contains(output, "drift.txt") {
-			t.Fatalf("drift output is not actionable:\n%s", output)
+	})
+
+	t.Run("beta outside HEAD history", func(t *testing.T) {
+		r := newReleaseTestRepo(t)
+		mustRun(t, r.root, "git", "checkout", "-b", "sidecar")
+		mustWriteFile(t, filepath.Join(r.root, "sidecar.txt"), []byte("never merged\n"), 0o644)
+		mustRun(t, r.root, "git", "add", ".")
+		mustRun(t, r.root, "git", "commit", "-m", "sidecar beta candidate")
+		mustRun(t, r.root, "git", "tag", "-a", "v1.0.1-beta.1", "-m", "Release v1.0.1-beta.1", "-m", "Channel: prerelease")
+		mustRun(t, r.root, "git", "checkout", "main")
+		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(stableSection(), betaSection())), 0o644)
+		r.commitAndPush(t, "prepare stable changelog")
+
+		output, err := runReleaseScript(t, r.root, r.contract,
+			"--repo-root", r.root,
+			"--channel", "stable",
+			"--version", "v1.0.1",
+			"--from-beta", "v1.0.1-beta.1",
+			"--remote", "origin",
+		)
+		if err == nil || !strings.Contains(output, "not an ancestor of HEAD") {
+			t.Fatalf("beta outside HEAD history was promoted: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("older sealed commit after main advanced", func(t *testing.T) {
+		r := newReleaseTestRepo(t)
+		r.seedBeta(t)
+		mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(stableSection(), betaSection())), 0o644)
+		r.commitAndPush(t, "prepare stable changelog")
+		sealed := strings.TrimSpace(mustOutput(t, r.root, "git", "rev-parse", "HEAD"))
+		mustWriteFile(t, filepath.Join(r.root, "after.txt"), []byte("main advanced\n"), 0o644)
+		r.commitAndPush(t, "advance main after stable candidate")
+		mustRun(t, r.root, "git", "checkout", "--detach", sealed)
+
+		output, err := runReleaseScript(t, r.root, r.contract,
+			"--repo-root", r.root,
+			"--channel", "stable",
+			"--version", "v1.0.1",
+			"--from-beta", "v1.0.1-beta.1",
+			"--remote", "origin",
+		)
+		if err != nil {
+			t.Fatalf("older sealed commit in main history was rejected: %v\noutput:\n%s", err, output)
 		}
 	})
 }

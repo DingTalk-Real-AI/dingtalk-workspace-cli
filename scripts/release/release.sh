@@ -351,7 +351,7 @@ else
   if [ -n "$previous_stable" ]; then
     printf '==> Comparing command tree with %s\n' "$previous_stable"
     "$ROOT/scripts/policy/check-command-compatibility.sh" \
-      --base-ref "$REMOTE/$BRANCH" \
+      --base-ref HEAD \
       --stable-ref "$previous_stable"
   fi
 
@@ -405,7 +405,7 @@ if [ "$previous_stable" != "$previous_stable_before_refresh" ]; then
   printf '==> Stable authority advanced from %s to %s; rechecking command compatibility\n' \
     "${previous_stable_before_refresh:-none}" "$previous_stable"
   "$ROOT/scripts/policy/check-command-compatibility.sh" \
-    --base-ref "$REMOTE/$BRANCH" \
+    --base-ref HEAD \
     --stable-ref "$previous_stable"
 fi
 
@@ -416,9 +416,9 @@ fi
 
 # Delivery, compatibility, and publication checks above may take long enough
 # for main or stable authority to move. This last refresh must be followed only
-# by local proof/tag creation. The atomic push advertises main with the tag, so
-# an already-advanced remote main rejects the whole transaction; a later main
-# advance is safe because the sealed commit remains in protected main history.
+# by local proof/tag creation. Only the tag is pushed: the sealed commit is
+# already contained in protected main history, so a later main advance never
+# invalidates the release.
 printf '==> Settling final %s/%s and stable authority\n' "$REMOTE" "$BRANCH"
 git fetch --force "$REMOTE" "+refs/heads/$BRANCH:refs/remotes/$REMOTE/$BRANCH"
 fetch_release_tags
@@ -447,8 +447,7 @@ else
   git tag -a "$VERSION" -m "Release $VERSION" -m 'Channel: prerelease'
 fi
 
-if ! git push --atomic "$push_url" \
-  "HEAD:refs/heads/$BRANCH" "refs/tags/$VERSION"; then
+if ! git push "$push_url" "refs/tags/$VERSION"; then
   set +e
   remote_refs="$(git ls-remote --tags "$push_url" "refs/tags/$VERSION" "refs/tags/$VERSION^{}")"
   query_status=$?

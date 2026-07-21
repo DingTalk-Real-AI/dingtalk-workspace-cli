@@ -128,13 +128,8 @@ require_remote() {
 }
 
 sync_main_if_safe() {
-  current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
-  [ "$current_branch" = "main" ] || {
-    printf 'release validation must run from the main worktree (current: %s)\n' "${current_branch:-detached HEAD}" >&2
-    exit 1
-  }
   [ -z "$(git status --porcelain --untracked-files=all)" ] || {
-    printf '%s\n' 'release main worktree must be clean before synchronization' >&2
+    printf '%s\n' 'release worktree must be clean before synchronization' >&2
     exit 1
   }
 
@@ -145,6 +140,14 @@ sync_main_if_safe() {
   remote_commit="$(git rev-parse "$remote_main^{commit}")"
   if [ "$head_commit" = "$remote_commit" ]; then
     return 0
+  fi
+  current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  if [ "$current_branch" != "main" ]; then
+    if git merge-base --is-ancestor HEAD "$remote_main"; then
+      return 0
+    fi
+    printf 'HEAD is not contained in %s/main history; merge it through a reviewed PR before release\n' "$REMOTE" >&2
+    exit 1
   fi
   if git merge-base --is-ancestor HEAD "$remote_main"; then
     git merge --ff-only "$remote_main"

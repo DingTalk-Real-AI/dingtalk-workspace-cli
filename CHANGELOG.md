@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Changed
+
+- **Relaxed stable promotion contract** — a stable release still requires a delivered, non-withdrawn beta baseline in its commit history, but no longer requires a byte-identical tree with that beta; reviewed commits merged to `main` after the beta can now ship in the stable release. Local releases now accept any sealed commit contained in `main` history and push only the release tag, so `main` is never frozen during the beta-to-stable window.
+
 ## [1.0.53] - 2026-07-21
 
 This release promotes the sealed `v1.0.53-beta.7` contents to stable. It adds enterprise onboarding, declarative shortcuts, Sheet/Aitable writes, multi-account profiles, and broader personal IM events, while hardening authentication and the guarded release path.

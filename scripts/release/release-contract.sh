@@ -71,20 +71,14 @@ git rev-parse --verify --quiet "$remote_main^{commit}" >/dev/null || {
   printf 'release branch is not available locally: %s/%s\n' "$REMOTE" "$BRANCH" >&2
   exit 1
 }
-remote_main_commit="$(git rev-parse "$remote_main^{commit}")"
 
 if [ "$CONTEXT" = "local" ]; then
   [ -z "$(git status --porcelain --untracked-files=all)" ] || {
     printf 'release worktree must be clean (staged, unstaged, and untracked files are blocked)\n' >&2
     exit 1
   }
-  current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
-  [ "$current_branch" = "$BRANCH" ] || {
-    printf 'local release must run from branch %s (current: %s)\n' "$BRANCH" "${current_branch:-detached HEAD}" >&2
-    exit 1
-  }
-  [ "$head_commit" = "$remote_main_commit" ] || {
-    printf 'HEAD must exactly match %s/%s before release\n' "$REMOTE" "$BRANCH" >&2
+  git merge-base --is-ancestor HEAD "$remote_main" || {
+    printf 'HEAD must be contained in %s/%s history before release\n' "$REMOTE" "$BRANCH" >&2
     exit 1
   }
   if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
@@ -227,11 +221,6 @@ else
     printf 'stable beta baseline is not an ancestor of HEAD: %s\n' "$FROM_BETA" >&2
     exit 1
   }
-  if ! git diff --quiet "$FROM_BETA^{commit}" HEAD -- . ':(exclude)CHANGELOG.md'; then
-    printf 'stable source drifted from %s; only CHANGELOG.md may differ\n' "$FROM_BETA" >&2
-    git diff --name-only "$FROM_BETA^{commit}" HEAD -- . ':(exclude)CHANGELOG.md' >&2
-    exit 1
-  fi
 fi
 
 semver="$(release_semver "$VERSION")"
