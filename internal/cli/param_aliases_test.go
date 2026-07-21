@@ -207,6 +207,46 @@ func TestReduceLeafParamAliasesBlockRemovesAndRecords(t *testing.T) {
 	}
 }
 
+func TestReduceLeafParamAliasesPendingReviewDoesNotEmit(t *testing.T) {
+	entry, problems := reduceLeafParamAliases("demo cmd", realMap(realFlag{name: "query"}), nil,
+		CommandOverride{CommandPath: "demo cmd", ScopedAliases: map[string]string{"keyword": "query"}, Confirm: true})
+	if len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+	if entry == nil || entry.Aliases["keyword"] != "" || !containsParamAlias(entry.Blocked, "keyword") {
+		t.Fatalf("pending mapping entered automatic aliases: %#v", entry)
+	}
+}
+
+func TestReduceLeafParamAliasesExcludesProtectFuzzyButDoNotOverrideAnotherConcept(t *testing.T) {
+	concepts := []Concept{
+		{ID: "page_number", Members: []string{"page", "page-no"}, Excludes: []string{"page-size"}},
+		{ID: "page_size", Members: []string{"limit", "page-size"}},
+	}
+	entry, problems := reduceLeafParamAliases("demo cmd", realMap(realFlag{name: "page"}, realFlag{name: "limit"}), concepts, CommandOverride{})
+	if len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+	if entry.Aliases["page-size"] != "limit" || containsParamAlias(entry.Blocked, "page-size") {
+		t.Fatalf("another reviewed concept alias was overridden by an exclude: %#v", entry)
+	}
+}
+
+func TestReduceLeafParamAliasesRejectsProtectionOrScopedAliasOnRealFlag(t *testing.T) {
+	real := realMap(realFlag{name: "user-id"}, realFlag{name: "user"})
+	for name, override := range map[string]CommandOverride{
+		"block":     {CommandPath: "demo cmd", Block: []string{"user-id"}},
+		"ambiguous": {CommandPath: "demo cmd", Ambiguous: []string{"user-id"}},
+		"scoped":    {CommandPath: "demo cmd", ScopedAliases: map[string]string{"user-id": "user"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, problems := reduceLeafParamAliases("demo cmd", real, nil, override); len(problems) == 0 {
+				t.Fatal("real native flag was allowed to be reclassified")
+			}
+		})
+	}
+}
+
 // TestGeneratedParamAliasesAreWellFormed guards the committed generated table
 // at the Go level, complementing the byte-identity drift gate.
 func TestGeneratedParamAliasesAreWellFormed(t *testing.T) {
@@ -231,6 +271,21 @@ func TestGeneratedParamAliasesAreWellFormed(t *testing.T) {
 			}
 			if emitted == canon {
 				t.Fatalf("%s: alias %q maps to itself", e.CLIPath, emitted)
+			}
+		}
+		classified := make(map[string]string, len(e.Aliases)+len(e.Blocked)+len(e.Ambiguous))
+		for emitted := range e.Aliases {
+			classified[emitted] = "alias"
+		}
+		for kind, values := range map[string][]string{"blocked": e.Blocked, "ambiguous": e.Ambiguous} {
+			for _, name := range values {
+				if name != cmdutil.Morph(name) {
+					t.Fatalf("%s: %s name %q is not morph-normalized", e.CLIPath, kind, name)
+				}
+				if previous := classified[name]; previous != "" {
+					t.Fatalf("%s: %q is classified as both %s and %s", e.CLIPath, name, previous, kind)
+				}
+				classified[name] = kind
 			}
 		}
 	}

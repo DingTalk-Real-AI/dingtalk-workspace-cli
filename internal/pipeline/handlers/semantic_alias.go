@@ -14,6 +14,7 @@
 package handlers
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
@@ -45,11 +46,24 @@ func (h SemanticAliasHandler) Handle(ctx *pipeline.Context) error {
 		return nil
 	}
 	aliases, blocked, ambiguous, ok := h.Lookup(ctx.Command)
-	if !ok || len(aliases) == 0 {
+	if !ok {
 		return nil
+	}
+	for _, name := range blocked {
+		ctx.ProtectFlag(name, pipeline.FlagProtectionBlocked)
+	}
+	for _, name := range ambiguous {
+		ctx.ProtectFlag(name, pipeline.FlagProtectionAmbiguous)
+	}
+
+	if err := rejectMixedAliasSpellings(ctx, aliases); err != nil {
+		return err
 	}
 
 	for i, arg := range ctx.Args {
+		if arg == "--" {
+			break
+		}
 		bare, suffix, isFlag := splitFlagToken(arg)
 		if !isFlag {
 			continue
@@ -59,7 +73,7 @@ func (h SemanticAliasHandler) Handle(ctx *pipeline.Context) error {
 		// A blocked or intentionally ambiguous name must never be silently
 		// rewritten: it is left untouched so the unknown-flag did-you-mean
 		// path can surface the reviewed candidates instead of guessing.
-		if contains(blocked, morphed) || contains(ambiguous, morphed) {
+		if ctx.IsFlagProtected(morphed) {
 			continue
 		}
 
@@ -71,6 +85,67 @@ func (h SemanticAliasHandler) Handle(ctx *pipeline.Context) error {
 		rewritten := "--" + canon + suffix
 		ctx.Args[i] = rewritten
 		ctx.AddCorrection("semantic-alias", pipeline.PreParse, canon, arg, rewritten, "semantic")
+	}
+	return nil
+}
+
+func rejectMixedAliasSpellings(ctx *pipeline.Context, aliases map[string]string) error {
+	if len(aliases) == 0 {
+		return nil
+	}
+	targetByMorph := make(map[string]string, len(aliases))
+	for _, canonical := range aliases {
+		targetByMorph[cmdutil.Morph(canonical)] = canonical
+	}
+	spellingsByTarget := make(map[string]map[string]bool)
+	hasAliasByTarget := make(map[string]bool)
+	for _, arg := range ctx.Args {
+		if arg == "--" {
+			break
+		}
+		bare, _, isFlag := splitFlagToken(arg)
+		if !isFlag {
+			continue
+		}
+		morphed := cmdutil.Morph(bare)
+		if ctx.IsFlagProtected(morphed) {
+			continue
+		}
+		canonical, isAlias := aliases[morphed]
+		if !isAlias {
+			canonical = targetByMorph[morphed]
+		}
+		if canonical == "" {
+			continue
+		}
+		if spellingsByTarget[canonical] == nil {
+			spellingsByTarget[canonical] = make(map[string]bool)
+		}
+		spellingsByTarget[canonical][morphed] = true
+		if isAlias {
+			hasAliasByTarget[canonical] = true
+		}
+	}
+	targets := make([]string, 0, len(spellingsByTarget))
+	for canonical := range spellingsByTarget {
+		targets = append(targets, canonical)
+	}
+	sort.Strings(targets)
+	for _, canonical := range targets {
+		spellings := spellingsByTarget[canonical]
+		if !hasAliasByTarget[canonical] || len(spellings) < 2 {
+			continue
+		}
+		list := make([]string, 0, len(spellings))
+		for spelling := range spellings {
+			list = append(list, spelling)
+		}
+		sort.Strings(list)
+		return &pipeline.FlagConflictError{
+			Command:   ctx.Command,
+			Canonical: canonical,
+			Spellings: list,
+		}
 	}
 	return nil
 }
@@ -93,13 +168,4 @@ func splitFlagToken(arg string) (bare, suffix string, isFlag bool) {
 		return body[:idx], body[idx:], true
 	}
 	return body, "", true
-}
-
-func contains(list []string, target string) bool {
-	for _, v := range list {
-		if v == target {
-			return true
-		}
-	}
-	return false
 }

@@ -67,6 +67,13 @@ func ReduceParamAliases(root *cobra.Command) ([]ParamAliasEntry, error) {
 		overrideByPath[ov.CommandPath] = ov
 	}
 	usedOverride := make(map[string]bool, len(overrideByPath))
+	conceptsByPath := make(map[string][]Concept)
+	usedConceptScope := make(map[string]bool)
+	for _, concept := range concepts.Concepts {
+		for _, path := range concept.Commands {
+			conceptsByPath[path] = append(conceptsByPath[path], concept)
+		}
+	}
 
 	var problems []string
 	var entries []ParamAliasEntry
@@ -78,8 +85,15 @@ func ReduceParamAliases(root *cobra.Command) ([]ParamAliasEntry, error) {
 		if hasOverride {
 			usedOverride[path] = true
 		}
+		scopedConcepts := conceptsByPath[path]
+		for _, concept := range scopedConcepts {
+			usedConceptScope[concept.ID+"\x00"+path] = true
+			if !conceptHasRealFlag(concept, ov, realByMorph) {
+				problems = append(problems, fmt.Sprintf("concept %q reviewed command %q has no matching real flag or reviewed bind", concept.ID, path))
+			}
+		}
 
-		entry, entryProblems := reduceLeafParamAliases(path, realByMorph, concepts.Concepts, ov)
+		entry, entryProblems := reduceLeafParamAliases(path, realByMorph, scopedConcepts, ov)
 		problems = append(problems, entryProblems...)
 		if entry != nil {
 			entries = append(entries, *entry)
@@ -89,6 +103,13 @@ func ReduceParamAliases(root *cobra.Command) ([]ParamAliasEntry, error) {
 	for path := range overrideByPath {
 		if !usedOverride[path] {
 			problems = append(problems, fmt.Sprintf("command_override %q does not match any runnable Cobra leaf", path))
+		}
+	}
+	for _, concept := range concepts.Concepts {
+		for _, path := range concept.Commands {
+			if !usedConceptScope[concept.ID+"\x00"+path] {
+				problems = append(problems, fmt.Sprintf("concept %q command scope %q does not match any runnable Cobra command", concept.ID, path))
+			}
 		}
 	}
 
@@ -156,6 +177,9 @@ func realFlagsByMorph(leaf *cobra.Command) map[string][]realFlag {
 func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, concepts []Concept, ov CommandOverride) (*ParamAliasEntry, []string) {
 	var problems []string
 	aliasMap := make(map[string]string)
+	blockedSet := make(map[string]bool)
+	excludedSet := make(map[string]bool)
+	pendingReview := ov.Confirm || ov.Investigate
 
 	for boundFlag, conceptID := range ov.Bind {
 		if _, ok := realByMorph[cmdutil.Morph(boundFlag)]; !ok {
@@ -163,7 +187,8 @@ func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, conc
 		}
 	}
 
-	// (a) Concept auto-reduction. Concepts are already sorted by id.
+	// (a) Concept auto-reduction. The caller has already admitted only the
+	// concepts whose reviewed command scope contains this exact leaf.
 	for _, concept := range concepts {
 		eff := make(map[string]bool, len(concept.Members)+2)
 		for _, member := range concept.Members {
@@ -171,7 +196,16 @@ func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, conc
 		}
 		for boundFlag, conceptID := range ov.Bind {
 			if conceptID == concept.ID {
-				eff[cmdutil.Morph(boundFlag)] = true
+				if pendingReview {
+					for _, member := range concept.Members {
+						morphed := cmdutil.Morph(member)
+						if _, isReal := realByMorph[morphed]; !isReal {
+							blockedSet[morphed] = true
+						}
+					}
+				} else {
+					eff[cmdutil.Morph(boundFlag)] = true
+				}
 			}
 		}
 
@@ -235,29 +269,71 @@ func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, conc
 			}
 			aliasMap[m] = canon
 		}
+		// Excludes are not passive prose: once this concept is active on a
+		// reviewed command, a non-real excluded spelling is protected from
+		// downstream fuzzy correction. A real flag is left alone because it
+		// already has an independently valid command-local meaning.
+		for _, exclude := range concept.Excludes {
+			morphed := cmdutil.Morph(exclude)
+			if _, isReal := realByMorph[morphed]; !isReal {
+				excludedSet[morphed] = true
+			}
+		}
+	}
+	for excluded := range excludedSet {
+		if _, isAlias := aliasMap[excluded]; !isAlias {
+			blockedSet[excluded] = true
+		}
 	}
 
 	// (b) Command scoped aliases override concept reductions.
 	for emitted, target := range ov.ScopedAliases {
+		morphedEmitted := cmdutil.Morph(emitted)
 		reals, ok := realByMorph[cmdutil.Morph(target)]
 		if !ok {
 			problems = append(problems, fmt.Sprintf("command_override %q scoped alias %q->%q targets %q which is not a real flag", path, emitted, target, target))
 			continue
 		}
-		aliasMap[cmdutil.Morph(emitted)] = canonicalRealName(reals)
+		if _, sourceIsReal := realByMorph[morphedEmitted]; sourceIsReal {
+			problems = append(problems, fmt.Sprintf("command_override %q scoped alias source %q is already a real flag; keep its native compatibility path or remove it before enabling semantic rewrite", path, emitted))
+			continue
+		}
+		if pendingReview {
+			delete(aliasMap, morphedEmitted)
+			blockedSet[morphedEmitted] = true
+			continue
+		}
+		delete(blockedSet, morphedEmitted)
+		aliasMap[morphedEmitted] = canonicalRealName(reals)
 	}
 
 	// (c) Blocks are removed from the alias map and recorded for did-you-mean.
-	blocked := make([]string, 0, len(ov.Block))
 	for _, b := range ov.Block {
 		mb := cmdutil.Morph(b)
+		if _, isReal := realByMorph[mb]; isReal {
+			problems = append(problems, fmt.Sprintf("command_override %q blocks %q but it is already a real flag; blocking must not disable a canonical/native parameter", path, b))
+			continue
+		}
 		delete(aliasMap, mb)
-		blocked = append(blocked, mb)
+		blockedSet[mb] = true
 	}
-
 	ambiguous := make([]string, 0, len(ov.Ambiguous))
 	for _, a := range ov.Ambiguous {
-		ambiguous = append(ambiguous, cmdutil.Morph(a))
+		ma := cmdutil.Morph(a)
+		if _, isReal := realByMorph[ma]; isReal {
+			problems = append(problems, fmt.Sprintf("command_override %q marks %q ambiguous but it is already a real flag", path, a))
+			continue
+		}
+		if canon, ok := aliasMap[ma]; ok {
+			problems = append(problems, fmt.Sprintf("command %q name %q is both auto-reduced to %q and marked ambiguous; a name cannot be aliased and ambiguous at once", path, a, canon))
+		}
+		delete(aliasMap, ma)
+		delete(blockedSet, ma)
+		ambiguous = append(ambiguous, ma)
+	}
+	blocked := make([]string, 0, len(blockedSet))
+	for b := range blockedSet {
+		blocked = append(blocked, b)
 	}
 
 	// A name cannot be both auto-reduced and ambiguous: the alias table says
@@ -279,6 +355,22 @@ func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, conc
 		Blocked:   sortedUnique(blocked),
 		Ambiguous: sortedUnique(ambiguous),
 	}, problems
+}
+
+func conceptHasRealFlag(concept Concept, ov CommandOverride, realByMorph map[string][]realFlag) bool {
+	for _, member := range concept.Members {
+		if _, ok := realByMorph[cmdutil.Morph(member)]; ok {
+			return true
+		}
+	}
+	for boundFlag, conceptID := range ov.Bind {
+		if conceptID == concept.ID {
+			if _, ok := realByMorph[cmdutil.Morph(boundFlag)]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func appendRealFlag(list []realFlag, value realFlag) []realFlag {

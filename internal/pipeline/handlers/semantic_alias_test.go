@@ -14,6 +14,7 @@
 package handlers
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -75,6 +76,47 @@ func TestSemanticAliasHandlerLeavesBlockedAndAmbiguous(t *testing.T) {
 	}
 	if len(ctx.Corrections) != 0 {
 		t.Fatalf("no corrections expected, got %#v", ctx.Corrections)
+	}
+	if ctx.ProtectedFlags["count"] != pipeline.FlagProtectionBlocked || ctx.ProtectedFlags["user-id"] != pipeline.FlagProtectionAmbiguous {
+		t.Fatalf("protections = %#v", ctx.ProtectedFlags)
+	}
+}
+
+func TestSemanticAliasHandlerProtectsWithoutAliases(t *testing.T) {
+	h := SemanticAliasHandler{Lookup: fakeLookup(nil, []string{"limt"}, nil)}
+	ctx := &pipeline.Context{Command: "dws demo cmd", Args: []string{"--limt", "10"}}
+	if err := h.Handle(ctx); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if !ctx.IsFlagProtected("limt") {
+		t.Fatalf("blocked-only entry did not populate pipeline protection: %#v", ctx.ProtectedFlags)
+	}
+}
+
+func TestSemanticAliasHandlerRejectsMixedAliasAndCanonical(t *testing.T) {
+	for _, args := range [][]string{
+		{"--keyword", "one", "--query", "two"},
+		{"--query=two", "--keyword=one"},
+	} {
+		ctx := &pipeline.Context{Command: "dws demo cmd", Args: args}
+		err := newSemanticHandler().Handle(ctx)
+		var conflict *pipeline.FlagConflictError
+		if !errors.As(err, &conflict) {
+			t.Fatalf("Handle(%v) error = %v, want FlagConflictError", args, err)
+		}
+		if conflict.Canonical != "query" || !reflect.DeepEqual(conflict.Spellings, []string{"keyword", "query"}) {
+			t.Fatalf("conflict = %#v", conflict)
+		}
+	}
+}
+
+func TestSemanticAliasHandlerStopsAtDoubleDash(t *testing.T) {
+	ctx := &pipeline.Context{Command: "dws demo cmd", Args: []string{"--query", "one", "--", "--keyword", "two"}}
+	if err := newSemanticHandler().Handle(ctx); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if want := []string{"--query", "one", "--", "--keyword", "two"}; !reflect.DeepEqual(ctx.Args, want) {
+		t.Fatalf("Args = %v, want %v", ctx.Args, want)
 	}
 }
 

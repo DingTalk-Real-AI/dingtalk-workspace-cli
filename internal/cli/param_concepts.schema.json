@@ -107,6 +107,7 @@
         "denotes",
         "canonical_hint",
         "members",
+        "commands",
         "risk"
       ],
       "properties": {
@@ -136,6 +137,15 @@
             "$ref": "#/$defs/flagToken"
           },
           "description": "Spellings that denote a DIFFERENT entity and must never be reduced into this concept."
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/commandPath"
+          },
+          "description": "Exact reviewed runnable command paths on which this concept may participate in reduction. A concept never activates on an unlisted command merely because a real flag has the same spelling."
         },
         "risk": {
           "$ref": "#/$defs/risk"

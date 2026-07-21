@@ -46,6 +46,10 @@ func (AliasHandler) Handle(ctx *pipeline.Context) error {
 	result := make([]string, 0, len(ctx.Args))
 
 	for i, arg := range ctx.Args {
+		if arg == "--" {
+			result = append(result, ctx.Args[i:]...)
+			break
+		}
 		rewritten, ok := tryNormaliseFlag(arg, known)
 		if ok {
 			ctx.AddCorrection("alias", pipeline.PreParse, rewritten, arg, rewritten, "alias")

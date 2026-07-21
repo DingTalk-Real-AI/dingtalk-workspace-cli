@@ -30,26 +30,34 @@ import (
 // If the target command cannot be resolved (e.g. the user typed a
 // non-existent command), PreParse is skipped silently and Cobra will
 // handle the error.
-func RunPreParse(root *cobra.Command, engine *Engine) {
+func RunPreParse(root *cobra.Command, engine *Engine) error {
+	_, err := RunPreParseArgs(root, engine, os.Args[1:])
+	return err
+}
+
+// RunPreParseArgs is the testable form of RunPreParse. Production passes
+// os.Args[1:]; end-to-end tests can pass an isolated argv while exercising the
+// exact same command traversal, FlagInfo extraction, handler chain, and
+// root.SetArgs delivery path.
+func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Context, error) {
 	if engine == nil || !engine.HasHandlers(PreParse) {
-		return
+		return nil, nil
 	}
 
-	rawArgs := os.Args[1:]
 	if len(rawArgs) == 0 {
-		return
+		return nil, nil
 	}
 
 	// Traverse the command tree to find the target command.
 	target, _, err := root.Traverse(rawArgs)
 	if err != nil {
-		return
+		return nil, nil
 	}
 
 	// Build FlagInfo from the target command's registered flags.
 	flagInfos := FlagInfoFromCommand(target)
 	if len(flagInfos) == 0 {
-		return
+		return nil, nil
 	}
 
 	ctx := &Context{
@@ -63,7 +71,7 @@ func RunPreParse(root *cobra.Command, engine *Engine) {
 
 	if err := engine.RunPhase(PreParse, ctx); err != nil {
 		slog.Debug("pipeline pre-parse", "error", err)
-		return
+		return ctx, err
 	}
 
 	// Only set corrected args if PreParse actually changed something.
@@ -79,6 +87,7 @@ func RunPreParse(root *cobra.Command, engine *Engine) {
 			)
 		}
 	}
+	return ctx, nil
 }
 
 // FlagInfoFromCommand extracts FlagInfo entries from a Cobra

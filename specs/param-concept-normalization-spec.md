@@ -1,349 +1,225 @@
-# Spec：参数幻觉治理 —— 概念字典 + 逐命令归约
+# Spec：参数幻觉治理 —— 受审命令范围内的概念归一化
 
-- 状态：Draft（待评审）
+- 状态：Implemented，待最终回归
 - 分支：`fix/param-hallucination`
-- 关联草稿：[`docs/param-concept-dictionary-draft.json`](../docs/param-concept-dictionary-draft.json)、[`docs/param-concept-dictionary-draft.md`](../docs/param-concept-dictionary-draft.md)
-- 评测来源：`param_alias_map_merged_20260720`（440 条 badcase）+ 参数幻觉与 dws 参数设计分析报告
+- 评测来源：`param_alias_map_merged_20260720`（440 条 badcase）及参数幻觉分析报告
 
----
+## 1. 目标与边界
 
-## 1. 背景与目标
+本次工作的目标是提高已知参数幻觉的执行成功率，并重点避免“参数被错误归一后成功执行”。主要方案是：
 
-### 1.1 问题
-LLM/Agent 调用 dws CLI 时高频出现"参数幻觉"：对同一实体在不同命令用不同拼写（`--group`/`--conversation-ids`/`--id`）、用业界习惯别名（`--keyword` 代 `--query`、`--size` 代 `--limit`）、或用形态变体（`--pageSize` 代 `--page-size`）。评测显示去重后 144 组幻觉 / 388 次，其中约 70% 属"同实体异名"，可通过归一化消除。
+1. 以 `internal/cli/param_concepts.json` 作为 reviewed 参数概念与逐命令决策源。
+2. 只在概念明确列出的真实 Cobra 命令上做 build-time 归约，生成逐命令别名/保护表。
+3. 在现有 PreParse 流水线中把安全别名改写为 canonical flag。
+4. 对语义不完整、存在歧义或仍待确认的名字 fail closed，不进入自动执行。
 
-### 1.2 现状（已核实）
-dws 已有一套**相当完整、但机制分散、无单一源**的运行时参数处理。本 spec 是"统一/收编"这些机制，而非从零造：
-- **PreParse 改写流水线（已实现，`root.go` 注册）**：`AliasHandler`（camel/snake→kebab，如 `--startTime`→`--start-time`）、`StickyHandler`（拆粘连值 `--limit100`→`--limit 100`）、`ParamNameHandler`（近似拼写自动纠正）。
-- **全局语义别名 `CrossProductAliases`（已实现，`cross_product_aliases.go`）**：12 组等价名 → 批量注册隐藏 flag。**本 spec 的概念字典（15 概念）即其上位替代。**
-- **各命令手写隐藏别名 flag**：`calendar event list`（一次手写 8 个时间拼写变体）、`todo`(subject/content→title)、`sheet find`(find→query) 等，与 CrossProductAliases 叠加。
-- **取值回落逻辑 5 套并存**：`flagOrFallback`、`mustFlagOrFallback`、手写 if/else 链、`shortcut.RuntimeContext.IntFirst`、`validateRequiredFlagWithAliases`。
-- **flag 级 did-you-mean 已实现**：`SuggestFlagFix`（`pkg/cmdutil/flagfix.go`）在 unknown flag 时给 `Did you mean --xxx?`，用**动态阈值**（≤3→1 / ≤8→2 / 否则 3）+ `CommonFlagAliases` 语义快路 + 粘连检测；错误载荷含**结构化 `available_flags`**（非仅文本）。子命令级另有 sheet 家族的 `attachUnknownSubcommandGuard`。
-- **零 `SetNormalizeFunc`**：形态归一由上面的 PreParse 流水线完成，dws 未用 pflag 库级钩子。
-- 覆盖不一致：`calendar` 接受 `count`，`report` 不接受；概念字典未覆盖的命令仍散落手写。
+本次不以“内部路径与历史实现完全一致”为目标。有明确收益且通过语义审查、最终 payload 验证的行为变化可以接受；但必须满足本文的安全边界。
 
-### 1.3 目标
-用"概念字典（唯一 reviewed 源）+ build 时逐命令归约生成器"取代散落手写；分层交付（形态/同义/模糊各归其位）；把 440 条 badcase 降级为回归夹具；新增命令自动被覆盖。
+本次不做：
 
-### 1.4 Non-goals
-- 不解决"红类能力缺口"（命令本身缺参数/接口）——那是补功能，不是归一。
-- 不改 `schema_catalog.json` 的 wire 格式（保持 #602 兼容基线）。
-- 不引入运行时单体中间件；不新建第二身份源。
-- 不做语义 NLU；归约全靠"概念成员表 ∩ 命令真实 flag"的机械规则。
+- 不解决命令或接口本身缺少能力的红类问题。
+- 不改 Schema/Catalog wire contract。
+- 不把所有产品的 hidden flag、fallback、helper Go 文件清理作为交付范围。
+- 不将 Calendar 试点扩展为全 Calendar 或全产品治理。
+- 不做值转换、单位换算或需要补充第二个参数的复杂推理。
 
----
+## 2. 最终链路
 
-## 2. 架构与数据流
-
-```
-[源] internal/cli/param_concepts.json      ← 唯一 reviewed 事实源（概念 + command_overrides）
-       │  (go generate ./internal/cli)
-       ▼
-[生成器] internal/generator/cmd_param_aliases
-       │  读 Cobra 树真实 flag + 概念，morph() 后求 ∩，∩=1 产出，∩≥2 护栏
-       ├─► internal/cli/param_aliases_generated.go   （逐命令别名表，generated 禁手改）
-       └─► 灌入 schema_agent_metadata（别名对 schema --all / CI 可见）
-       ▼
-[运行时] 复用现有 PreParse 流水线 + 错误路径（非新建中间件）
-       ├─ ③ 扩展 AliasHandler/新增 PreParse handler：morph 后查②表 → --size 解析期即归一到 --limit
-       ├─ ④ 统一取值：值已落 canonical，读 canonical；require-one-of 收口单一 helper
-       └─ ⑤ 扩展现有 SuggestFlagFix：命中②表 ambiguous/block → 引导 --help；其余仍最近邻，均不静默改写
-       ▼
-[门禁] ⑥ validation_fixture 回归（走 embedded 交付路径）+ 共现 gate（scripts/policy）
+```text
+用户/Agent argv
+  │
+  ├─ Cobra Traverse：定位真实叶子命令并读取真实 flags
+  │
+  └─ PreParse（同一个 Context）
+       1. AliasHandler
+          处理 camelCase/snake_case/kebab-case 等形态差异
+       2. SemanticAliasHandler
+          按“精确命令路径”读取 generatedParamAliases
+          ├─ alias      → 改写为 canonical flag
+          ├─ blocked    → 保持原样并写入 ProtectedFlags
+          └─ ambiguous  → 保持原样并写入 ProtectedFlags
+       3. StickyHandler
+          拆分安全的粘连参数；不得处理 ProtectedFlags
+       4. ParamNameHandler
+          处理普通近似拼写；不得处理 ProtectedFlags
+       5. 检测 alias/canonical 冲突
+          同一 canonical 出现两个不同拼写时直接报错
+  │
+  ├─ Cobra ParseFlags：只解析归一化后的 canonical/native flags
+  ├─ RunE：现有 helper 读取 canonical/native 值并校验
+  └─ MCP/HTTP payload：只包含命令原本定义的最终接口字段
 ```
 
-**硬不变量**：`morph()` 归一逻辑在 build 期（求 ∩）与运行期（PreParse 流水线查表）**必须是同一份代码**。⚠️ 现状 build 用 `cmdutil.Morph`、运行期 `AliasHandler` 用 `toKebabCase` 是**两份实现**，③ 落地时必须统一成同一函数（`Morph`），否则生成期认为能配、运行期配不上 = 契约漂移。
+归一化参数名只影响 Cobra 解析前的 argv。它不会向 RunE 或 MCP payload 注入新的业务字段；RunE 仍按原有 canonical flag 构造请求。对已保留的真实 hidden/native flag，归一化体系不抢占其原生路径。
 
----
+## 3. Reviewed 源与生成物
 
-## 3. 组件详设
+### 3.1 概念
 
-### ① 中央概念字典事实源
+每个概念包含：
 
-**是什么 / 干什么**：唯一 reviewed 源，声明概念（成员/排除）与逐命令覆盖，取代散落手写别名。
-
-**文件改动**：
-| 文件 | 类型 | 说明 |
-|---|---|---|
-| `internal/cli/param_concepts.json` | 新增（源，**非生成物**） | 由 `docs/param-concept-dictionary-draft.json` 正式化 |
-| `internal/cli/param_concepts.schema.json` | 新增 | 闭合校验契约，参照 `schema_command_registry.schema.json` |
-| `internal/cli/param_concepts.go` | 新增 | loader + `go:embed` + 结构体 + 语义校验 |
-| `internal/cli/param_concepts_contract_test.go` | 新增 | 结构/约束契约测试 |
-
-**数据结构（Go）**：
 ```go
-type ParamConcepts struct {
-    Version    string                     `json:"version"`
-    Morph      MorphRules                 `json:"morphological_rules"`
-    Concepts   map[string]Concept         `json:"concepts"`
-    Overrides  map[string]CommandOverride `json:"command_overrides"` // key = 命令主路径
-    Fixture    ValidationFixture          `json:"validation_fixture"`
-}
 type Concept struct {
-    Denotes      string   `json:"denotes"`
-    CanonicalHint string  `json:"canonical_hint"` // 仅治理建议，运行时不用
-    Members      []string `json:"members"`
-    Excludes     []string `json:"excludes"`
-    Risk         string   `json:"risk"` // green|yellow
-}
-type CommandOverride struct {
-    Bind          map[string]string `json:"bind,omitempty"`          // realFlag -> conceptID
-    ScopedAliases map[string]string `json:"scoped_aliases,omitempty"`// emitted -> realFlag（仅本命令）
-    Block         []string          `json:"block,omitempty"`         // 拒绝归约，走 did-you-mean
-    Ambiguous     []string          `json:"ambiguous,omitempty"`     // 共现白名单（reviewed）
-    Confirm       bool              `json:"confirm,omitempty"`
-    ScopeStrict   bool              `json:"scope_strict,omitempty"`
-    Note          string            `json:"note,omitempty"`
+    ID            string
+    Denotes       string
+    CanonicalHint string
+    Members       []string
+    Excludes      []string
+    Commands      []string // 精确、受审、可运行的 Cobra 叶子路径
+    Risk          string
 }
 ```
 
-**loader 期校验（否则 CI 失败）**：
-1. 概念成员两两不重叠（一个拼写不能同属两概念）。
-2. `members` 与 `excludes` 无交集。
-3. `bind` 的 value 必须是已声明的 conceptID。
-4. `scoped_aliases`/`bind`/`block` 引用的命令路径需存在（对齐 Cobra 树，见 §7 时序）。
-5. 未知字段拒绝（closed schema）。
+`commands` 是强制字段。概念只允许在这些精确路径上参与归约；新命令不会因为碰巧出现同名 flag 就自动获得所有概念别名。这一约束用于阻断全局词汇碰撞，例如：
 
----
+- `from` 在时间查询中可能表示开始时间，在邮件中可能表示发件人。
+- `name` 可能是名称，也可能被某些接口错误地当作 ID。
+- `time` 不足以说明 RFC3339、毫秒时间戳或日期边界。
 
-### ② build 时归约生成器
+概念成员仍需全局唯一；同一概念内 `members` 与 `excludes` 不得重叠。
 
-**是什么 / 干什么**：`go generate ./internal/cli` 的一步；把字典 + Cobra 真实 flag 编译成逐命令别名表与 schema 别名清单。
+### 3.2 逐命令覆盖
 
-**文件改动**：
-| 文件 | 类型 | 说明 |
+`command_overrides` 只表达当前命令的特殊决策：
+
+- `bind`：把真实 generic flag 绑定到一个概念。
+- `scoped_aliases`：明确的命令局部 alias → real flag。
+- `block`：语义不完整或错误映射，禁止自动处理。
+- `ambiguous`：存在多个合理含义，禁止自动选择。
+- `confirm` / `investigate`：待审状态；不得生成可执行 alias。
+
+当前 reviewed 源不允许残留 `confirm=true` 或 `investigate=true`。未来若再次引入，归约器也必须将相关名字置为保护态而不是激活。
+
+### 3.3 生成物
+
+`internal/generator/cmd_param_aliases` 使用真实 `app.NewRootCommand()`：
+
+1. 校验每个 `commands` 路径存在且是可运行叶子。
+2. 校验概念在该命令上至少命中一个真实 member 或 reviewed bind。
+3. 用共享的 `cmdutil.Morph` 归一名称。
+4. 一个概念只命中一个可见真实 flag 时，生成安全 alias。
+5. 命中多个可见真实 flag 时，必须有精确 `ambiguous` 决策，否则生成失败。
+6. `scoped_aliases`/`bind` 目标必须是真实 flag。
+7. alias、blocked、ambiguous 不得互相重叠，也不得覆盖真实 canonical/native flag。
+
+输出 `internal/cli/param_aliases_generated.go` 是确定性生成物，不得手改。
+
+## 4. 映射准入规则
+
+名称相似不是准入依据。自动映射必须同时满足：
+
+1. 同一实体：源与目标表达同一个业务对象。
+2. 同一卡数：单值不能静默转成列表，列表不能静默缩成单值。
+3. 同一值域/格式：日期、RFC3339、Unix 毫秒等不能只换名字就互换。
+4. 同一单位：秒、毫秒、数量、页号等不能做 name-only 映射。
+5. 单参数可完成：若正确语义需要补充另一个参数，则必须 block。
+6. 目标是该命令真实 flag，且最终 payload 字段已核对。
+7. 写命令需要逐命令说明，并以 mock caller 断言最终 payload。
+
+### 4.1 本次重点审计结论
+
+| 风险 | 决策 | 例子 |
 |---|---|---|
-| `internal/generator/cmd_param_aliases/main.go` | 新增 | 生成器入口，对齐 `cmd_schema_catalog` 等 |
-| `internal/cli/param_aliases_generated.go` | 新增（**generated**） | 逐命令别名表，纳入 `check-generated-drift.sh` |
-| `internal/cli/schema_agent_metadata/*` | 修改（生成） | 追加各命令 `accepted_aliases` |
-| `internal/cli/generate.go`（或既有 `//go:generate` 聚合处） | 修改 | 注册新生成步骤 |
+| 单数/复数 | 拆成不同概念或 block | `user_id` 与 `user_ids`、`dept_id` 与 `dept_ids` |
+| ID/名称 | 只有源代码/接口证明同实体才开放 | `contact +resolve-dept --query → --name` 可开放；`list-sub-depts --name → --dept` 被 block |
+| 时间格式 | 只保留值格式不变的命令局部映射 | Calendar `--date → --start` 由相同 ISO 解析与 payload 验证；`list-by-sender --time` 被 block |
+| 分页基数 | 页号、页索引、条数、游标分开 | `page-index` 不再等同 `page-number`；`count` 不并入 `limit` 概念 |
+| 值单位 | 不做隐式换算 | name-only 归一化不得改变秒/毫秒或日期/时间戳 |
+| 多参数转换 | block | `before-block-id` 实际需要 `--ref-block` 和 `--where before` |
+| 机器人身份 | 不把 code 与 ID 混用 | `robot-id` 不再归入 `robot_code` |
 
-**核心算法（伪代码）**：
+已存在的真实 hidden/native compatibility flag 不由本体系重新解释。它仍由现有 Cobra/RunE 路径负责，避免中央规则改变原命令已有语义。
+
+## 5. 保护与冲突规则
+
+### 5.1 blocked / ambiguous
+
+SemanticAlias 命中保护项时：
+
+- 不改写 argv。
+- 把 morphed flag 写入 `Context.ProtectedFlags`。
+- Sticky 与 ParamName 必须跳过该名字。
+- Cobra 最终返回 unknown flag。
+- 最终错误使用 generated table 给出结构化 `blocked_flag` / `ambiguous_flag` 原因并引导该命令的 `--help`；不得再给最近邻猜测。
+
+裸 `--` 是流水线终止符。它之后的内容视为 positional data，任何 handler 都不得继续当作 flag 处理。
+
+### 5.2 alias 与 canonical 同时出现
+
+若 argv 同时包含指向同一 canonical 的两个不同拼写，例如：
+
+```text
+--date A --start B
+--start B --date A
 ```
-for cmd in cobraTree.runnableLeaves():
-    F = { morph(f) : f for f in cmd.realFlags() }        # 归一形态 -> 原名
-    ov = concepts.Overrides[cmd.path]
-    aliasMap = {}                                        # morph(emitted) -> canonicalRealFlag
 
-    # (a) 概念自动归约
-    for concept in concepts.Concepts:
-        eff = { morph(m) for m in concept.Members }
-        eff |= { morph(rf) for rf,cid in ov.Bind if cid==concept.id }   # bind 并入
-        hit = eff ∩ set(F.keys())
-        if len(hit) == 1:
-            canon = F[ the one in hit ]
-            for m in eff \ {canon}: aliasMap[m] = canon
-        elif len(hit) >= 2:
-            assert cmd.path in ov.Ambiguous, FAIL("co-occurrence 未登记: %s %s" % (cmd, concept))
-            # 共现：不产出别名
+无论顺序、无论值是否相同，一律在 PreParse 返回 `FlagConflictError`，RunE 不执行。这样不会由“最后一个参数获胜”静默决定结果，也避免将来不同 pflag 类型产生不一致行为。
 
-    # (b) 命令级 scoped_aliases（仅本命令；scope_strict 不外泄）
-    for emitted, realFlag in ov.ScopedAliases:
-        assert realFlag in F.values(), FAIL("scoped alias 目标非真实 flag")
-        aliasMap[morph(emitted)] = realFlag
+同一个拼写重复出现仍保持 Cobra 原有语义，本次不额外改变。
 
-    # (c) block：从 aliasMap 移除并记入 blockList
-    blockList[cmd.path] = [morph(b) for b in ov.Block]
+## 6. Calendar 试点结论
 
-    emit(cmd.path, aliasMap, blockList)
-    emitSchemaAliases(cmd.path, aliasMap.keys())         # schema 可见
-```
+保留 `calendar event list` 试点，不回退，也不扩面。
 
-**生成器保证**：
-- 全量重算（非增量补丁），对齐 `make generate-schema` 的确定性快照语义。
-- 任一命令 `∩≥2` 且不在 `Ambiguous` → **生成失败**。
-- `scoped_aliases`/`bind` 目标不是真实 flag → 失败。
-- 生成物 byte 稳定，drift gate 守。
+该试点已经移除一组手写 hidden spelling flag，改为在 PreParse 统一归一到：
 
----
+- `start`
+- `end`
+- `calendar-id`
+- `cursor`
+- `limit`
 
-### ③ 形态/语义层：接入现有 PreParse 流水线（非新建 `SetNormalizeFunc`）
+保留 `count` 原生兼容 flag，因为它不被概念层认定为通用 `limit` 同义词。端到端测试验证 Calendar 幻觉参数最终只形成正确的 `startTime`、`endTime`、`calendarId`、`cursor`、`limit` payload。
 
-**是什么 / 干什么**：形态归一（camel/snake→kebab）**已由现有 `AliasHandler` 实现**；本步不引入平行的 `SetNormalizeFunc`，而是**把②的语义别名表接进同一条 PreParse 流水线**——在形态归一后查②表，把 `keyword→query`、`min-time→start` 这类语义别名改写成命令真名；命中 `Ambiguous`/`Blocked` 则不改写、留给⑤。落地后即可删掉各命令的语义/形态隐藏 flag。
+除这一已提交试点外，本次不继续修改 `internal/helpers/calendar.go`，也不要求其他 skill/helper 迁移 hidden flag 与 fallback。
 
-**文件改动**：
-| 文件 | 类型 | 说明 |
-|---|---|---|
-| `pkg/cmdutil/flagnorm.go` | 已存在 | `Morph(string) string` 已就位；运行期查表须**复用它**（勿再用 `toKebabCase` 另一份） |
-| `internal/pipeline/handlers/alias.go`（或新增 PreParse handler） | 修改/新增 | 形态归一后，查 `generatedParamAliases[cliPath]`：命中别名→改写为真名；命中 ambiguous/block→不改写 |
-| `internal/pipeline/cobra.go` / `Context` | 修改 | 让 PreParse handler 拿到当前命令的 CLIPath，以索引②表 |
-| `internal/helpers/calendar.go` 等 + `cross_product_aliases.go` | 修改（清理） | ②表覆盖后删对应手写隐藏 flag；`CrossProductAliases` 12 组并入概念字典后下线 |
+## 7. 测试与门禁
 
-**流水线内的查表逻辑（复用 build 同一 `Morph`）**：
-```go
-// 在 AliasHandler 形态归一之后追加
-m := cmdutil.Morph(bare)                          // 与 build 期求 ∩ 用同一函数
-entry := generatedParamAliases[ctx.CLIPath]
-switch {
-case entry.isBlocked(m) || entry.isAmbiguous(m):  // 不改写，交⑤引导 --help
-    // 原样放回，unknown flag 由⑤装饰
-case entry.Aliases[m] != "":                      // 语义别名 → 真名
-    rewrite("--" + entry.Aliases[m])
-default:
-    // 形态归一结果若命中真实 flag，AliasHandler 既有逻辑已处理
-}
-```
-> 关键一致性：现状 `AliasHandler` 用 `toKebabCase`、build 用 `cmdutil.Morph`，二者必须统一为**同一函数**（`Morph`），否则生成期与运行期对同一拼写的归一结果可能分叉 = 契约漂移。
+| 层级 | 验证 |
+|---|---|
+| reviewed 源 | closed schema、命令范围非空、成员/排除约束、无待审项 |
+| 归约器 | 精确命令准入、单/多命中、真实目标、真实 flag 不被覆盖、分类互斥 |
+| handler 链 | protected 状态贯穿 Semantic/Sticky/ParamName、裸 `--`、冲突双顺序 |
+| fixture | 每条 badcase 走真实 `RunPreParseArgs` 与真实 Cobra `ParseFlags` |
+| 最终执行 | 代表性读命令 Calendar 与写命令 chat send 走真实 RunE + mock caller，并断言最终 payload |
+| 最终错误 | blocked/ambiguous 使用 reviewed 错误路由，不回落到 generic fuzzy suggestion |
+| policy | dictionary contract、全量 Cobra co-occurrence、fixture、generated drift |
+| 回归 | CLI 契约、Skill static、Skill `--mock` E2E |
 
----
+fixture 只有“被测参数名”而没有每个业务命令的完整必填业务数据，因此全量 fixture 的执行边界是 Cobra 解析；真实 RunE/payload 由有完整 argv 的代表性读写测试承担。二者组合覆盖从输入到最终请求的完整链路，同时避免 fixture 触发真实外部写操作。
 
-### ④ 统一取值回落入口
+## 8. 对原有链路的可能影响
 
-**是什么 / 干什么**：③②落地后别名在解析期已归一到 canonical，**纯别名 fallback 变冗余**（直接读 canonical）；真正的跨 flag 约束（require-one-of）收口成单一 helper。
+允许且有收益的影响：
 
-**文件改动**：
-| 文件 | 类型 | 说明 |
-|---|---|---|
-| `internal/helpers/helpers.go`（或 `pkg/cmdutil`） | 修改 | 保留唯一 `RequireOneOf(cmd, flags...)`；标注旧 helper deprecated |
-| `internal/helpers/calendar.go` | 修改 | 删 `flagOrFallback(...,"page-size","size","count")`、if/else 链，改读 canonical |
-| `internal/shortcut/runner.go` | 修改 | `IntFirst` 逻辑并入统一 helper 或改读 canonical |
-| `internal/helpers/todo.go`、`minutes.go` | 修改 | `validateRequiredFlagWithAliases` → `RequireOneOf`（约束保留，别名清单删除） |
+- 受审命令开始接受明确安全的语义别名。
+- Calendar 试点由 hidden flag/fallback 迁移到 PreParse canonical 读取。
+- alias/canonical 混传从顺序覆盖变为确定性报错。
+- 某些曾被普通 fuzzy handler 猜中的危险名字现在明确失败。
 
-**迁移判定（逐调用点）**：
-- 纯别名取值（同一实体多拼写）→ **删 fallback，读 canonical**（别名已由②③处理）。
-- require-one-of（title/subject/content 至少一个）→ **收口 `RequireOneOf`**，别名清单从代码移入字典。
-- 跨真正不同 flag 的读取（非别名）→ 保留，但用统一 helper 表达。
+需要持续约束的影响：
 
-> ⚠️ 本项是**行为迁移**，风险最高：必须在 ③②稳定、⑥夹具铺好后逐命令迁，每命令迁移配夹具断言。
+- 不能因为新增命令或真实 flag 而自动扩大概念覆盖；必须显式加入 `commands`。
+- 不能让中央 alias 覆盖现存真实 flag。
+- 不能降低 Cobra required 约束或绕过 RunE 校验/确认逻辑。
+- 写命令的新映射必须审查最终接口字段，不能只断言 argv 被改写。
+- 生成表、reviewed 源与运行时必须共用 `cmdutil.Morph`，避免 build/runtime 漂移。
 
----
+## 9. 回退
 
-### ⑤ flag 级 did-you-mean（扩展现有 `SuggestFlagFix`）
+本次修改只提交在 `fix/param-hallucination` 本地分支，不推送、不合并、不修改 main。
 
-**是什么 / 干什么**：flag 级 did-you-mean **已由 `SuggestFlagFix`（`flagfix.go`）实现**（动态阈值最近邻 + `CommonFlagAliases` + 粘连检测）。本步是**在其上增加②表路由**：未知 flag 先查本命令的 `Ambiguous`/`Blocked`，命中则**不猜单个候选、直接引导 `--help`**（共现无法二选一、block 的最近邻往往就是它正要拦的错映射）；未命中再走现有最近邻。全程**只提示不改写**（尤其写命令）。
+- 本地提交后发现问题：对本次 commit 执行 `git revert <sha>`，保留完整可审计历史。
+- 如果日后已经合入 main：仍可在 main 上 `git revert <merge-or-commit-sha>`，再走正常审核与发布流程。
+- reviewed 源与 `param_aliases_generated.go` 必须一起回退，或回退源后重新生成并通过 drift gate。
+- Calendar 试点是更早的独立提交；若只回退本次安全加固，不会自动撤回 Calendar 试点。若需撤回试点，应单独 revert 对应提交。
 
-**文件改动**：
-| 文件 | 类型 | 说明 |
-|---|---|---|
-| `pkg/cmdutil/flagfix.go`（`SuggestFlagFix`） | 修改 | 入口先查 `entry.Ambiguous`/`entry.Blocked` → 引导 `--help`；否则保留现有最近邻/`CommonFlagAliases`/粘连逻辑 |
-| flag 解析错误处理处（`root.go` 已接 `SuggestFlagFix`） | 保持 | 结构化 `available_flags`/`hint`/`actions` 已在，无需新建 |
+## 10. 验收标准
 
-**行为**：
-```
-unknown flag --xxx
-  # 1) 已登记的共现存疑：不猜单个候选，直接引导 --help
-  if Morph(xxx) in entry.Ambiguous:
-      stderr "unknown flag --xxx; it is ambiguous on 'dws <path>'; run 'dws <path> --help' to pick the right flag"
-  # 2) 已登记的 block（假同义词/不同实体）：绝不给最近邻
-  #    （否则会把 block 正要拦的那个错映射又推荐回去），直接引导 --help
-  elif Morph(xxx) in entry.Blocked:
-      stderr "unknown flag --xxx; it is a different entity than it looks here; run 'dws <path> --help' for valid flags"
-  # 3) 其余未知 flag（普通拼错）：最近邻提示，仍附带 --help 兜底
-  else:
-      cands = nearest(Morph(xxx), realFlags(cmd) ∪ conceptMembersOf(cmd), dist<=2)
-      if cands: stderr "unknown flag --xxx; did you mean --{cands[0]}? (or run 'dws <path> --help')"
-      else:     stderr "unknown flag --xxx; see 'dws <path> --help'"
-  # 永不自动改写；退出非零
-```
-> 与 ①-block 协同：`block` 名单命中时**绝不自动改写、也不给最近邻建议**（blocked 名的最近邻往往就是它正要拦的错映射，如 `node`→`job-id`），统一引导 `--help`。
-> 引导 `--help` 无需新增数据：`entry.Ambiguous` / `entry.Blocked` 已足以判定命中；若日后想在提示里直接列出候选真实 flag（如 `--user`/`--users`），需在生成表额外存该概念的真实交集，属可选增强。
-
----
-
-### ⑥ validation_fixture 回归 + 共现 gate
-
-**是什么 / 干什么**：两道门禁，防退化 + 防将来静默误归约。
-
-**文件改动**：
-| 文件 | 类型 | 说明 |
-|---|---|---|
-| `internal/app/param_alias_fixture_test.go` | 新增 | 读字典 `validation_fixture`，**走 embedded 交付路径**断言归约结果（含 did-you-mean/blocked） |
-| `scripts/policy/check-param-concepts.sh` | 新增 | 校验字典 schema + loader 语义 |
-| `scripts/policy/check-param-alias-cooccurrence.sh` | 新增 | 扫全量命令，∩≥2 且不在 Ambiguous → 红 |
-| `Makefile` | 修改 | `generate-schema` 加生成步；`policy` 加两 gate |
-
-**夹具断言语义**：
-- `expect=<realFlag>`：模型给 `emitted`，经交付路径归约后命中 canonical。
-- `expect=did-you-mean:ambiguous`：命中共现护栏，产出提示、不改写。
-- `expect=did-you-mean:blocked`：命中 block，产出提示、不改写。
-
-**为什么走 embedded 交付路径**：对齐 AGENTS.md——语义回归必须经最终 embedded loader/query 交付路径验证，生成器单测或 JSON count 不充分。
-
----
-
-## 4. 关键不变量（评审必查）
-
-1. **单一身份源**：别名只来自 `param_concepts.json`；代码里不得再手写别名清单（②后 grep 兜底）。
-2. **morph 一致**：build 与运行时共用 `pkg/cmdutil.Morph`。
-3. **概念纯度**：不同实体分属不同概念（`app-id`≠`app-key`、`folder`≠`space`）。
-4. **∩ 三态**：`=1` 自动、`=0` 不适用、`≥2` 护栏（须 reviewed 白名单）。
-5. **泛型名逐命令**：`id/name/type` 不入全局概念，仅 `bind`/`scoped_aliases` 处理。
-6. **不静默改写写命令**：模糊层只提示。
-7. **`required` 硬底线**：归一/别名不得降低 Cobra `MarkFlagRequired`。
-8. **生成物只读**：`param_aliases_generated.go` 禁手改，drift gate 守。
-
----
-
-## 5. 现有隐藏 flag 迁移 triage
-
-对每个现存隐藏别名 flag 分三类处理（**逐个 reviewed，非盲替**）：
-
-| 类别 | 例 | 处理 |
-|---|---|---|
-| (a) 纯形态变体 | `startTime`/`start-time` | 删，交③（现有 `AliasHandler` 已做形态归一） |
-| (b) 真同义词 | `size↔limit`、`find→query` | 进概念字典，②生成；草稿缺的成员 reviewed 补 |
-| (c) 非别名/独立/兼容 flag | `remind-at`(内部兼容)、`modified-start` | **保留**，字典不碰 |
-
-**行为收敛提示**：统一字典后 `report` 也会接受 `count/limit` 等（现仅 `calendar` 接受）。属有意一致化，但为**行为变更**，需评审 + 夹具兜底，不得静默。
-
----
-
-## 6. 分阶段落地（rollout）
-
-| 阶段 | 内容 | 验收 |
-|---|---|---|
-| P0 | ①源 + schema + loader + contract_test | `check-param-concepts.sh` 绿；无运行时行为变化 |
-| P1 | ②生成器 + `param_aliases_generated.go` + schema 别名可见 | drift gate 绿；`schema --all` 出现 aliases |
-| P2 | ③ 扩展 PreParse 流水线（AliasHandler 查②表），试点 **calendar** 删手写隐藏 flag | 夹具 calendar 子集绿；`--help`/baseline 更新 |
-| P3 | ⑥ 夹具全量 + 共现 gate 接入 `make policy` | 63 条夹具全绿；共现 gate 生效 |
-| P4 | ⑤ 扩展 `SuggestFlagFix` 加 ambiguous/block 路由 | 命中②表引导 --help；写命令不改写 |
-| P5 | ④ 逐命令迁移 fallback（风险最高，最后做） | 每命令迁移配夹具；`RequireOneOf` 收口 |
-
-**最小可用切片 = P0+P1+P2(calendar)+P3**：先证明"删手写别名、行为不变、夹具全绿、契约可见"。
-
----
-
-## 7. 时序与依赖
-
-- 生成器需 `app.NewRootCommand()` 建好的 Cobra 树来枚举真实 flag；loader 的"命令路径存在性"校验同样依赖它。
-- 依赖链：①→②→(③,⑤)；②产物→④；全程被⑥守。
-- CI 顺序：`make generate-schema`（含②）→ `check-generated-drift.sh` → `check-param-concepts.sh` → `check-param-alias-cooccurrence.sh` → 夹具测试 → 既有 schema/catalog gate。
-
----
-
-## 8. 测试计划
-
-| 层 | 测试 | 位置 |
-|---|---|---|
-| 源校验 | 成员不重叠/excludes/bind 目标/未知字段 | `param_concepts_contract_test.go` |
-| 生成器 | ∩ 三态、scoped/block、byte 稳定 | `internal/generator/cmd_param_aliases` 单测 |
-| 交付回归 | 63 条 fixture 走 embedded 路径 | `internal/app/param_alias_fixture_test.go` |
-| 共现 | 全量命令扫描 | `check-param-alias-cooccurrence.sh` |
-| 形态 | `Morph` 幂等/边界 | `pkg/cmdutil/flagnorm_test.go` |
-| did-you-mean | 最近邻/block 协同/不改写 | `pkg/cmdutil/flagsuggest_test.go` |
-| 回归 | 既有 CLI smoke / interface-baseline | 既有 gate |
-
----
-
-## 9. 风险与回退
-
-**风险**：
-- ④行为迁移可能改变取值优先级/空值语义（5 套写法语义本就不一致）→ 逐命令迁 + 夹具。
-- 行为收敛（report 开始收 count）可能影响既有脚本 → 评审 + CHANGELOG 记录。
-- 概念圈错（不同实体混一概念）→ 共现 gate + 概念纯度评审拦截。
-
-**回退**（分支 `fix/param-hallucination`，小步提交）：
-- 未提交：`git restore <file>`；新文件 `git clean -n` 确认后 `git clean -fd <path>`。
-- 已提交未合并：`git revert <sha>`（按组件粒度）。
-- 生成物需与源**一起回退或重生成**：`make generate-schema && ./scripts/policy/check-generated-drift.sh`，避免 drift 红。
-- 每阶段独立 commit，回退粒度 = 阶段。
-
----
-
-## 10. 待评审开放项
-
-1. 概念字典 15 个概念的 `excludes` 边界是否正确（错放 = 误归约）。
-2. `command_overrides` 中 `confirm/investigate` 项逐条定夺（date→start、query→name、chat conversation-info:user 等）。
-3. 行为收敛范围（哪些命令允许新接受 count/limit 等）是否需要灰度。
-4. 生成物形态：`.go`（embed 常量）vs `.json`+embed，与既有 `schema_*` 保持一致的选择。
-5. `④` 是否一次性迁移还是长期渐进（保留旧 helper 一段时间）。
+1. 已知 fixture 全部通过。
+2. 未确认、语义不完整或需要值/多参数转换的映射不会自动执行。
+3. blocked/ambiguous 不会被后续 fuzzy handler 改写。
+4. alias/canonical 冲突确定性失败且不进入 RunE。
+5. 代表性读、写命令最终 payload 正确。
+6. 参数概念、co-occurrence、生成漂移、CLI 契约及 Skill 回归门禁通过。
+7. 改动集中在中央归一化体系，不开展全产品 helper 清理。

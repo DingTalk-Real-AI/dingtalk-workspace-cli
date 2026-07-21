@@ -61,7 +61,7 @@ policy:
 	@$(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
 	@$(POLICY_ENV) ./scripts/policy/check-param-concepts.sh
 	@$(POLICY_ENV) ./scripts/policy/check-param-alias-cooccurrence.sh
-	@$(POLICY_ENV) $(GO) test -count=1 ./internal/app -run '^TestParamAliasFixtureThroughEmbeddedDeliveryPath$$'
+	@$(POLICY_ENV) $(GO) test -count=1 ./internal/app -run '^(TestParamAlias(FixtureThroughEmbeddedDeliveryPath|ReadCommandFinalPayload|WriteCommandFinalPayload|CanonicalConflictFailsBeforeRunE|BlockedFlagReachesReviewedFinalError)|TestFlagConflictErrorFormattingIsDeterministic)$$'
 	@$(POLICY_ENV) ./scripts/policy/check-schema-catalog.sh
 	@$(POLICY_ENV) ./scripts/policy/check-schema-binary.sh
 	@$(POLICY_ENV) $(MAKE) test-schema-agent-examples

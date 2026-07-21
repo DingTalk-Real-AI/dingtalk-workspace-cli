@@ -23,7 +23,7 @@ func TestParamConceptsJSONSchemaDocumentsClosedShape(t *testing.T) {
 		t.Fatalf("concept schema allows unknown fields: %#v", concept)
 	}
 	properties := concept["properties"].(map[string]any)
-	for _, field := range []string{"denotes", "canonical_hint", "members", "excludes", "risk"} {
+	for _, field := range []string{"denotes", "canonical_hint", "members", "excludes", "commands", "risk"} {
 		if _, ok := properties[field]; !ok {
 			t.Fatalf("concept schema is missing %s", field)
 		}
@@ -54,6 +54,9 @@ func TestEmbeddedParamConceptsLoadsAndSatisfiesInvariants(t *testing.T) {
 	// Members must be globally unique and disjoint from their own excludes.
 	memberOwner := make(map[string]string)
 	for _, concept := range concepts.Concepts {
+		if len(concept.Commands) == 0 {
+			t.Fatalf("concept %s has no reviewed command scope", concept.ID)
+		}
 		excludeSet := make(map[string]bool, len(concept.Excludes))
 		for _, exclude := range concept.Excludes {
 			excludeSet[exclude] = true
@@ -71,6 +74,9 @@ func TestEmbeddedParamConceptsLoadsAndSatisfiesInvariants(t *testing.T) {
 
 	// Every bind target must reference a declared concept.
 	for _, override := range concepts.Overrides {
+		if override.Confirm || override.Investigate {
+			t.Fatalf("current override %q remains unresolved (confirm=%v investigate=%v)", override.CommandPath, override.Confirm, override.Investigate)
+		}
 		for flag, conceptID := range override.Bind {
 			if _, ok := concepts.ByConcept[conceptID]; !ok {
 				t.Fatalf("command_override %q binds %q to undeclared concept %q", override.CommandPath, flag, conceptID)
@@ -87,9 +93,39 @@ func TestEmbeddedParamConceptsLoadsAndSatisfiesInvariants(t *testing.T) {
 	}
 }
 
+func TestParamConceptRiskAuditBoundaries(t *testing.T) {
+	concepts, err := LoadParamConcepts()
+	if err != nil {
+		t.Fatalf("LoadParamConcepts() error = %v", err)
+	}
+	assertMembers := func(id string, forbidden ...string) {
+		t.Helper()
+		concept, ok := concepts.ByConcept[id]
+		if !ok {
+			t.Fatalf("missing audited concept %q", id)
+		}
+		members := make(map[string]bool, len(concept.Members))
+		for _, member := range concept.Members {
+			members[member] = true
+		}
+		for _, name := range forbidden {
+			if members[name] {
+				t.Fatalf("audited concept %s still contains forbidden cross-semantics member %q", id, name)
+			}
+		}
+	}
+	assertMembers("user_id", "users", "user-ids")
+	assertMembers("user_ids", "user", "user-id")
+	assertMembers("dept_id", "depts", "dept-ids")
+	assertMembers("dept_ids", "dept", "dept-id")
+	assertMembers("group_id", "conversation-ids", "group-ids")
+	assertMembers("page_number", "page-index")
+	assertMembers("robot_code", "robot-id")
+}
+
 func TestDecodeParamConceptsRejectsUnknownFieldsAtEveryLevel(t *testing.T) {
 	valid := `{"$schema":"./param_concepts.schema.json","version":1,` +
-		`"concepts":{"search_query":{"denotes":"d","canonical_hint":"query","members":["query"],"risk":"green"}},` +
+		`"concepts":{"search_query":{"denotes":"d","canonical_hint":"query","members":["query"],"commands":["demo cmd"],"risk":"green"}},` +
 		`"command_overrides":{"chat group rename":{"bind":{"id":"search_query"}}}}`
 	for name, input := range map[string]string{
 		"root":     strings.Replace(valid, `"version":1`, `"version":1,"unknown":true`, 1),
@@ -109,7 +145,7 @@ func TestDecodeParamConceptsEnforcesReviewedConstraints(t *testing.T) {
 		return `{"$schema":"./param_concepts.schema.json","version":1,` + body + `}`
 	}
 	concept := func(members, excludes, risk string) string {
-		return `"concepts":{"c_one":{"denotes":"d","canonical_hint":"query","members":` + members + `,"excludes":` + excludes + `,"risk":"` + risk + `"}}`
+		return `"concepts":{"c_one":{"denotes":"d","canonical_hint":"query","members":` + members + `,"excludes":` + excludes + `,"commands":["demo cmd"],"risk":"` + risk + `"}}`
 	}
 	tests := map[string]string{
 		"missing schema ref":       `{"version":1,"concepts":{"c_one":{"denotes":"d","canonical_hint":"query","members":["query"],"risk":"green"}}}`,
@@ -119,6 +155,7 @@ func TestDecodeParamConceptsEnforcesReviewedConstraints(t *testing.T) {
 		"empty denotes":            wrap(`"concepts":{"c_one":{"denotes":"","canonical_hint":"query","members":["query"],"risk":"green"}}`),
 		"invalid risk":             wrap(concept(`["query"]`, `[]`, "red")),
 		"no members":               wrap(`"concepts":{"c_one":{"denotes":"d","canonical_hint":"query","members":[],"risk":"green"}}`),
+		"no command scope":         wrap(`"concepts":{"c_one":{"denotes":"d","canonical_hint":"query","members":["query"],"commands":[],"risk":"green"}}`),
 		"member equals exclude":    wrap(concept(`["query"]`, `["query"]`, "green")),
 		"member overlaps concepts": wrap(`"concepts":{"c_one":{"denotes":"d","canonical_hint":"query","members":["query"],"risk":"green"},"c_two":{"denotes":"d","canonical_hint":"query","members":["query"],"risk":"green"}}`),
 		"bind undeclared concept":  wrap(concept(`["query"]`, `[]`, "green") + `,"command_overrides":{"chat group rename":{"bind":{"id":"missing"}}}`),

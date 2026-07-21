@@ -111,7 +111,16 @@ func Execute() (exitCode int) {
 	// Run PreParse handlers on raw argv before Cobra parses flags.
 	// This corrects model-generated errors like --userId → --user-id
 	// and --limit100 → --limit 100.
-	rootRunPreParse(root, engine)
+	if err := rootRunPreParse(root, engine); err != nil {
+		err = apperrors.NewValidation(
+			err.Error(),
+			apperrors.WithReason("parameter_conflict"),
+			apperrors.WithHint("Remove the duplicate alias/canonical spelling and pass the parameter exactly once."),
+			apperrors.WithCause(err),
+		)
+		_ = printExecutionError(root, os.Stdout, os.Stderr, err)
+		return apperrors.ExitCode(err)
+	}
 
 	executed, err := rootExecuteCommand(root)
 	if err != nil {
@@ -180,6 +189,22 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// 无论哪种格式，子串 "--help' for usage." 都可被检索到。
 	tail := fmt.Sprintf("\nSee '%s --help' for usage.", cmd.CommandPath())
 	msgWithTail := errMsg + tail
+	if flag, protection, ok := reviewedFlagProtection(cmd, errMsg); ok {
+		hint := fmt.Sprintf("Parameter --%s is blocked from automatic normalization on %q; choose an explicit flag from --help.", flag, cmd.CommandPath())
+		reason := "blocked_flag"
+		if protection == pipeline.FlagProtectionAmbiguous {
+			hint = fmt.Sprintf("Parameter --%s is ambiguous on %q and cannot be normalized safely; choose the intended explicit flag from --help.", flag, cmd.CommandPath())
+			reason = "ambiguous_flag"
+		}
+		return apperrors.NewValidation(
+			msgWithTail,
+			apperrors.WithHint(hint),
+			apperrors.WithReason(reason),
+			apperrors.WithCause(err),
+			apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
+			apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
+		)
+	}
 
 	// Common flag aliases and suggestions
 	suggestions := map[string]string{
@@ -226,6 +251,33 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// （missing required / ambiguous / unknown shorthand 等），仍包尾部 hint，
 	// 行为对齐 wukong / docker / kubectl。
 	return fmt.Errorf("%s%s", errMsg, tail)
+}
+
+func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline.FlagProtection, bool) {
+	if cmd == nil {
+		return "", "", false
+	}
+	const prefix = "unknown flag: --"
+	idx := strings.Index(errMsg, prefix)
+	if idx < 0 {
+		return "", "", false
+	}
+	flag := strings.TrimSpace(errMsg[idx+len(prefix):])
+	if i := strings.IndexAny(flag, " =\n\t"); i >= 0 {
+		flag = flag[:i]
+	}
+	entry, ok := cli.LookupParamAlias(cmd.CommandPath())
+	if !ok {
+		return "", "", false
+	}
+	morphed := cmdutil.Morph(flag)
+	if entry.IsBlocked(morphed) {
+		return flag, pipeline.FlagProtectionBlocked, true
+	}
+	if entry.IsAmbiguous(morphed) {
+		return flag, pipeline.FlagProtectionAmbiguous, true
+	}
+	return "", "", false
 }
 
 func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {

@@ -53,39 +53,38 @@ func TestParamAliasFixtureThroughEmbeddedDeliveryPath(t *testing.T) {
 	// The exact runtime handler chain (alias → semantic → sticky → paramname),
 	// with the semantic table sourced from the embedded generated snapshot.
 	engine := newPipelineEngine()
-	// The live Cobra tree is the source of truth for whether a synonym is a
-	// genuine (often hidden) real flag the command already accepts.
-	root := NewRootCommand()
-
-	const fixtureValue = "FIXTURE_VALUE"
-
 	for _, c := range concepts.Fixture {
 		t.Run(c.Command+"/"+c.Emitted, func(t *testing.T) {
+			// Fresh tree per case because Cobra parsing mutates flag state.
+			root := NewRootCommand()
+			leaf := resolveParamLeaf(root, c.Command)
+			if leaf == nil {
+				t.Fatalf("fixture command %q is not a live Cobra command", c.Command)
+			}
 			// Fixture command paths carry no "dws" prefix; LookupParamAlias
 			// normalizes to the same key the generator used, so the runtime
 			// lookup is byte-identical to the build-time key.
-			entry, ok := cli.LookupParamAlias(c.Command)
-			if !ok {
-				t.Fatalf("no embedded alias entry for command %q (fixture references a command not covered by the generated table)", c.Command)
+			entry, hasEntry := cli.LookupParamAlias(c.Command)
+			fixtureValue := paramFixtureValue(leaf, c.Emitted, c.Expect)
+			rawArgs := append(strings.Fields(c.Command), "--"+c.Emitted, fixtureValue)
+			root.SetArgs(rawArgs)
+			ctx, err := pipeline.RunPreParseArgs(root, engine, rawArgs)
+			if err != nil {
+				t.Fatalf("RunPreParseArgs error = %v", err)
 			}
-
-			ctx := &pipeline.Context{
-				Args:    []string{"--" + c.Emitted, fixtureValue},
-				Command: c.Command,
-			}
-			if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
-				t.Fatalf("PreParse error = %v", err)
+			if ctx == nil {
+				t.Fatal("RunPreParseArgs skipped a fixture command with real flags")
 			}
 			morphed := cmdutil.Morph(c.Emitted)
 
 			switch c.Expect {
 			case "did-you-mean:ambiguous":
-				if !entry.IsAmbiguous(morphed) {
+				if !hasEntry || !entry.IsAmbiguous(morphed) {
 					t.Fatalf("%q on %q: expected co-occurrence guard (ambiguous) but embedded entry does not classify it; ambiguous=%v", c.Emitted, c.Command, entry.Ambiguous)
 				}
 				assertLeftUnchanged(t, ctx, c.Emitted, fixtureValue)
 			case "did-you-mean:blocked":
-				if !entry.IsBlocked(morphed) {
+				if !hasEntry || !entry.IsBlocked(morphed) {
 					t.Fatalf("%q on %q: expected block guard but embedded entry does not classify it; blocked=%v", c.Emitted, c.Command, entry.Blocked)
 				}
 				assertLeftUnchanged(t, ctx, c.Emitted, fixtureValue)
@@ -99,28 +98,37 @@ func TestParamAliasFixtureThroughEmbeddedDeliveryPath(t *testing.T) {
 				//      (usually hidden) real flag the command accepts directly and
 				//      maps to the same entity via its fallback wiring. These are
 				//      the un-migrated commands pending §5 hidden-flag cleanup.
-				if len(ctx.Args) < 2 || ctx.Args[1] != fixtureValue {
+				flagArgs := ctx.Args[len(strings.Fields(c.Command)):]
+				if len(flagArgs) < 2 || flagArgs[1] != fixtureValue {
 					t.Fatalf("%q on %q lost its value: args=%v", c.Emitted, c.Command, ctx.Args)
 				}
-				switch got := ctx.Args[0]; got {
-				case "--" + c.Expect:
+				got := flagArgs[0]
+				gotBare := strings.SplitN(strings.TrimPrefix(got, "--"), "=", 2)[0]
+				switch {
+				case got == "--"+c.Expect:
 					// (1) rewritten; the embedded table must agree.
+					if !hasEntry {
+						t.Fatalf("%q on %q was rewritten without an embedded alias entry", c.Emitted, c.Command)
+					}
 					if canon, hit := entry.ResolveAlias(morphed); !hit || canon != c.Expect {
 						t.Fatalf("embedded table ResolveAlias(%q) on %q = %q (hit=%v), want %q", morphed, c.Command, canon, hit, c.Expect)
 					}
-				case "--" + c.Emitted:
+				case cmdutil.Morph(gotBare) == morphed && commandHasRealFlagByMorph(leaf, morphed):
 					// (2) not rewritten — only valid if the command natively
 					// accepts the emitted synonym as a real flag.
-					leaf := resolveParamLeaf(root, c.Command)
-					if leaf == nil {
-						t.Fatalf("%q on %q was not reduced and the command could not be resolved in the Cobra tree", c.Emitted, c.Command)
-					}
-					if !commandHasRealFlagByMorph(leaf, morphed) {
-						t.Fatalf("%q on %q was neither reduced to --%s nor accepted as a real flag (unknown-flag hallucination)", c.Emitted, c.Command, c.Expect)
-					}
 				default:
 					t.Fatalf("%q on %q reduced to unexpected %q, want --%s or native --%s (args=%v)", c.Emitted, c.Command, got, c.Expect, c.Emitted, ctx.Args)
 				}
+			}
+
+			flagArgs := ctx.Args[len(strings.Fields(c.Command)):]
+			parseErr := leaf.ParseFlags(flagArgs)
+			if c.Expect == "did-you-mean:blocked" || c.Expect == "did-you-mean:ambiguous" {
+				if parseErr == nil || !strings.Contains(parseErr.Error(), "unknown flag") {
+					t.Fatalf("guarded --%s reached Cobra without an unknown-flag error: %v", c.Emitted, parseErr)
+				}
+			} else if parseErr != nil {
+				t.Fatalf("Cobra ParseFlags(%v) error = %v", flagArgs, parseErr)
 			}
 		})
 	}
@@ -131,10 +139,20 @@ func TestParamAliasFixtureThroughEmbeddedDeliveryPath(t *testing.T) {
 // unknown-flag did-you-mean path can surface the reviewed candidates.
 func assertLeftUnchanged(t *testing.T, ctx *pipeline.Context, emitted, value string) {
 	t.Helper()
-	if got := ctx.Args[0]; got != "--"+emitted {
+	flagIndex := -1
+	for i, arg := range ctx.Args {
+		if arg == "--"+emitted || strings.HasPrefix(arg, "--"+emitted+"=") {
+			flagIndex = i
+			break
+		}
+	}
+	if flagIndex < 0 {
+		t.Fatalf("guarded synonym --%s disappeared: args=%v", emitted, ctx.Args)
+	}
+	if got := ctx.Args[flagIndex]; got != "--"+emitted {
 		t.Fatalf("guarded synonym --%s was rewritten to %q (must be left for did-you-mean): args=%v", emitted, got, ctx.Args)
 	}
-	if len(ctx.Args) < 2 || ctx.Args[1] != value {
+	if len(ctx.Args) <= flagIndex+1 || ctx.Args[flagIndex+1] != value {
 		t.Fatalf("guarded synonym --%s lost its value: args=%v", emitted, ctx.Args)
 	}
 	for _, corr := range ctx.Corrections {
@@ -142,6 +160,34 @@ func assertLeftUnchanged(t *testing.T, ctx *pipeline.Context, emitted, value str
 			t.Fatalf("guarded synonym --%s was corrected by %s (must not be): %+v", emitted, corr.Handler, corr)
 		}
 	}
+}
+
+func paramFixtureValue(cmd *cobra.Command, emitted, expect string) string {
+	if cmd == nil {
+		return "FIXTURE_VALUE"
+	}
+	wanted := []string{emitted}
+	if !strings.HasPrefix(expect, "did-you-mean:") {
+		wanted = append(wanted, expect)
+	}
+	for _, name := range wanted {
+		var found *pflag.Flag
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			if found == nil && cmdutil.Morph(flag.Name) == cmdutil.Morph(name) {
+				found = flag
+			}
+		})
+		if found == nil {
+			continue
+		}
+		switch found.Value.Type() {
+		case "bool":
+			return "true"
+		case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64":
+			return "1"
+		}
+	}
+	return "FIXTURE_VALUE"
 }
 
 // resolveParamLeaf resolves a fixture command path (no "dws" prefix, e.g.

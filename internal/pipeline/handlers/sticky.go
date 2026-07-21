@@ -45,7 +45,15 @@ func (StickyHandler) Handle(ctx *pipeline.Context) error {
 	specByName := buildFlagSpecIndex(ctx.FlagSpecs)
 	result := make([]string, 0, len(ctx.Args))
 
-	for _, arg := range ctx.Args {
+	for i, arg := range ctx.Args {
+		if arg == "--" {
+			result = append(result, ctx.Args[i:]...)
+			break
+		}
+		if bare, _, isFlag := splitFlagToken(arg); isFlag && ctx.IsFlagProtected(cmdutil.Morph(bare)) {
+			result = append(result, arg)
+			continue
+		}
 		split, ok := trySplitSticky(arg, specByName)
 		if ok {
 			ctx.AddCorrection("sticky", pipeline.PreParse, split.flag, arg, split.flag+" "+split.value, "sticky")

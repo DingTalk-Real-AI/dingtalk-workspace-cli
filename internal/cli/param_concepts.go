@@ -55,6 +55,7 @@ type paramConceptSpec struct {
 	CanonicalHint string   `json:"canonical_hint"`
 	Members       []string `json:"members"`
 	Excludes      []string `json:"excludes,omitempty"`
+	Commands      []string `json:"commands"`
 	Risk          string   `json:"risk"`
 }
 
@@ -99,6 +100,7 @@ type Concept struct {
 	CanonicalHint string
 	Members       []string
 	Excludes      []string
+	Commands      []string
 	Risk          string
 }
 
@@ -246,6 +248,9 @@ func decodeParamConceptSpecs(specs map[string]paramConceptSpec) ([]Concept, map[
 		if len(spec.Members) == 0 {
 			return nil, nil, fmt.Errorf("concept %s has no members", id)
 		}
+		if len(spec.Commands) == 0 {
+			return nil, nil, fmt.Errorf("concept %s has no reviewed command scope", id)
+		}
 		members := make([]string, 0, len(spec.Members))
 		memberSet := make(map[string]bool, len(spec.Members))
 		for _, member := range spec.Members {
@@ -277,12 +282,26 @@ func decodeParamConceptSpecs(specs map[string]paramConceptSpec) ([]Concept, map[
 			}
 			excludes = append(excludes, exclude)
 		}
+		commands := make([]string, 0, len(spec.Commands))
+		commandSet := make(map[string]bool, len(spec.Commands))
+		for _, command := range spec.Commands {
+			if !validParamCommandPath(command) {
+				return nil, nil, fmt.Errorf("concept %s has invalid command scope %q", id, command)
+			}
+			if commandSet[command] {
+				return nil, nil, fmt.Errorf("concept %s repeats command scope %q", id, command)
+			}
+			commandSet[command] = true
+			commands = append(commands, command)
+		}
+		sort.Strings(commands)
 		concept := Concept{
 			ID:            id,
 			Denotes:       strings.TrimSpace(spec.Denotes),
 			CanonicalHint: spec.CanonicalHint,
 			Members:       members,
 			Excludes:      excludes,
+			Commands:      commands,
 			Risk:          spec.Risk,
 		}
 		concepts = append(concepts, concept)
@@ -445,6 +464,7 @@ func cloneParamConcepts(src ParamConcepts) ParamConcepts {
 func cloneConcept(c Concept) Concept {
 	c.Members = append([]string(nil), c.Members...)
 	c.Excludes = append([]string(nil), c.Excludes...)
+	c.Commands = append([]string(nil), c.Commands...)
 	return c
 }
 

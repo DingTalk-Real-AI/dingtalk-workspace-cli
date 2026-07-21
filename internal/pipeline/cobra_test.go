@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -106,7 +107,9 @@ func TestCrossPlatformCoverageRunPreParseAppliesCorrectionsOnlyOnSuccess(t *test
 	failing := NewEngine()
 	failing.Register(newStub("fail", PreParse, func(*Context) error { return errors.New("boom") }))
 	os.Args = []string{"root", "child", "--name", "original"}
-	RunPreParse(root, failing)
+	if err := RunPreParse(root, failing); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("failed preparse error = %v, want boom", err)
+	}
 	if err := root.Execute(); err != nil || *value != "original" {
 		t.Fatalf("failed preparse execute = %q, %v", *value, err)
 	}
