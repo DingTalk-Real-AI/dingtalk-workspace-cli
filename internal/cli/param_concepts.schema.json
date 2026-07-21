@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/internal/cli/param_concepts.schema.json",
+  "title": "DWS Reviewed Parameter Concept Dictionary",
+  "description": "Human-reviewed source of parameter concepts (equivalent flag spellings for the same entity) and per-command overrides. Build-time generators reduce these concepts against each command's real Cobra flags; they must never rewrite this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "concepts"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./param_concepts.schema.json",
+      "description": "Relative editor contract. Keep this value unchanged so agents can validate the dictionary without network access."
+    },
+    "version": {
+      "const": 1,
+      "description": "ParamConcepts source format version."
+    },
+    "morphological_rules": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/morphRule"
+      },
+      "description": "Table-free, global name normalization behaviors realized by pflag SetNormalizeFunc. Documentation of morph behavior, not per-command aliases."
+    },
+    "concepts": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/conceptId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/concept"
+      },
+      "description": "Global concepts keyed by stable concept id. Go validation additionally rejects members that overlap across concepts and members that intersect their own excludes."
+    },
+    "command_overrides": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/commandPath"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/commandOverride"
+      },
+      "description": "Per-command overrides keyed by the command path (without leading 'dws'). Only needed for generic-name binding, command-scoped aliases, co-occurrence whitelisting, or reject."
+    },
+    "validation_fixture": {
+      "$ref": "#/$defs/validationFixture"
+    }
+  },
+  "$defs": {
+    "conceptId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Stable concept id in lower snake_case."
+    },
+    "flagToken": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "A flag spelling token without leading dashes."
+    },
+    "commandPath": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+][A-Za-z0-9._:+-]*(?: [A-Za-z0-9+][A-Za-z0-9._:+-]*)*$",
+      "description": "Exact command path without the leading 'dws' or flags. A leading '+' segment marks a shortcut subcommand. Existence against the real Cobra tree is validated by the generator, not this schema."
+    },
+    "risk": {
+      "type": "string",
+      "enum": [
+        "green",
+        "yellow"
+      ],
+      "description": "Reviewed risk band. green concepts reduce freely; yellow concepts need extra reviewer attention on excludes boundaries."
+    },
+    "morphRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "desc",
+        "enabled"
+      ],
+      "properties": {
+        "desc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "guard": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "denotes",
+        "canonical_hint",
+        "members",
+        "risk"
+      ],
+      "properties": {
+        "denotes": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human description of the single entity this concept denotes."
+        },
+        "canonical_hint": {
+          "$ref": "#/$defs/flagToken",
+          "description": "Governance hint only; the runtime reduces to whichever real flag the command exposes, not to this value."
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/flagToken"
+          },
+          "description": "Equivalent spellings that all denote the concept's entity."
+        },
+        "excludes": {
+          "type": "array",
+          "default": [],
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/flagToken"
+          },
+          "description": "Spellings that denote a DIFFERENT entity and must never be reduced into this concept."
+        },
+        "risk": {
+          "$ref": "#/$defs/risk"
+        }
+      }
+    },
+    "commandOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "bind": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/flagToken"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/conceptId"
+          },
+          "description": "Maps a generic real flag (e.g. id) to a concept id so concept members can reduce onto it. Go validation requires every value to be a declared concept id."
+        },
+        "scoped_aliases": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/flagToken"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/flagToken"
+          },
+          "description": "Command-scoped emitted->realFlag aliases. Never promoted to a global concept member."
+        },
+        "block": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/flagToken"
+          },
+          "description": "Emitted names that must never be reduced on this command; they route to did-you-mean instead."
+        },
+        "ambiguous": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/flagToken"
+          },
+          "description": "Reviewed co-occurrence whitelist: when a concept intersects two or more real flags on this command, the emitted names listed here are expected to route to did-you-mean rather than fail generation."
+        },
+        "confirm": {
+          "type": "boolean",
+          "description": "Reviewer flagged this override as needing user confirmation of the mapping semantics."
+        },
+        "scope_strict": {
+          "type": "boolean",
+          "description": "This alias must stay strictly command-local; another command has a real and different flag with the same spelling."
+        },
+        "investigate": {
+          "type": "boolean",
+          "description": "Reviewer flagged this override as needing source-case investigation before landing."
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reviewer note explaining the override."
+        }
+      }
+    },
+    "validationFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cases"
+      ],
+      "properties": {
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/fixtureCase"
+          }
+        }
+      }
+    },
+    "fixtureCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "emitted",
+        "expect"
+      ],
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/commandPath"
+        },
+        "emitted": {
+          "$ref": "#/$defs/flagToken",
+          "description": "The name the model produced."
+        },
+        "expect": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Either the real flag the emitted name must reduce to, or one of the did-you-mean sentinels 'did-you-mean:ambiguous' / 'did-you-mean:blocked'."
+        },
+        "via": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reviewer annotation of the reduction path; documentation only."
+        },
+        "occ": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Occurrence count in the evaluation batch; frequency evidence only."
+        }
+      }
+    }
+  }
+}
