@@ -358,6 +358,25 @@ jobs:
                 latestByName.set(run.name, run);
               }
             }
+            // Also check commit statuses — some contexts (e.g. "AI Behavior")
+            // are reported as commit statuses rather than check runs.
+            const statuses = await github.paginate(
+              github.rest.repos.listCommitStatusesForRef,
+              { owner, repo, ref: sha, per_page: 100 },
+            );
+            const seenStatusContexts = new Set();
+            for (const status of statuses) {
+              if (!requiredContexts.includes(status.context) || seenStatusContexts.has(status.context)) {
+                continue;
+              }
+              seenStatusContexts.add(status.context);
+              if (!latestByName.has(status.context)) {
+                latestByName.set(status.context, {
+                  conclusion: status.state,
+                  status: "completed",
+                });
+              }
+            }
             const missing = requiredContexts.filter((name) => !latestByName.has(name));
             const nonSuccess = requiredContexts.flatMap((name) => {
               const run = latestByName.get(name);
@@ -751,6 +770,25 @@ jobs:
               const current = latestByName.get(run.name);
               if (!current || run.id > current.id) {
                 latestByName.set(run.name, run);
+              }
+            }
+            // Also check commit statuses — some contexts (e.g. "AI Behavior")
+            // are reported as commit statuses rather than check runs.
+            const statuses = await github.paginate(
+              github.rest.repos.listCommitStatusesForRef,
+              { owner, repo, ref: sha, per_page: 100 },
+            );
+            const seenStatusContexts = new Set();
+            for (const status of statuses) {
+              if (!requiredContexts.includes(status.context) || seenStatusContexts.has(status.context)) {
+                continue;
+              }
+              seenStatusContexts.add(status.context);
+              if (!latestByName.has(status.context)) {
+                latestByName.set(status.context, {
+                  conclusion: status.state,
+                  status: "completed",
+                });
               }
             }
             const missing = requiredContexts.filter((name) => !latestByName.has(name));
