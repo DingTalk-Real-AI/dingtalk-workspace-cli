@@ -758,7 +758,7 @@ func TestReleaseWorkflowGovernancePreflightCannotPublish(t *testing.T) {
 		"EXPECTED_REPOSITORY: DingTalk-Real-AI/dingtalk-workspace-cli",
 		`DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}`,
 		`test "$PREFLIGHT_COMMIT" = "$GITHUB_SHA"`,
-		`ref: ${{ inputs.governance_preflight_commit }}`,
+		`ref: ${{ needs.dispatch-contract.outputs.mode == 'create_release' && github.sha || inputs.governance_preflight_commit }}`,
 		"persist-credentials: false",
 		"governance preflight cannot be combined with npm repair",
 	} {
@@ -792,9 +792,94 @@ func TestReleaseWorkflowGovernancePreflightCannotPublish(t *testing.T) {
 	for _, required := range []string{
 		"needs: dispatch-contract",
 		"needs.dispatch-contract.outputs.mode == 'repair_npm'",
+		`ref: ` + "`tags/withdrawn/${version}`",
+		"was withdrawn and cannot be repaired",
+		"verify-release-workflow-delivery.sh --npm-repair",
 	} {
 		if !strings.Contains(repair, required) {
 			t.Errorf("npm repair dispatch contract is missing %q", required)
+		}
+	}
+}
+
+func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	planStart := strings.Index(workflow, "  release-plan:\n")
+	sealStart := strings.Index(workflow, "  seal-release:\n")
+	if planStart == -1 || sealStart == -1 || planStart >= sealStart {
+		t.Fatal("cloud release plan and seal jobs are missing or out of order")
+	}
+	plan := workflow[planStart:sealStart]
+	seal := workflow[sealStart:]
+
+	for _, required := range []string{
+		"release_operation:",
+		"- none",
+		"- plan",
+		"- publish",
+		"release_channel:",
+		"release_bump:",
+		"release_confirmation:",
+		`release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery`,
+		`echo "mode=plan_release"`,
+		`echo "mode=create_release"`,
+		`release_confirmation must be exactly: PUBLISH $RELEASE_CHANNEL`,
+		`needs.dispatch-contract.outputs.mode == 'plan_release'`,
+		`needs.governance-preflight.result == 'success'`,
+		"actions: read",
+		"contents: read",
+		`github.event.repository.default_branch`,
+		`GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY`,
+		`GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH`,
+		`ref: ${{ github.sha }}`,
+		"persist-credentials: false",
+		`refs/remotes/origin/main)" = "$GITHUB_SHA`,
+		"next-release-version.sh",
+		"refs/tags/withdrawn/v",
+		"refs_fingerprint",
+		"Validate the candidate release contract before sealing",
+		"release-contract.sh",
+		"Require delivered previous stable baseline before sealing",
+		"Require delivered beta before sealing stable",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("cloud release contract is missing %q", required)
+		}
+	}
+	if strings.Contains(plan, "contents: write") {
+		t.Error("cloud release planning must remain read-only")
+	}
+
+	for _, required := range []string{
+		"name: Seal cloud release tag",
+		"contents: write",
+		"name: Create one immutable annotated release tag",
+		`branch.data.commit.sha !== commit`,
+		`actualFingerprint !== expectedFingerprint`,
+		`github.rest.git.createTag`,
+		`github.rest.git.createRef`,
+		`ref: ` + "`refs/tags/${version}`",
+		"`Release-Run: ${context.runId}`",
+		"`Requested-By: ${context.actor}`",
+		"`Requested-By-ID: ${context.payload.sender?.id || \"\"}`",
+		"`Sealed-Commit: ${commit}`",
+		"`Workflow-Commit: ${context.sha}`",
+		"`Allocation-Fingerprint: ${expectedFingerprint}`",
+	} {
+		if !strings.Contains(seal, required) {
+			t.Errorf("cloud release seal is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"actions/checkout",
+		"github.rest.git.updateRef",
+		"github.rest.git.deleteRef",
+		"git push",
+		"--force",
+	} {
+		if strings.Contains(seal, forbidden) {
+			t.Errorf("write-capable cloud seal must not contain %q", forbidden)
 		}
 	}
 }
@@ -807,7 +892,11 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 	if start == -1 {
 		t.Fatal("release workflow is missing the channel repair job")
 	}
-	repair := workflow[start:]
+	end := strings.Index(workflow[start:], "\n  release-plan:\n")
+	if end == -1 {
+		t.Fatal("release workflow channel repair job is missing its end marker")
+	}
+	repair := workflow[start : start+end]
 	tagAuthority := releaseWorkflowSection(
 		t,
 		repair,
@@ -826,7 +915,7 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		"oss_repair=0",
 		`test -z "$REPAIR_GITEE_VERSION" || gitee_repair=1`,
 		`test -z "$REPAIR_OSS_VERSION" || oss_repair=1`,
-		"npm_repair + gitee_repair + oss_repair + governance + recovery",
+		"release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery",
 		`echo "mode=repair_gitee" >> "$GITHUB_OUTPUT"`,
 		`echo "mode=repair_oss" >> "$GITHUB_OUTPUT"`,
 	} {
@@ -847,6 +936,8 @@ func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
 		"persist-credentials: false",
 		"release_is_stable_version",
 		"release_is_prerelease_version",
+		`ref: ` + "`tags/withdrawn/${version}`",
+		"was withdrawn and cannot be repaired",
 		`ref: ` + "`tags/${version}`",
 		`["ahead", "identical"].includes(comparison.data.status)`,
 		"!release.data.immutable",
@@ -942,12 +1033,14 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		"protected_branches !== true",
 		"can_admins_bypass !== false",
 		`run.path !== ".github/workflows/release.yml"`,
-		`run.event !== "push"`,
+		`const expectedEvent = failedByCloud ? "workflow_dispatch" : "push"`,
+		`run.event !== expectedEvent`,
+		`tagFields.get("Release-Run") !== failedRunId`,
 		`"GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}"`,
 		"attempt_number: Number(failedRunAttempt)",
 		"run.run_attempt !== Number(failedRunAttempt)",
 		`["failure", "cancelled", "timed_out", "startup_failure", "stale"].includes(run.conclusion)`,
-		`run.head_branch !== version`,
+		`run.head_branch !== expectedBranch`,
 		`run.head_sha !== commit`,
 		`tagObject !== expectedTagObject`,
 		`["ahead", "identical"].includes(comparison.data.status)`,
@@ -960,7 +1053,7 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		`ref: sha`,
 		`path: tmp/trusted-release-tooling`,
 		`ref: ${{ github.sha }}`,
-		`step.name === "Require immutable published GitHub Release"`,
+		"verify-release-workflow-delivery.sh",
 		"Require a clean sealed source before GoReleaser",
 		`git status --porcelain --untracked-files=all`,
 	} {
@@ -1105,7 +1198,11 @@ func TestRecoverReleaseBindsOneFailedRunAttempt(t *testing.T) {
 		"actions/runs/$find_run_id/attempts/$find_attempt",
 		`select(.head_sha == \"$commit\" and .head_branch == \"$VERSION\")`,
 		"Release run %s has no failed attempt",
-		`[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha] | @tsv`,
+		`[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha, .actor.login, .actor.id] | @tsv`,
+		`Release-Run`,
+		`Release-Run-Attempt`,
+		`expected_attempt_event="workflow_dispatch"`,
+		`is not bound by the cloud seal`,
 		"actions/runs/%s/attempts/%s",
 		`-f "recover_failed_run_attempt=$FAILED_RUN_ATTEMPT"`,
 	} {
@@ -1129,7 +1226,7 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 			name:      "release contract",
 			start:     "  release-contract:\n",
 			end:       "\n  release:\n",
-			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success')) }}`,
+			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}`,
 		},
 		{
 			name:      "build",
@@ -1192,7 +1289,11 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		"- mirror-gitee-release",
 		"- repair-npm",
 		"- repair-channel",
+		"- release-plan",
+		"- seal-release",
 		`REPAIR_CHANNEL_RESULT: ${{ needs.repair-channel.result }}`,
+		`RELEASE_PLAN_RESULT: ${{ needs.release-plan.result }}`,
+		`SEAL_RELEASE_RESULT: ${{ needs.seal-release.result }}`,
 		"require_publication",
 		`require_result release-contract "$RELEASE_CONTRACT_RESULT" success`,
 		`require_result release "$RELEASE_RESULT" success`,
@@ -1200,6 +1301,8 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		`require_result publish-release "$PUBLISH_RELEASE_RESULT" success`,
 		`require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success`,
 		"workflow_dispatch:recover_release",
+		"workflow_dispatch:create_release",
+		"workflow_dispatch:plan_release",
 		"workflow_dispatch:governance_preflight",
 		"workflow_dispatch:repair_npm",
 		"workflow_dispatch:repair_gitee",

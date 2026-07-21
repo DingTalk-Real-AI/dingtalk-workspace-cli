@@ -18,6 +18,9 @@ if [ "${1:-}" = "--channel-repair" ]; then
       exit 2
       ;;
   esac
+elif [ "${1:-}" = "--npm-repair" ]; then
+  MODE="npm-repair"
+  shift
 fi
 
 TAG="${1:-}"
@@ -25,7 +28,7 @@ EXPECTED_COMMIT="${2:-}"
 REPOSITORY="${DWS_RELEASE_OFFICIAL_REPOSITORY:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 
 [ -n "$TAG" ] && [ -n "$EXPECTED_COMMIT" ] || {
-  printf 'usage: verify-release-workflow-delivery.sh [--channel-repair <oss|gitee>] <tag> <commit>\n' >&2
+  printf 'usage: verify-release-workflow-delivery.sh [--channel-repair <oss|gitee> | --npm-repair] <tag> <commit>\n' >&2
   exit 2
 }
 if ! release_is_stable_version "$TAG" && ! release_is_prerelease_version "$TAG"; then
@@ -79,6 +82,209 @@ for run in runs:
     [ "$page_count" -eq 100 ] || return 1
     page=$((page + 1))
   done
+}
+
+find_cloud_delivery_identity() {
+  tag_ref="$(
+    github_get "repos/$REPOSITORY/git/ref/tags/$TAG" \
+      | python3 -c 'import json,sys
+ref=json.load(sys.stdin)
+obj=ref.get("object", {})
+if obj.get("type") == "tag" and obj.get("sha"):
+    print(obj["sha"])'
+  )" || return 1
+  [ -n "$tag_ref" ] || return 1
+  github_get "repos/$REPOSITORY/git/tags/$tag_ref" \
+    | python3 -c 'import json,re,sys
+tag,commit=sys.argv[1:]
+payload=json.load(sys.stdin)
+if payload.get("tag") != tag or payload.get("object", {}).get("type") != "commit":
+    raise SystemExit(1)
+if payload.get("object", {}).get("sha") != commit:
+    raise SystemExit(1)
+fields={}
+for line in payload.get("message", "").splitlines():
+    if ": " not in line:
+        continue
+    key,value=line.split(": ", 1)
+    if key in fields:
+        raise SystemExit(1)
+    fields[key]=value
+required={
+    "Channel", "Release-Run", "Release-Run-Attempt", "Requested-By",
+    "Requested-By-ID", "Sealed-Commit", "Workflow-Commit",
+    "Allocation-Fingerprint",
+}
+if not required.issubset(fields):
+    raise SystemExit(1)
+if fields["Sealed-Commit"] != commit or fields["Workflow-Commit"] != commit:
+    raise SystemExit(1)
+if not re.fullmatch(r"[1-9][0-9]*", fields["Release-Run"]):
+    raise SystemExit(1)
+if not re.fullmatch(r"[1-9][0-9]*", fields["Release-Run-Attempt"]):
+    raise SystemExit(1)
+if not re.fullmatch(r"[1-9][0-9]*", fields["Requested-By-ID"]):
+    raise SystemExit(1)
+if not fields["Requested-By"] or not re.fullmatch(r"[0-9a-f]{64}", fields["Allocation-Fingerprint"]):
+    raise SystemExit(1)
+is_beta="-beta." in tag
+if fields["Channel"] != ("prerelease" if is_beta else "stable"):
+    raise SystemExit(1)
+from_beta=fields.get("From-Beta", "")
+if is_beta:
+    if from_beta:
+        raise SystemExit(1)
+else:
+    core=re.escape(tag)
+    if not re.fullmatch(core + r"-beta\.[1-9][0-9]*", from_beta):
+        raise SystemExit(1)
+print("\t".join([
+    fields["Release-Run"],
+    fields["Release-Run-Attempt"],
+    fields["Requested-By"],
+    fields["Requested-By-ID"],
+    fields["Workflow-Commit"],
+]))' "$TAG" "$EXPECTED_COMMIT"
+}
+
+verify_cloud_delivery() {
+  cloud_identity="$1"
+  cloud_run_id="$(printf '%s\n' "$cloud_identity" | cut -f1)"
+  cloud_run_attempt="$(printf '%s\n' "$cloud_identity" | cut -f2)"
+  cloud_actor="$(printf '%s\n' "$cloud_identity" | cut -f3)"
+  cloud_actor_id="$(printf '%s\n' "$cloud_identity" | cut -f4)"
+  cloud_workflow_sha="$(printf '%s\n' "$cloud_identity" | cut -f5)"
+  [ -n "$cloud_run_id" ] && [ -n "$cloud_run_attempt" ] &&
+    [ -n "$cloud_actor" ] && [ -n "$cloud_actor_id" ] &&
+    [ -n "$cloud_workflow_sha" ] || return 1
+
+  cloud_run_state="$(
+    github_get "repos/$REPOSITORY/actions/runs/$cloud_run_id/attempts/$cloud_run_attempt" \
+      | python3 -c 'import json,sys
+r=json.load(sys.stdin)
+print("\t".join(str(value) for value in (
+    r.get("id", ""),
+    r.get("run_attempt", ""),
+    r.get("repository", {}).get("full_name", ""),
+    r.get("path", ""),
+    r.get("event", ""),
+    r.get("status", ""),
+    r.get("conclusion", ""),
+    r.get("head_branch", ""),
+    r.get("head_sha", ""),
+    r.get("actor", {}).get("login", ""),
+    r.get("actor", {}).get("id", ""),
+)))'
+  )" || return 1
+  expected_cloud_core="$(printf '%s\t%s\t%s\t.github/workflows/release.yml\tworkflow_dispatch\tcompleted\tsuccess\tmain\t%s' \
+    "$cloud_run_id" "$cloud_run_attempt" "$REPOSITORY" "$cloud_workflow_sha")"
+  [ "$(printf '%s\n' "$cloud_run_state" | cut -f1-9)" = "$expected_cloud_core" ] ||
+    return 1
+  [ -n "$(printf '%s\n' "$cloud_run_state" | cut -f10)" ] || return 1
+  [ "$(printf '%s\n' "$cloud_run_state" | cut -f11)" = "$cloud_actor_id" ] ||
+    return 1
+  [ "$cloud_workflow_sha" = "$EXPECTED_COMMIT" ] || return 1
+
+  jobs_dir="$(mktemp -d "${TMPDIR:-/tmp}/dws-release-cloud-jobs.XXXXXX")"
+  page=1
+  while :; do
+    jobs_page="$jobs_dir/jobs-$page.json"
+    if ! github_get "repos/$REPOSITORY/actions/runs/$cloud_run_id/attempts/$cloud_run_attempt/jobs?per_page=100&page=$page" \
+      >"$jobs_page"; then
+      rm -rf "$jobs_dir"
+      return 1
+    fi
+    page_count="$(
+      python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("jobs", [])))' \
+        "$jobs_page"
+    )" || {
+      rm -rf "$jobs_dir"
+      return 1
+    }
+    [ "$page_count" -eq 100 ] || break
+    page=$((page + 1))
+  done
+
+  result=0
+  python3 - "$cloud_workflow_sha" "$jobs_dir"/jobs-*.json <<'PY' || result=$?
+import json
+import sys
+
+workflow_sha, *pages = sys.argv[1:]
+jobs = []
+for page in pages:
+    with open(page, encoding="utf-8") as handle:
+        jobs.extend(json.load(handle).get("jobs", []))
+
+required = (
+    "Plan next cloud release",
+    "Seal cloud release tag",
+    "release-contract",
+    "Build signed release artifacts",
+    "Verify Apple Developer ID signatures",
+    "Publish immutable GitHub Release",
+    "Publish npm and mirrors",
+    "Release delivery gate",
+)
+for name in required:
+    matches = [job for job in jobs if job.get("name") == name]
+    if len(matches) != 1:
+        raise SystemExit(1)
+    job = matches[0]
+    if (
+        job.get("head_sha") != workflow_sha
+        or job.get("status") != "completed"
+        or job.get("conclusion") != "success"
+    ):
+        raise SystemExit(1)
+
+seal = next(job for job in jobs if job.get("name") == "Seal cloud release tag")
+steps = [
+    step for step in seal.get("steps", [])
+    if step.get("name") == "Create one immutable annotated release tag"
+]
+if (
+    len(steps) != 1
+    or steps[0].get("status") != "completed"
+    or steps[0].get("conclusion") != "success"
+):
+    raise SystemExit(1)
+PY
+  rm -rf "$jobs_dir"
+  return "$result"
+}
+
+verify_failed_cloud_delivery_identity() {
+  cloud_identity="$1"
+  cloud_run_id="$(printf '%s\n' "$cloud_identity" | cut -f1)"
+  cloud_run_attempt="$(printf '%s\n' "$cloud_identity" | cut -f2)"
+  cloud_actor="$(printf '%s\n' "$cloud_identity" | cut -f3)"
+  cloud_actor_id="$(printf '%s\n' "$cloud_identity" | cut -f4)"
+  cloud_workflow_sha="$(printf '%s\n' "$cloud_identity" | cut -f5)"
+  [ "$cloud_workflow_sha" = "$EXPECTED_COMMIT" ] || return 1
+  cloud_run_state="$(
+    github_get "repos/$REPOSITORY/actions/runs/$cloud_run_id/attempts/$cloud_run_attempt" \
+      | python3 -c 'import json,sys
+r=json.load(sys.stdin)
+print("\t".join(str(value) for value in (
+    r.get("id", ""),
+    r.get("run_attempt", ""),
+    r.get("repository", {}).get("full_name", ""),
+    r.get("path", ""),
+    r.get("event", ""),
+    r.get("status", ""),
+    r.get("conclusion", ""),
+    r.get("head_branch", ""),
+    r.get("head_sha", ""),
+    r.get("actor", {}).get("login", ""),
+    r.get("actor", {}).get("id", ""),
+)))'
+  )" || return 1
+  expected_cloud_core="$(printf '%s\t%s\t%s\t.github/workflows/release.yml\tworkflow_dispatch\tcompleted\tfailure\tmain\t%s' \
+    "$cloud_run_id" "$cloud_run_attempt" "$REPOSITORY" "$cloud_workflow_sha")"
+  [ "$(printf '%s\n' "$cloud_run_state" | cut -f1-9)" = "$expected_cloud_core" ] &&
+    [ -n "$(printf '%s\n' "$cloud_run_state" | cut -f10)" ] &&
+    [ "$(printf '%s\n' "$cloud_run_state" | cut -f11)" = "$cloud_actor_id" ]
 }
 
 find_failed_push_delivery() {
@@ -275,10 +481,125 @@ PY
   return "$result"
 }
 
+verify_npm_repair_delivery() {
+  run_id="$1"
+  run_attempt="$2"
+  require_cloud_seal="$3"
+  jobs_dir="$(mktemp -d "${TMPDIR:-/tmp}/dws-release-npm-repair-jobs.XXXXXX")"
+  page=1
+  while :; do
+    jobs_page="$jobs_dir/jobs-$page.json"
+    if ! github_get "repos/$REPOSITORY/actions/runs/$run_id/attempts/$run_attempt/jobs?per_page=100&page=$page" \
+      >"$jobs_page"; then
+      rm -rf "$jobs_dir"
+      return 1
+    fi
+    if ! page_count="$(
+      python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("jobs", [])))' \
+        "$jobs_page"
+    )"; then
+      rm -rf "$jobs_dir"
+      return 1
+    fi
+    [ "$page_count" -eq 100 ] || break
+    page=$((page + 1))
+  done
+
+  result=0
+  python3 - "$EXPECTED_COMMIT" "$run_id" "$run_attempt" "$TAG" "$require_cloud_seal" "$jobs_dir"/jobs-*.json <<'PY' || result=$?
+import json
+import sys
+
+commit, run_id, run_attempt, tag, require_cloud_seal, *pages = sys.argv[1:]
+jobs = []
+for page in pages:
+    with open(page, encoding="utf-8") as handle:
+        jobs.extend(json.load(handle).get("jobs", []))
+
+def fail(message):
+    print(
+        f"Release run {run_id} attempt {run_attempt} is not safe npm-repair "
+        f"authority for {tag}: {message}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+def one_job(name):
+    matches = [job for job in jobs if job.get("name") == name]
+    if len(matches) != 1:
+        fail(f"expected exactly one job {name!r}, found {len(matches)}")
+    job = matches[0]
+    if (
+        job.get("head_sha") != commit
+        or job.get("status") != "completed"
+        or job.get("conclusion") != "success"
+    ):
+        fail(f"required job {name!r} did not succeed at {commit}")
+    return job
+
+for name in (
+    "release-contract",
+    "Build signed release artifacts",
+    "Verify Apple Developer ID signatures",
+):
+    one_job(name)
+
+if require_cloud_seal == "true":
+    one_job("Plan next cloud release")
+    seal = one_job("Seal cloud release tag")
+    seal_steps = [
+        step for step in seal.get("steps", [])
+        if step.get("name") == "Create one immutable annotated release tag"
+    ]
+    if (
+        len(seal_steps) != 1
+        or seal_steps[0].get("status") != "completed"
+        or seal_steps[0].get("conclusion") != "success"
+    ):
+        fail("cloud release seal step did not succeed")
+elif require_cloud_seal != "false":
+    fail(f"invalid cloud seal requirement {require_cloud_seal!r}")
+
+published = one_job("Publish immutable GitHub Release")
+steps = [
+    step for step in published.get("steps", [])
+    if step.get("name") == "Require immutable published GitHub Release"
+]
+if (
+    len(steps) != 1
+    or steps[0].get("status") != "completed"
+    or steps[0].get("conclusion") != "success"
+):
+    fail("immutable GitHub Release verification step did not succeed")
+
+channels = [job for job in jobs if job.get("name") == "Publish npm and mirrors"]
+if len(channels) != 1:
+    fail(f"expected exactly one npm publication job, found {len(channels)}")
+channel = channels[0]
+if (
+    channel.get("head_sha") != commit
+    or channel.get("status") != "completed"
+    or channel.get("conclusion") not in {"success", "failure"}
+):
+    fail("npm publication job is not a completed success/failure at the release commit")
+PY
+  rm -rf "$jobs_dir"
+  return "$result"
+}
+
 push_delivery="$(find_push_delivery || true)"
 if [ -n "$push_delivery" ]; then
   printf 'Release workflow delivery verified through exact-tag push run %s: %s -> %s\n' \
     "$push_delivery" "$TAG" "$EXPECTED_COMMIT"
+  exit 0
+fi
+
+cloud_delivery_identity="$(find_cloud_delivery_identity || true)"
+if [ -n "$cloud_delivery_identity" ] &&
+  verify_cloud_delivery "$cloud_delivery_identity"; then
+  cloud_delivery_run="$(printf '%s\n' "$cloud_delivery_identity" | cut -f1)"
+  printf 'Release workflow delivery verified through cloud release run %s: %s -> %s\n' \
+    "$cloud_delivery_run" "$TAG" "$EXPECTED_COMMIT"
   exit 0
 fi
 
@@ -291,6 +612,38 @@ if [ "$MODE" = "channel-repair" ]; then
     printf 'Release %s channel-repair authority verified through failed exact-tag push run %s attempt %s: %s -> %s\n' \
       "$CHANNEL_REPAIR_TARGET" "$failed_push_delivery" "$failed_push_attempt" "$TAG" "$EXPECTED_COMMIT"
     exit 0
+  fi
+  if [ -n "$cloud_delivery_identity" ] &&
+    verify_failed_cloud_delivery_identity "$cloud_delivery_identity"; then
+    failed_cloud_run="$(printf '%s\n' "$cloud_delivery_identity" | cut -f1)"
+    failed_cloud_attempt="$(printf '%s\n' "$cloud_delivery_identity" | cut -f2)"
+    if verify_channel_repair_delivery "$failed_cloud_run" "$failed_cloud_attempt"; then
+      printf 'Release %s channel-repair authority verified through failed cloud release run %s attempt %s: %s -> %s\n' \
+        "$CHANNEL_REPAIR_TARGET" "$failed_cloud_run" "$failed_cloud_attempt" "$TAG" "$EXPECTED_COMMIT"
+      exit 0
+    fi
+  fi
+fi
+
+if [ "$MODE" = "npm-repair" ]; then
+  failed_push_identity="$(find_failed_push_delivery || true)"
+  failed_push_run="$(printf '%s\n' "$failed_push_identity" | cut -f1)"
+  failed_push_attempt="$(printf '%s\n' "$failed_push_identity" | cut -f2)"
+  if [ -n "$failed_push_run" ] &&
+    verify_npm_repair_delivery "$failed_push_run" "$failed_push_attempt" false; then
+    printf 'Release npm-repair authority verified through failed exact-tag push run %s attempt %s: %s -> %s\n' \
+      "$failed_push_run" "$failed_push_attempt" "$TAG" "$EXPECTED_COMMIT"
+    exit 0
+  fi
+  if [ -n "$cloud_delivery_identity" ] &&
+    verify_failed_cloud_delivery_identity "$cloud_delivery_identity"; then
+    failed_cloud_run="$(printf '%s\n' "$cloud_delivery_identity" | cut -f1)"
+    failed_cloud_attempt="$(printf '%s\n' "$cloud_delivery_identity" | cut -f2)"
+    if verify_npm_repair_delivery "$failed_cloud_run" "$failed_cloud_attempt" true; then
+      printf 'Release npm-repair authority verified through failed cloud release run %s attempt %s: %s -> %s\n' \
+        "$failed_cloud_run" "$failed_cloud_attempt" "$TAG" "$EXPECTED_COMMIT"
+      exit 0
+    fi
   fi
 fi
 
@@ -325,7 +678,7 @@ for run in runs:
 
 recovery_identity="$(find_recovery_identity || true)"
 [ -n "$recovery_identity" ] || {
-  printf 'Release workflow did not deliver %s at %s through a tag push or protected recovery\n' \
+  printf 'Release workflow did not deliver %s at %s through a tag push, cloud release, or protected recovery\n' \
     "$TAG" "$EXPECTED_COMMIT" >&2
   exit 1
 }

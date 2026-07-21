@@ -1,5 +1,5 @@
 name: Release
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.event_name == 'workflow_dispatch' && inputs.repair_gitee_version != '' && format('Release Gitee repair {0}', inputs.repair_gitee_version) || github.event_name == 'workflow_dispatch' && inputs.repair_oss_version != '' && format('Release OSS repair {0}', inputs.repair_oss_version) || github.workflow }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_operation != 'none' && format('Release {0} {1} ({2})', inputs.release_operation, inputs.release_channel, inputs.release_bump) || github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.event_name == 'workflow_dispatch' && inputs.repair_gitee_version != '' && format('Release Gitee repair {0}', inputs.repair_gitee_version) || github.event_name == 'workflow_dispatch' && inputs.repair_oss_version != '' && format('Release OSS repair {0}', inputs.repair_oss_version) || github.workflow }}
 
 on:
   push:
@@ -7,6 +7,36 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      release_operation:
+        description: "Plan the next version or publish it from the current default-branch commit"
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - plan
+          - publish
+      release_channel:
+        description: "Release channel (used only when release_operation is plan/publish)"
+        required: true
+        default: beta
+        type: choice
+        options:
+          - beta
+          - stable
+      release_bump:
+        description: "New beta core bump; ignored while continuing an open beta line"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_confirmation:
+        description: "For publish, type PUBLISH beta or PUBLISH stable"
+        required: false
+        type: string
       repair_npm_version:
         description: "Recover npm for a public immutable release without moving latest/beta"
         required: false
@@ -89,13 +119,21 @@ jobs:
           RECOVER_FAILED_RUN_ATTEMPT: ${{ inputs.recover_failed_run_attempt }}
           RECOVER_NONCE: ${{ inputs.recover_release_nonce }}
           RECOVER_CONFIRMATION: ${{ inputs.recover_release_confirmation }}
+          RELEASE_OPERATION: ${{ inputs.release_operation }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
+          RELEASE_BUMP: ${{ inputs.release_bump }}
+          RELEASE_CONFIRMATION: ${{ inputs.release_confirmation }}
         run: |
           set -eu
+          release_flow=0
           npm_repair=0
           gitee_repair=0
           oss_repair=0
           governance=0
           recovery=0
+          if test -n "$RELEASE_OPERATION" && test "$RELEASE_OPERATION" != none; then
+            release_flow=1
+          fi
           test -z "$REPAIR_NPM_VERSION" || npm_repair=1
           test -z "$REPAIR_GITEE_VERSION" || gitee_repair=1
           test -z "$REPAIR_OSS_VERSION" || oss_repair=1
@@ -105,11 +143,36 @@ jobs:
              test -n "$RECOVER_FAILED_RUN_ATTEMPT" || \
              test -n "$RECOVER_NONCE" || \
              test -n "$RECOVER_CONFIRMATION"; then recovery=1; fi
-          test $((npm_repair + gitee_repair + oss_repair + governance + recovery)) -eq 1 || {
+          test $((release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery)) -eq 1 || {
             echo "workflow_dispatch must select exactly one release mode" >&2
             exit 1
           }
-          if test "$npm_repair" -eq 1; then
+          if test "$release_flow" -eq 1; then
+            case "$RELEASE_CHANNEL" in beta|stable) ;; *)
+              echo "release_channel must be beta or stable" >&2
+              exit 1
+            esac
+            case "$RELEASE_BUMP" in patch|minor|major) ;; *)
+              echo "release_bump must be patch, minor, or major" >&2
+              exit 1
+            esac
+            if test "$RELEASE_OPERATION" = plan; then
+              test -z "$RELEASE_CONFIRMATION" || {
+                echo "release_confirmation must be empty for a plan" >&2
+                exit 1
+              }
+              echo "mode=plan_release" >> "$GITHUB_OUTPUT"
+            elif test "$RELEASE_OPERATION" = publish; then
+              test "$RELEASE_CONFIRMATION" = "PUBLISH $RELEASE_CHANNEL" || {
+                echo "release_confirmation must be exactly: PUBLISH $RELEASE_CHANNEL" >&2
+                exit 1
+              }
+              echo "mode=create_release" >> "$GITHUB_OUTPUT"
+            else
+              echo "release_operation must be none, plan, or publish" >&2
+              exit 1
+            fi
+          elif test "$npm_repair" -eq 1; then
             echo "mode=repair_npm" >> "$GITHUB_OUTPUT"
           elif test "$gitee_repair" -eq 1; then
             echo "mode=repair_gitee" >> "$GITHUB_OUTPUT"
@@ -197,7 +260,7 @@ jobs:
   governance-preflight:
     name: Release governance preflight
     needs: dispatch-contract
-    if: ${{ needs.dispatch-contract.outputs.mode == 'governance_preflight' }}
+    if: ${{ needs.dispatch-contract.outputs.mode == 'governance_preflight' || needs.dispatch-contract.outputs.mode == 'create_release' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -208,7 +271,8 @@ jobs:
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           EXPECTED_REPOSITORY: DingTalk-Real-AI/dingtalk-workspace-cli
-          PREFLIGHT_COMMIT: ${{ inputs.governance_preflight_commit }}
+          DISPATCH_MODE: ${{ needs.dispatch-contract.outputs.mode }}
+          PREFLIGHT_COMMIT: ${{ needs.dispatch-contract.outputs.mode == 'create_release' && github.sha || inputs.governance_preflight_commit }}
           PREFLIGHT_NONCE: ${{ inputs.governance_preflight_nonce }}
           REPAIR_NPM_VERSION: ${{ inputs.repair_npm_version }}
         run: |
@@ -225,10 +289,24 @@ jobs:
             echo "governance preflight cannot be combined with npm repair" >&2
             exit 1
           }
-          if test -z "$PREFLIGHT_COMMIT" || test -z "$PREFLIGHT_NONCE"; then
-            echo "governance_preflight_commit and governance_preflight_nonce are both required" >&2
-            exit 1
-          fi
+          case "$DISPATCH_MODE" in
+            governance_preflight)
+              if test -z "$PREFLIGHT_COMMIT" || test -z "$PREFLIGHT_NONCE"; then
+                echo "governance_preflight_commit and governance_preflight_nonce are both required" >&2
+                exit 1
+              fi
+              ;;
+            create_release)
+              test -z "$PREFLIGHT_NONCE" || {
+                echo "cloud release cannot be combined with a governance nonce" >&2
+                exit 1
+              }
+              ;;
+            *)
+              echo "unsupported governance preflight mode: $DISPATCH_MODE" >&2
+              exit 1
+              ;;
+          esac
           case "$PREFLIGHT_COMMIT" in
             *[!0-9a-f]*)
               echo "governance_preflight_commit must be a lowercase commit SHA" >&2
@@ -247,7 +325,7 @@ jobs:
       - name: Require successful Code Admission contexts on the preflight commit
         uses: actions/github-script@v7
         env:
-          PREFLIGHT_COMMIT: ${{ inputs.governance_preflight_commit }}
+          PREFLIGHT_COMMIT: ${{ needs.dispatch-contract.outputs.mode == 'create_release' && github.sha || inputs.governance_preflight_commit }}
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -299,7 +377,7 @@ jobs:
       - name: Check out trusted preflight tooling
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.governance_preflight_commit }}
+          ref: ${{ needs.dispatch-contract.outputs.mode == 'create_release' && github.sha || inputs.governance_preflight_commit }}
           persist-credentials: false
           fetch-depth: 0
 
@@ -348,8 +426,8 @@ jobs:
           ./scripts/release/verify-homebrew-pr-token.sh "$GITHUB_REPOSITORY" --canary
 
   release-contract:
-    needs: [dispatch-contract, authorize-recovery]
-    if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success')) }}
+    needs: [dispatch-contract, authorize-recovery, governance-preflight, release-plan, seal-release]
+    if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -377,16 +455,28 @@ jobs:
           RECOVER_COMMIT: ${{ inputs.recover_release_commit }}
           RECOVER_FAILED_RUN_ID: ${{ inputs.recover_failed_run_id }}
           RECOVER_FAILED_RUN_ATTEMPT: ${{ inputs.recover_failed_run_attempt }}
+          DISPATCH_MODE: ${{ needs.dispatch-contract.outputs.mode }}
+          SEALED_VERSION: ${{ needs.seal-release.outputs.release_version }}
+          SEALED_COMMIT: ${{ needs.seal-release.outputs.release_commit }}
+          SEALED_TAG_OBJECT: ${{ needs.seal-release.outputs.release_tag_object }}
         with:
           script: |
             const { owner, repo } = context.repo;
-            const isRecovery = context.eventName === "workflow_dispatch";
+            const dispatchMode = process.env.DISPATCH_MODE;
+            const isRecovery =
+              context.eventName === "workflow_dispatch" && dispatchMode === "recover_release";
+            const isCreate =
+              context.eventName === "workflow_dispatch" && dispatchMode === "create_release";
             let version = context.ref.replace("refs/tags/", "");
             let commit = context.sha;
             let expectedTagObject = "";
             let failedRunId = "";
             let failedRunAttempt = "";
-            if (isRecovery) {
+            if (context.eventName === "workflow_dispatch" && !isRecovery && !isCreate) {
+              core.setFailed(`unsupported publication dispatch mode: ${dispatchMode}`);
+              return;
+            }
+            if (isRecovery || isCreate) {
               if (
                 context.payload.repository.full_name !== "DingTalk-Real-AI/dingtalk-workspace-cli" ||
                 context.ref !== `refs/heads/${context.payload.repository.default_branch}`
@@ -394,24 +484,28 @@ jobs:
                 core.setFailed("release recovery must be dispatched from the official default branch");
                 return;
               }
-              version = process.env.RECOVER_VERSION;
-              commit = process.env.RECOVER_COMMIT;
-              expectedTagObject = process.env.RECOVER_TAG_OBJECT;
-              failedRunId = process.env.RECOVER_FAILED_RUN_ID;
-              failedRunAttempt = process.env.RECOVER_FAILED_RUN_ATTEMPT;
+              version = isCreate ? process.env.SEALED_VERSION : process.env.RECOVER_VERSION;
+              commit = isCreate ? process.env.SEALED_COMMIT : process.env.RECOVER_COMMIT;
+              expectedTagObject = isCreate
+                ? process.env.SEALED_TAG_OBJECT
+                : process.env.RECOVER_TAG_OBJECT;
+              if (isRecovery) {
+                failedRunId = process.env.RECOVER_FAILED_RUN_ID;
+                failedRunAttempt = process.env.RECOVER_FAILED_RUN_ATTEMPT;
+              }
               if (!/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-beta\.[1-9]\d*)?$/.test(version)) {
-                core.setFailed(`invalid recovery release version: ${version}`);
+                core.setFailed(`invalid dispatched release version: ${version}`);
                 return;
               }
               if (!/^[0-9a-f]{40}$/.test(commit) || !/^[0-9a-f]{40}$/.test(expectedTagObject)) {
-                core.setFailed("recovery tag object and commit must be full lowercase SHA-1 values");
+                core.setFailed("dispatched tag object and commit must be full lowercase SHA-1 values");
                 return;
               }
-              if (!/^[1-9]\d*$/.test(failedRunId)) {
+              if (isRecovery && !/^[1-9]\d*$/.test(failedRunId)) {
                 core.setFailed("recover_failed_run_id must be a positive workflow run ID");
                 return;
               }
-              if (!/^[1-9]\d*$/.test(failedRunAttempt)) {
+              if (isRecovery && !/^[1-9]\d*$/.test(failedRunAttempt)) {
                 core.setFailed("recover_failed_run_attempt must be a positive run attempt");
                 return;
               }
@@ -432,12 +526,67 @@ jobs:
               core.setFailed(`${version} resolves to ${tag.data.object.sha}, expected ${commit}`);
               return;
             }
-            if (isRecovery && tagObject !== expectedTagObject) {
+            if ((isRecovery || isCreate) && tagObject !== expectedTagObject) {
               core.setFailed(`${version} tag object is ${tagObject}, expected ${expectedTagObject}`);
               return;
             }
+            const tagFields = new Map();
+            for (const line of tag.data.message.split(/\r?\n/)) {
+              const separator = line.indexOf(": ");
+              if (separator < 1) continue;
+              const key = line.slice(0, separator);
+              if (tagFields.has(key)) {
+                core.setFailed(`${version} annotated tag contains duplicate ${key} metadata`);
+                return;
+              }
+              tagFields.set(key, line.slice(separator + 2));
+            }
+            const cloudKeys = [
+              "Channel",
+              "Release-Run",
+              "Release-Run-Attempt",
+              "Requested-By",
+              "Requested-By-ID",
+              "Sealed-Commit",
+              "Workflow-Commit",
+              "Allocation-Fingerprint",
+            ];
+            const hasAnyCloudMetadata = cloudKeys.some((key) => tagFields.has(key));
+            const isCloudSeal = cloudKeys.every((key) => tagFields.has(key));
+            if (hasAnyCloudMetadata && !isCloudSeal) {
+              core.setFailed(`${version} contains incomplete cloud seal metadata`);
+              return;
+            }
+            if (isCloudSeal) {
+              const expectedChannel = version.includes("-beta.") ? "prerelease" : "stable";
+              const actorId = String(context.payload.sender?.id || "");
+              if (
+                tagFields.get("Channel") !== expectedChannel ||
+                tagFields.get("Sealed-Commit") !== commit ||
+                tagFields.get("Workflow-Commit") !== commit ||
+                !/^[0-9a-f]{64}$/.test(tagFields.get("Allocation-Fingerprint")) ||
+                !/^[1-9]\d*$/.test(tagFields.get("Release-Run")) ||
+                !/^[1-9]\d*$/.test(tagFields.get("Release-Run-Attempt")) ||
+                !/^[1-9]\d*$/.test(tagFields.get("Requested-By-ID"))
+              ) {
+                core.setFailed(`${version} cloud seal metadata does not match its tag authority`);
+                return;
+              }
+              if (isCreate && (
+                tagFields.get("Release-Run") !== String(context.runId) ||
+                tagFields.get("Release-Run-Attempt") !== process.env.GITHUB_RUN_ATTEMPT ||
+                tagFields.get("Requested-By") !== context.actor ||
+                tagFields.get("Requested-By-ID") !== actorId
+              )) {
+                core.setFailed(`${version} cloud seal is not bound to this release request`);
+                return;
+              }
+            } else if (isCreate) {
+              core.setFailed(`${version} is missing cloud seal metadata`);
+              return;
+            }
 
-            if (isRecovery) {
+            if (isRecovery || isCreate) {
               const defaultBranch = context.payload.repository.default_branch;
               const branch = await github.rest.repos.getBranch({ owner, repo, branch: defaultBranch });
               const comparison = await github.rest.repos.compareCommitsWithBasehead({
@@ -449,6 +598,8 @@ jobs:
                 core.setFailed(`${version} commit is not contained in ${defaultBranch}`);
                 return;
               }
+            }
+            if (isRecovery) {
               const failedRun = await github.request(
                 "GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}",
                 {
@@ -459,19 +610,34 @@ jobs:
                 },
               );
               const run = failedRun.data;
+              const failedByCloud = isCloudSeal;
+              const expectedBranch = failedByCloud
+                ? context.payload.repository.default_branch
+                : version;
+              const expectedEvent = failedByCloud ? "workflow_dispatch" : "push";
               if (
                 run.id !== Number(failedRunId) ||
                 run.run_attempt !== Number(failedRunAttempt) ||
                 run.repository.full_name !== `${owner}/${repo}` ||
                 run.path !== ".github/workflows/release.yml" ||
-                run.event !== "push" ||
+                run.event !== expectedEvent ||
                 run.status !== "completed" ||
                 !["failure", "cancelled", "timed_out", "startup_failure", "stale"].includes(run.conclusion) ||
-                run.head_branch !== version ||
+                run.head_branch !== expectedBranch ||
                 run.head_sha !== commit
               ) {
                 core.setFailed(
-                  `run ${failedRunId} attempt ${failedRunAttempt} is not the failed exact-tag Release attempt for ${version}`,
+                  `run ${failedRunId} attempt ${failedRunAttempt} is not the failed sealed Release attempt for ${version}`,
+                );
+                return;
+              }
+              if (failedByCloud && (
+                tagFields.get("Release-Run") !== failedRunId ||
+                tagFields.get("Release-Run-Attempt") !== failedRunAttempt ||
+                tagFields.get("Requested-By-ID") !== String(run.actor?.id || "")
+              )) {
+                core.setFailed(
+                  `run ${failedRunId} attempt ${failedRunAttempt} is not bound by the cloud seal for ${version}`,
                 );
                 return;
               }
@@ -512,7 +678,8 @@ jobs:
             '+refs/heads/main:refs/remotes/origin/main'
           git fetch --force --no-tags \
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 
       - name: Validate release contract
         id: contract
@@ -757,7 +924,8 @@ jobs:
             '+refs/heads/main:refs/remotes/origin/main'
           git fetch --force --no-tags \
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 
       - name: Verify sealed tag before executing release source
         env:
@@ -952,7 +1120,8 @@ jobs:
             '+refs/heads/main:refs/remotes/origin/main'
           git fetch --force --no-tags \
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 
       - name: Verify sealed tag before executing publication source
         env:
@@ -1337,7 +1506,8 @@ jobs:
             '+refs/heads/main:refs/remotes/origin/main'
           git fetch --force --no-tags \
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 
       - name: Verify sealed tag before executing channel source
         env:
@@ -1568,7 +1738,8 @@ jobs:
         run: |
           git fetch --force --no-tags \
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
@@ -1628,6 +1799,17 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const version = process.env.VERSION;
+            try {
+              await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/withdrawn/${version}`,
+              });
+              core.setFailed(`${version} was withdrawn and cannot be repaired`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
             const ref = await github.rest.git.getRef({
               owner,
               repo,
@@ -1694,99 +1876,17 @@ jobs:
               core.setFailed(`${version} does not contain the exact release asset set`);
               return;
             }
-            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
-              owner,
-              repo,
-              workflow_id: "release.yml",
-              branch: version,
-              event: "push",
-              status: "completed",
-              per_page: 100,
-            });
-            let passed = false;
-            for (const run of runs) {
-              if (run.head_sha !== commitSha || run.head_branch !== version) continue;
-              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-                owner,
-                repo,
-                run_id: run.id,
-                filter: "all",
-                per_page: 100,
-              });
-              if (
-                jobs.some(
-                  (job) =>
-                    job.name === "Publish immutable GitHub Release" &&
-                    job.head_sha === commitSha &&
-                    job.steps?.some(
-                      (step) =>
-                        step.name === "Require immutable published GitHub Release" &&
-                        step.conclusion === "success",
-                    ),
-                )
-              ) {
-                passed = true;
-                break;
-              }
-            }
-            if (!passed) {
-              const recoveryTitle = `Release recovery ${version} at ${commitSha}`;
-              const recoveries = await github.paginate(github.rest.actions.listWorkflowRuns, {
-                owner,
-                repo,
-                workflow_id: "release.yml",
-                branch: defaultBranch,
-                event: "workflow_dispatch",
-                status: "completed",
-                per_page: 100,
-              });
-              for (const run of recoveries) {
-                const nonce = run.display_title.startsWith(`${recoveryTitle} `)
-                  ? run.display_title.slice(recoveryTitle.length + 1)
-                  : "";
-                if (
-                  !new RegExp(`^${commitSha}-[0-9]+-[0-9]+$`).test(nonce) ||
-                  run.head_branch !== defaultBranch ||
-                  run.path !== ".github/workflows/release.yml" ||
-                  run.repository.full_name !== `${owner}/${repo}`
-                ) {
-                  continue;
-                }
-                const workflowComparison = await github.rest.repos.compareCommitsWithBasehead({
-                  owner,
-                  repo,
-                  basehead: `${run.head_sha}...${branch.data.commit.sha}`,
-                });
-                if (!["ahead", "identical"].includes(workflowComparison.data.status)) continue;
-                const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-                  owner,
-                  repo,
-                  run_id: run.id,
-                  filter: "all",
-                  per_page: 100,
-                });
-                if (
-                  jobs.some(
-                    (job) =>
-                      job.name === "Publish immutable GitHub Release" &&
-                      job.head_sha === run.head_sha &&
-                      job.steps?.some(
-                        (step) =>
-                          step.name === "Require immutable published GitHub Release" &&
-                          step.conclusion === "success",
-                      ),
-                  )
-                ) {
-                  passed = true;
-                  break;
-                }
-              }
-            }
-            if (!passed) {
-              core.setFailed(`Immutable GitHub Release job did not succeed for ${version} at ${commitSha}`);
-              return;
-            }
             core.setOutput("commit_sha", commitSha);
+
+      - name: Require successful Release workflow delivery
+        working-directory: tooling
+        env:
+          VERSION: ${{ inputs.repair_npm_version }}
+          RELEASE_COMMIT: ${{ steps.authority.outputs.commit_sha }}
+          DWS_RELEASE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/release/verify-release-workflow-delivery.sh --npm-repair \
+            "$VERSION" "$RELEASE_COMMIT"
 
       - name: Check out target release source
         uses: actions/checkout@v4
@@ -1888,6 +1988,8 @@ jobs:
       - mirror-gitee-release
       - repair-npm
       - repair-channel
+      - release-plan
+      - seal-release
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -1908,6 +2010,8 @@ jobs:
           MIRROR_GITEE_RESULT: ${{ needs.mirror-gitee-release.result }}
           REPAIR_NPM_RESULT: ${{ needs.repair-npm.result }}
           REPAIR_CHANNEL_RESULT: ${{ needs.repair-channel.result }}
+          RELEASE_PLAN_RESULT: ${{ needs.release-plan.result }}
+          SEAL_RELEASE_RESULT: ${{ needs.seal-release.result }}
         run: |
           set -eu
           require_result() {
@@ -1931,6 +2035,10 @@ jobs:
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
             fi
           }
+          require_cloud_jobs_skipped() {
+            require_result release-plan "$RELEASE_PLAN_RESULT" skipped
+            require_result seal-release "$SEAL_RELEASE_RESULT" skipped
+          }
           case "$EVENT_NAME:$DISPATCH_MODE" in
             push:)
               require_result dispatch-contract "$DISPATCH_RESULT" skipped
@@ -1938,7 +2046,33 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
+              require_cloud_jobs_skipped
               require_publication
+              ;;
+            workflow_dispatch:create_release)
+              require_result dispatch-contract "$DISPATCH_RESULT" success
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" success
+              require_result release-plan "$RELEASE_PLAN_RESULT" success
+              require_result seal-release "$SEAL_RELEASE_RESULT" success
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
+              require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
+              require_publication
+              ;;
+            workflow_dispatch:plan_release)
+              require_result dispatch-contract "$DISPATCH_RESULT" success
+              require_result release-plan "$RELEASE_PLAN_RESULT" success
+              require_result seal-release "$SEAL_RELEASE_RESULT" skipped
+              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
+              require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
+              require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release "$RELEASE_RESULT" skipped
+              require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
+              require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
+              require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
+              require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
               ;;
             workflow_dispatch:recover_release)
               require_result dispatch-contract "$DISPATCH_RESULT" success
@@ -1946,6 +2080,7 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
+              require_cloud_jobs_skipped
               require_publication
               ;;
             workflow_dispatch:governance_preflight)
@@ -1960,6 +2095,7 @@ jobs:
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
+              require_cloud_jobs_skipped
               ;;
             workflow_dispatch:repair_npm)
               require_result dispatch-contract "$DISPATCH_RESULT" success
@@ -1973,6 +2109,7 @@ jobs:
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
+              require_cloud_jobs_skipped
               ;;
             workflow_dispatch:repair_gitee)
               require_result dispatch-contract "$DISPATCH_RESULT" success
@@ -1986,6 +2123,7 @@ jobs:
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              require_cloud_jobs_skipped
               ;;
             workflow_dispatch:repair_oss)
               require_result dispatch-contract "$DISPATCH_RESULT" success
@@ -1999,6 +2137,7 @@ jobs:
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
+              require_cloud_jobs_skipped
               ;;
             *)
               echo "unsupported release mode: event=$EVENT_NAME mode=$DISPATCH_MODE" >&2
@@ -2050,6 +2189,17 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const version = process.env.VERSION;
+            try {
+              await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/withdrawn/${version}`,
+              });
+              core.setFailed(`${version} was withdrawn and cannot be repaired`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
             const ref = await github.rest.git.getRef({
               owner,
               repo,
@@ -2142,7 +2292,8 @@ jobs:
           set -eu
           git fetch --force --no-tags \
             https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*'
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
           ./scripts/release/verify-github-tag-authority.sh \
             "$VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
@@ -2207,3 +2358,348 @@ jobs:
           OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
           DWS_REQUIRE_OSS: "1"
+
+  release-plan:
+    name: Plan next cloud release
+    needs: [dispatch-contract, governance-preflight]
+    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'plan_release' || (needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      release_version: ${{ steps.allocate.outputs.release_version }}
+      release_commit: ${{ steps.allocate.outputs.release_commit }}
+      channel: ${{ steps.allocate.outputs.channel }}
+      from_beta: ${{ steps.allocate.outputs.from_beta }}
+      base: ${{ steps.allocate.outputs.base }}
+      refs_fingerprint: ${{ steps.allocate.outputs.refs_fingerprint }}
+    steps:
+      - name: Validate official default-branch release request
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_REPOSITORY: DingTalk-Real-AI/dingtalk-workspace-cli
+        run: |
+          set -eu
+          test "$GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY" || {
+            echo "cloud releases are restricted to $EXPECTED_REPOSITORY" >&2
+            exit 1
+          }
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" || {
+            echo "cloud releases must be dispatched from $DEFAULT_BRANCH" >&2
+            exit 1
+          }
+          printf '%s\n' "$GITHUB_SHA" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo "cloud release commit must be a full lowercase SHA" >&2
+            exit 1
+          }
+
+      - name: Check out exact default-branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Fetch current main and all allocated versions
+        run: |
+          set -eu
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || {
+            echo "checked-out release commit differs from the dispatched commit" >&2
+            exit 1
+          }
+          test "$(git rev-parse refs/remotes/origin/main)" = "$GITHUB_SHA" || {
+            echo "main moved after this release was dispatched; run it again from current main" >&2
+            exit 1
+          }
+
+      - name: Allocate the next version
+        id: allocate
+        env:
+          REQUESTED_CHANNEL: ${{ inputs.release_channel }}
+          REQUESTED_BUMP: ${{ inputs.release_bump }}
+        run: |
+          set -eu
+          allocation="$RUNNER_TEMP/next-release-version"
+          ./scripts/release/next-release-version.sh \
+            --channel "$REQUESTED_CHANNEL" \
+            --bump "$REQUESTED_BUMP" > "$allocation"
+          for key in release_version from_beta channel base; do
+            count="$(grep -c "^$key=" "$allocation")"
+            test "$count" -eq 1 || {
+              echo "allocator returned $count values for $key" >&2
+              exit 1
+            }
+            value="$(sed -n "s/^$key=//p" "$allocation")"
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
+          done
+          refs_fingerprint="$(
+            git for-each-ref --format='%(refname)=%(objectname)' \
+              refs/tags/v refs/tags/withdrawn/v \
+              | LC_ALL=C sort \
+              | sha256sum \
+              | awk '{print $1}'
+          )"
+          echo "release_commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "refs_fingerprint=$refs_fingerprint" >> "$GITHUB_OUTPUT"
+
+          release_version="$(sed -n 's/^release_version=//p' "$allocation")"
+          from_beta="$(sed -n 's/^from_beta=//p' "$allocation")"
+          channel="$(sed -n 's/^channel=//p' "$allocation")"
+          {
+            echo "## Cloud release plan"
+            echo
+            echo "- Version: \`$release_version\`"
+            echo "- Channel: \`$channel\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            if test -n "$from_beta"; then
+              echo "- Promotes beta: \`$from_beta\`"
+            fi
+            if test "${{ needs.dispatch-contract.outputs.mode }}" = plan_release; then
+              echo
+              echo "Plan only: no tag or package was created. Add the exact \`CHANGELOG.md\` section, merge it to main, then run publish."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate the candidate release contract before sealing
+        if: ${{ needs.dispatch-contract.outputs.mode == 'create_release' }}
+        env:
+          RELEASE_VERSION: ${{ steps.allocate.outputs.release_version }}
+          RELEASE_CHANNEL: ${{ steps.allocate.outputs.channel }}
+          FROM_BETA: ${{ steps.allocate.outputs.from_beta }}
+        run: |
+          set -eu
+          git config user.name "dws release cloud seal"
+          git config user.email "dws-release@users.noreply.github.com"
+          {
+            printf 'Release %s\n\n' "$RELEASE_VERSION"
+            printf 'Channel: %s\n' "$RELEASE_CHANNEL"
+            test -z "$FROM_BETA" || printf 'From-Beta: %s\n' "$FROM_BETA"
+          } > "$RUNNER_TEMP/candidate-tag-message"
+          git tag -a "$RELEASE_VERSION" HEAD -F "$RUNNER_TEMP/candidate-tag-message"
+          set -- \
+            --channel "$RELEASE_CHANNEL" \
+            --version "$RELEASE_VERSION" \
+            --context ci \
+            --remote origin \
+            --branch main \
+            --notes-output "$RUNNER_TEMP/release-notes.md" \
+            --metadata-output "$RUNNER_TEMP/release-contract-output"
+          if test -n "$FROM_BETA"; then
+            set -- "$@" --from-beta "$FROM_BETA"
+          fi
+          ./scripts/release/release-contract.sh "$@"
+
+      - name: Require delivered previous stable baseline before sealing
+        if: ${{ needs.dispatch-contract.outputs.mode == 'create_release' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DWS_RELEASE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          previous_stable="$(sed -n 's/^previous_stable=//p' "$RUNNER_TEMP/release-contract-output")"
+          previous_commit="$(sed -n 's/^previous_stable_commit=//p' "$RUNNER_TEMP/release-contract-output")"
+          if test -n "$previous_stable"; then
+            ./scripts/release/verify-delivered-stable.sh "$previous_stable" "$previous_commit"
+          fi
+
+      - name: Require delivered beta before sealing stable
+        if: ${{ needs.dispatch-contract.outputs.mode == 'create_release' && steps.allocate.outputs.channel == 'stable' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DWS_RELEASE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FROM_BETA: ${{ steps.allocate.outputs.from_beta }}
+        run: |
+          set -eu
+          from_beta_commit="$(git rev-parse "$FROM_BETA^{commit}")"
+          release_state="$(
+            gh api -H 'Accept: application/vnd.github+json' \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$FROM_BETA" \
+              --jq '[.tag_name, .draft, .prerelease, .immutable] | @tsv'
+          )"
+          test "$release_state" = "$(printf '%s\tfalse\ttrue\ttrue' "$FROM_BETA")" || {
+            echo "$FROM_BETA is not a published immutable prerelease" >&2
+            exit 1
+          }
+          ./scripts/release/verify-github-release-assets.sh "$FROM_BETA"
+          ./scripts/release/verify-release-workflow-delivery.sh \
+            "$FROM_BETA" "$from_beta_commit"
+
+  seal-release:
+    name: Seal cloud release tag
+    needs: [dispatch-contract, governance-preflight, release-plan]
+    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      release_version: ${{ steps.seal.outputs.release_version }}
+      release_commit: ${{ steps.seal.outputs.release_commit }}
+      release_tag_object: ${{ steps.seal.outputs.release_tag_object }}
+    steps:
+      - name: Create one immutable annotated release tag
+        id: seal
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ needs.release-plan.outputs.release_version }}
+          RELEASE_COMMIT: ${{ needs.release-plan.outputs.release_commit }}
+          RELEASE_CHANNEL: ${{ needs.release-plan.outputs.channel }}
+          FROM_BETA: ${{ needs.release-plan.outputs.from_beta }}
+          REFS_FINGERPRINT: ${{ needs.release-plan.outputs.refs_fingerprint }}
+        with:
+          script: |
+            const crypto = require("crypto");
+            const { owner, repo } = context.repo;
+            const expectedRepository = "DingTalk-Real-AI/dingtalk-workspace-cli";
+            const defaultBranch = context.payload.repository.default_branch;
+            const version = process.env.RELEASE_VERSION;
+            const commit = process.env.RELEASE_COMMIT;
+            const channel = process.env.RELEASE_CHANNEL;
+            const fromBeta = process.env.FROM_BETA;
+            const expectedFingerprint = process.env.REFS_FINGERPRINT;
+
+            if (
+              context.payload.repository.full_name !== expectedRepository ||
+              context.ref !== `refs/heads/${defaultBranch}` ||
+              context.sha !== commit
+            ) {
+              core.setFailed("cloud release seal is not bound to the official dispatched default-branch commit");
+              return;
+            }
+            if (
+              !/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-beta\.[1-9]\d*)?$/.test(version) ||
+              !/^[0-9a-f]{40}$/.test(commit) ||
+              !/^[0-9a-f]{64}$/.test(expectedFingerprint)
+            ) {
+              core.setFailed("cloud release plan contains an invalid sealed identity");
+              return;
+            }
+            if (
+              (channel === "stable" && !fromBeta) ||
+              (channel === "prerelease" && fromBeta)
+            ) {
+              core.setFailed("cloud release channel and beta promotion baseline disagree");
+              return;
+            }
+
+            const branch = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: defaultBranch,
+            });
+            if (branch.data.commit.sha !== commit) {
+              core.setFailed(`${defaultBranch} moved to ${branch.data.commit.sha}; run the release again`);
+              return;
+            }
+
+            const refs = [];
+            for (const prefix of ["tags/v", "tags/withdrawn/v"]) {
+              const matching = await github.paginate(github.rest.git.listMatchingRefs, {
+                owner,
+                repo,
+                ref: prefix,
+                per_page: 100,
+              });
+              for (const ref of matching) {
+                refs.push(`${ref.ref}=${ref.object.sha}`);
+              }
+            }
+            refs.sort();
+            const actualFingerprint = crypto
+              .createHash("sha256")
+              .update(refs.length > 0 ? `${refs.join("\n")}\n` : "")
+              .digest("hex");
+            if (actualFingerprint !== expectedFingerprint) {
+              core.setFailed("allocated release refs changed after planning; run the release again");
+              return;
+            }
+
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `tags/${version}` });
+              core.setFailed(`release tag already exists: ${version}`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            try {
+              await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/withdrawn/${version}`,
+              });
+              core.setFailed(`release version was withdrawn and cannot be reused: ${version}`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            const message = [
+              `Release ${version}`,
+              "",
+              `Channel: ${channel}`,
+              ...(fromBeta ? [`From-Beta: ${fromBeta}`] : []),
+              `Release-Run: ${context.runId}`,
+              `Release-Run-Attempt: ${process.env.GITHUB_RUN_ATTEMPT}`,
+              `Requested-By: ${context.actor}`,
+              `Requested-By-ID: ${context.payload.sender?.id || ""}`,
+              `Sealed-Commit: ${commit}`,
+              `Workflow-Commit: ${context.sha}`,
+              `Allocation-Fingerprint: ${expectedFingerprint}`,
+            ].join("\n");
+            const tag = await github.rest.git.createTag({
+              owner,
+              repo,
+              tag: version,
+              message,
+              object: commit,
+              type: "commit",
+            });
+            await github.rest.git.createRef({
+              owner,
+              repo,
+              ref: `refs/tags/${version}`,
+              sha: tag.data.sha,
+            });
+
+            const sealedRef = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: `tags/${version}`,
+            });
+            if (
+              sealedRef.data.object.type !== "tag" ||
+              sealedRef.data.object.sha !== tag.data.sha
+            ) {
+              core.setFailed(`${version} did not seal to the new annotated tag object`);
+              return;
+            }
+            const sealedTag = await github.rest.git.getTag({
+              owner,
+              repo,
+              tag_sha: tag.data.sha,
+            });
+            if (
+              sealedTag.data.tag !== version ||
+              sealedTag.data.object.type !== "commit" ||
+              sealedTag.data.object.sha !== commit ||
+              sealedTag.data.message !== message
+            ) {
+              core.setFailed(`${version} annotated tag authority differs after creation`);
+              return;
+            }
+
+            core.setOutput("release_version", version);
+            core.setOutput("release_commit", commit);
+            core.setOutput("release_tag_object", tag.data.sha);
+            await core.summary
+              .addHeading("Cloud release sealed")
+              .addRaw(`\`${version}\` → \`${commit}\` (run ${context.runId})`)
+              .write();
