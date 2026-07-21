@@ -237,7 +237,7 @@ func newCalendarCommand() *cobra.Command {
 			toolArgs := map[string]any{}
 			var startTime, endTime int64
 			var now time.Time
-			if v := flagOrFallback(cmd, "start", "time-min", "min-time", "start-time", "startTime", "start_time", "start-date", "startDate"); v != "" {
+			if v, _ := cmd.Flags().GetString("start"); v != "" {
 				var err error
 				startTime, err = parseISOTimeToMillis("start", v)
 				if err != nil {
@@ -249,7 +249,7 @@ func newCalendarCommand() *cobra.Command {
 				startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).UnixMilli()
 				toolArgs["startTime"] = startTime
 			}
-			if v := flagOrFallback(cmd, "end", "time-max", "max-time", "end-time", "endTime", "end_time", "end-date", "endDate"); v != "" {
+			if v, _ := cmd.Flags().GetString("end"); v != "" {
 				var err error
 				endTime, err = parseISOTimeToMillis("end", v)
 				if err != nil {
@@ -266,21 +266,17 @@ func newCalendarCommand() *cobra.Command {
 			if err := validateTimeRange(startTime, endTime); err != nil {
 				return err
 			}
-			if v := flagOrFallback(cmd, "calendar-id", "calendarId", "calendar"); v != "" {
+			if v, _ := cmd.Flags().GetString("calendar-id"); v != "" {
 				toolArgs["calendarId"] = v
 			}
-			if v := flagOrFallback(cmd, "cursor", "next-cursor", "nextCursor", "page-token", "pageToken", "next-token"); v != "" {
+			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
 			}
+			// Alias forms (size/page-size/max-results/maxResults) are normalized to
+			// --limit in the PreParse pipeline, so only --limit and --count reach the
+			// handler. --count stays a deliberately separate flag (pagination_size
+			// excludes it) that still maps onto the limit argument.
 			if lim, _ := cmd.Flags().GetInt("limit"); lim > 0 {
-				toolArgs["limit"] = lim
-			} else if lim, _ := cmd.Flags().GetInt("max-results"); lim > 0 {
-				toolArgs["limit"] = lim
-			} else if lim, _ := cmd.Flags().GetInt("maxResults"); lim > 0 {
-				toolArgs["limit"] = lim
-			} else if lim, _ := cmd.Flags().GetInt("page-size"); lim > 0 {
-				toolArgs["limit"] = lim
-			} else if lim, _ := cmd.Flags().GetInt("size"); lim > 0 {
 				toolArgs["limit"] = lim
 			} else if lim, _ := cmd.Flags().GetInt("count"); lim > 0 {
 				toolArgs["limit"] = lim
