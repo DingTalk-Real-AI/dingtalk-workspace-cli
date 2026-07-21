@@ -1073,6 +1073,8 @@ func newDriveCommand() *cobra.Command {
 	_ = drivePermRemoveCmd.Flags().MarkHidden("user")
 	drivePermRemoveCmd.Flags().String("workspace", "", "知识库 ID (选填)")
 
+	drivePermissionExtraCmds := newDrivePermissionExtraCommands()
+
 	// permission 子命令 --node 隐藏别名（保持与迁移前 doc 命令一致）
 	for _, c := range []*cobra.Command{drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermRemoveCmd} {
 		c.Flags().String("url", "", "")
@@ -1088,6 +1090,7 @@ func newDriveCommand() *cobra.Command {
 	}
 
 	drivePermissionCmd.AddCommand(drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermRemoveCmd)
+	drivePermissionCmd.AddCommand(drivePermissionExtraCmds...)
 
 	// --node 隐藏别名（保持与迁移前 doc 命令一致）
 	driveNodeAliasCmds := []*cobra.Command{
@@ -1380,6 +1383,8 @@ func newDriveCommand() *cobra.Command {
 		driveShortcutCmd,
 		drivePermissionCmd,
 		drivePublishCmd,
+		newDriveTaskCommand(),
+		newDriveStarCommand(),
 		recycleCmd,
 		// deprecated 兼容命令（Phase 2）— 隐藏，保留向后兼容
 		driveFolderCmd,

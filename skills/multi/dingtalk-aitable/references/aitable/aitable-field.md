@@ -34,11 +34,17 @@ Flags:
       --type string       要创建的单字段类型（参考 table create 字段类型）
       --config string     单字段配置，如 options（可选）
       --ai-config string  单字段 AI 配置 JSON（可选，用于创建 AI 字段）
-      --fields string     批量新增字段 JSON 数组，单次最多 15 个 (与 --name/--type 二选一)
+      --fields string     批量新增字段 JSON 数组，单次最多 15 个（非空时优先于 --name/--type）
       --table-id string   Table ID (必填)
 ```
 
 允许部分成功，返回结果逐项标明成功/失败状态。
+
+支持两种输入模式：
+- 单字段模式：同时传 `--name` 和 `--type`，可选 `--config`、`--ai-config`、`--options`
+- 批量模式：传 `--fields` JSON 数组
+
+为兼容既有调用，若 `--fields` 与单字段参数同时出现，以 `--fields` 为准，单字段参数会被忽略。未传 `--fields` 时，`--name` 和 `--type` 必须同时提供。
 
 ### AI 字段创建示例
 

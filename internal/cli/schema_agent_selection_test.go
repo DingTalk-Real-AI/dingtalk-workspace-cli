@@ -52,6 +52,44 @@ func TestBuildManualAgentSelectionEvalFixtureUsesReviewedScenariosAndRealCommand
 	}
 }
 
+func TestValidateManualAgentSelectionBindingAcceptsBoundRunnableParentCompatibilityPrimary(t *testing.T) {
+	root, primary, alias := runnableParentCompatibilityFixture()
+	annotateTestCompatibilityPair(primary, alias)
+	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
+		CanonicalPath:  "item.run_action",
+		PrimaryCLIPath: "item action",
+		Aliases:        []string{"item action create"},
+	}})
+	bound, err := BindEffectiveCommandRegistry(root, effective)
+	if err != nil {
+		t.Fatalf("BindEffectiveCommandRegistry() error = %v", err)
+	}
+	command := bound.ByCanonical["item.run_action"]
+	if err := validateManualAgentSelectionBinding(bound, command.CanonicalPath, command); err != nil {
+		t.Fatalf("validateManualAgentSelectionBinding() error = %v", err)
+	}
+}
+
+func TestValidateManualAgentSelectionBindingRejectsUnprovenRunnableParent(t *testing.T) {
+	_, primary, _ := runnableParentCompatibilityFixture()
+	spec := BoundCommandSpec{
+		CommandSpec: CommandSpec{
+			CanonicalPath:  "item.run_action",
+			PrimaryCLIPath: "item action",
+		},
+		PrimaryCommand: primary,
+	}
+	bound := BoundCommandRegistry{
+		Commands:    []BoundCommandSpec{spec},
+		ByCanonical: map[string]BoundCommandSpec{spec.CanonicalPath: spec},
+		ByCLIPath:   map[string]BoundCommandSpec{spec.PrimaryCLIPath: spec},
+	}
+	err := validateManualAgentSelectionBinding(bound, spec.CanonicalPath, spec)
+	if err == nil || !strings.Contains(err.Error(), "reviewed runnable-parent compatibility primary") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestBuildManualAgentSelectionEvalFixtureRejectsFactualContractDrift(t *testing.T) {
 	tests := []struct {
 		name    string

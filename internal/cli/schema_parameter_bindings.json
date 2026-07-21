@@ -2,8 +2,8 @@
   "version": 3,
   "baseline": {
     "manifest": "schema-parameter-bindings-v3",
-    "sha256": "sha256:9008afd72243232d4bcb37b46f1e8fc10e2bc283c8af26c59fbdb4901ebeef2f",
-    "reason": "Reviewed v3 baseline for the complete active canonical/flag/property manifest after splitting the fixed-scope minutes list commands into distinct registry identities.",
+    "sha256": "sha256:363c9f4c3622498b2a9e7c1e6fcb4c46f0b483d3d6d0a7461ad96ab9bddb022a",
+    "reason": "Reviewed v3 baseline after adding Sheet export create/get mappings and CLI-only async orchestration exclusion while retaining the local output exclusion.",
     "reviewed": true
   },
   "removals": {
@@ -88,7 +88,8 @@
     },
     "aitable.view_create": {
       "desc": "viewDescription",
-      "name": "viewName"
+      "name": "viewName",
+      "visible-field-ids": "config.visibleFieldIds"
     },
     "aitable.view_duplicate": {
       "new-name": "newViewName",
@@ -589,6 +590,15 @@
     "doc.download_file": {
       "node": "nodeId"
     },
+    "doc.export": {
+      "export-format": "exportFormat",
+      "node": "nodeId"
+    },
+    "doc.import": {
+      "folder": "targetFolderId",
+      "name": "fileName",
+      "workspace": "workspaceId"
+    },
     "doc.get_document_content": {
       "content-format": "format",
       "node": "nodeId"
@@ -628,6 +638,9 @@
       "folder": "targetFolderId",
       "node": "nodeId",
       "workspace": "workspaceId"
+    },
+    "doc.query_export_job": {
+      "task-id": "jobId"
     },
     "doc.remove_permission": {
       "node": "nodeId",
@@ -725,9 +738,26 @@
       "node": "nodeId",
       "workspace": "workspaceId"
     },
+    "drive.permission_apply": {
+      "node": "nodeId",
+      "notify-mode": "notifyMode",
+      "reason": "reason",
+      "role": "roleId",
+      "users": "receivers"
+    },
+    "drive.permission_apply_info": {
+      "node": "nodeId"
+    },
     "drive.permission_remove": {
       "node": "nodeId",
       "users": "userIds",
+      "workspace": "workspaceId"
+    },
+    "drive.permission_transfer_owner": {
+      "new-owner": "newOwnerId",
+      "node": "nodeId",
+      "recursive": "recursiveChange",
+      "reserve-role": "reserveOldOwnerRole",
       "workspace": "workspaceId"
     },
     "drive.permission_update": {
@@ -750,6 +780,20 @@
       "modified-to": "modifiedTimeTo",
       "query": "keyword",
       "target": "searchTarget"
+    },
+    "drive.star_add": {
+      "node": "nodeId"
+    },
+    "drive.star_list": {
+      "content-types": "contentTypes",
+      "cursor": "cursor",
+      "limit": "limit",
+      "order-by": "orderBy",
+      "resource-types": "supportResourceTypes",
+      "sort": "sortType"
+    },
+    "drive.star_remove": {
+      "node": "nodeId"
     },
     "mail.batch_move_message": {
       "folder": "destinationFolderId"
@@ -1055,6 +1099,9 @@
     "sheet.delete_sheet": {
       "node": "nodeId"
     },
+    "sheet.export_get": {
+      "task-id": "jobId"
+    },
     "sheet.fill_range": {
       "node": "nodeId",
       "target-range": "destinationRange"
@@ -1079,6 +1126,14 @@
       "node": "nodeId",
       "query": "text",
       "use-regexp": "useRegExp"
+    },
+    "sheet.formula_verify": {
+      "max-cells": "maxCells",
+      "max-locations-per-error": "maxLocationsPerError",
+      "node": "nodeId",
+      "range": "targets[].range",
+      "sheet-id": "targets[].sheetId",
+      "targets": "targets"
     },
     "sheet.get_all_sheets": {
       "node": "nodeId"
@@ -1215,6 +1270,18 @@
     },
     "sheet.update_sheet": {
       "name": "title",
+      "node": "nodeId"
+    },
+    "sheet.version_list": {
+      "cursor": "nextCursor",
+      "limit": "maxResults",
+      "node": "nodeId"
+    },
+    "sheet.version_revert": {
+      "node": "nodeId",
+      "version": "version"
+    },
+    "sheet.version_save": {
       "node": "nodeId"
     },
     "sheet.write_image": {
@@ -1718,7 +1785,11 @@
     "doc.create_document --fix-jsonml": "local JSONML normalization control",
     "doc.delete_comment --comment-key": "Reviewed unpinned adapter: doc.delete_comment has no singular pinned interface_ref; --comment-key is a CLI wrapper input and does not publish a direct interface property.",
     "doc.download_file --output": "local output path",
+    "doc.export --async": "Reviewed CLI-only flow control: submit and return the task ID without polling or downloading; it is not sent to an MCP interface.",
+    "doc.export --output": "Reviewed local destination consumed only after synchronous export completion; it is not sent to an MCP interface.",
     "doc.get_document_content --output": "local output path",
+    "doc.import --async": "Reviewed CLI-only flow control: create the session, upload and confirm the import, then return TaskResult.id without polling; it is not sent to a singular MCP interface.",
+    "doc.import --file": "Reviewed local upload input consumed by the CLI between create_import_session and confirm_import; it is not sent as a singular MCP interface property.",
     "doc.import_get --task-id": "Reviewed unpinned adapter: doc.import_get has no singular pinned interface_ref; --task-id is a CLI wrapper input and does not publish a direct interface property.",
     "doc.insert_document_block --fix-jsonml": "local JSONML normalization control",
     "doc.insert_document_block --heading": "aggregate convenience input used to build element",
@@ -1828,6 +1899,7 @@
     "sheet.filter_view_get_criteria --filter-view-id": "local post-filter over get_filter_views response",
     "sheet.filter_view_info --filter-view-id": "local post-filter over get_filter_views response",
     "sheet.filter_view_list_criteria --filter-view-id": "local post-filter over get_filter_views response",
+    "sheet.formula_verify --exit-on-error": "CLI-local exit status control evaluated after verify_formula returns; it is never sent to the MCP tool.",
     "sheet.filter_view_update_criteria --column": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --column is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.filter_view_update_criteria --filter-criteria": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --filter-criteria is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.filter_view_update_criteria --filter-view-id": "Reviewed unpinned adapter: sheet.filter_view_update_criteria has no singular pinned interface_ref; --filter-view-id is a CLI wrapper input and does not publish a direct interface property.",
@@ -1848,6 +1920,7 @@
     "sheet.range_read --range": "Reviewed unpinned adapter: sheet.range_read has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.range_read --sheet-id": "Reviewed unpinned adapter: sheet.range_read has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.show_gridline --sheet-id": "Reviewed unpinned adapter: sheet.show_gridline has no singular pinned interface_ref; --sheet-id is a CLI wrapper input and does not publish a direct interface property.",
+    "sheet.submit_export_job --async": "CLI orchestration control that returns after task submission and is not sent to a singular MCP request",
     "sheet.submit_export_job --output": "local destination consumed after export job completion",
     "sheet.table_get --no-header": "Reviewed unpinned adapter: sheet.table_get has no singular pinned interface_ref; --no-header is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.table_get --range": "Reviewed unpinned adapter: sheet.table_get has no singular pinned interface_ref; --range is a CLI wrapper input and does not publish a direct interface property.",

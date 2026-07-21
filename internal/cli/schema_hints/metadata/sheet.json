@@ -226,6 +226,21 @@
       "reviewed": true,
       "runtime_gate": "typed_yes"
     },
+    "sheet.export_get": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "query_export_job"
+      },
+      "interface_mode": "mcp",
+      "availability": "available",
+      "reviewed": true,
+      "review_reason": "Reviewed direct read-only binding to doc/query_export_job; the public --task-id flag maps to the jobId request property while the hidden --job-id compatibility flag stays outside Schema.",
+      "runtime_gate": "none"
+    },
     "sheet.fill_range": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -311,6 +326,17 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "sheet.formula_verify": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls sheet/verify_formula, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "review_reason": "人工审阅：只扫描已落表公式并聚合错误，不修改工作簿。"
     },
     "sheet.get_all_sheets": {
       "interface_mode": "mcp",
@@ -574,9 +600,18 @@
       "reviewed": true
     },
     "sheet.submit_export_job": {
-      "interface_mode": "mcp",
+      "interface_mode": "composite",
       "availability": "available",
-      "reviewed": true
+      "interface_reason": "The CLI composes sheet/submit_export_job, doc/query_export_job polling, and an optional local HTTP download; no single pinned interface_ref represents the complete synchronous and asynchronous behavior.",
+      "reviewed": true,
+      "parameters": {
+        "async": {
+          "description": "Submit the export job and return TaskResult.id without polling or downloading.",
+          "required": false
+        }
+      },
+      "cli_path": "sheet export create",
+      "review_reason": "Preserve the historical sheet export primary identity in the reviewed command registry while binding this manual hint to its equivalent create leaf, and explicitly migrate the Schema from an inaccurate single-MCP binding to the composite submit, query, and optional download flow."
     },
     "sheet.table_get": {
       "interface_mode": "composite",
@@ -682,6 +717,37 @@
     "sheet.update_float_image": {
       "interface_mode": "mcp",
       "availability": "available",
+      "reviewed": true
+    },
+    "sheet.version_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/list_doc_versions, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true
+    },
+    "sheet.version_revert": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper preflights with doc/list_doc_versions and then calls doc/revert_doc_version.",
+      "reviewed": true,
+      "runtime_gate": "confirm_dangerous"
+    },
+    "sheet.version_save": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this Sheet wrapper reuses doc/save_doc_version, which is absent from the pinned MCP metadata snapshot.",
       "reviewed": true
     },
     "sheet.update_pivot_table": {

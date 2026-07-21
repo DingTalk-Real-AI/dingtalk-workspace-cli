@@ -57,6 +57,8 @@ func init() {
 	registerRequireOneOf("dev.search_open_platform_docs_rag", "query", "keyword")
 	registerRequireOneOf("devdoc.search_open_error_code_rag", "query", "request-id", "error-code", "error-message", "context")
 	registerRequireOneOf("devdoc.search_open_platform_docs_rag", "query", "keyword")
+	registerRequireOneOf("drive.permission_transfer_owner", "node", "workspace")
+	registerExclusiveOneOf("doc.query_export_job", "job-id", "task-id")
 	registerRequireOneOf("event.consume", "event_key", "subscribe-id")
 	registerExclusiveOneOf("event.stop", "all", "subscribe_id")
 	registerRequireOneOf("doc.insert_document_block", "text", "heading", "element")
@@ -90,6 +92,9 @@ func init() {
 	registerRequireOneOf("sheet.update_float_image", "src", "range", "width", "height", "offset-x", "offset-y")
 	registerRequireOneOf("sheet.update_sheet", "name", "index", "hidden", "frozen-row-count", "frozen-column-count", "tab-color")
 	registerRequireOneOf("sheet.import", "folder-token", "workspace")
+	RegisterRuntimeSchemaConstraints("sheet.formula_verify", RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"targets", "sheet-id"}, {"targets", "range"}},
+	})
 	registerRequireOneOf("wiki.search_wikiSpaces", "query", "type")
 }
 

@@ -1,4 +1,4 @@
-# doc export（在线文档导出为 docx）
+# doc export（在线文档导出为 docx / markdown / pdf）
 
 > **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
 > 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
@@ -7,70 +7,76 @@
 > - `contentType` 为 `ALIDOC`（在线文档）→ **必须用 `export`**，禁止用 `download`
 > - `contentType` 为 `DOCUMENT`/`IMAGE`/`VIDEO` 等（已有文件）→ 用 `dws drive download`（详见 [`../drive.md`](../drive.md)）
 >
-> `drive download` 只能下载**已有文件**（原样下载），`export` 是将**在线文档格式转换**后导出为 docx，两者完全不同。
+> `drive download` 只能下载**已有文件**（原样下载），`export` 是将**在线文档格式转换**后导出为 docx、markdown 或 pdf，两者完全不同。
 
 ---
 
-## doc export（一体化命令）
+## doc export / doc export create
 
 ```
 Usage:
-  dws doc export [flags]
+  dws doc export create [flags]
+  dws doc export [flags]  # 历史兼容入口
 Example:
-  dws doc export --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
-  dws doc export --node <DOC_ID> --output ~/downloads/
+  dws doc export create --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
+  dws doc export create --node <DOC_ID> --export-format markdown --output ./exported.md
+  dws doc export create --node <DOC_ID> --export-format pdf --async --format json
 Flags:
       --node string           要导出的文档标识，支持文档 URL 或 dentryUuid (必填)
-      --output string         本地保存路径，文件路径或目录 (必填)
-      --export-format string  导出格式，当前仅支持 docx (默认)
+      --output string         本地保存路径，文件路径或目录（同步模式必填；--async 时可省略）
+      --export-format string  导出格式: docx / markdown / md / pdf (默认 docx)
+      --async                 异步模式：提交成功后立即返回任务，不轮询或下载
 ```
 
-CLI 内部自动完成：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 成功后自动下载文件。
-**只需一条命令，无需手动轮询。**
+- 默认同步模式：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 成功后下载到 `--output`。
+- `--async` 模式：提交成功后只输出一个 `PENDING` 任务结果，其中 `id` 是后续查询使用的 task ID；不会轮询或下载。
+- `doc export create` 是公开主入口；`doc export` 保留为兼容入口，行为相同。
 
 ---
 
-## doc export get（手动兜底查询任务）
+## doc export get（查询任务）
 
 ```
 Usage:
   dws doc export get [flags]
 Example:
+  dws doc export get --task-id <TASK_ID>
   dws doc export get --job-id <JOB_ID>
 Flags:
-      --job-id string   导出任务 ID (必填)
+      --task-id string  导出任务 ID（与 --job-id 二选一）
+      --job-id string   导出任务 ID（历史参数；与 --task-id 二选一）
 ```
 
-仅在 `dws doc export` 超时或中断后，用于手动查询任务状态。通常不需要调用。
+用于查询 `--async` 返回的任务，或同步导出超时、中断后遗留的任务。`--task-id` 是新流程推荐写法；公开的历史 `--job-id` 继续可用，两者不可同时传入。
 
 ## 关键说明
 
-- `export` 是一体化命令，一条命令自动完成提交→轮询→下载，**无需手动编排轮询**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）。
-- `export` 超时或中断后，CLI 会输出 `jobId`，可用 `dws doc export get --job-id <jobId>` 手动查询任务状态。
-- `export` 当前仅支持钉钉在线文档（alidocs，`contentType=ALIDOC`）导出为 `docx`，**在线表格导出请使用其他命令**。
-- `--output` 既可以是文件完整路径，也可以是目录（CLI 自动按文档名生成 `.docx`）。
+- 默认同步模式会自动提交、轮询和下载；`--async` 只提交任务并立即返回，不会下载文件。
+- 返回任务结果中的 `id` 可直接传给 `dws doc export get --task-id <TASK_ID>`。
+- `export` 支持钉钉在线文档（alidocs，`contentType=ALIDOC`）导出为 `docx`、`markdown`（`md`）或 `pdf`；在线表格导出请使用其他命令。
+- 同步模式下 `--output` 必填，既可以是文件完整路径，也可以是目录；异步模式可省略。
 
 ## 上下文传递
 
 | 从返回中提取 | 用于 |
 |-------------|------|
 | `localPath` | 用户可访问的本地文件路径 |
-| 中断时返回的 `jobId` | `export get` 的 `--job-id` |
+| 任务结果的 `id` | `export get` 的 `--task-id` |
 
 ## 常用模板
 
 ```bash
-# 一体化导出（最常用）
-dws doc export --node <DOC_ID> --output ./exported.docx
+# 同步导出（最常用）
+dws doc export create --node <DOC_ID> --output ./exported.docx
 
-# 输出到目录（自动按文档名命名）
-dws doc export --node <DOC_ID> --output ~/downloads/
+# 导出为 markdown
+dws doc export create --node <DOC_ID> --export-format markdown --output ./exported.md
 
-# alidocs URL 直传
-dws doc export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ./exported.docx
+# 异步提交（返回 TaskResult.id，不轮询或下载）
+dws doc export create --node <DOC_ID> --export-format pdf --async --format json
 
-# 兜底：超时或中断后手动查任务
-dws doc export get --job-id <JOB_ID> --format json
+# 查询异步、超时或中断任务
+dws doc export get --task-id <TASK_ID> --format json
 ```
 
 ## 参考

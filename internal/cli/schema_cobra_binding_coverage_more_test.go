@@ -342,7 +342,7 @@ func TestCrossPlatformCoverageCompatibilityPathAndHelperRemainingEdges(t *testin
 	}
 	nonRunnableRoot := &cobra.Command{Use: "dws"}
 	nonRunnableRoot.AddCommand(&cobra.Command{Use: "group"})
-	if _, err := bindCommandRegistryPath(nonRunnableRoot, spec, "group"); err == nil || !strings.Contains(err.Error(), "not a runnable") {
+	if _, err := bindCommandRegistryPath(nonRunnableRoot, spec, "group"); err == nil || !strings.Contains(err.Error(), "neither a runnable Cobra leaf nor a reviewed runnable-parent compatibility primary") {
 		t.Fatalf("non-runnable primary error = %v", err)
 	}
 	if runnableSchemaLeaf(nil) {

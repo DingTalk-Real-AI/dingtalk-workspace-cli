@@ -17,6 +17,12 @@ Flags:
 
 只需传入需修改的字段，未传入的保持原值。每条记录必须含 recordId 和 cells。
 
+`cells` 的 key 支持两种写法：
+- 推荐：真实 `fieldId`，不受字段改名或重名影响
+- 兼容：当前表内精确且唯一的字段名；字段重名时必须改用 `fieldId`
+
+同一字段同时通过 `fieldId` 和字段名传入时，`fieldId` 的值优先。执行前先用 `table get` / `field get` 获取真实字段信息，不要猜 ID。
+
 ## 高频错误 flag（LLM 极易踩坑，必读）
 
 CLI **没有** `--record-id` 和 `--cells` 两个独立 flag，**只接受 `--records` 一个参数**，格式为 JSON 数组。

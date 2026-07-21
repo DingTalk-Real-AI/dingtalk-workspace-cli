@@ -90,6 +90,30 @@
       "availability": "available",
       "reviewed": true
     },
+    "doc.export": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed export orchestration: the command submits an export job, optionally polls it to completion, and optionally downloads the result to a local path, so no single interface_ref represents every branch.",
+      "reviewed": true,
+      "parameters": {
+        "async": {
+          "description": "Submit the export job and return its task ID without polling or downloading.",
+          "required": false
+        },
+        "output": {
+          "description": "Local destination required for synchronous export; omitted when --async is used.",
+          "required": false,
+          "required_when": "async is false"
+        }
+      },
+      "review_reason": "Reviewed the composite submit, optional polling, and optional local-download branches; async and output are CLI orchestration inputs rather than a singular MCP request.",
+      "cli_path": "doc export create",
+      "runtime_gate": "none"
+    },
     "doc.get_document_content": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -99,6 +123,25 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "doc.import": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed import orchestration: the command creates an import session, uploads the local file, confirms conversion, and optionally polls the task, so no single interface_ref represents every step.",
+      "reviewed": true,
+      "parameters": {
+        "async": {
+          "description": "Create the session, upload and confirm the import, then return TaskResult.id without polling.",
+          "required": false
+        }
+      },
+      "review_reason": "Reviewed the composite session, local upload, confirmation, and optional polling branches; file and async are CLI orchestration inputs rather than singular MCP request properties.",
+      "cli_path": "doc import create",
+      "runtime_gate": "none"
     },
     "doc.import_get": {
       "effect": "write",
@@ -154,9 +197,30 @@
       "reviewed": true
     },
     "doc.query_export_job": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "query_export_job"
+      },
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "parameters": {
+        "job-id": {
+          "description": "Historical task identifier accepted by the CLI; maps to jobId and is mutually exclusive with --task-id.",
+          "required": false
+        },
+        "task-id": {
+          "description": "Preferred task identifier returned as TaskResult.id; maps to the same jobId request property as --job-id.",
+          "required": false
+        }
+      },
+      "cli_path": "doc export get",
+      "review_reason": "Preserve public --job-id execution compatibility while reviewing --job-id/--task-id as an exclusive one-of alias pair for the same jobId interface property.",
+      "runtime_gate": "none"
     },
     "doc.remove_permission": {
       "effect": "write",

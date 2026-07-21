@@ -17,6 +17,11 @@ dws drive upload --help
 dws drive download --help
 dws drive stats --help
 dws drive shortcut --help
+dws drive permission apply-info --help
+dws drive permission apply --help
+dws drive permission transfer-owner --help
+dws drive star --help
+dws drive task get --help
 ```
 
 规则：
@@ -25,6 +30,37 @@ dws drive shortcut --help
 - 不确定某个功能是否存在时 → `dws drive --help` 查看命令列表
 
 ## 命令总览
+
+### 查询导出/导入异步任务（统一入口）
+
+`drive task get` 对 Doc/Sheet 导出和 Doc 导入任务做一次只读查询，统一返回 `TaskResult`。已有任务必须查询同一 ID，不要重新提交 create。
+
+```
+Usage:
+  dws drive task get --type export --id <TASK_ID>
+
+Examples:
+  dws drive task get --type export --id <TASK_ID> --format json
+  dws drive task get --type import --id <TASK_ID> --format json
+
+Flags:
+      --type string   任务类型：export 或 import（必填）
+      --id string     提交命令返回的任务 ID（必填）
+```
+
+- `--type export` 查询 Doc 或 Sheet 导出任务；成功时 `resultUrl` 是有时效性的下载链接。
+- `--type import` 查询 Doc 导入任务；成功时 `resultUrl` 是创建后的在线文档地址。
+- 本命令只查询一次，不在 CLI 内轮询。状态为非终态时，稍后使用相同 ID 再查。
+- 产品级 `doc export get`、`sheet export get`、`doc import get` 是等价的专用入口。
+- 任务 ID 必须来自真实提交响应，禁止编造；验证日志不得记录完整临时下载 URL。
+
+| 状态 | 含义 | 后续动作 |
+|---|---|---|
+| `PENDING` | 已排队 | 稍后查询同一 ID |
+| `PROCESSING` | 处理中 | 稍后查询同一 ID |
+| `SUCCESS` | 已完成 | 读取 `resultUrl` |
+| `FAILED` | 任务失败 | 转述 `message`，不要自动重提 |
+| `TIMEOUT` | 查询窗口超时 | 保留 ID，稍后继续查询 |
 
 ### 获取文件/文件夹列表
 
@@ -347,6 +383,9 @@ Flags:
 用户说"回收站/查看回收站/回收站列表/回收站里有什么" → `recycle list`
 用户说"恢复文件/还原删除的文件/从回收站恢复/还原回收站文件" → `recycle restore`
 用户说"给文档授权/分享权限" → `permission add`
+用户说"权限不够/申请访问/找审批人" → 先 `permission apply-info`，确认可申请角色和审批人后再 `permission apply`
+用户说"转交文档所有者/转交知识库所有者" → `permission transfer-owner`（不可逆，必须确认目标、新所有者、原所有者保留角色和是否递归）
+用户说"收藏文档/取消收藏/查看收藏" → `star add` / `star remove` / `star list`
 用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问" → `publish set`
 用户说"关闭公开/取消公开/取消互联网访问" → `publish unset`
 用户说"查看公开状态/是否公开/发布状态" → `publish get`
@@ -450,6 +489,45 @@ Flags:
       --filter-role string 按角色过滤: OWNER / MANAGER / EDITOR / DOWNLOADER / READER (仅 list)
 ```
 
+### 权限申请
+
+当前用户没有节点权限时，先查询可申请角色和审批人，再发起申请。`apply` 会真实通知审批人，执行前必须确认。
+
+```bash
+# 1. 查询可申请角色 availableRoles[].roleId 和审批人 approvers[].userId
+dws drive permission apply-info --node <NODE_ID> --format json
+
+# 2. 使用查询结果发起申请
+dws drive permission apply --node <NODE_ID> --role READER --users <APPROVER_UID> --reason "需要查看该文档" --yes --format json
+```
+
+`--role` 仅支持 `EDITOR`、`DOWNLOADER`、`READER`；`--notify-mode` 可选 `DEFAULT`、`MSG_ACCOUNT`、`SINGLE_CHAT`。不要猜审批人或角色，必须使用 `apply-info` 的返回值。
+
+### 转交所有者
+
+`permission transfer-owner` 可转交单个节点或整个知识库的所有者。这是不可逆操作，不能作为普通权限授予使用。
+
+```bash
+dws drive permission transfer-owner --node <NODE_ID> --new-owner <USER_ID>
+dws drive permission transfer-owner --workspace <WORKSPACE_ID> --new-owner <USER_ID>
+
+# 非交互执行时必须显式写出原所有者保留角色和递归策略
+dws drive permission transfer-owner --node <NODE_ID> --new-owner <USER_ID> \
+  --reserve-role EDITOR --recursive=false --yes --format json
+```
+
+`--node` 和 `--workspace` 至少提供一个；同时提供时以 `--node` 为准。`--reserve-role` 支持 `MANAGER`、`EDITOR`、`DOWNLOADER`、`READER`、`NONE`。
+
+### 文档收藏
+
+```bash
+dws drive star add --node <NODE_ID> --format json
+dws drive star remove --node <NODE_ID> --format json
+dws drive star list --limit 20 --sort desc --format json
+```
+
+`star list` 支持 `--cursor` 分页、`--resource-types DENTRY,TEAM,WORKSPACE` 和 `--content-types doc,sheet,...` 筛选；`--limit` 最大为 20。收藏是当前用户维度，和 Chat 消息收藏无关。
+
 ### 文件互联网公开发布
 
 管理文件的互联网公开发布状态。公开后任何人通过链接即可访问，无需登录钉钉。操作者需要是文件的管理员或拥有者。
@@ -532,6 +610,9 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 | `recycle list` | `name`（原始文件名） | 供用户确认还原目标 |
 | `recent` | `recentItems[].nodeId` / `docUrl` | doc read / info / update / block 操作的 --node |
 | `recent` | `nextCursor` | recent 的 --cursor（翻页） |
+| `permission apply-info` | `availableRoles[].roleId` | permission apply 的 --role |
+| `permission apply-info` | `approvers[].userId` | permission apply 的 --users |
+| `star list` | `nextCursor` | star list 的 --cursor（翻页） |
 
 > **重要**：`drive list` 返回结果中同时包含 `dentryId` 和 `fileId` 两个字段。所有需要传 `--node` 的命令（info / download / delete）必须使用 `fileId`（即 dentryUuid），**不要使用** `dentryId`。
 
@@ -547,6 +628,9 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 - `download` 需要指定 `--output`，CLI 会把文件保存到本地路径或目录
 - 文件名规则：头尾不能有空格；不能含 `*`、`"`、`<`、`>`、`|`、制表符；不能以 `.` 结尾
 - `shortcut` 会创建新节点，执行后必须通过 `drive list` 回读确认目标位置；`stats` 为只读命令
+- `permission apply` 会通知审批人；必须先用 `permission apply-info` 取得可申请角色和审批人
+- `permission transfer-owner` 不可逆；自动化调用必须显式传 `--reserve-role`、`--recursive=true|false` 和 `--yes`
+- `star add/remove` 只改变当前用户的收藏状态，可用 `star list` 回读验证并在测试后恢复原状态
 
 ## 自动化脚本
 

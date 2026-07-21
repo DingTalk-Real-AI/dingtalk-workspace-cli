@@ -32,6 +32,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -43,8 +44,34 @@ const (
 	StatusPending    Status = "PENDING"
 	StatusSuccess    Status = "SUCCESS"
 	StatusFailed     Status = "FAILED"
-	StatusTimeout    Status = "TIMEOUT" // 本地超时（非服务端状态）
+	StatusTimeout    Status = "TIMEOUT" // 本地轮询或服务端任务超时
 )
+
+type TaskResult struct {
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Status     Status `json:"status"`
+	ResultURL  string `json:"resultUrl,omitempty"`
+	Message    string `json:"message,omitempty"`
+	CreateTime string `json:"createTime,omitempty"`
+}
+
+func NormalizeStatus(raw string) Status {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "PENDING", "QUEUED":
+		return StatusPending
+	case "PROCESSING", "RUNNING", "IN_PROGRESS", "DOING":
+		return StatusProcessing
+	case "SUCCESS", "SUCCEED", "SUCCEEDED", "DONE", "FINISHED", "COMPLETE", "COMPLETED":
+		return StatusSuccess
+	case "FAILED", "FAILURE", "FAIL", "ERROR":
+		return StatusFailed
+	case "TIMEOUT", "TIMED_OUT":
+		return StatusTimeout
+	default:
+		return StatusProcessing
+	}
+}
 
 // SubmitFunc 是"提交任务"回调，返回 jobId 或 error。
 type SubmitFunc func(ctx context.Context) (jobID string, err error)

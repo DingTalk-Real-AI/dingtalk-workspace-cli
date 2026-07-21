@@ -5,6 +5,7 @@ package asynctask
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -161,5 +162,36 @@ func TestSubmit_UnknownStatusKeepsPolling(t *testing.T) {
 	res, _ := Submit(context.Background(), submitFn, queryFn, Options{Backoff: testBackoff, Timeout: 1 * time.Second})
 	if res.Status != StatusSuccess {
 		t.Fatalf("unknown status not handled: %+v", res)
+	}
+}
+
+func TestNormalizeStatus(t *testing.T) {
+	tests := map[string]Status{
+		"pending": StatusPending, "QUEUED": StatusPending,
+		"processing": StatusProcessing, "RUNNING": StatusProcessing,
+		"IN_PROGRESS": StatusProcessing, "DOING": StatusProcessing,
+		"success": StatusSuccess, "SUCCEED": StatusSuccess,
+		"SUCCEEDED": StatusSuccess, "DONE": StatusSuccess,
+		"FINISHED": StatusSuccess, "COMPLETE": StatusSuccess,
+		"COMPLETED": StatusSuccess,
+		"failed":    StatusFailed, "FAILURE": StatusFailed,
+		"FAIL": StatusFailed, "ERROR": StatusFailed,
+		"timeout": StatusTimeout, "TIMED_OUT": StatusTimeout,
+		"": StatusProcessing, "new-server-state": StatusProcessing,
+	}
+	for raw, want := range tests {
+		if got := NormalizeStatus(raw); got != want {
+			t.Errorf("NormalizeStatus(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestTaskResultJSONContract(t *testing.T) {
+	data, err := json.Marshal(TaskResult{ID: "job-1", Type: "export", Status: StatusSuccess, ResultURL: "https://download.invalid/file"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), `{"id":"job-1","type":"export","status":"SUCCESS","resultUrl":"https://download.invalid/file"}`; got != want {
+		t.Fatalf("TaskResult JSON = %s, want %s", got, want)
 	}
 }

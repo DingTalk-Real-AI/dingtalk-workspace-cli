@@ -287,6 +287,10 @@ func TestSheetConfirmationGuardCoversEveryProtectedLeaf(t *testing.T) {
 			path: "sheet range move-to",
 			args: []string{"range", "move-to", "--node", "node-1", "--sheet-id", "sheet-1", "--source-range", "A1:B3", "--target-range", "D1"},
 		},
+		{
+			path: "sheet version revert",
+			args: []string{"version", "revert", "--node", "node-1", "--version", "1"},
+		},
 	}
 
 	// A newly protected command must add a runnable case here. This keeps the

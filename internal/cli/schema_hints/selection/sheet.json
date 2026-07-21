@@ -489,6 +489,26 @@
         "dws-schema-live:sheet.delete_sheet"
       ]
     },
+    "sheet.export_get": {
+      "agent_summary": "查询已有表格导出任务的状态与下载链接。",
+      "use_when": [
+        "sheet export 异步提交、超时或中断后，已有任务 ID，需要查询状态或取得下载链接时"
+      ],
+      "avoid_when": [
+        "尚未提交导出任务时，使用 sheet export create 创建任务；不要重复提交已有任务"
+      ],
+      "examples": [
+        "dws sheet export get --task-id <TASK_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并固定查询到 doc/query_export_job 的只读接口。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "cobra-help:dws sheet export get --help",
+        "skills/mono/references/products/sheet/sheet-export.md",
+        "pinned-mcp:doc/query_export_job"
+      ]
+    },
     "sheet.fill_range": {
       "agent_summary": "按源区域对目标区域做自动填充（复制或序列）。",
       "use_when": [
@@ -647,6 +667,29 @@
         "cobra-help:dws sheet find --help",
         "skills/mono/references/products/sheet.md",
         "dws-schema-live:sheet.find_cells"
+      ]
+    },
+    "sheet.formula_verify": {
+      "agent_summary": "扫描在线电子表格中已落表公式并汇总错误类型、数量与位置。",
+      "use_when": [
+        "用户要检查整个工作簿或指定工作表范围内是否存在公式错误时",
+        "自动化质量门禁需要在发现公式错误时通过 --exit-on-error 返回非零退出码时"
+      ],
+      "avoid_when": [
+        "只读取公式文本用 range read；需要修改公式用 range update",
+        "多目标使用 --targets，不能再同时传 --sheet-id/--range"
+      ],
+      "examples": [
+        "dws sheet formula-verify --node <NODE_ID> --format json",
+        "dws sheet formula-verify --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:D100 --exit-on-error --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：只读公式扫描命令；输入契约与 Wukong verify_formula 保持一致。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.formula_verify",
+        "cobra-help:dws sheet formula-verify --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (sheet/verify_formula; composite/unpinned)"
       ]
     },
     "sheet.get_all_sheets": {
@@ -1273,23 +1316,23 @@
       ]
     },
     "sheet.submit_export_job": {
-      "agent_summary": "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+      "agent_summary": "通过历史 sheet export 主入口导出 axls 为 xlsx；create 是等价入口，可异步返回任务 ID或同步等待并可选下载。",
       "use_when": [
-        "需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"
+        "需要把在线电子表格导出为 Excel 文件，并选择立即取得任务 ID 或同步等待 downloadUrl/本地文件时"
       ],
       "avoid_when": [
-        "禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"
+        "已有导出任务 ID 时使用 sheet export get；禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download"
       ],
       "examples": [
-        "dws sheet export --node <NODE_ID> --output ./report.xlsx"
+        "dws sheet export create --node <SHEET_ID> --async --format json"
       ],
       "reviewed": true,
-      "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
+      "review_reason": "人工审阅：区分新建表格导出任务与已有任务查询，并明确异步 TaskResult 与同步历史结果两种形态。",
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws sheet export --help",
-        "skills/mono/references/products/sheet.md",
-        "dws-schema-live:sheet.submit_export_job"
+        "skills/mono/references/products/sheet/sheet-export.md",
+        "pinned-mcp:sheet/submit_export_job"
       ]
     },
     "sheet.table_get": {
@@ -1530,6 +1573,66 @@
         "cobra-help:dws sheet update-float-image --help",
         "skills/mono/references/products/sheet.md",
         "dws-schema-live:sheet.update_float_image"
+      ]
+    },
+    "sheet.version_list": {
+      "agent_summary": "查看在线电子表格的历史版本列表。",
+      "use_when": [
+        "保存或回滚前需要确认当前表格有哪些历史版本及版本号时"
+      ],
+      "avoid_when": [
+        "创建快照用 version save；回滚用 version revert（需用户确认）"
+      ],
+      "examples": [
+        "dws sheet version list --node <NODE_ID_OR_URL> --limit 10 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：Sheet 命令复用文档版本后端，只读查询版本列表。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.version_list",
+        "cobra-help:dws sheet version list --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (doc/list_doc_versions; composite/unpinned)"
+      ]
+    },
+    "sheet.version_revert": {
+      "agent_summary": "将在线电子表格回滚到已确认的历史版本。",
+      "use_when": [
+        "用户明确要求回滚，且已用 version list 确认目标版本存在时"
+      ],
+      "avoid_when": [
+        "只查看历史用 version list；版本号或用户意图未确认时禁止回滚"
+      ],
+      "examples": [
+        "dws sheet version revert --node <NODE_ID_OR_URL> --version 3 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：CLI 先校验版本存在，再强制用户确认后执行回滚。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.version_revert",
+        "cobra-help:dws sheet version revert --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (doc/list_doc_versions + doc/revert_doc_version; composite/unpinned)"
+      ]
+    },
+    "sheet.version_save": {
+      "agent_summary": "为在线电子表格手动保存一个历史版本快照。",
+      "use_when": [
+        "大范围编辑前要保留当前状态，或用户明确要求创建版本快照时"
+      ],
+      "avoid_when": [
+        "查看已有版本用 version list；恢复旧版本用 version revert"
+      ],
+      "examples": [
+        "dws sheet version save --node <NODE_ID_OR_URL> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：复用文档版本后端创建表格快照，重复执行可能产生多个版本。",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.version_save",
+        "cobra-help:dws sheet version save --help",
+        "skills/mono/references/products/sheet.md",
+        "live-mcp:none (doc/save_doc_version; composite/unpinned)"
       ]
     },
     "sheet.update_pivot_table": {

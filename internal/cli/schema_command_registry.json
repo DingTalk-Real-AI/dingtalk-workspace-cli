@@ -1335,6 +1335,10 @@
           "cli_path": "doc download"
         },
         {
+          "canonical_path": "doc.export",
+          "cli_path": "doc export create"
+        },
+        {
           "canonical_path": "doc.query_export_job",
           "cli_path": "doc export get"
         },
@@ -1345,6 +1349,10 @@
         {
           "canonical_path": "doc.create_folder",
           "cli_path": "doc folder create"
+        },
+        {
+          "canonical_path": "doc.import",
+          "cli_path": "doc import create"
         },
         {
           "canonical_path": "doc.import_get",
@@ -1480,8 +1488,21 @@
           "cli_path": "drive permission list"
         },
         {
+          "canonical_path": "drive.permission_apply",
+          "cli_path": "drive permission apply"
+        },
+        {
+          "canonical_path": "drive.permission_apply_info",
+          "cli_path": "drive permission apply-info"
+        },
+        {
           "canonical_path": "drive.permission_remove",
           "cli_path": "drive permission remove"
+        },
+        {
+          "canonical_path": "drive.permission_transfer_owner",
+          "source_product_id": "doc",
+          "cli_path": "drive permission transfer-owner"
         },
         {
           "canonical_path": "drive.permission_update",
@@ -1520,12 +1541,28 @@
           "cli_path": "drive search"
         },
         {
+          "canonical_path": "drive.star_add",
+          "cli_path": "drive star add"
+        },
+        {
+          "canonical_path": "drive.star_list",
+          "cli_path": "drive star list"
+        },
+        {
+          "canonical_path": "drive.star_remove",
+          "cli_path": "drive star remove"
+        },
+        {
           "canonical_path": "drive.create_shortcut",
           "cli_path": "drive shortcut"
         },
         {
           "canonical_path": "drive.get_node_stats",
           "cli_path": "drive stats"
+        },
+        {
+          "canonical_path": "drive.task_get",
+          "cli_path": "drive task get"
         },
         {
           "canonical_path": "drive.upload",
@@ -2044,7 +2081,14 @@
         },
         {
           "canonical_path": "sheet.submit_export_job",
-          "cli_path": "sheet export"
+          "cli_path": "sheet export",
+          "aliases": [
+            "sheet export create"
+          ]
+        },
+        {
+          "canonical_path": "sheet.export_get",
+          "cli_path": "sheet export get"
         },
         {
           "canonical_path": "sheet.filter_clear_criteria",
@@ -2109,6 +2153,10 @@
         {
           "canonical_path": "sheet.find_cells",
           "cli_path": "sheet find"
+        },
+        {
+          "canonical_path": "sheet.formula_verify",
+          "cli_path": "sheet formula-verify"
         },
         {
           "canonical_path": "sheet.get_dropdown_lists",
@@ -2279,6 +2327,18 @@
         {
           "canonical_path": "sheet.update_float_image",
           "cli_path": "sheet update-float-image"
+        },
+        {
+          "canonical_path": "sheet.version_list",
+          "cli_path": "sheet version list"
+        },
+        {
+          "canonical_path": "sheet.version_revert",
+          "cli_path": "sheet version revert"
+        },
+        {
+          "canonical_path": "sheet.version_save",
+          "cli_path": "sheet version save"
         },
         {
           "canonical_path": "sheet.write_image",

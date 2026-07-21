@@ -216,6 +216,9 @@ func init() {
 	RegisterRuntimeSchemaParameterMetadata("dev.unsubscribe_dev_app_events", RuntimeSchemaParameterMetadata{
 		Required: []string{"event-codes"},
 	})
+	RegisterRuntimeSchemaParameterMetadata("drive.task_get", RuntimeSchemaParameterMetadata{
+		Enums: map[string][]string{"type": {"export", "import"}},
+	})
 	RegisterRuntimeSchemaParameterMetadata("minutes.add_member_permission", RuntimeSchemaParameterMetadata{
 		Enums: map[string][]string{"policy": {"0", "1", "2", "3", "4"}},
 	})

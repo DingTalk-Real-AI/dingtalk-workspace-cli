@@ -2759,6 +2759,527 @@
         "用户说把某篇文档分享给某人看/可编辑时（含「我的文档」下的节点）"
       ]
     },
+    "drive permission apply": {
+      "agent_summary": "向文档或知识库节点的审批人发起访问权限申请。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "尚未查询可申请角色/审批人时先用 permission apply-info",
+        "已有管理权限、要直接授权他人时用 permission add；不要用 apply 代替授权"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive permission apply --node \u003cNODE_ID\u003e --role READER --users \u003cAPPROVER_USER_ID\u003e --reason \"需要查看该文档\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "向文档或知识库节点的审批人发起访问权限申请。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。",
+          "candidates": [
+            {
+              "value": "向文档或知识库节点的审批人发起访问权限申请。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚未查询可申请角色/审批人时先用 permission apply-info",
+            "已有管理权限、要直接授权他人时用 permission add；不要用 apply 代替授权"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。",
+          "candidates": [
+            {
+              "value": [
+                "尚未查询可申请角色/审批人时先用 permission apply-info",
+                "已有管理权限、要直接授权他人时用 permission add；不要用 apply 代替授权"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive permission apply --node \u003cNODE_ID\u003e --role READER --users \u003cAPPROVER_USER_ID\u003e --reason \"需要查看该文档\" --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive permission apply --node \u003cNODE_ID\u003e --role READER --users \u003cAPPROVER_USER_ID\u003e --reason \"需要查看该文档\" --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/apply_permission, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/apply_permission, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：发起申请会向审批人发送真实通知，重复执行可能产生多条申请。"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已通过 permission apply-info 确认可申请角色和审批人，且用户同意发送申请时"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。",
+          "candidates": [
+            {
+              "value": [
+                "已通过 permission apply-info 确认可申请角色和审批人，且用户同意发送申请时"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：真实发送权限申请，要求先查询候选角色与审批人并进行用户确认。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/apply_permission, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "cobra-help:dws drive permission apply --help",
+        "internal/cli/schema_command_registry.json#drive.permission_apply",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "live-mcp:none (drive/apply_permission; composite/unpinned)",
+        "skills/mono/references/products/drive.md"
+      ],
+      "use_when": [
+        "已通过 permission apply-info 确认可申请角色和审批人，且用户同意发送申请时"
+      ]
+    },
+    "drive permission apply-info": {
+      "agent_summary": "查询节点当前可申请的权限角色与审批人。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "只查看现有协作者用 permission list；真正发送申请用 permission apply"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive permission apply-info --node \u003cNODE_ID_OR_URL\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询节点当前可申请的权限角色与审批人。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。",
+          "candidates": [
+            {
+              "value": "查询节点当前可申请的权限角色与审批人。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只查看现有协作者用 permission list；真正发送申请用 permission apply"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。",
+          "candidates": [
+            {
+              "value": [
+                "只查看现有协作者用 permission list；真正发送申请用 permission apply"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive permission apply-info --node \u003cNODE_ID_OR_URL\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive permission apply-info --node \u003cNODE_ID_OR_URL\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/query_permission_apply_info, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/query_permission_apply_info, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询可申请角色与审批人，不修改权限。"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "访问节点被拒绝，需要在发起权限申请前获取 availableRoles 和 approvers 时"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。",
+          "candidates": [
+            {
+              "value": [
+                "访问节点被拒绝，需要在发起权限申请前获取 availableRoles 和 approvers 时"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：权限申请两步流程中的只读预检命令。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/query_permission_apply_info, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws drive permission apply-info --help",
+        "internal/cli/schema_command_registry.json#drive.permission_apply_info",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "live-mcp:none (drive/query_permission_apply_info; composite/unpinned)",
+        "skills/mono/references/products/drive.md"
+      ],
+      "use_when": [
+        "访问节点被拒绝，需要在发起权限申请前获取 availableRoles 和 approvers 时"
+      ]
+    },
     "drive permission list": {
       "agent_summary": "查询文档空间节点的协作者列表",
       "agent_summary_source": "dws-agent-selection/drive",
@@ -3307,6 +3828,292 @@
       ],
       "use_when": [
         "从节点移除指定用户的直接授权时"
+      ]
+    },
+    "drive permission transfer-owner": {
+      "agent_summary": "将文档节点或整个知识库的所有权转交给指定用户。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "只需授予编辑或管理权限时用 permission add/update，不要转移所有权",
+        "目标、新所有者或递归范围未确认时禁止执行"
+      ],
+      "confirmation": "user_required",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive permission transfer-owner --node \u003cNODE_ID\u003e --new-owner \u003cUSER_ID\u003e --reserve-role EDITOR --recursive=false --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "将文档节点或整个知识库的所有权转交给指定用户。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。",
+          "candidates": [
+            {
+              "value": "将文档节点或整个知识库的所有权转交给指定用户。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需授予编辑或管理权限时用 permission add/update，不要转移所有权",
+            "目标、新所有者或递归范围未确认时禁止执行"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。",
+          "candidates": [
+            {
+              "value": [
+                "只需授予编辑或管理权限时用 permission add/update，不要转移所有权",
+                "目标、新所有者或递归范围未确认时禁止执行"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "destructive",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": "destructive",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive permission transfer-owner --node \u003cNODE_ID\u003e --new-owner \u003cUSER_ID\u003e --reserve-role EDITOR --recursive=false --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive permission transfer-owner --node \u003cNODE_ID\u003e --new-owner \u003cUSER_ID\u003e --reserve-role EDITOR --recursive=false --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls doc/transfer_owner, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls doc/transfer_owner, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "high",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。",
+          "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：所有权转交不可自动撤销，必须确认目标、新所有者、原所有者角色和递归范围。"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求转交节点或知识库所有者，并已确认新所有者、原所有者保留角色和递归范围时"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求转交节点或知识库所有者，并已确认新所有者、原所有者保留角色和递归范围时"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：不可逆高风险操作，CLI 在执行前强制确认；非交互模式要求显式给出风险选项。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls doc/transfer_owner, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "high",
+      "source_refs": [
+        "cobra-help:dws drive permission transfer-owner --help",
+        "internal/cli/schema_command_registry.json#drive.permission_transfer_owner",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "live-mcp:none (doc/transfer_owner; composite/unpinned)",
+        "skills/mono/references/products/drive.md"
+      ],
+      "use_when": [
+        "用户明确要求转交节点或知识库所有者，并已确认新所有者、原所有者保留角色和递归范围时"
       ]
     },
     "drive permission update": {
@@ -6066,6 +6873,855 @@
         "用户要给已有节点建快捷方式/软链接到目标文件夹或知识库时"
       ]
     },
+    "drive star add": {
+      "agent_summary": "收藏指定文档空间节点。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "收藏聊天消息应使用 chat message add-favorite；两者不是同一种收藏"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive star add --node \u003cNODE_ID_OR_URL\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "收藏指定文档空间节点。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。",
+          "candidates": [
+            {
+              "value": "收藏指定文档空间节点。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "收藏聊天消息应使用 chat message add-favorite；两者不是同一种收藏"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。",
+          "candidates": [
+            {
+              "value": [
+                "收藏聊天消息应使用 chat message add-favorite；两者不是同一种收藏"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive star add --node \u003cNODE_ID_OR_URL\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive star add --node \u003cNODE_ID_OR_URL\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/mark_star, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/mark_star, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户要把某个文档、表格或文件夹加入个人收藏时"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。",
+          "candidates": [
+            {
+              "value": [
+                "用户要把某个文档、表格或文件夹加入个人收藏时"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：文档资源收藏，可通过 star remove 反向恢复。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/mark_star, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws drive star add --help",
+        "internal/cli/schema_command_registry.json#drive.star_add",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "live-mcp:none (drive/mark_star; composite/unpinned)",
+        "skills/mono/references/products/drive.md"
+      ],
+      "use_when": [
+        "用户要把某个文档、表格或文件夹加入个人收藏时"
+      ]
+    },
+    "drive star list": {
+      "agent_summary": "列出当前用户收藏的文档资源。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "查看聊天消息收藏用 chat message list-favorites；最近访问用 drive recent"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive star list --content-types doc,sheet --limit 20 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "列出当前用户收藏的文档资源。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读分页查询文档资源收藏。",
+          "candidates": [
+            {
+              "value": "列出当前用户收藏的文档资源。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读分页查询文档资源收藏。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "查看聊天消息收藏用 chat message list-favorites；最近访问用 drive recent"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读分页查询文档资源收藏。",
+          "candidates": [
+            {
+              "value": [
+                "查看聊天消息收藏用 chat message list-favorites；最近访问用 drive recent"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读分页查询文档资源收藏。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive star list --content-types doc,sheet --limit 20 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读分页查询文档资源收藏。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive star list --content-types doc,sheet --limit 20 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读分页查询文档资源收藏。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/get_star_list, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/get_star_list, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：只读分页查询文档资源收藏。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户要查看个人收藏的文档、表格、文件夹或知识库时"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：只读分页查询文档资源收藏。",
+          "candidates": [
+            {
+              "value": [
+                "用户要查看个人收藏的文档、表格、文件夹或知识库时"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：只读分页查询文档资源收藏。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/get_star_list, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws drive star list --help",
+        "internal/cli/schema_command_registry.json#drive.star_list",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "live-mcp:none (drive/get_star_list; composite/unpinned)",
+        "skills/mono/references/products/drive.md"
+      ],
+      "use_when": [
+        "用户要查看个人收藏的文档、表格、文件夹或知识库时"
+      ]
+    },
+    "drive star remove": {
+      "agent_summary": "取消收藏指定文档空间节点。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "删除文档用 drive delete；取消聊天消息收藏用 chat message remove-favorite"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive star remove --node \u003cNODE_ID_OR_URL\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "取消收藏指定文档空间节点。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅取消个人收藏，不删除资源。",
+          "candidates": [
+            {
+              "value": "取消收藏指定文档空间节点。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅取消个人收藏，不删除资源。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "删除文档用 drive delete；取消聊天消息收藏用 chat message remove-favorite"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅取消个人收藏，不删除资源。",
+          "candidates": [
+            {
+              "value": [
+                "删除文档用 drive delete；取消聊天消息收藏用 chat message remove-favorite"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅取消个人收藏，不删除资源。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive star remove --node \u003cNODE_ID_OR_URL\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅取消个人收藏，不删除资源。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive star remove --node \u003cNODE_ID_OR_URL\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅取消个人收藏，不删除资源。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/unmark_star, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/unmark_star, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：仅取消个人收藏，不删除资源。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户要从个人文档资源收藏中移除某节点时"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅取消个人收藏，不删除资源。",
+          "candidates": [
+            {
+              "value": [
+                "用户要从个人文档资源收藏中移除某节点时"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅取消个人收藏，不删除资源。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls drive/unmark_star, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws drive star remove --help",
+        "internal/cli/schema_command_registry.json#drive.star_remove",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "live-mcp:none (drive/unmark_star; composite/unpinned)",
+        "skills/mono/references/products/drive.md"
+      ],
+      "use_when": [
+        "用户要从个人文档资源收藏中移除某节点时"
+      ]
+    },
     "drive stats": {
       "agent_summary": "读取指定钉盘或文档空间节点的阅读、编辑、评论、点赞、预览与下载等统计。",
       "agent_summary_source": "dws-agent-selection/drive",
@@ -6319,6 +7975,297 @@
       ],
       "use_when": [
         "用户要查看节点阅读/编辑/评论/点赞/预览/下载等统计维度时"
+      ]
+    },
+    "drive task get": {
+      "agent_summary": "查询已有导出或导入异步任务的状态与结果。",
+      "agent_summary_source": "dws-agent-selection/drive",
+      "availability": "available",
+      "avoid_when": [
+        "需要创建或提交导出/导入任务时使用对应发起命令；本命令只查询现有任务",
+        "还没有任务 ID 时先从任务提交响应中取得 ID，不要调用本命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws drive task get --type export --id \u003cTASK_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询已有导出或导入异步任务的状态与结果。",
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": "查询已有导出或导入异步任务的状态与结果。",
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要创建或提交导出/导入任务时使用对应发起命令；本命令只查询现有任务",
+            "还没有任务 ID 时先从任务提交响应中取得 ID，不要调用本命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": [
+                "需要创建或提交导出/导入任务时使用对应发起命令；本命令只查询现有任务",
+                "还没有任务 ID 时先从任务提交响应中取得 ID，不要调用本命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws drive task get --type export --id \u003cTASK_ID\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": [
+                "dws drive task get --type export --id \u003cTASK_ID\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "The CLI routes --type export to doc/query_export_job and --type import to doc/query_import_task, so no single pinned interface_ref can represent both branches.",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "The CLI routes --type export to doc/query_export_job and --type import to doc/query_import_task, so no single pinned interface_ref can represent both branches.",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：仅查询已有导出或导入任务，不创建、修改或删除任务。"
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",
+            "已有导入任务 ID，需要查询状态、文档链接或失败信息时选择 --type import"
+          ],
+          "source": "internal/cli/schema_hints/selection/drive.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。",
+          "candidates": [
+            {
+              "value": [
+                "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",
+                "已有导入任务 ID，需要查询状态、文档链接或失败信息时选择 --type import"
+              ],
+              "source": "internal/cli/schema_hints/selection/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：明确按 --type 分流到两个 Doc 查询接口，并限定为已有任务的只读状态查询。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "The CLI routes --type export to doc/query_export_job and --type import to doc/query_import_task, so no single pinned interface_ref can represent both branches.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws drive task get --help",
+        "internal/cli/schema_command_registry.json#drive.task_get",
+        "internal/cli/schema_hints/metadata/drive.json",
+        "internal/cli/schema_hints/selection/drive.json",
+        "internal/helpers/drive_task.go",
+        "live-mcp:none (composite: doc/query_export_job + doc/query_import_task)",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/drive.md"
+      ],
+      "use_when": [
+        "已有导出任务 ID，需要查询状态、下载链接或失败信息时选择 --type export",
+        "已有导入任务 ID，需要查询状态、文档链接或失败信息时选择 --type import"
       ]
     },
     "drive upload": {

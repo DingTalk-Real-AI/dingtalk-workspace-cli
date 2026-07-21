@@ -9,7 +9,7 @@
 | 在线电子表格（`axls`） | 走 `sheet` 全部命令（读/写/筛选/合并/导出等服务端原子操作） |
 | 本地路径上的 `xlsx` / `xls` | 用 `dws sheet import create --file <路径> --folder-token <ID>` 或 `--workspace <ID>` 转换为新的在线电子表格 |
 | 钉盘/文档中已有的 `xlsx` / `xls` / `xlsm` / `csv` 节点 | 不能直接调用工作表/单元格命令；先用 `dws doc download --node <ID> --output <路径>` 下载。若用户要转为在线表格，再对下载文件执行 `sheet import` |
-| 想把在线表格导出为 xlsx | 用 `dws sheet export` ——输入是 `axls`，输出是 xlsx（axls → xlsx 的格式转换） |
+| 想把在线表格导出为 xlsx | Agent 用 `dws sheet export create`；历史 `dws sheet export` 继续可用。输入是 `axls`，输出是 xlsx |
 
 > 用户直接粘贴原始 `alidocs` URL 时必须先 probe：先执行 `dws doc info --node <URL> --format json`，按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) 校验 `contentType` 和 `extension`：
 > - 仅当 `contentType=ALIDOC` 且 `extension=axls` 时，才继续走 `sheet`
@@ -101,6 +101,10 @@ dws sheet filter-view --help
 | `sheet append` | 在末尾追加数据行 |
 | `sheet csv-put` | 将 CSV 数据写入指定位置（纯值，自动扩容） |
 | `sheet table-put` | 写入一个或多个结构化 table（别名: table-write） |
+| `sheet formula-verify` | 扫描已落表公式并汇总错误位置，可在发现错误时返回非零退出码 |
+| `sheet version save` | 手动保存表格历史版本快照 |
+| `sheet version list` | 查看表格历史版本列表 |
+| `sheet version revert` | 回滚表格到指定历史版本（危险操作，必须确认） |
 | `sheet pivot-table list` | 列出透视表或获取指定透视表详情 |
 | `sheet pivot-table create` | 创建原生透视表 |
 | `sheet pivot-table update` | 更新透视表配置 |
@@ -127,7 +131,8 @@ dws sheet filter-view --help
 | `sheet update-float-image` | 更新浮动图片属性 |
 | `sheet delete-float-image` | 删除浮动图片 |
 | `sheet import create` | 导入本地 xlsx/xls 为新的在线电子表格（`sheet import` 保留兼容） |
-| `sheet export` | 导出表格为 xlsx |
+| `sheet export create` | 新建表格导出任务（同步或 `--async`；`sheet export` 保留兼容） |
+| `sheet export get` | 按任务 ID 查询已有表格导出任务 |
 | `sheet filter get` | 获取全局筛选信息 |
 | `sheet filter create` | 创建全局筛选 |
 | `sheet filter delete` | 删除全局筛选 |
@@ -179,7 +184,7 @@ dws sheet filter-view --help
 | 全局筛选 | [sheet/sheet-filter.md](./sheet/sheet-filter.md) | filter get / create / delete / update / clear-criteria / sort |
 | 筛选视图 | [sheet/sheet-filter-view.md](./sheet/sheet-filter-view.md) | filter-view 全系列 |
 | 导入 | [sheet/sheet-import.md](./sheet/sheet-import.md) | import / import get |
-| 导出 | [sheet/sheet-export.md](./sheet/sheet-export.md) | export |
+| 导出 | [sheet/sheet-export.md](./sheet/sheet-export.md) | export create / export get / 历史 export |
 
 > `template list/search/apply` 无独立子文档，直接执行 `dws sheet template <子命令> --help` 查看用法。
 
@@ -210,6 +215,11 @@ dws sheet filter-view --help
 - 复制工作表 → `copy`
 - 复制并指定名称 → `copy --title "副本名称"`
 - 复制并指定位置 → `copy --index N`
+
+用户说"保存版本/查看历史版本/回滚表格版本":
+- 保存当前快照 → `version save`
+- 查看可用版本号 → `version list`
+- 回滚 → 先 `version list` 确认版本存在，再执行 `version revert --version <N>`；回滚是危险操作，必须确认
 
 ### 数据读写
 
@@ -243,6 +253,12 @@ dws sheet filter-view --help
 - 正则替换 → `replace --use-regexp`
 - 删除匹配内容 → `replace --replacement ""`
 - 请勿用 `find` + `range update`、`range read` + `range update` 等组合来模拟替换，`replace` 是服务端原子操作，效率更高且返回替换计数
+
+用户说"检查公式错误/公式是否正确/#REF!/#DIV/0!":
+- 整本扫描 → `formula-verify --node <NODE_ID>`
+- 单个工作表或区域 → `formula-verify --node <NODE_ID> --sheet-id <SHEET_ID> [--range A1:D100]`
+- 多区域扫描 → 使用 `--targets` JSON 数组
+- 自动化门禁需要发现错误即失败 → 加 `--exit-on-error`
 
 ### 行列操作
 
@@ -384,11 +400,34 @@ dws sheet filter-view --help
 ### 导出
 
 用户说"导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel":
-- 导出表格 → `export`（单命令一站式，内部自动完成提交、轮询、可选下载）
-- 仅需传 `--node`，可选 `--output` 指定本地文件/目录（不传则返回 downloadUrl）
-- 需要落盘到本地 → `dws sheet export --node <NODE_ID> --output <path>`，命令自动下载 xlsx
+- 新建导出 → `dws sheet export create --node <NODE_ID>`；历史 `dws sheet export` 继续可用
+- 需要立即拿任务 ID → 加 `--async`，保存返回的 `TaskResult.id`；此模式不轮询、不下载
+- 已有任务 → `dws sheet export get --task-id <TASK_ID>`，禁止重新 create
+- 状态统一为 `PENDING` / `PROCESSING` / `SUCCESS` / `FAILED` / `TIMEOUT`
+- 同步模式保持 `{success, jobId, downloadUrl[, outputPath]}`，可选 `--output` 指定本地文件/目录
 - 禁止用 `range read` 全量读取后自行拼接 xlsx 来模拟导出，必须使用 `export` 命令（服务端原子导出，保留格式/合并/公式等属性）
-- 禁止在 AI Agent 侧实现轮询或重试，CLI 内部已按渐进式退避策略完成（最多 30 次约 5 分钟）
+- 同步模式由 CLI 内部轮询；异步模式只通过 `export get` 查询同一任务，不要在 Agent 侧重提任务
+
+### 公式校验与历史版本
+
+```bash
+# 扫描整本表格，发现公式错误时返回非零退出码
+dws sheet formula-verify --node <NODE_ID> --exit-on-error --format json
+
+# 扫描单个目标；--range 不能带 Sheet1! 前缀
+dws sheet formula-verify --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:D100 --format json
+
+# 多目标扫描
+dws sheet formula-verify --node <NODE_ID> \
+  --targets '[{"sheetId":"Sheet1","range":"A1:D100"},{"sheetId":"Sheet2"}]' --format json
+
+# 历史版本
+dws sheet version save --node <NODE_ID> --format json
+dws sheet version list --node <NODE_ID> --limit 20 --format json
+dws sheet version revert --node <NODE_ID> --version <VERSION> --yes --format json
+```
+
+`--targets` 和 `--sheet-id/--range` 互斥；单独使用 `--range` 无效。`version revert` 会先确认目标版本存在，再要求危险操作确认；不要猜版本号。
 
 ### URL 粘贴场景
 
@@ -423,6 +462,8 @@ dws sheet filter-view --help
 - ★ **单元格图片用 `write-image` 不用 `range update`**：`update_range` MCP 不支持图片参数，调用必失败
 - ★ **浮动图片用 `create-float-image` 不用 `write-image`**：两者用途不同——`write-image` 写入单元格内部，`create-float-image` 创建悬浮于单元格之上的浮动图片；`--src` 必须来自 `media-upload` 的 `resourceUrl`
 - ★ **`export` 禁止自行轮询/重试**：CLI 内部已完成渐进式退避轮询（最多 30 次约 5 分钟），失败时直接告知用户稍后再试
+- ★ **公式门禁使用 `formula-verify --exit-on-error`**：不带此 flag 时命令会输出错误汇总但保持成功退出，适合人工检查；CI/Agent 自动判定必须显式启用
+- ★ **版本回滚先 list 后 revert**：必须从 `version list` 获取真实版本号；`version revert` 是危险操作，执行前确认并在完成后回读
 - ★ **关键区分**：sheet(在线电子表格/单元格读写) vs aitable(AI多维表/结构化记录/字段定义) vs doc(文档编辑/阅读)
 
 > 完整注意事项请参见本文档末尾「注意事项（完整版）」章节。
@@ -1598,10 +1639,12 @@ Flags:
 - **区分**：`get-criteria` 只返回指定列的条件；`list-criteria` 返回所有列的条件。`--column` 为列偏移量（从 0 开始），相对于筛选视图范围首列。
 - **实现**：内部调用 `get_filter_views` 获取视图详情后按列偏移量过滤 `criteria` 中的对应条件。
 
-### 导出表格为 xlsx（异步任务一站式）
+### 导出表格为 xlsx（同步轮询或异步提交）
 ```
 Usage:
-  dws sheet export [flags]    # 一站式：提交 → 轮询 → 可选下载
+  dws sheet export [flags]           # Schema 稳定主入口
+  dws sheet export create [flags]    # 公开等价入口
+  dws sheet export get --task-id <TASK_ID>
 Example:
   # 仅导出，返回 downloadUrl（链接有时效性，请尽快下载）
   dws sheet export --node <NODE_ID>
@@ -1616,6 +1659,7 @@ Example:
 Flags:
       --node string     表格文档 ID 或 URL (必填)
       --output string   本地保存路径（可选，支持文件路径或目录）
+      --async           提交后立即返回 TaskResult.id，不轮询或下载
 ```
 
 将钉钉在线电子表格导出为 Office xlsx 格式。**单命令一站式**：命令内部自动完成「提交任务 → 渐进式退避轮询 → （可选）下载文件」全流程，AI Agent 无需自行拆分步骤或实现轮询。
@@ -1637,9 +1681,11 @@ Flags:
 - `--output` 指定为文件路径：下载到该路径，JSON 额外含 `outputPath`
 - `--output` 指定为已存在目录：自动从 `downloadUrl` 推断文件名并保存到该目录，JSON 含 `outputPath`
 
+**异步与查询**：`dws sheet export create --node <NODE_ID> --async --format json` 返回一个 `PENDING` TaskResult。保存 `TaskResult.id`，再执行 `dws sheet export get --task-id <TASK_ID> --format json`。查询状态为 `PENDING`、`PROCESSING`、`SUCCESS`、`FAILED` 或 `TIMEOUT`；成功时下载链接在 `resultUrl`。已有任务只 get，不要重提。
+
 **失败处理（命令内部已处理，Agent 仅需转述）**：
-- MCP 返回 `FAILED`：命令立即返回错误并附带失败原因，**禁止自动重试 `dws sheet export`**，告知用户稍后再试
-- 轮询 30 次仍 `PROCESSING`：命令返回超时错误，告知用户稍后再试
+- `get` 返回 `FAILED` / `TIMEOUT`：先输出结构化 TaskResult，再以非零状态退出；保留任务 ID，不要自动重提
+- 同步轮询超时：保存错误中的任务 ID，改用 `export get` 续查
 
 **限制**：仅支持钉钉在线电子表格（axls）→ xlsx。导出钉钉文字文档请使用 `doc` 产品对应的导出工具。
 
@@ -1921,21 +1967,24 @@ dws sheet filter-view create --node <NODE_ID> --sheet-id <SHEET_ID> \
 ```
 
 ```bash
-# ── 工作流 12: 导出表格为 xlsx（单命令一站式）──
+# ── 工作流 12: 导出表格为 xlsx（同步或异步）──
 
-# 场景 A：仅获取下载链接（命令内部自动完成提交+轮询，最终返回 downloadUrl）
-dws sheet export --node <NODE_ID> --format json
+# 场景 A：异步提交，保存 TaskResult.id
+dws sheet export create --node <NODE_ID> --async --format json
+
+# 场景 B：查询同一任务，不要重新 create
+dws sheet export get --task-id <TASK_ID> --format json
+
+# 场景 C：同步等待下载链接（命令内部提交+轮询）
+dws sheet export create --node <NODE_ID> --format json
 # 传入 URL 也可：
 # dws sheet export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --format json
 
-# 场景 B：导出并自动下载为本地文件
-dws sheet export --node <NODE_ID> --output ./report.xlsx
+# 场景 D：同步等待并下载为本地文件
+dws sheet export create --node <NODE_ID> --output ./report.xlsx
 
-# 场景 C：下载到目录，自动按链接推断文件名
+# 历史入口仍可用
 dws sheet export --node <NODE_ID> --output ./
-
-# 禁止在 Agent 侧实现任何轮询或重试，CLI 内部已按 2s/5s/10s/15s 渐进式退避自动完成（最多 30 次）。
-# 若命令返回失败或超时，直接告知用户稍后再试，不要自动重调 dws sheet export。
 ```
 
 ## 上下文传递表
@@ -1978,7 +2027,9 @@ dws sheet export --node <NODE_ID> --output ./
 | `filter-view delete-criteria` | `id` 筛选视图 ID | 确认条件清除完成 |
 | `filter-view list-criteria` | 所有列条件（按列偏移量为 key 的对象） | 了解当前视图已设置哪些列的条件 |
 | `filter-view get-criteria` | 指定列的条件详情（`filterType`、`conditions` 等） | 查看某列的具体筛选规则 |
-| `export` | `downloadUrl`（未指定 --output）/ `outputPath`（指定 --output） | 直接下发给用户或告知文件已保存到本地。命令内部已完成轮询，不要再调用其他 export 相关命令 |
+| `export create --async` | `TaskResult.id` | 传给 `export get --task-id` 查询同一任务，禁止重新 create |
+| `export create`（同步） | `downloadUrl`（未指定 --output）/ `outputPath`（指定 --output） | 直接下发给用户或告知文件已保存到本地 |
+| `export get` | `status` / `resultUrl` / `message` | 判断任务进度、成功下载链接或失败原因 |
 
 ## nodeId 多格式说明
 
@@ -2133,9 +2184,9 @@ dws sheet export --node <NODE_ID> --output ./
 - `filter-view delete-criteria` 如果指定列没有设置筛选条件，调用不会报错
 - 筛选视图相关操作需要"可阅读"权限（list / info / list-criteria / get-criteria）或"可编辑"权限（create / update / delete / update-criteria / delete-criteria），不支持跨组织操作
 - ★ `export` 仅支持钉钉在线电子表格（axls）→ xlsx；传入钉钉文字文档会报 `invalidRequest.document.typeIllegal`
-- ★ `export` 为单命令一站式，CLI 内部已自动完成「提交 → 渐进式退避轮询 → 可选下载」，**Agent 不得在外部实现轮询或重试**；命令返回成功后不再调用其他 export 相关命令
+- ★ `export create` 支持同步轮询或 `--async`；历史 `export` 与 create 等价，Schema 为兼容既有契约继续以 `export` 为稳定主入口
 - `export` 内置轮询策略：1~5 次间隔 2s、6~10 次间隔 5s、11~20 次间隔 10s、21~30 次间隔 15s，硬上限 30 次（约 5 分钟）；超时后命令返回错误，告知用户稍后再试即可
-- ★ `export` 命令返回失败或超时时，**禁止自动重调 `dws sheet export`**；直接告知用户导出失败并建议稍后再试
+- ★ 异步或超时后保存 `TaskResult.id`，只用 `export get --task-id` 查询；`FAILED` / `TIMEOUT` 禁止自动重提导出
 - `export` 未指定 `--output` 时，返回的 `downloadUrl` 具有时效性，获取后请尽快下载；若用户需要本地文件，优先直接传 `--output` 让 CLI 代为下载
 - `export` 的 `--output` 可为文件路径或已存在目录；为目录时自动从 `downloadUrl` 推断文件名，为文件路径时直接按该路径保存
 - 用户要求"导出表格/下载 xlsx"时，必须使用 `export` 单命令，禁止用 `range read` 读全量数据后自行拼 xlsx 模拟导出（服务端导出会保留格式/合并/公式等完整属性）

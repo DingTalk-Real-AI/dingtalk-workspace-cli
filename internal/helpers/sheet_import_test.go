@@ -358,12 +358,16 @@ func TestCrossPlatformCoverageDocImportDryRunStillAcceptsMarkdownWithoutTarget(t
 	if len(caller.calls) != 0 {
 		t.Fatalf("dry-run made %d remote calls", len(caller.calls))
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
-		t.Fatalf("doc import dry-run stdout must be one JSON document: %v\n%s", err, output.String())
-	}
-	if payload["operation"] != "导入本地文件为在线文档" || payload["format"] != "md" || payload["dry_run"] != true || payload["preview_kind"] != "plan" {
-		t.Fatalf("unexpected dry-run output: %#v", payload)
+	preview := decodeSingleAsyncDryRunPreview(t, output.String())
+	requireAsyncDryRunFields(t, preview, map[string]any{
+		"operation":  "doc_import",
+		"taskType":   "import",
+		"mode":       "sync_wait",
+		"file":       filePath,
+		"fileFormat": "md",
+	})
+	if _, leaked := preview["uploadUrl"]; leaked {
+		t.Fatalf("doc import dry-run leaked uploadUrl: %#v", preview)
 	}
 }
 

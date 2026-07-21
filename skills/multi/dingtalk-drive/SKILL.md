@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉盘文件存储。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/创建文件夹。Distinct from dingtalk-doc(钉钉文档内容编辑)、dingtalk-wiki(知识库空间)。命令前缀：dws drive。
+description: 钉盘文件存储与异步任务查询。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/创建文件夹/查导出或导入任务状态。Distinct from dingtalk-doc(钉钉文档内容编辑)、dingtalk-wiki(知识库空间)。命令前缀：dws drive。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -51,6 +51,7 @@ metadata:
 | "查文件元数据" | `dws drive info --node <fileId>` |
 | "查阅读/编辑/评论/下载等节点统计" | `dws drive stats --node <fileId>` |
 | "创建文件快捷方式" | `dws drive shortcut --node <fileId> [--folder <targetFolderId>] [--workspace <workspaceId>]` |
+| "查导出任务 / 导入任务状态 / 已有任务 ID" | `dws drive task get --type export --id <TASK_ID>`（导入用 `--type import`） |
 | "下载文件" | `dws drive download --node <fileId> --output <path>` |
 | "上传本地文件" | `dws drive upload --file ./report.pdf [--folder <fileId>]` |
 | "建文件夹" | `dws drive mkdir --name "<名称>" [--folder <fileId>]` |

@@ -90,7 +90,7 @@
       "avoid_when": [
         "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type <type>（勿用 doc create）",
         "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-        "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+        "导入本地 Word/Markdown 为在线文档改用 dws doc import create 或 drive upload --convert"
       ],
       "examples": [
         "dws doc create --name \"项目周报\" --format json",
@@ -344,24 +344,46 @@
         "live-mcp:dws schema doc.get_document_info"
       ]
     },
-    "doc.import_get": {
-      "agent_summary": "根据 taskId 查询文档导入任务的执行结果",
+    "doc.import": {
+      "agent_summary": "上传本地文件并导入为在线文档，可异步返回任务 ID 或同步等待完成。",
       "use_when": [
-        "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+        "需要把本地 Word、Excel、Markdown、文本或脑图文件转换为钉钉在线文档时",
+        "需要先完成文件上传和导入确认，再选择立即取得任务 ID 或等待文档创建完成时"
       ],
       "avoid_when": [
-        "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+        "已有导入任务 ID 且只需查询状态或结果链接时，使用 doc import get",
+        "只需原样上传文件且不转换为在线文档时，使用 drive upload"
+      ],
+      "examples": [
+        "dws doc import create --file ./report.docx --async --format json",
+        "dws doc import create --file ./notes.md --folder <FOLDER_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：区分创建导入任务与查询已有任务，明确异步模式仍会创建会话、上传文件、确认导入并最终创建文档。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=doc.import",
+        "cobra-help:dws doc import create",
+        "Skill:skills/mono/references/products/doc/doc-import.md",
+        "live-mcp:none (composite: doc/create_import_session + local upload + doc/confirm_import + optional doc/query_import_task)"
+      ]
+    },
+    "doc.import_get": {
+      "agent_summary": "按任务 ID 查询文档导入状态与统一结果链接",
+      "use_when": [
+        "异步提交、同步超时或中断后，已有任务 ID 并需要查询导入状态与 resultUrl 时"
+      ],
+      "avoid_when": [
+        "尚未上传并发起导入时，使用 doc import create"
       ],
       "examples": [
         "dws doc import get --task-id <TASK_ID> --format json"
       ],
       "reviewed": true,
-      "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+      "review_reason": "人工审阅：明确该命令是只读任务查询，并记录 SUCCESS、FAILED、TIMEOUT 的统一 TaskResult 输出语义。",
       "source_refs": [
         "CommandRegistry:canonical_path=doc.import_get",
         "cobra-help:dws doc import get",
-        "Skill:skills/mono/references/products/doc.md",
-        "structured-hint:internal/cli/schema_hints/products/doc.json",
+        "Skill:skills/mono/references/products/doc/doc-import.md",
         "live-mcp:none (Cobra+Skill; composite/unpinned)"
       ]
     },
@@ -532,16 +554,36 @@
         "live-mcp:dws schema doc.move_document"
       ]
     },
+    "doc.export": {
+      "agent_summary": "导出在线文档，可异步返回任务 ID 或同步等待并下载到本地。",
+      "use_when": [
+        "需要把钉钉在线文档导出为 docx、markdown 或 pdf，并选择立即取得任务 ID 或等待下载时"
+      ],
+      "avoid_when": [
+        "已有导出任务 ID 且只需查询状态或下载链接时，使用 doc export get"
+      ],
+      "examples": [
+        "dws doc export create --node <DOC_ID> --async --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：区分新建导出任务与已有任务查询，并明确异步返回和同步本地下载两种结果形态。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=doc.export",
+        "cobra-help:dws doc export create",
+        "Skill:skills/mono/references/products/doc/doc-export.md",
+        "live-mcp:none (composite: doc/submit_export_job + doc/query_export_job + local download)"
+      ]
+    },
     "doc.query_export_job": {
       "agent_summary": "查询文档导出任务结果",
       "use_when": [
-        "doc export 超时/中断后，用 jobId 查询导出任务状态与下载链接时"
+        "doc export 超时、中断或异步提交后，用任务 ID 查询导出状态与下载链接时"
       ],
       "avoid_when": [
-        "常规导出请直接 dws doc export（一体化提交+轮询+下载），不要先查 job"
+        "尚未提交导出任务时，使用 doc export create 创建任务"
       ],
       "examples": [
-        "dws doc export get --job-id <JOB_ID> --format json"
+        "dws doc export get --task-id <TASK_ID> --format json"
       ],
       "reviewed": true,
       "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",

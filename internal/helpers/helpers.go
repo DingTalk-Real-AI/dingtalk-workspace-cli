@@ -142,6 +142,37 @@ func callMCPToolReturnText(ctx context.Context, toolName string, args map[string
 }
 
 func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	return callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx, serverID, toolName, args, isBusinessError)
+}
+
+func callMCPToolReturnTextOnServerWithBusinessErrorClassifier(ctx context.Context, serverID, toolName string, args map[string]any, classifiesBusinessError func(map[string]any) bool) (string, error) {
+	return callMCPToolReturnTextOnServerWithBusinessErrorPolicy(ctx, serverID, toolName, args, classifiesBusinessError, false)
+}
+
+// callMCPToolReturnTextWithRedactedBusinessErrors is the data-returning call
+// path for workflows that may receive temporary upload/download URLs. It keeps
+// successful response data intact, but limits business failures to their
+// message and a safe error code instead of echoing the complete JSON envelope.
+func callMCPToolReturnTextWithRedactedBusinessErrors(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	serverID := resolveProductID()
+	if serverID == "" {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: fmt.Sprintf("cannot resolve product for tool %q", toolName),
+		}
+	}
+	return callMCPToolReturnTextOnServerWithRedactedBusinessErrors(ctx, serverID, toolName, args)
+}
+
+func callMCPToolReturnTextOnServerWithRedactedBusinessErrors(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	return callMCPToolReturnTextOnServerWithRedactedBusinessErrorClassifier(ctx, serverID, toolName, args, isBusinessError)
+}
+
+func callMCPToolReturnTextOnServerWithRedactedBusinessErrorClassifier(ctx context.Context, serverID, toolName string, args map[string]any, classifiesBusinessError func(map[string]any) bool) (string, error) {
+	return callMCPToolReturnTextOnServerWithBusinessErrorPolicy(ctx, serverID, toolName, args, classifiesBusinessError, true)
+}
+
+func callMCPToolReturnTextOnServerWithBusinessErrorPolicy(ctx context.Context, serverID, toolName string, args map[string]any, classifiesBusinessError func(map[string]any) bool, redactBusinessError bool) (string, error) {
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
 	if err != nil {
 		if patErr := reclassifyPATFromError(err); patErr != nil {
@@ -154,9 +185,13 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
 				if _, ok := getDWSGatewayErrorCode(errBody); ok {
+					message := c.Text
+					if redactBusinessError {
+						message = redactedBusinessErrorMessage(errBody)
+					}
 					return "", &CLIError{
 						Code:       CodeAuthTokenExpired,
-						Message:    c.Text,
+						Message:    message,
 						Suggestion: authExpiredSuggestion(),
 					}
 				}
@@ -170,10 +205,14 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 				if patErr := classifyPATError(errBody); patErr != nil {
 					return "", patErr
 				}
-				if isBusinessError(errBody) {
+				if classifiesBusinessError(errBody) {
+					message := c.Text
+					if redactBusinessError {
+						message = redactedBusinessErrorMessage(errBody)
+					}
 					return "", &CLIError{
 						Code:       CodeMCPToolError,
-						Message:    c.Text,
+						Message:    message,
 						Suggestion: suggestForBusinessError(errBody),
 					}
 				}
@@ -465,6 +504,14 @@ func buildMinimalPATJSON(code string) string {
 
 // isBusinessError checks if a parsed JSON body represents a business-level error.
 func isBusinessError(body map[string]any) bool {
+	return isBusinessErrorWithStatus(body, true)
+}
+
+func isBusinessErrorWithoutStatus(body map[string]any) bool {
+	return isBusinessErrorWithStatus(body, false)
+}
+
+func isBusinessErrorWithStatus(body map[string]any, statusSignalsError bool) bool {
 	if v, ok := body["error"]; ok {
 		switch t := v.(type) {
 		case string:
@@ -485,7 +532,7 @@ func isBusinessError(body map[string]any) bool {
 			}
 		}
 	}
-	if v, ok := body["status"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "error") {
+	if v, ok := body["status"].(string); statusSignalsError && ok && strings.EqualFold(strings.TrimSpace(v), "error") {
 		return true
 	}
 	for _, key := range []string{"errorCode", "error_code", "code"} {
@@ -588,15 +635,62 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 // suggestForBusinessError returns a user-facing suggestion for known business
 // error patterns in a parsed JSON body, or "" if no specific suggestion applies.
 func suggestForBusinessError(body map[string]any) string {
-	msg := ""
-	if v, ok := body["errorMsg"].(string); ok {
-		msg = v
-	} else if v, ok := body["message"].(string); ok {
-		msg = v
-	} else if v, ok := body["error"].(string); ok {
-		msg = v
+	return suggestForBusinessErrorText(businessErrorMessage(body))
+}
+
+func businessErrorMessage(body map[string]any) string {
+	for _, key := range []string{"errorMsg", "message", "error"} {
+		if value, ok := body[key].(string); ok && value != "" {
+			return value
+		}
 	}
-	return suggestForBusinessErrorText(msg)
+	return ""
+}
+
+func redactedBusinessErrorMessage(body map[string]any) string {
+	message := strings.TrimSpace(businessErrorMessage(body))
+	if message == "" || strings.Contains(strings.ToLower(message), "http://") || strings.Contains(strings.ToLower(message), "https://") {
+		message = "operation failed"
+	}
+	for _, key := range []string{"errorCode", "error_code", "code", "server_error_code"} {
+		code, ok := body[key].(string)
+		code = strings.TrimSpace(code)
+		if !ok || !isSafeBusinessErrorCode(code) {
+			continue
+		}
+		return fmt.Sprintf("%s (code: %s)", message, code)
+	}
+	return message
+}
+
+func isSafeBusinessErrorCode(code string) bool {
+	if code == "" || len(code) > 128 {
+		return false
+	}
+	for _, r := range code {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isNoPermissionError(body map[string]any) bool {
+	for _, key := range []string{"code", "errorCode", "server_error_code"} {
+		if code, ok := body[key].(string); ok && noPermissionServerCodes[code] {
+			return true
+		}
+	}
+	message := businessErrorMessage(body)
+	if message == "" {
+		return false
+	}
+	lower := strings.ToLower(message)
+	return strings.Contains(message, "无权限访问") || strings.Contains(message, "没有访问权限") ||
+		strings.Contains(message, "没有权限") || strings.Contains(message, "权限不足") ||
+		strings.Contains(lower, "no permission") || strings.Contains(lower, "permission denied") ||
+		strings.Contains(lower, "forbidden.no.auth")
 }
 
 // confirmDelete is a convenience wrapper around cmdutil.ConfirmDelete that

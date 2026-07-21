@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "source_hash": "sha256:de587cba5051dd4c2715353012d8d9f2a7c5208a0c6dee4ea703cfc97b7351f0",
-  "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
+  "source_hash": "sha256:a0b8b17fe8979e8644777df9f2b44bace438fb526ac7b645a572689f1bae0d13",
+  "surface_hash": "sha256:1bfd9f493add00fbce044a751e83314ac4a19d9107a2eba7899bcdc0e62294dd",
   "coverage": {
     "surface_products": 22,
     "products_with_metadata": 22,
-    "surface_tools": 572,
-    "tools_with_metadata": 572,
-    "tools_with_agent_summary": 572,
-    "tools_with_use_when": 572,
-    "tools_with_avoid_when": 572,
-    "tools_with_examples": 572,
-    "tools_with_interface_mode": 572,
+    "surface_tools": 586,
+    "tools_with_metadata": 586,
+    "tools_with_agent_summary": 586,
+    "tools_with_use_when": 586,
+    "tools_with_avoid_when": 586,
+    "tools_with_examples": 586,
+    "tools_with_interface_mode": 586,
     "unmatched_skill_tools": 120,
-    "unreviewed_skill_tools": 7
+    "unreviewed_skill_tools": 8
   },
   "products": {
     "aisearch": {

@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/asynctask"
 )
 
 func runSheetExport(cmd *cobra.Command, _ []string) error {
@@ -19,27 +22,34 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("flag --node is required")
 	}
 	outputPath, _ := cmd.Flags().GetString("output")
+	asyncMode, _ := cmd.Flags().GetBool("async")
 
 	if deps.Caller.DryRun() {
-		deps.Out.PrintKeyValue("操作", "导出钉钉表格为 xlsx")
-		deps.Out.PrintKeyValue("节点", nodeID)
-		if outputPath != "" {
-			deps.Out.PrintKeyValue("输出", outputPath)
-		}
-		return nil
+		return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+			Operation:    "sheet_export",
+			TaskType:     "export",
+			Mode:         asyncDryRunMode(asyncMode),
+			Node:         nodeID,
+			ExportFormat: "xlsx",
+			Output:       outputPath,
+		})
 	}
 
-	ctx := context.Background()
-
+	ctx := cmd.Context()
+	// Cobra injects a context during normal Execute/ExecuteContext. Keep direct
+	// handler callers (including embedders and focused unit tests) safe as well.
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// json 模式下进度提示会污染 stdout（PrintInfo/PrintKeyValue 都写 stdout），
 	// 使得 agent 无法按 JSON 解析。故 json 模式抑制进度、末尾统一输出结果 JSON。
-	jsonMode := deps.Caller.Format() == "json"
+	jsonMode := strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 
 	// Step 1: submit export job
 	if !jsonMode {
 		deps.Out.PrintInfo("[1/3] 提交表格导出任务 (xlsx)...")
 	}
-	submitText, err := callMCPToolReturnText(ctx, "submit_export_job", map[string]any{
+	submitText, err := callMCPToolReturnTextWithRedactedBusinessErrors(ctx, "submit_export_job", map[string]any{
 		"nodeId":       nodeID,
 		"exportFormat": "xlsx",
 	})
@@ -50,6 +60,14 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if asyncMode {
+		return deps.Out.PrintJSON(asynctask.TaskResult{
+			ID:      jobID,
+			Type:    "export",
+			Status:  asynctask.StatusPending,
+			Message: "任务已提交，请稍后查询",
+		})
+	}
 	if !jsonMode {
 		deps.Out.PrintInfo(fmt.Sprintf("导出任务已提交: jobId=%s", jobID))
 		// Step 2: progressive backoff polling
@@ -57,7 +75,7 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 	}
 	downloadURL, err := pollSheetExportJob(ctx, jobID)
 	if err != nil {
-		return err
+		return fmt.Errorf("表格导出任务未完成 (taskId=%s): %w", jobID, err)
 	}
 
 	// No output path: print the downloadUrl and exit
@@ -89,7 +107,8 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 		deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载 xlsx 到 %s ...", outputPath))
 	}
 	if err := httpGetFile(ctx, downloadURL, map[string]string{}, outputPath); err != nil {
-		return fmt.Errorf("下载 xlsx 失败: %w", err)
+		err = &redactedTransferError{cause: err, operation: "download"}
+		return fmt.Errorf("下载 xlsx 失败 (taskId=%s): %w", jobID, err)
 	}
 	if jsonMode {
 		return deps.Out.PrintJSON(map[string]any{
@@ -121,7 +140,7 @@ func parseExportSubmitResult(text string) (string, error) {
 	}
 	jobID, _ := data["jobId"].(string)
 	if jobID == "" {
-		return "", fmt.Errorf("submit_export_job 未返回 jobId，响应: %s", text)
+		return "", fmt.Errorf("submit_export_job 未返回 jobId")
 	}
 	return jobID, nil
 }
@@ -149,7 +168,7 @@ func exportPollIntervals() []time.Duration {
 // until the job completes successfully, fails, or the 30-attempt cap is hit.
 func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 	// json 模式下轮询进度也要抑制，否则 [INFO] 行会混进 stdout 破坏纯 JSON 输出。
-	quiet := deps.Caller.Format() == "json"
+	quiet := strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json")
 	intervals := exportPollIntervals()
 	for i, wait := range intervals {
 		select {
@@ -158,7 +177,7 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 		case <-helperAfter(wait):
 		}
 
-		text, err := callMCPToolReturnText(ctx, "query_export_job", map[string]any{
+		text, err := callMCPToolReturnTextWithRedactedBusinessErrors(ctx, "query_export_job", map[string]any{
 			"jobId": jobID,
 		})
 		if err != nil {
@@ -246,10 +265,10 @@ func inferSheetExportFilename(rawURL string) string {
 func newExportCmd() *cobra.Command {
 	exportCmd := &cobra.Command{
 		Use:   "export",
-		Short: "导出表格为 xlsx（异步任务一站式）",
+		Short: "导出表格为 xlsx（同步轮询或异步提交）",
 		Long: `将钉钉在线电子表格导出为 Office xlsx 格式（单命令一站式）。
 
-执行流程（全程自动，无需 Agent 介入轮询）:
+默认同步模式会自动完成全部流程（无需 Agent 介入轮询）:
   1. 提交导出任务（submit_export_job），获取 jobId
   2. 按渐进式退避策略轮询任务状态（query_export_job）
        第 1~5 次：每次 2 秒
@@ -259,6 +278,10 @@ func newExportCmd() *cobra.Command {
        硬上限 30 次（约 5 分钟），超时后返回错误
   3. 任务成功后取得 downloadUrl
   4. 若指定了 --output，将 xlsx 下载到本地文件；否则直接输出 downloadUrl
+
+异步模式传入 --async 后，在提交成功后立即输出一个 PENDING TaskResult，
+不会轮询或下载。请保存 TaskResult.id，稍后查询：
+  dws sheet export get --task-id <TASK_ID>
 
 参数说明:
   --node    表格文档 ID 或链接 URL，系统自动识别（必填）
@@ -280,10 +303,96 @@ func newExportCmd() *cobra.Command {
   dws sheet export --node NODE_ID --output ./report.xlsx
 
   # --output 为目录时，自动按下载链接里的文件名保存
-  dws sheet export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ./`,
+  dws sheet export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ./
+
+  # 异步提交并立即返回 TaskResult.id
+  dws sheet export --node NODE_ID --async`,
 		RunE: runSheetExport,
 	}
-	exportCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
-	exportCmd.Flags().String("output", "", "本地保存路径（可选，支持文件路径或目录）")
+	registerSheetExportFlags(exportCmd)
+
+	// 保留历史 runnable parent，并通过 create compatibility leaf 暴露完全
+	// 相同的提交/同步导出动作。
+	exportCreateCmd := &cobra.Command{
+		Use:     "create",
+		Short:   exportCmd.Short,
+		Long:    exportCmd.Long,
+		Example: strings.ReplaceAll(exportCmd.Example, "dws sheet export --", "dws sheet export create --"),
+		RunE:    runSheetExport,
+	}
+	registerSheetExportFlags(exportCreateCmd)
+	RegisterCrossProductAliases(exportCreateCmd)
+	cli.AnnotateRuntimeCompatibilityEquivalence(exportCmd, exportCreateCmd, cli.RuntimeCompatibilityEquivalence{
+		ID:       "sheet-export-create-v1",
+		Reason:   "The create compatibility leaf reuses the historical export handler and exact flag contract while preserving the stable parent Schema identity.",
+		Reviewed: true,
+	})
+
+	exportGetCmd := &cobra.Command{
+		Use:   "get",
+		Short: "按任务 ID 查询表格导出任务结果",
+		Long: `根据任务 ID 查询表格导出任务的执行结果。
+用于查询 --async 返回的任务，或同步导出超时、中断后遗留的任务。
+
+任务状态：
+  PENDING     等待处理
+  PROCESSING  处理中
+  SUCCESS     导出成功，返回 resultUrl
+  FAILED      导出失败
+  TIMEOUT     查询超时`,
+		Example: `  dws sheet export get --task-id <TASK_ID>`,
+		RunE:    runSheetExportGet,
+	}
+	exportGetCmd.Flags().String("task-id", "", "导出任务 ID (必填)")
+	exportGetCmd.Flags().String("job-id", "", "--task-id 的兼容别名")
+	_ = exportGetCmd.Flags().MarkHidden("job-id")
+
+	exportCmd.AddCommand(exportCreateCmd, exportGetCmd)
 	return exportCmd
+}
+
+func registerSheetExportFlags(cmd *cobra.Command) {
+	cmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
+	cmd.Flags().String("output", "", "本地保存路径（可选，支持文件路径或目录）")
+	cmd.Flags().Bool("async", false, "异步模式：提交导出任务后立即返回 TaskResult.id，不等待完成")
+}
+
+func runSheetExportGet(cmd *cobra.Command, _ []string) error {
+	taskID, err := taskIDFromFlags(cmd)
+	if err != nil {
+		return err
+	}
+
+	if deps.Caller.DryRun() {
+		return printAsyncTaskDryRunPreview(asyncTaskDryRunPreview{
+			Operation: "sheet_export_get",
+			TaskType:  "export",
+			TaskID:    taskID,
+		})
+	}
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := queryAsyncTask(ctx, "export", taskID)
+	if err != nil {
+		return err
+	}
+	if err := deps.Out.PrintJSON(result); err != nil {
+		return err
+	}
+	switch result.Status {
+	case asynctask.StatusFailed:
+		if result.Message != "" {
+			return fmt.Errorf("表格导出任务失败 (status=%s): %s", result.Status, result.Message)
+		}
+		return fmt.Errorf("表格导出任务失败 (status=%s)", result.Status)
+	case asynctask.StatusTimeout:
+		if result.Message != "" {
+			return fmt.Errorf("表格导出任务超时 (status=%s): %s", result.Status, result.Message)
+		}
+		return fmt.Errorf("表格导出任务超时 (status=%s)", result.Status)
+	}
+	return nil
 }

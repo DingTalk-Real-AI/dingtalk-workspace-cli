@@ -2,6 +2,8 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 )
 
@@ -53,5 +55,44 @@ func TestCrossPlatformCoverageIsBusinessErrorAllowsCodeZeroSuccessEnvelope(t *te
 	}
 	if isBusinessError(body) {
 		t.Fatalf("isBusinessError(%v) = true, want false", body)
+	}
+}
+
+func TestPermissionBusinessErrorSuggestsApplyWorkflow(t *testing.T) {
+	hint := suggestForBusinessError(map[string]any{
+		"success":   false,
+		"errorCode": "NO_PERMISSION",
+		"errorMsg":  "没有访问权限",
+	})
+	for _, expected := range []string{"drive permission apply-info", "drive permission apply"} {
+		if !strings.Contains(hint, expected) {
+			t.Fatalf("hint = %q, want %q", hint, expected)
+		}
+	}
+}
+
+func TestClassifyToolResultContentRecognizesPermissionCode(t *testing.T) {
+	err := ClassifyToolResultContent(map[string]any{
+		"success":           false,
+		"server_error_code": "NO_PERMISSION",
+		"message":           "access denied",
+	})
+	cliErr, ok := err.(*CLIError)
+	if !ok || cliErr.Code != CodeAuthPermission {
+		t.Fatalf("error = %#v, want permission CLIError", err)
+	}
+	if !strings.Contains(cliErr.Suggestion, "permission apply-info") {
+		t.Fatalf("suggestion = %q", cliErr.Suggestion)
+	}
+}
+
+func TestDriveNotFoundErrorAlsoSuggestsPermissionWorkflow(t *testing.T) {
+	err := WrapErrorWithOperation(errors.New("resource not found"), "drive/get_dentry")
+	cliErr, ok := err.(*CLIError)
+	if !ok {
+		t.Fatalf("error = %#v, want CLIError", err)
+	}
+	if !strings.Contains(cliErr.Suggestion, "permission apply-info") {
+		t.Fatalf("suggestion = %q", cliErr.Suggestion)
 	}
 }

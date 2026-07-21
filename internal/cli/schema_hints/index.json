@@ -562,12 +562,13 @@
     },
     "doc export": {
       "status": "alias",
-      "target": "doc export get",
+      "target": "doc export create",
       "reason": "已审查的旧路径或跨产品文档前缀，固定映射到当前公开命令"
     },
     "doc import": {
-      "status": "stale",
-      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
+      "status": "alias",
+      "target": "doc import create",
+      "reason": "已审查的历史可运行父路径，Skill 证据固定映射到 Schema 可绑定的 create leaf"
     },
     "doc import get": {
       "status": "stale",

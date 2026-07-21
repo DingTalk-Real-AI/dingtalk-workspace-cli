@@ -137,18 +137,19 @@ Flags:
 
 ```
 Usage:
-  dws doc import [flags]
+  dws doc import create [flags]
   dws doc import get [flags]
 Example:
-  dws doc import --file ./report.docx
-  dws doc import --file ./notes.md --folder <FOLDER_ID>
-  dws doc import --file ./data.xlsx --workspace <WS_ID>
+  dws doc import create --file ./report.docx
+  dws doc import create --file ./notes.md --folder <FOLDER_ID>
+  dws doc import create --file ./data.xlsx --workspace <WS_ID> --async
   dws doc import get --task-id <TASK_ID>
 Flags:
       --file string        本地文件路径 (必填)
       --folder string      目标文件夹 ID 或 URL
       --workspace string   目标知识库 ID 或 URL
       --name string        导入后文档名称 (默认取文件名)
+      --async              上传并确认导入后返回 TaskResult.id，不轮询
       --task-id string     导入任务 ID (import get 必填)
 ```
 
@@ -555,33 +556,37 @@ Flags:
 
 > 接口不支持游标分页，使用 `--limit` 一次性拉取。
 
-### 导出在线文档为 docx（一体化命令）
+### 导出在线文档为 docx / markdown / pdf
 ```
 Usage:
-  dws doc export [flags]
+  dws doc export create [flags]
+  dws doc export [flags]  # 历史兼容入口
 Example:
-  dws doc export --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
-  dws doc export --node <DOC_ID> --output ~/downloads/
+  dws doc export create --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
+  dws doc export create --node <DOC_ID> --export-format markdown --output ./exported.md
+  dws doc export create --node <DOC_ID> --export-format pdf --async --format json
 Flags:
       --node string           要导出的文档标识，支持文档 URL 或 dentryUuid (必填)
-      --output string         本地保存路径，文件路径或目录 (必填)
-      --export-format string  导出格式，当前仅支持 docx (默认)
+      --output string         本地保存路径，文件路径或目录（同步模式必填；--async 时可省略）
+      --export-format string  导出格式: docx / markdown / md / pdf (默认 docx)
+      --async                 异步模式：提交后立即返回任务，不轮询或下载
 ```
 
-CLI 内部自动完成：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 成功后自动下载文件。
-**只需一条命令，无需手动轮询。**
+默认同步模式自动提交、轮询并下载到 `--output`。传 `--async` 时只提交任务并返回 `PENDING` 任务结果，结果中的 `id` 用于后续查询。
 
-### 查询导出任务结果（手动兜底）
+### 查询导出任务结果
 ```
 Usage:
   dws doc export get [flags]
 Example:
+  dws doc export get --task-id <TASK_ID>
   dws doc export get --job-id <JOB_ID>
 Flags:
-      --job-id string   导出任务 ID (必填)
+      --task-id string  导出任务 ID（与 --job-id 二选一）
+      --job-id string   导出任务 ID（历史参数；与 --task-id 二选一）
 ```
 
-仅在 `dws doc export` 超时或中断后，用于手动查询任务状态。通常不需要调用。
+用于查询 `--async` 返回的任务，或同步导出超时、中断后遗留的任务。推荐新流程使用 `--task-id`；公开的历史 `--job-id` 继续可用，两者不可同时传入。
 
 
 ## URL 识别与 DOC_ID 提取
@@ -656,10 +661,11 @@ Flags:
 - 上传并转换 → `upload --convert`
 
 用户说"导入文件/导入为在线文档/导入 Word/导入 Excel/导入 xmind/导入 Markdown/把本地文件转在线文档":
-- 导入并转换为在线文档 → `doc import --file <本地路径>`
+- 导入并转换为在线文档 → `doc import create --file <本地路径>`
 - 支持 docx/doc/xlsx/xls/md/txt/xmind/mark，文件大小不超过 20MB
 - 如果用户指定知识库或文件夹，补充 `--workspace` 或 `--folder`
-- 不要把本地文件内容先读出来再 `doc create/update`；应直接使用 `doc import`
+- 需要立即取得任务 ID 时加 `--async`；该模式仍会创建会话、上传文件并确认导入，返回 `TaskResult.id` 后不轮询
+- 不要把本地文件内容先读出来再 `doc create/update`；应直接使用 `doc import create`
 
 用户说"下载/导出/下载到本地/导出文档/导出为Word/导出为docx/把文档导出来":
 - **必须先判断目标文件类型**，再决定走 `doc export` 还是 `drive download`：
@@ -814,16 +820,19 @@ dws doc export --node <NODE_ID> --output ~/downloads/
 # ── 工作流 5a: 导入本地文件为在线文档 ──
 
 # 导入到默认位置
-dws doc import --file ./report.docx --format json
+dws doc import create --file ./report.docx --format json
 
 # 导入到指定文件夹
-dws doc import --file ./notes.md --folder <DOC_FOLDER_NODE_ID> --format json
+dws doc import create --file ./notes.md --folder <DOC_FOLDER_NODE_ID> --format json
 
 # 导入到知识库
-dws doc import --file ./data.xlsx --workspace <WS_ID> --format json
+dws doc import create --file ./data.xlsx --workspace <WS_ID> --format json
 
-# 如果导入命令超时或中断，可用 import get 手动查询任务状态：
-# dws doc import get --task-id <TASK_ID>
+# 异步模式仍会上传并创建文档；保存唯一 JSON 结果中的 TaskResult.id
+dws doc import create --file ./report.docx --async --format json
+
+# 使用任务 ID 查询异步、超时或中断任务
+dws doc import get --task-id <TASK_ID> --format json
 
 # ── 工作流 6: 上传附件并插入文档 ──
 
@@ -929,13 +938,16 @@ dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 0 --
 # 9. 创建划词评论并附带引用原文 + @ 相关人
 dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 5 --end 20 --content "请确认这部分" --selected-text "被选中的原文内容" --mention <userId1>,<userId2> --format json
 
-# ── 工作流 10: 导出在线文档为 docx ──
+# ── 工作流 10: 导出在线文档 ──
 
-# 一条命令自动完成（提交→轮询→下载），无需手动编排
-dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
+# 默认同步模式自动完成提交→轮询→下载
+dws doc export create --node <DOC_ID_OR_URL> --output ./exported.docx
 
-# 如果导出命令超时或中断，可用 export get 手动查询任务状态：
-# dws doc export get --job-id <JOB_ID>
+# 异步模式立即返回 TaskResult.id，不轮询或下载
+dws doc export create --node <DOC_ID_OR_URL> --export-format pdf --async --format json
+
+# 查询异步、超时或中断任务
+dws doc export get --task-id <TASK_ID> --format json
 ```
 
 ## 上下文传递表
@@ -945,7 +957,7 @@ dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
 | `drive list`（原 `doc list`，已弃用） | `nodes[].nodeId` / folder 类型 `nodeId` | read / info / update / block 的 --node；folder 用作 `--folder` |
 | `drive search`（原 `doc search`，已弃用） | 文档 `nodeId` / URL / `createTime` / `creatorUid` | read / info / update 的 --node；创建时间与创建者信息 |
 | `create` | `nodeId` | update / block 操作的 --node |
-| `import` | `nodeId` / `documentUrl` / `documentName` / `documentType`；中断时提取 `taskId` | 后续 read / info / sheet 操作；中断后用 `doc import get --task-id` |
+| `import create` | 同步成功取 `nodeId` / `documentUrl`；异步取 `TaskResult.id` | 后续 read / info / sheet 操作；用任务 ID 调 `doc import get --task-id` |
 | `drive mkdir`（原 `doc folder create`，已弃用） | `nodeId` | create 的 --folder |
 | `block list` | `blockId` | block insert 的 --ref-block, block update/delete 的 --block-id |
 | `comment list` | `commentList[].commentKey` | comment reply/update/delete 的 --comment-key |
@@ -1024,9 +1036,9 @@ EOF
 
 ## 注意事项
 
-- `export` 是一体化命令，一条命令自动完成提交→轮询→下载，**无需手动编排轮询**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）
-- `export` 超时或中断后，CLI 会输出 `jobId`，可用 `dws doc export get --job-id <jobId>` 手动查询任务状态
-- `export` 当前仅支持钉钉在线文档 (alidocs) 导出为 `docx`；当前开源 CLI 未暴露在线表格导出命令，在线表格数据读取走 `dws sheet range read --node <ID>`
+- `export create` 是公开主入口，历史 `export` 入口保持兼容；默认同步模式自动提交、轮询并下载，`--async` 只提交并返回任务
+- 任务结果中的 `id` 可用 `dws doc export get --task-id <TASK_ID>` 查询；公开的历史 `--job-id` 继续兼容，两者不可同时传入
+- `export` 支持钉钉在线文档 (alidocs) 导出为 `docx`、`markdown`（`md`）或 `pdf`；在线表格整表导出使用 `dws sheet export`
 - `update --mode overwrite` 会**清空原内容后重写**，⚠️ 谨慎使用；必须先 `--dry-run` 预览并在用户确认后加 `--yes`；默认 `--mode append`（追加）更安全
 - `read` 返回 Markdown 格式的文档内容，仅限有"下载"权限的文档
 - `read` 返回的内容中，文档里的附件会以 OSS 临时下载链接形式给出（如 `https://alidocs2.oss-cn-zhangjiakou.aliyuncs.com/res/.../att/<resourceId>.ext?Expires=...`），该链接会过期。链接过期后，可从 URL 路径中提取 `<resourceId>`（即 `/att/` 后、扩展名前的 UUID 部分），然后使用 `media download --node <DOC_ID> --resource-id <resourceId>` 重新获取下载链接
