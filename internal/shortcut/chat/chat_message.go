@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 // MessagesSend sends a text/markdown message as the current user
@@ -242,6 +243,11 @@ var MessagesList = shortcut.Shortcut{
 // clean output projection. Both the list container and the per-item field names are
 // probed defensively across candidate keys, so an empty or unexpected shape
 // yields an empty list rather than a crash or fabricated data.
+//
+// Text goes through the shared chatmsg projection so card/auto-reply JSON is
+// rendered readable and encrypted ciphertext is marked, and forwarded chat
+// records ("聊天记录") expand their nested messages under "forwarded" instead of
+// collapsing to a "[卡片]" summary.
 func listMessagesProject(data map[string]any) []map[string]any {
 	raw := listMessagesResolveList(data)
 	out := make([]map[string]any, 0, len(raw))
@@ -250,27 +256,37 @@ func listMessagesProject(data map[string]any) []map[string]any {
 		if !ok {
 			continue
 		}
-		row := map[string]any{}
-		if v, ok := listMessagesFirst(m, "openMessageId", "openMsgId", "messageId", "msgId"); ok {
-			row["messageId"] = v
-		}
-		if v, ok := listMessagesFirst(m, "senderOpenDingTalkId", "senderUserId", "senderId", "senderStaffId"); ok {
-			row["senderId"] = v
-		}
-		if v, ok := listMessagesFirst(m, "msgType", "messageType", "type"); ok {
-			row["msgType"] = v
-		}
-		if v, ok := listMessagesFirst(m, "createTime", "sendTime", "gmtCreate", "messageTime"); ok {
-			row["createTime"] = v
-		}
-		if v, ok := listMessagesFirst(m, "text", "content", "plainText"); ok {
-			row["text"] = v
-		}
-		if len(row) > 0 {
+		if row := listMessageProjectOne(m); len(row) > 0 {
 			out = append(out, row)
 		}
 	}
 	return out
+}
+
+// listMessageProjectOne projects a single message into the native
+// {messageId, senderId, msgType, createTime, text(, forwarded)} shape, reused
+// recursively for forwarded chat records.
+func listMessageProjectOne(m map[string]any) map[string]any {
+	row := map[string]any{}
+	if v, ok := listMessagesFirst(m, "openMessageId", "openMsgId", "messageId", "msgId"); ok {
+		row["messageId"] = v
+	}
+	if v, ok := listMessagesFirst(m, "senderOpenDingTalkId", "senderUserId", "senderId", "senderStaffId"); ok {
+		row["senderId"] = v
+	}
+	if v, ok := listMessagesFirst(m, "msgType", "messageType", "type"); ok {
+		row["msgType"] = v
+	}
+	if v, ok := listMessagesFirst(m, "createTime", "sendTime", "gmtCreate", "messageTime"); ok {
+		row["createTime"] = v
+	}
+	if text := chatmsg.Text(m); text != nil {
+		row["text"] = text
+	}
+	if forwarded := chatmsg.Forwarded(m, listMessageProjectOne); len(forwarded) > 0 {
+		row["forwarded"] = forwarded
+	}
+	return row
 }
 
 // listMessagesResolveList locates the list payload, tolerating a bare top-level
