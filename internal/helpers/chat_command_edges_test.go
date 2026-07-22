@@ -226,6 +226,8 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 		aliasArgs := []string{"message", "download-media", "--type=mediaId", "--resource-id=r", "--open-conversation-id=cid", alias, "--output=" + filepath.Join(tmp, "alias-dry")}
 		_ = runChatCoverageCommand(t, &productExampleCaller{dry: true}, aliasArgs...)
 	}
+	missingMessageID := []string{"message", "download-media", "--type=mediaId", "--resource-id=r", "--open-conversation-id=cid", "--output=" + filepath.Join(tmp, "missing-id")}
+	_ = runChatCoverageCommand(t, &productExampleCaller{dry: true}, missingMessageID...)
 	for _, tc := range []struct {
 		step scriptedToolStep
 		out  string
