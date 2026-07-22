@@ -16,7 +16,7 @@ import (
 // Go's normal per-package coverage accounting attributes the exercised Schema
 // assembly code to internal/cli.
 func TestCrossPlatformCoverageProductionSchemaSourcePipeline(t *testing.T) {
-	root := app.NewRootCommand()
+	root := app.NewSchemaSourceRootCommand()
 	resolved, err := cli.ResolveSchemaBuild(root)
 	if err != nil {
 		t.Fatalf("ResolveSchemaBuild() error = %v", err)
@@ -33,17 +33,17 @@ func TestCrossPlatformCoverageProductionSchemaSourcePipeline(t *testing.T) {
 	if len(snapshot.Tools) == 0 {
 		t.Fatal("production Schema snapshot contains no tools")
 	}
-	registry, err := cli.AssembleSchemaRegistry(app.NewRootCommand())
+	registry, err := cli.AssembleSchemaRegistry(app.NewSchemaSourceRootCommand())
 	if err != nil {
 		t.Fatalf("AssembleSchemaRegistry() error = %v", err)
 	}
 	if len(registry.Products) == 0 {
 		t.Fatal("assembled production Schema registry contains no products")
 	}
-	if err := cli.ValidateEmbeddedRuntimeSchemaCompleteness(app.NewRootCommand()); err != nil {
+	if err := cli.ValidateEmbeddedRuntimeSchemaCompleteness(app.NewSchemaSourceRootCommand()); err != nil {
 		t.Fatalf("ValidateEmbeddedRuntimeSchemaCompleteness() error = %v", err)
 	}
-	root = app.NewRootCommand()
+	root = app.NewSchemaSourceRootCommand()
 	if _, err := cli.ApplyEmbeddedManualSchemaHints(root); err != nil {
 		t.Fatal(err)
 	}

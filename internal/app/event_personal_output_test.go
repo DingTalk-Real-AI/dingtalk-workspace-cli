@@ -188,7 +188,44 @@ func TestPersonalEventSchemaHidesSchemaIDs(t *testing.T) {
 	}
 }
 
-func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
+func TestPersonalEventSchemaDefaultsToTransportEnvelope(t *testing.T) {
+	cmd := newEventSchemaCommand()
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{personal.EventSingleChat})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("schema output is not JSON: %v\n%s", err, out.String())
+	}
+	if doc["jq_root_path"] != ".data | fromjson" {
+		t.Fatalf("jq_root_path = %#v, want .data | fromjson", doc["jq_root_path"])
+	}
+	schema, ok := doc["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema = %#v, want object", doc["schema"])
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema.properties = %#v, want object", schema["properties"])
+	}
+	for _, field := range []string{"type", "seq", "event_type", "data", "headers", "subscribe_id"} {
+		if _, ok := props[field]; !ok {
+			t.Fatalf("default envelope schema missing %q: %#v", field, props)
+		}
+	}
+	for _, field := range []string{"content", "sender", "conversation_id", "timestamp"} {
+		if _, ok := props[field]; ok {
+			t.Fatalf("default envelope schema unexpectedly contains flat field %q", field)
+		}
+	}
+}
+
+func TestPersonalEventFlattenedSchemaUsesSingleJSONSchema(t *testing.T) {
 	for _, eventKey := range []string{
 		personal.EventMention,
 		personal.EventSingleChat,
@@ -200,7 +237,7 @@ func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
 			cmd.SilenceErrors = true
 			var out bytes.Buffer
 			cmd.SetOut(&out)
-			cmd.SetArgs([]string{eventKey})
+			cmd.SetArgs([]string{eventKey, "--flatten"})
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
@@ -316,7 +353,7 @@ func TestPersonalActionEventSchemaMatchesFlatOutput(t *testing.T) {
 				cmd.SilenceErrors = true
 				var out bytes.Buffer
 				cmd.SetOut(&out)
-				cmd.SetArgs([]string{eventKey})
+				cmd.SetArgs([]string{eventKey, "--flatten"})
 				if err := cmd.Execute(); err != nil {
 					t.Fatal(err)
 				}
@@ -366,6 +403,9 @@ func TestEventSchemaDefaultsToUser(t *testing.T) {
 	}
 	if doc["event_key"] != personal.EventSingleChat {
 		t.Fatalf("event_key = %#v, want %s", doc["event_key"], personal.EventSingleChat)
+	}
+	if doc["jq_root_path"] != ".data | fromjson" {
+		t.Fatalf("jq_root_path = %#v, want default envelope path", doc["jq_root_path"])
 	}
 }
 
@@ -468,6 +508,9 @@ func TestEventConsumeCobraSchemaIncludesOpenDingTalkID(t *testing.T) {
 	}
 	if _, ok := params["odid"]; ok {
 		t.Fatalf("schema parameters unexpectedly include odid alias: %#v", params)
+	}
+	if _, ok := params["flatten"]; !ok {
+		t.Fatalf("schema parameters missing flatten: %#v", params)
 	}
 	for _, name := range []string{"user", "open-dingtalk-id", "group"} {
 		param, ok := params[name].(map[string]any)

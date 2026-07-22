@@ -2,7 +2,7 @@
   "product_id": "event",
   "tools": {
     "event consume": {
-      "agent_summary": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+      "agent_summary": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
       "agent_summary_source": "dws-agent-selection/event",
       "availability": "available",
       "avoid_when": [
@@ -13,19 +13,19 @@
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-        "dws event consume user_im_message_reaction_group --group cid-example --max-events 1 --format ndjson"
+        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+        "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+          "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+              "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -105,8 +105,8 @@
         },
         "examples": {
           "value": [
-            "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-            "dws event consume user_im_message_reaction_group --group cid-example --max-events 1 --format ndjson"
+            "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+            "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
           ],
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
@@ -115,8 +115,8 @@
           "candidates": [
             {
               "value": [
-                "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-                "dws event consume user_im_message_reaction_group --group cid-example --max-events 1 --format ndjson"
+                "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+                "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
               ],
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
@@ -538,7 +538,7 @@
       ]
     },
     "event schema": {
-      "agent_summary": "查询指定个人事件码的 payload 字段结构",
+      "agent_summary": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
       "agent_summary_source": "dws-agent-selection/event",
       "availability": "available",
       "avoid_when": [
@@ -549,18 +549,18 @@
       "effect": "read",
       "effect_source": "agent-hint",
       "examples": [
-        "dws event schema user_im_message_receive_at --format json"
+        "dws event schema user_im_message_receive_at --flatten --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询指定个人事件码的 payload 字段结构",
+          "value": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "查询指定个人事件码的 payload 字段结构",
+              "value": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -640,7 +640,7 @@
         },
         "examples": {
           "value": [
-            "dws event schema user_im_message_receive_at --format json"
+            "dws event schema user_im_message_receive_at --flatten --format json"
           ],
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
@@ -649,7 +649,7 @@
           "candidates": [
             {
               "value": [
-                "dws event schema user_im_message_receive_at --format json"
+                "dws event schema user_im_message_receive_at --flatten --format json"
               ],
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",

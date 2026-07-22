@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net"
@@ -301,7 +302,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			callbackTokenMu.Unlock()
 
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = fmt.Fprintf(w, "<html><body><h1>授权失败</h1><p>%s</p></body></html>", exchangeErr.Error())
+			_, _ = fmt.Fprintf(w, "<html><body><h1>授权失败</h1><p>%s</p></body></html>", html.EscapeString(oauthExchangeDisplayError(exchangeErr)))
 			select {
 			case resultCh <- callbackResult{err: exchangeErr}:
 			default:
@@ -642,6 +643,14 @@ continueLogin:
 	return tokenData, nil
 }
 
+func oauthExchangeDisplayError(err error) string {
+	var statusErr *HTTPStatusError
+	if errors.As(err, &statusErr) && statusErr != nil {
+		return fmt.Sprintf("HTTP %d: token exchange failed", statusErr.StatusCode)
+	}
+	return err.Error()
+}
+
 // GetTokenSnapshot returns a valid token together with its expiry metadata.
 // Storage and refresh failures retain their original cause; only a confirmed
 // missing credential is reported as ErrTokenDataNotFound.
@@ -665,7 +674,12 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 		if rErr == nil {
 			return refreshed, nil
 		}
-		_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+		// A network, timeout, rate-limit or 5xx failure does not invalidate the
+		// refresh credential. Keep the profile active so a long-running source
+		// can retry after backoff. Terminal and unknown failures remain fatal.
+		if ClassifyRefreshFailure(rErr) != RefreshFailureTransient {
+			_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+		}
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}

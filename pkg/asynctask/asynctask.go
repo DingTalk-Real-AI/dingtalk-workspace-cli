@@ -20,8 +20,8 @@
 //  2. 渐进式退避（1s/2s/5s/10s/15s/30s/30s...，可自定义）
 //  3. 默认 5 分钟超时，超时返回 jobId 让用户用 `... get --job-id <ID>` 续等
 //  4. 状态机统一：PROCESSING/PENDING → SUCCESS → 拿 downloadUrl
-//                              ↓
-//                            FAILED → 返回 error
+//     ↓
+//     FAILED → 返回 error
 //  5. 可选 PUT 下载：传入 OutputPath 时本包负责 HTTP GET 落盘
 package asynctask
 

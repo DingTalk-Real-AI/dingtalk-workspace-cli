@@ -634,6 +634,11 @@
       "target": "event consume",
       "reason": "已审查的带 event_key 和输出参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
+    "event consume user_im_message_receive_at": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
     "event consume user_im_message_receive_group": {
       "status": "alias",
       "target": "event consume",

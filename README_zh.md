@@ -470,6 +470,8 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 
 `dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录包括：当前用户被 @ 的消息、与指定用户的单聊消息、指定群的消息。
 
+默认 `ndjson`、`json`、`pretty` 输出保留兼容 transport envelope（`type`、`event_type`、字符串 `data`、`headers`），`compact` 继续沿用原 processor。Agent 或新脚本显式加 `--flatten` 后，输出稳定的顶层业务字段。`--format` 控制 JSON 序列化，`--flatten` 控制数据结构，且不能与 `-f raw` 或 `--debug-raw-events` 同时使用。
+
 > **前置条件**：先运行 `dws auth login`。个人身份从 OAuth token 解析，不允许通过命令行伪造。
 
 只需要 event 能力时，可以使用官方便捷安装脚本：
@@ -481,19 +483,19 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 ```bash
 # 查看公开个人事件目录和 schema
 dws event list
-dws event schema user_im_message_receive_o2o
+dws event schema user_im_message_receive_o2o --flatten
 
 # 监听当前用户被 @ 的消息
-dws event consume user_im_message_receive_at -f ndjson
+dws event consume user_im_message_receive_at --flatten -f ndjson
 
 # 监听与指定用户的单聊消息
-dws event consume user_im_message_receive_o2o --user <userId> -f ndjson
+dws event consume user_im_message_receive_o2o --user <userId> --flatten -f ndjson
 
 # 使用 openDingtalkId 监听外部联系人、机器人或跨组织身份
-dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> -f ndjson
+dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> --flatten -f ndjson
 
 # 监听指定群的消息
-dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
+dws event consume user_im_message_receive_group --group <openConversationId> --flatten -f ndjson
 
 # 查看本地 consume，并取消指定订阅
 dws event status

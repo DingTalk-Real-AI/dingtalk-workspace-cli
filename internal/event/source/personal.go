@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/gorilla/websocket"
@@ -43,6 +44,7 @@ const (
 type PersonalConfig struct {
 	AccessToken         string
 	AccessTokenProvider AccessTokenProvider
+	ForceRefreshToken   ForceRefreshTokenFn
 	ClientID            string
 	ClientSecret        string
 	SourceID            string
@@ -56,6 +58,13 @@ type PersonalConfig struct {
 }
 
 type AccessTokenProvider func(context.Context) (string, error)
+
+// ForceRefreshTokenFn rotates an access token that the server has just
+// rejected (HTTP 401). It receives the exact rejected token so the caller's
+// compare-and-refresh logic can skip the refresh when another goroutine has
+// already rotated it, and returns the fresh token to retry with. Optional:
+// when nil a 401 stays fatal, matching the previous behavior.
+type ForceRefreshTokenFn func(ctx context.Context, rejectedToken string) (string, error)
 
 type PersonalSource struct {
 	cfg     PersonalConfig
@@ -197,8 +206,29 @@ func (s *PersonalSource) runAttempt(ctx context.Context, emit dwsevent.EmitFn) (
 func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, error) {
 	accessToken, err := resolveSourceAccessToken(ctx, s.cfg.AccessTokenProvider, s.cfg.AccessToken, "personal source")
 	if err != nil {
+		// Transient provider failures (network, 429, 5xx) must not kill a
+		// long-running source; the reconnect loop retries after backoff.
+		if authpkg.ClassifyRefreshFailure(err) == authpkg.RefreshFailureTransient {
+			return nil, retryPersonal(err)
+		}
 		return nil, err
 	}
+	ticket, status, err := s.fetchTicketAttempt(ctx, accessToken)
+	if status == http.StatusUnauthorized && s.cfg.ForceRefreshToken != nil {
+		refreshed, refreshErr := refreshRejectedSourceToken(ctx, s.cfg.ForceRefreshToken, accessToken, "personal source", err)
+		if refreshErr != nil {
+			if authpkg.ClassifyRefreshFailure(refreshErr) == authpkg.RefreshFailureTransient {
+				return nil, retryPersonal(refreshErr)
+			}
+			return nil, refreshErr
+		}
+		// Retry once with the freshly rotated token; a second 401 stays fatal.
+		ticket, _, err = s.fetchTicketAttempt(ctx, refreshed)
+	}
+	return ticket, err
+}
+
+func (s *PersonalSource) fetchTicketAttempt(ctx context.Context, accessToken string) (*ticketResponse, int, error) {
 	body := map[string]any{
 		"sourceId": s.cfg.SourceID,
 		"mode":     s.cfg.TicketMode,
@@ -210,7 +240,7 @@ func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, erro
 	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.TicketURL, bytes.NewReader(b))
 	if err != nil {
-		return nil, fmt.Errorf("personal source: create ticket request: %w", err)
+		return nil, 0, fmt.Errorf("personal source: create ticket request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -221,28 +251,50 @@ func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, erro
 
 	resp, err := s.cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, retryPersonal(fmt.Errorf("personal source: fetch ticket: %w", err))
+		return nil, 0, retryPersonal(fmt.Errorf("personal source: fetch ticket: %w", err))
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
-	if err != nil {
-		return nil, retryPersonal(fmt.Errorf("personal source: read ticket response: %w", err))
-	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Classify by status before touching the body: a truncated error body
+		// must not upgrade a fatal status (notably 401) into a retryable
+		// error, or the outer reconnect loop would bypass the single
+		// refresh-retry guard. The body is not used here, so drain it only
+		// best-effort for connection reuse.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, config.MaxResponseBodySize))
 		err := fmt.Errorf("personal source: ticket HTTP %d", resp.StatusCode)
 		if retryableTicketStatus(resp.StatusCode) {
-			return nil, retryPersonal(err)
+			return nil, resp.StatusCode, retryPersonal(err)
 		}
-		return nil, err
+		return nil, resp.StatusCode, err
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
+	if err != nil {
+		return nil, resp.StatusCode, retryPersonal(fmt.Errorf("personal source: read ticket response: %w", err))
 	}
 	ticket, err := decodeTicket(data)
 	if err != nil {
-		return nil, err
+		return nil, resp.StatusCode, err
 	}
 	if ticket.Endpoint == "" || ticket.Ticket == "" {
-		return nil, errors.New("personal source: ticket response missing endpoint or ticket")
+		return nil, resp.StatusCode, errors.New("personal source: ticket response missing endpoint or ticket")
 	}
-	return ticket, nil
+	return ticket, resp.StatusCode, nil
+}
+
+// refreshRejectedSourceToken funnels a server-side 401 into the optional
+// force-refresh callback. It hands the actual rejected token to the caller's
+// compare-and-refresh logic and returns the rotated token for an immediate
+// retry. Refresh failures keep the original 401 as context instead of being
+// dropped.
+func refreshRejectedSourceToken(ctx context.Context, refresh ForceRefreshTokenFn, rejectedToken, component string, cause error) (string, error) {
+	token, err := refresh(ctx, rejectedToken)
+	if err != nil {
+		return "", fmt.Errorf("%s: refresh rejected access token: %w", component, errors.Join(cause, err))
+	}
+	if token = strings.TrimSpace(token); token == "" {
+		return "", fmt.Errorf("%s: refresh rejected access token returned empty token: %w", component, cause)
+	}
+	return token, nil
 }
 
 func resolveSourceAccessToken(ctx context.Context, provider AccessTokenProvider, fallback, component string) (string, error) {
@@ -381,6 +433,13 @@ func isRetryablePersonalError(err error) bool {
 func personalRetryLogError(err error) string {
 	message := err.Error()
 	switch {
+	case strings.Contains(message, "resolve access token"), strings.Contains(message, "refresh rejected access token"):
+		// Token resolution/refresh errors may carry provider details; log
+		// only the structured HTTP status.
+		if status := refreshHTTPStatus(err); status != 0 {
+			return fmt.Sprintf("personal source: token refresh HTTP %d", status)
+		}
+		return "personal source: token refresh: temporary network error"
 	case strings.Contains(message, "ticket HTTP"):
 		return message
 	case strings.Contains(message, "fetch ticket"):
@@ -396,6 +455,14 @@ func personalRetryLogError(err error) string {
 	default:
 		return "personal source: retryable stream error"
 	}
+}
+
+func refreshHTTPStatus(err error) int {
+	var statusErr *authpkg.HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr == nil {
+		return 0
+	}
+	return statusErr.StatusCode
 }
 
 func retryableTicketStatus(status int) bool {

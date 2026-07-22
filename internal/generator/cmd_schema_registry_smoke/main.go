@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	newSmokeRoot                = app.NewRootCommand
+	newSmokeRoot                = app.NewSchemaSourceRootCommand
 	buildEffectiveSmokeRegistry = cli.BuildEffectiveCommandRegistry
 	bindEffectiveSmokeRegistry  = cli.BindEffectiveCommandRegistry
 	buildSmokeRegistryData      = buildSmokeRegistry

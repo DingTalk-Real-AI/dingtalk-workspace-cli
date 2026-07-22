@@ -23,21 +23,39 @@ const SourceAnnotation = "dws.source"
 // SourceEnvelope marks a command as authored by the runtime discovery envelope.
 const SourceEnvelope = "envelope"
 
+// SourcePlugin marks a command as an installed plugin extension. Plugin
+// commands are part of the runtime CLI surface, not the embedded base Schema.
+const SourcePlugin = "plugin"
+
 // MarkEnvelopeSource stamps cmd with runtime discovery provenance.
 func MarkEnvelopeSource(cmd *cobra.Command) {
+	markSource(cmd, SourceEnvelope)
+}
+
+// MarkPluginSource stamps cmd with installed-plugin provenance.
+func MarkPluginSource(cmd *cobra.Command) {
+	markSource(cmd, SourcePlugin)
+}
+
+func markSource(cmd *cobra.Command, source string) {
 	if cmd == nil {
 		return
 	}
 	if cmd.Annotations == nil {
 		cmd.Annotations = map[string]string{}
 	}
-	cmd.Annotations[SourceAnnotation] = SourceEnvelope
+	cmd.Annotations[SourceAnnotation] = source
 }
 
 // IsEnvelopeSourced reports whether cmd was authored by the runtime discovery
 // envelope.
 func IsEnvelopeSourced(cmd *cobra.Command) bool {
 	return cmd != nil && cmd.Annotations[SourceAnnotation] == SourceEnvelope
+}
+
+// IsPluginSourced reports whether cmd came from an installed plugin.
+func IsPluginSourced(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations[SourceAnnotation] == SourcePlugin
 }
 
 // KindAnnotation is the annotation key for marking command kinds.

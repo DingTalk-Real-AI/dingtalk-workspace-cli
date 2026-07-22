@@ -116,11 +116,14 @@ func NewWorkflowInvocation(legacyPath, workflowName string, steps []Invocation) 
 func MergePayloads(jsonPayload, paramsPayload string, overrides map[string]any) (map[string]any, error) {
 	merged := make(map[string]any)
 
-	for label, payload := range map[string]string{
-		"--json":   jsonPayload,
-		"--params": paramsPayload,
+	for _, payload := range []struct {
+		label string
+		raw   string
+	}{
+		{label: "--json", raw: jsonPayload},
+		{label: "--params", raw: paramsPayload},
 	} {
-		value, err := parseJSONObject(label, payload)
+		value, err := parseJSONObject(payload.label, payload.raw)
 		if err != nil {
 			return nil, err
 		}
