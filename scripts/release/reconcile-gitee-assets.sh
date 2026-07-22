@@ -10,7 +10,7 @@ GITEE_CURL_MAX_TIME="${GITEE_CURL_MAX_TIME:-120}"
 GITEE_LIST_MAX_TIME="${GITEE_LIST_MAX_TIME:-20}"
 GITEE_VERIFY_MAX_TIME="${GITEE_VERIFY_MAX_TIME:-60}"
 GITEE_MUTATION_MAX_TIME="${GITEE_MUTATION_MAX_TIME:-20}"
-GITEE_UPLOAD_MAX_TIME="${GITEE_UPLOAD_MAX_TIME:-120}"
+GITEE_UPLOAD_MAX_TIME="${GITEE_UPLOAD_MAX_TIME:-300}"
 GITEE_UPLOAD_RETRIES="${GITEE_UPLOAD_RETRIES:-2}"
 GITEE_UPLOAD_RETRY_DELAY="${GITEE_UPLOAD_RETRY_DELAY:-5}"
 GITEE_EXISTING_VERIFY_ATTEMPTS="${GITEE_EXISTING_VERIFY_ATTEMPTS:-1}"
@@ -243,7 +243,9 @@ gitee_attach() {
     if response="$(curl -fsS --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
       --max-time "$max_time" \
       -X POST "${base}/releases/${release_id}/attach_files" \
-      -H "Authorization: token ${GITEE_TOKEN}" -F "file=@${file}" 2>&1)"; then
+      -H "Authorization: token ${GITEE_TOKEN}" \
+      -H "Expect:" \
+      -F "file=@${file}" 2>&1)"; then
       status=0
     else
       status=$?

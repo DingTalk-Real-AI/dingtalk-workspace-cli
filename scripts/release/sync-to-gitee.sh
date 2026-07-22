@@ -34,6 +34,8 @@ GITEE_CURL_MAX_TIME="${GITEE_CURL_MAX_TIME:-120}"
 GITEE_SYNC_TIMEOUT_SECONDS="${GITEE_SYNC_TIMEOUT_SECONDS:-5700}"
 GITEE_TAG_TIMEOUT_SECONDS="${GITEE_TAG_TIMEOUT_SECONDS:-300}"
 GITEE_RELEASE_LOOKUP_MAX_TIME="${GITEE_RELEASE_LOOKUP_MAX_TIME:-60}"
+GITEE_RELEASE_LOOKUP_RETRIES="${GITEE_RELEASE_LOOKUP_RETRIES:-2}"
+GITEE_RELEASE_LOOKUP_RETRY_DELAY="${GITEE_RELEASE_LOOKUP_RETRY_DELAY:-2}"
 GITEE_RELEASE_CREATE_MAX_TIME="${GITEE_RELEASE_CREATE_MAX_TIME:-60}"
 GITEE_RECONCILE_TIMEOUT_SECONDS="${GITEE_RECONCILE_TIMEOUT_SECONDS:-4920}"
 GITEE_CHILD_DEADLINE_RESERVE_SECONDS="${GITEE_CHILD_DEADLINE_RESERVE_SECONDS:-5}"
@@ -51,17 +53,28 @@ require_positive_integer() {
   [ "$value" -gt 0 ] || err "${name} must be greater than zero"
 }
 
+require_nonnegative_integer() {
+  local name="$1" value="$2"
+  case "$value" in
+    ''|*[!0-9]*) err "${name} must be a non-negative integer: ${value}" ;;
+  esac
+}
+
 for setting in \
   GITEE_CURL_CONNECT_TIMEOUT \
   GITEE_CURL_MAX_TIME \
   GITEE_SYNC_TIMEOUT_SECONDS \
   GITEE_TAG_TIMEOUT_SECONDS \
   GITEE_RELEASE_LOOKUP_MAX_TIME \
+  GITEE_RELEASE_LOOKUP_RETRIES \
   GITEE_RELEASE_CREATE_MAX_TIME \
   GITEE_RECONCILE_TIMEOUT_SECONDS \
   GITEE_CHILD_DEADLINE_RESERVE_SECONDS; do
   require_positive_integer "$setting" "${!setting}"
 done
+require_nonnegative_integer \
+  GITEE_RELEASE_LOOKUP_RETRY_DELAY \
+  "$GITEE_RELEASE_LOOKUP_RETRY_DELAY"
 
 missing=""
 [ -z "${GITEE_TOKEN:-}" ] && missing="$missing GITEE_TOKEN"
@@ -117,14 +130,6 @@ GITEE_TAG_TIMEOUT_SECONDS="$GITEE_TAG_TIMEOUT_SECONDS" \
 deadline_remaining >/dev/null || err "overall Gitee sync deadline exhausted during tag synchronization"
 target_commit="$(git rev-parse --verify "${VERSION}^{commit}")"
 
-api_get() {
-  local configured_max_time="$1" max_time
-  shift
-  max_time="$(bounded_max_time "$configured_max_time")" || return 1
-  curl -fsSL --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
-    --max-time "$max_time" "$@"
-}
-
 release_id_from_json() {
   python3 -c 'import json, sys
 data = json.load(sys.stdin)
@@ -136,12 +141,41 @@ elif isinstance(value, str) and value.isdigit() and int(value) > 0:
 }
 
 # ── Resolve or create the Gitee release for this tag ──────────────────────────
-rel_json="$(api_get "$GITEE_RELEASE_LOOKUP_MAX_TIME" \
+# A transient lookup failure must not be mistaken for a missing release: doing
+# so can race a duplicate create and hides the actual Gitee availability issue.
+release_lookup_body="$(mktemp)"
+trap 'rm -f "$release_lookup_body"' EXIT HUP INT TERM
+lookup_max_time="$(bounded_max_time "$GITEE_RELEASE_LOOKUP_MAX_TIME")" \
+  || err "overall Gitee sync deadline exhausted before release lookup"
+if ! release_status="$(curl -sS --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
+  --max-time "$lookup_max_time" \
+  --retry "$GITEE_RELEASE_LOOKUP_RETRIES" \
+  --retry-all-errors \
+  --retry-delay "$GITEE_RELEASE_LOOKUP_RETRY_DELAY" \
+  --retry-max-time "$lookup_max_time" \
+  -o "$release_lookup_body" \
+  -w '%{http_code}' \
   -H "Authorization: token ${GITEE_TOKEN}" \
-  "${base}/releases/tags/${VERSION}" 2>/dev/null || true)"
-release_id="$(printf '%s' "$rel_json" | release_id_from_json || true)"
+  "${base}/releases/tags/${VERSION}")"; then
+  deadline_remaining >/dev/null \
+    || err "overall Gitee sync deadline exhausted during release lookup"
+  err "could not query Gitee release ${VERSION} after bounded retries"
+fi
+rel_json="$(<"$release_lookup_body")"
+case "$release_status" in
+  200)
+    release_id="$(printf '%s' "$rel_json" | release_id_from_json || true)"
+    [ -n "$release_id" ] || err "Gitee release lookup returned HTTP 200 without a valid release id"
+    ;;
+  404)
+    release_id=""
+    ;;
+  *)
+    err "Gitee release lookup returned HTTP ${release_status} for ${VERSION}"
+    ;;
+esac
 
-if [ -z "$release_id" ]; then
+if [ "$release_status" = "404" ]; then
   deadline_remaining >/dev/null || err "overall Gitee sync deadline exhausted during release lookup"
   echo "   No Gitee release for ${VERSION} yet — creating it."
   create_max_time="$(bounded_max_time "$GITEE_RELEASE_CREATE_MAX_TIME")" \
