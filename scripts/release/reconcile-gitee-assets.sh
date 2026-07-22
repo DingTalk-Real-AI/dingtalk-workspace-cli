@@ -243,7 +243,9 @@ gitee_attach() {
     if response="$(curl -fsS --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" \
       --max-time "$max_time" \
       -X POST "${base}/releases/${release_id}/attach_files" \
-      -H "Authorization: token ${GITEE_TOKEN}" -F "file=@${file}" 2>&1)"; then
+      -H "Authorization: token ${GITEE_TOKEN}" \
+      -H "Expect:" \
+      -F "file=@${file}" 2>&1)"; then
       status=0
     else
       status=$?

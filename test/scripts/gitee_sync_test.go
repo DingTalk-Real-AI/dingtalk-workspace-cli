@@ -416,6 +416,31 @@ func TestReconcileGiteeAssetsRecoversACommittedUploadWithLostResponse(t *testing
 	}
 }
 
+func TestReconcileGiteeAssetsDisablesExpectContinueForLargeUploads(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	distDir := seedGiteeDist(t)
+	mustWriteFile(
+		t,
+		filepath.Join(distDir, requiredGiteeAssets[0]),
+		[]byte(strings.Repeat("x", 2<<20)),
+		0o644,
+	)
+	fake := newFakeGiteeRelease(false, false)
+	fake.rejectExpectContinue = true
+	server := httptest.NewServer(fake)
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = giteeAssetEnv(distDir, server.URL, "1")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("large-asset reconciliation error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "all 8 verified") {
+		t.Fatalf("large-asset reconciliation did not verify every asset:\n%s", output)
+	}
+}
+
 func TestReconcileGiteeAssetsFailsWhenAnyUploadIsMissing(t *testing.T) {
 	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
 	distDir := seedGiteeDist(t)
@@ -754,14 +779,15 @@ type fakeGiteeAsset struct {
 }
 
 type fakeGiteeRelease struct {
-	mu                sync.Mutex
-	nextID            int
-	assets            map[int]fakeGiteeAsset
-	uploadCalls       map[string]int
-	dropFirstResponse bool
-	droppedResponse   bool
-	failUploads       bool
-	uploadDelay       time.Duration
+	mu                   sync.Mutex
+	nextID               int
+	assets               map[int]fakeGiteeAsset
+	uploadCalls          map[string]int
+	dropFirstResponse    bool
+	droppedResponse      bool
+	failUploads          bool
+	uploadDelay          time.Duration
+	rejectExpectContinue bool
 }
 
 func newFakeGiteeRelease(dropFirstResponse, failUploads bool) *fakeGiteeRelease {
@@ -820,6 +846,10 @@ func (f *fakeGiteeRelease) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *fakeGiteeRelease) upload(w http.ResponseWriter, r *http.Request) {
+	if f.rejectExpectContinue && r.Header.Get("Expect") != "" {
+		http.Error(w, "Expect: 100-continue is not supported", http.StatusExpectationFailed)
+		return
+	}
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
