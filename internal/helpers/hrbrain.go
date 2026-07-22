@@ -147,6 +147,9 @@ func newHrbrainCommand() *cobra.Command {
 			if err := json.Unmarshal([]byte(mustGetFlag(cmd, "data-queries")), &queries); err != nil {
 				return fmt.Errorf("--data-queries must be a valid JSON array: %w", err)
 			}
+			if len(queries) == 0 {
+				return fmt.Errorf("--data-queries must be a non-empty JSON array")
+			}
 			return callMCPTool("query_profile_data", map[string]any{
 				"workNo":      mustGetFlag(cmd, "work-no"),
 				"dataQueries": queries,
@@ -278,6 +281,9 @@ func newHrbrainCommand() *cobra.Command {
 			var fields []any
 			if err := json.Unmarshal([]byte(mustGetFlag(cmd, "fields")), &fields); err != nil {
 				return fmt.Errorf("--fields must be a valid JSON array: %w", err)
+			}
+			if len(fields) == 0 {
+				return fmt.Errorf("--fields must be a non-empty JSON array")
 			}
 			toolArgs := map[string]any{
 				"originJson":  originJSON,

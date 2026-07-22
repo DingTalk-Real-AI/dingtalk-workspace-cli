@@ -113,6 +113,21 @@ func TestHrbrainProfileQuery(t *testing.T) {
 		t.Fatal("query with invalid data-queries JSON should error")
 	}
 
+	// An empty JSON array is syntactically valid but queries nothing, so it
+	// must be rejected before dispatch.
+	emptyDataQueriesCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, emptyDataQueriesCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"profile", "query",
+		"--work-no", "WORK_NO",
+		"--data-queries", `[]`,
+	); err == nil {
+		t.Fatal("query with empty data-queries array should error")
+	}
+	if emptyDataQueriesCaller.calls != 0 {
+		t.Fatalf("query with empty data-queries must not call MCP, got %d call(s)", emptyDataQueriesCaller.calls)
+	}
+
 	if err := executeHrbrainCommand(t, newHrbrainCommand(),
 		"profile", "query", "--work-no", "WORK_NO",
 	); err == nil {
@@ -246,6 +261,21 @@ func TestHrbrainSearchEmployeesStructured(t *testing.T) {
 	}
 	if nonObjectOriginJSONCaller.calls != 0 {
 		t.Fatalf("search employees-structured with non-object origin-json must not call MCP, got %d call(s)", nonObjectOriginJSONCaller.calls)
+	}
+
+	// An empty --fields array is syntactically valid but selects no columns,
+	// so it must be rejected before dispatch.
+	emptyFieldsCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, emptyFieldsCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"search", "employees-structured",
+		"--origin-json", `{"rules":[],"combinator":"and"}`,
+		"--fields", `[]`,
+	); err == nil {
+		t.Fatal("search employees-structured with empty fields array should error")
+	}
+	if emptyFieldsCaller.calls != 0 {
+		t.Fatalf("search employees-structured with empty fields must not call MCP, got %d call(s)", emptyFieldsCaller.calls)
 	}
 
 	if err := executeHrbrainCommand(t, newHrbrainCommand(),
