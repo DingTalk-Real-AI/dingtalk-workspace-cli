@@ -68,13 +68,26 @@ func extractUsers(data map[string]any) []contactUser {
 			continue
 		}
 		id, _ := m["userId"].(string)
-		if id == "" {
-			continue
-		}
-		nm, _ := m["name"].(string)
 		openID, _ := m["openDingTalkId"].(string)
 		if openID == "" {
 			openID, _ = m["openDingtalkId"].(string)
+		}
+		// External / cross-org contacts come back with an empty userId and only
+		// an openDingTalkId (verified live). Dropping them here made name→ID
+		// resolution miss those people, or collapse to the wrong single match
+		// when an in-org namesake also existed. Keep any row with at least one
+		// usable identity; downstream (e.g. +dm) can act on the openDingTalkId.
+		if id == "" && openID == "" {
+			continue
+		}
+		nm, _ := m["name"].(string)
+		if nm == "" {
+			for _, k := range []string{"nick", "showName", "flowerName", "staffName", "userName"} {
+				if v, _ := m[k].(string); v != "" {
+					nm = v
+					break
+				}
+			}
 		}
 		out = append(out, contactUser{userID: id, openDingTalkID: openID, name: nm})
 	}

@@ -62,3 +62,6 @@ dwsbin
 /docs/shortcut-comparison.html
 /docs/shortcut-gsb-eval.*
 /scripts/run_shortcut_real_read_matrix.py
+
+coverage-shortcut.txt
+coverage-*.txt
