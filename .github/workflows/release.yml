@@ -1735,7 +1735,7 @@ jobs:
     if: ${{ !cancelled() && vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
     needs: [release-contract, release, publish-channels]
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     permissions:
       contents: read
     env:
@@ -1752,12 +1752,14 @@ jobs:
 
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ github.sha }}
           path: tmp/trusted-release-tooling
           persist-credentials: false
 
       - name: Fetch and verify sealed release tag
+        timeout-minutes: 5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -1776,7 +1778,7 @@ jobs:
           path: dist
 
       - name: Mirror release to Gitee (China)
-        timeout-minutes: 100
+        timeout-minutes: 318
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ needs.release-contract.outputs.release_version }}
@@ -2180,13 +2182,14 @@ jobs:
     needs: dispatch-contract
     if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'repair_gitee' || needs.dispatch-contract.outputs.mode == 'repair_oss') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     permissions:
       actions: read
       contents: read
     steps:
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ github.sha }}
           path: tooling
@@ -2194,6 +2197,7 @@ jobs:
           fetch-depth: 0
 
       - name: Validate repair version
+        timeout-minutes: 2
         working-directory: tooling
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2208,6 +2212,7 @@ jobs:
       - name: Verify immutable release authority
         id: authority
         uses: actions/github-script@v7
+        timeout-minutes: 5
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
         with:
@@ -2330,12 +2335,14 @@ jobs:
 
       - name: Check out sealed release source
         uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ steps.authority.outputs.commit_sha }}
           path: release-source
           persist-credentials: false
 
       - name: Fetch and verify sealed release tag
+        timeout-minutes: 5
         working-directory: tooling
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2352,6 +2359,7 @@ jobs:
             "$VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
       - name: Require successful Release workflow delivery
+        timeout-minutes: 5
         working-directory: tooling
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2368,6 +2376,7 @@ jobs:
             --channel-repair "$target" "$VERSION" "$RELEASE_COMMIT"
 
       - name: Download and verify immutable GitHub Release assets
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2385,7 +2394,7 @@ jobs:
 
       - name: Mirror release to Gitee (China)
         if: ${{ needs.dispatch-contract.outputs.mode == 'repair_gitee' }}
-        timeout-minutes: 100
+        timeout-minutes: 318
         working-directory: tooling
         run: |
           "$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-gitee.sh"

@@ -300,7 +300,12 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/releases/tags/v1.2.3":
 			releaseMu.Lock()
 			releaseLookups++
+			lookupAttempt := releaseLookups
 			releaseMu.Unlock()
+			if lookupAttempt == 1 {
+				http.Error(w, "temporary Gitee outage", http.StatusServiceUnavailable)
+				return
+			}
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/releases":
 			if err := r.ParseMultipartForm(1 << 20); err != nil {
@@ -336,6 +341,8 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 		"GITEE_TAG_TIMEOUT_SECONDS=5",
 		"GITEE_GIT_TIMEOUT_SECONDS=3",
 		"GITEE_RELEASE_LOOKUP_MAX_TIME=2",
+		"GITEE_RELEASE_LOOKUP_RETRIES=2",
+		"GITEE_RELEASE_LOOKUP_RETRY_DELAY=0",
 		"GITEE_RELEASE_CREATE_MAX_TIME=2",
 		"GITEE_RECONCILE_TIMEOUT_SECONDS=20",
 		"GITEE_CHILD_DEADLINE_RESERVE_SECONDS=1",
@@ -357,8 +364,8 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 	}
 
 	releaseMu.Lock()
-	if releaseLookups != 1 || releaseCreates != 1 {
-		t.Errorf("release lookup/create calls = %d/%d, want 1/1", releaseLookups, releaseCreates)
+	if releaseLookups != 2 || releaseCreates != 1 {
+		t.Errorf("release lookup/create calls = %d/%d, want 2/1", releaseLookups, releaseCreates)
 	}
 	releaseMu.Unlock()
 	fake.mu.Lock()
@@ -374,11 +381,15 @@ func TestReconcileGiteeAssetsRecoversACommittedUploadWithLostResponse(t *testing
 	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
 	distDir := seedGiteeDist(t)
 	fake := newFakeGiteeRelease(true, false)
+	fake.listErrorResponsesAfterUpload = 1
+	fake.listEmptyResponsesAfterUpload = 1
 	server := httptest.NewServer(fake)
 	defer server.Close()
 
 	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = giteeAssetEnv(distDir, server.URL, "2")
+	cmd.Env = append(giteeAssetEnv(distDir, server.URL, "2"),
+		"GITEE_POST_UPLOAD_VERIFY_ATTEMPTS=2",
+	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("reconcile-gitee-assets.sh error = %v\noutput:\n%s", err, output)
@@ -406,6 +417,167 @@ func TestReconcileGiteeAssetsRecoversACommittedUploadWithLostResponse(t *testing
 		if got := fake.uploadCalls[name]; got != 1 {
 			t.Errorf("upload calls for %s = %d, want 1", name, got)
 		}
+	}
+}
+
+func TestReconcileGiteeAssetsDoesNotReplayAnAmbiguousUpload(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	distDir := seedGiteeDist(t)
+	fake := newFakeGiteeRelease(true, false)
+	fake.listEmptyResponsesAfterUpload = 3
+	server := httptest.NewServer(fake)
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(giteeAssetEnv(distDir, server.URL, "2"),
+		"GITEE_POST_UPLOAD_VERIFY_ATTEMPTS=2",
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("ambiguous upload unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(string(output), "refusing to replay POST") {
+		t.Fatalf("ambiguous upload did not fail closed:\n%s", output)
+	}
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	for _, name := range requiredGiteeAssets {
+		if got := fake.uploadCalls[name]; got != 1 {
+			t.Errorf("upload calls for %s = %d, want exactly 1", name, got)
+		}
+	}
+}
+
+func TestReconcileGiteeAssetsRetriesATransientListOutage(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	distDir := seedGiteeDist(t)
+	fake := newFakeGiteeRelease(false, false)
+	fake.listFailuresRemaining = 2
+	server := httptest.NewServer(fake)
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(giteeAssetEnv(distDir, server.URL, "1"),
+		"GITEE_LIST_RETRIES=3",
+		"GITEE_LIST_RETRY_DELAY=1",
+		"GITEE_LIST_RETRY_WINDOW_SECONDS=4",
+	)
+	started := time.Now()
+	output, err := cmd.CombinedOutput()
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("transient-list reconciliation error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "Gitee attachment list attempt 2/3 failed; retrying in 1s") {
+		t.Fatalf("transient list failures were not retried visibly:\n%s", output)
+	}
+	if elapsed < 1500*time.Millisecond {
+		t.Fatalf("transient list retry elapsed = %s, want production-style backoff", elapsed)
+	}
+	if !strings.Contains(string(output), "all 8 verified") {
+		t.Fatalf("transient-list reconciliation did not verify every asset:\n%s", output)
+	}
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if fake.listFailuresRemaining != 0 {
+		t.Fatalf("unconsumed list failures = %d, want 0", fake.listFailuresRemaining)
+	}
+	for _, name := range requiredGiteeAssets {
+		if got := fake.uploadCalls[name]; got != 1 {
+			t.Errorf("upload calls for %s = %d, want 1", name, got)
+		}
+	}
+}
+
+func TestReconcileGiteeAssetsDoesNotBurstRetriesInTheFinalWindowSecond(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	distDir := seedGiteeDist(t)
+	fake := newFakeGiteeRelease(false, false)
+	fake.listFailuresRemaining = 1000
+	server := httptest.NewServer(fake)
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(giteeAssetEnv(distDir, server.URL, "1"),
+		"GITEE_LIST_RETRIES=24",
+		"GITEE_LIST_RETRY_DELAY=1",
+		"GITEE_LIST_RETRY_WINDOW_SECONDS=1",
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("permanent list outage unexpectedly succeeded:\n%s", output)
+	}
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if fake.listCalls > len(requiredGiteeAssets)+1 {
+		t.Fatalf("list calls = %d, want at most one per asset plus final verification", fake.listCalls)
+	}
+}
+
+func TestReconcileGiteeAssetsDiscardsPartialOutputFromAMalformedList(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	distDir := seedGiteeDist(t)
+	fake := newFakeGiteeRelease(false, false)
+	existingName := requiredGiteeAssets[0]
+	existingData, err := os.ReadFile(filepath.Join(distDir, existingName))
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", existingName, err)
+	}
+	fake.assets[1] = fakeGiteeAsset{id: 1, name: existingName, data: existingData}
+	fake.nextID = 2
+	fake.malformedListResponsesRemaining = 1
+	server := httptest.NewServer(fake)
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(giteeAssetEnv(distDir, server.URL, "1"),
+		"GITEE_LIST_RETRIES=2",
+		"GITEE_LIST_RETRY_DELAY=0",
+		"GITEE_LIST_RETRY_WINDOW_SECONDS=2",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("malformed-list reconciliation error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), existingName+" already correct on Gitee") {
+		t.Fatalf("partial failed-list output manufactured a stale or duplicate asset:\n%s", output)
+	}
+	if !strings.Contains(string(output), "all 8 verified") {
+		t.Fatalf("malformed-list reconciliation did not verify every asset:\n%s", output)
+	}
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if got := fake.uploadCalls[existingName]; got != 0 {
+		t.Errorf("upload calls for existing %s = %d, want 0", existingName, got)
+	}
+}
+
+func TestReconcileGiteeAssetsDisablesExpectContinueForLargeUploads(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "reconcile-gitee-assets.sh"))
+	distDir := seedGiteeDist(t)
+	mustWriteFile(
+		t,
+		filepath.Join(distDir, requiredGiteeAssets[0]),
+		[]byte(strings.Repeat("x", 2<<20)),
+		0o644,
+	)
+	fake := newFakeGiteeRelease(false, false)
+	fake.rejectExpectContinue = true
+	server := httptest.NewServer(fake)
+	defer server.Close()
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = giteeAssetEnv(distDir, server.URL, "1")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("large-asset reconciliation error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "all 8 verified") {
+		t.Fatalf("large-asset reconciliation did not verify every asset:\n%s", output)
 	}
 }
 
@@ -515,7 +687,53 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 	}
 	perAssetSeconds := shellDefaultInt(t, reconciler, "GITEE_ASSET_TIMEOUT_SECONDS")
 	overallSeconds := shellDefaultInt(t, reconciler, "GITEE_OVERALL_TIMEOUT_SECONDS")
-	finalListSeconds := shellDefaultInt(t, reconciler, "GITEE_LIST_MAX_TIME")
+	listSeconds := shellDefaultInt(t, reconciler, "GITEE_LIST_MAX_TIME")
+	listRetries := shellDefaultInt(t, reconciler, "GITEE_LIST_RETRIES")
+	listRetryDelay := shellDefaultInt(t, reconciler, "GITEE_LIST_RETRY_DELAY")
+	listRetryWindow := shellDefaultInt(t, reconciler, "GITEE_LIST_RETRY_WINDOW_SECONDS")
+	uploadSeconds := shellDefaultInt(t, reconciler, "GITEE_UPLOAD_MAX_TIME")
+	verifySeconds := shellDefaultInt(t, reconciler, "GITEE_VERIFY_MAX_TIME")
+	postUploadVerifyAttempts := shellDefaultInt(t, reconciler, "GITEE_POST_UPLOAD_VERIFY_ATTEMPTS")
+	verifyRetryDelay := shellDefaultInt(t, reconciler, "GITEE_VERIFY_RETRY_DELAY")
+	uploadRetryDelay := shellDefaultInt(t, reconciler, "GITEE_UPLOAD_RETRY_DELAY")
+	const minimumLargeAssetUploadSeconds = 1200
+	if uploadSeconds < minimumLargeAssetUploadSeconds {
+		t.Fatalf(
+			"Gitee upload deadline = %ds, want at least %ds for near-10 MiB release assets",
+			uploadSeconds, minimumLargeAssetUploadSeconds,
+		)
+	}
+	const minimumTransientListOutageSeconds = 300
+	if listRetryWindow < minimumTransientListOutageSeconds {
+		t.Fatalf(
+			"Gitee list recovery budget = %ds, want at least %ds for a transient API outage",
+			listRetryWindow, minimumTransientListOutageSeconds,
+		)
+	}
+	if (listRetries-1)*listRetryDelay < listRetryWindow {
+		t.Fatalf(
+			"%d Gitee list attempts with %ds delay cannot span the configured %ds retry window after fast failures",
+			listRetries, listRetryDelay, listRetryWindow,
+		)
+	}
+	completeListRecoveryBudget := listRetryWindow
+	oneSlowSuccessBudget := 2*completeListRecoveryBudget + uploadSeconds + verifySeconds
+	if oneSlowSuccessBudget > perAssetSeconds {
+		t.Fatalf(
+			"one complete slow upload budget = %ds, exceeds per-asset deadline %ds",
+			oneSlowSuccessBudget, perAssetSeconds,
+		)
+	}
+	fastFailureRetryBudget := uploadSeconds + (postUploadVerifyAttempts+3)*listSeconds +
+		verifySeconds + (postUploadVerifyAttempts-1)*verifyRetryDelay + uploadRetryDelay
+	fastFailureRetryBudget += 2 * (completeListRecoveryBudget - listSeconds)
+	if fastFailureRetryBudget > perAssetSeconds {
+		t.Fatalf(
+			"fast-failure retry budget = %ds, exceeds per-asset deadline %ds",
+			fastFailureRetryBudget, perAssetSeconds,
+		)
+	}
+	finalListSeconds := completeListRecoveryBudget
 	completeAssetBudget := perAssetSeconds*len(requiredGiteeAssets) + finalListSeconds
 	if completeAssetBudget > overallSeconds {
 		t.Fatalf(
@@ -530,15 +748,16 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 		)
 	}
 
-	completeSyncBudget := tagSeconds + lookupSeconds + createSeconds + reconcileSeconds
+	childDeadlineReserveSeconds := shellDefaultInt(t, syncScript, "GITEE_CHILD_DEADLINE_RESERVE_SECONDS")
+	completeSyncBudget := tagSeconds + lookupSeconds + createSeconds + reconcileSeconds + childDeadlineReserveSeconds
 	if completeSyncBudget > syncSeconds {
 		t.Fatalf(
-			"complete sync budget = %ds (tag=%d + lookup=%d + create=%d + reconcile=%d), exceeds sync deadline %ds",
-			completeSyncBudget, tagSeconds, lookupSeconds, createSeconds, reconcileSeconds, syncSeconds,
+			"complete sync budget = %ds (tag=%d + lookup=%d + create=%d + reconcile=%d + child reserve=%d), exceeds sync deadline %ds",
+			completeSyncBudget, tagSeconds, lookupSeconds, createSeconds, reconcileSeconds, childDeadlineReserveSeconds, syncSeconds,
 		)
 	}
 
-	const workflowReserveMinutes = 5
+	const syncStepReserveMinutes = 4
 	releasePath := mustAbs(t, filepath.Join("..", "..", ".github", "workflows", "release.yml"))
 	releaseData, err := os.ReadFile(releasePath)
 	if err != nil {
@@ -550,18 +769,46 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 		"mirror-gitee-release:",
 		[]string{
 			"name: Check out sealed release source",
+			"name: Check out trusted release tooling",
+			"name: Fetch and verify sealed release tag",
 			"name: Restore finalized distribution files",
 			"name: Mirror release to Gitee (China)",
 		},
-		workflowReserveMinutes,
+		17,
 	)
 	releaseSyncStepSeconds := workflowTimeoutMinutesAfter(
 		t, string(releaseData), "mirror-gitee-release:", "name: Mirror release to Gitee (China)",
 	) * 60
-	if syncSeconds+workflowReserveMinutes*60 > releaseSyncStepSeconds {
+	if syncSeconds+syncStepReserveMinutes*60 > releaseSyncStepSeconds {
 		t.Fatalf(
 			"sync deadline %ds plus reserve exceeds release fallback step %ds",
 			syncSeconds, releaseSyncStepSeconds,
+		)
+	}
+
+	assertWorkflowBudget(
+		t,
+		string(releaseData),
+		"repair-channel:",
+		[]string{
+			"name: Check out trusted release tooling",
+			"name: Validate repair version",
+			"name: Verify immutable release authority",
+			"name: Check out sealed release source",
+			"name: Fetch and verify sealed release tag",
+			"name: Require successful Release workflow delivery",
+			"name: Download and verify immutable GitHub Release assets",
+			"name: Mirror release to Gitee (China)",
+		},
+		5,
+	)
+	repairSyncStepSeconds := workflowTimeoutMinutesAfter(
+		t, string(releaseData), "repair-channel:", "name: Mirror release to Gitee (China)",
+	) * 60
+	if syncSeconds+syncStepReserveMinutes*60 > repairSyncStepSeconds {
+		t.Fatalf(
+			"sync deadline %ds plus reserve exceeds repair step %ds",
+			syncSeconds, repairSyncStepSeconds,
 		)
 	}
 
@@ -731,6 +978,9 @@ func giteeAssetEnv(distDir, apiURL, retries string) []string {
 		"GITEE_RELEASE_ID=1",
 		"GITEE_CURL_CONNECT_TIMEOUT=2",
 		"GITEE_CURL_MAX_TIME=2",
+		"GITEE_LIST_RETRIES=2",
+		"GITEE_LIST_RETRY_DELAY=0",
+		"GITEE_LIST_RETRY_WINDOW_SECONDS=2",
 		"GITEE_UPLOAD_MAX_TIME=2",
 		"GITEE_UPLOAD_RETRIES="+retries,
 		"GITEE_UPLOAD_RETRY_DELAY=0",
@@ -747,14 +997,22 @@ type fakeGiteeAsset struct {
 }
 
 type fakeGiteeRelease struct {
-	mu                sync.Mutex
-	nextID            int
-	assets            map[int]fakeGiteeAsset
-	uploadCalls       map[string]int
-	dropFirstResponse bool
-	droppedResponse   bool
-	failUploads       bool
-	uploadDelay       time.Duration
+	mu                              sync.Mutex
+	nextID                          int
+	assets                          map[int]fakeGiteeAsset
+	uploadCalls                     map[string]int
+	dropFirstResponse               bool
+	droppedResponse                 bool
+	failUploads                     bool
+	uploadDelay                     time.Duration
+	rejectExpectContinue            bool
+	listFailuresRemaining           int
+	malformedListResponsesRemaining int
+	listErrorResponsesRemaining     int
+	listEmptyResponsesRemaining     int
+	listErrorResponsesAfterUpload   int
+	listEmptyResponsesAfterUpload   int
+	listCalls                       int
 }
 
 func newFakeGiteeRelease(dropFirstResponse, failUploads bool) *fakeGiteeRelease {
@@ -799,7 +1057,42 @@ func (f *fakeGiteeRelease) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (f *fakeGiteeRelease) list(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.listCalls++
+	if f.listFailuresRemaining > 0 {
+		f.listFailuresRemaining--
+		http.Error(w, "temporary Gitee list outage", http.StatusServiceUnavailable)
+		return
+	}
+	if f.listErrorResponsesRemaining > 0 {
+		f.listErrorResponsesRemaining--
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{}`)
+		return
+	}
+	if f.listEmptyResponsesRemaining > 0 {
+		f.listEmptyResponsesRemaining--
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]any{})
+		return
+	}
 	baseURL := requestBaseURL(r)
+	if f.malformedListResponsesRemaining > 0 {
+		f.malformedListResponsesRemaining--
+		for _, asset := range f.assets {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]any{
+				map[string]any{
+					"id":                   asset.id,
+					"name":                 asset.name,
+					"browser_download_url": fmt.Sprintf("%s/download/%d", baseURL, asset.id),
+				},
+				nil,
+			})
+			return
+		}
+		http.Error(w, "malformed-list fixture requires one asset", http.StatusInternalServerError)
+		return
+	}
 	rows := make([]map[string]any, 0, len(f.assets))
 	for _, asset := range f.assets {
 		rows = append(rows, map[string]any{
@@ -813,6 +1106,10 @@ func (f *fakeGiteeRelease) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *fakeGiteeRelease) upload(w http.ResponseWriter, r *http.Request) {
+	if f.rejectExpectContinue && r.Header.Get("Expect") != "" {
+		http.Error(w, "Expect: 100-continue is not supported", http.StatusExpectationFailed)
+		return
+	}
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -847,6 +1144,14 @@ func (f *fakeGiteeRelease) upload(w http.ResponseWriter, r *http.Request) {
 	id := f.nextID
 	f.nextID++
 	f.assets[id] = fakeGiteeAsset{id: id, name: header.Filename, data: data}
+	if f.listErrorResponsesAfterUpload > 0 {
+		f.listErrorResponsesRemaining += f.listErrorResponsesAfterUpload
+		f.listErrorResponsesAfterUpload = 0
+	}
+	if f.listEmptyResponsesAfterUpload > 0 {
+		f.listEmptyResponsesRemaining += f.listEmptyResponsesAfterUpload
+		f.listEmptyResponsesAfterUpload = 0
+	}
 	drop := f.dropFirstResponse && !f.droppedResponse
 	if drop {
 		f.droppedResponse = true
