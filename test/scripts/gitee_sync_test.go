@@ -300,7 +300,12 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/releases/tags/v1.2.3":
 			releaseMu.Lock()
 			releaseLookups++
+			lookupAttempt := releaseLookups
 			releaseMu.Unlock()
+			if lookupAttempt == 1 {
+				http.Error(w, "temporary Gitee outage", http.StatusServiceUnavailable)
+				return
+			}
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/releases":
 			if err := r.ParseMultipartForm(1 << 20); err != nil {
@@ -336,6 +341,8 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 		"GITEE_TAG_TIMEOUT_SECONDS=5",
 		"GITEE_GIT_TIMEOUT_SECONDS=3",
 		"GITEE_RELEASE_LOOKUP_MAX_TIME=2",
+		"GITEE_RELEASE_LOOKUP_RETRIES=2",
+		"GITEE_RELEASE_LOOKUP_RETRY_DELAY=0",
 		"GITEE_RELEASE_CREATE_MAX_TIME=2",
 		"GITEE_RECONCILE_TIMEOUT_SECONDS=20",
 		"GITEE_CHILD_DEADLINE_RESERVE_SECONDS=1",
@@ -357,8 +364,8 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 	}
 
 	releaseMu.Lock()
-	if releaseLookups != 1 || releaseCreates != 1 {
-		t.Errorf("release lookup/create calls = %d/%d, want 1/1", releaseLookups, releaseCreates)
+	if releaseLookups != 2 || releaseCreates != 1 {
+		t.Errorf("release lookup/create calls = %d/%d, want 2/1", releaseLookups, releaseCreates)
 	}
 	releaseMu.Unlock()
 	fake.mu.Lock()
