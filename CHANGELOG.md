@@ -6,6 +6,11 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **Name→ID resolution kept external contacts** — the shared contact resolver (`chat +dm`, `+broadcast`, …) no longer drops `search_contact_by_key_word` rows that carry only an `openDingTalkId` (external / cross-org contacts have an empty `userId`), so those people are found instead of reported missing or collapsed into a wrong single match; the display name also falls back through `nick`/`showName`/`flowerName`/`staffName`/`userName`.
+- **`chat +messages-resource-url` flag aliases** — the media download-URL shortcut now accepts `--msg-id` / `--open-message-id` as aliases for `--message-id` (matching the `openMessageId`/`msgId` output field), so agents chaining from a message list no longer hit "unknown flag".
+
 ## [1.0.54] - 2026-07-21
 
 This release promotes the validated `v1.0.54-beta.2` baseline to stable. It restores the default transport envelope for personal event output with opt-in flattening, plus Schema CLI path and plugin overlay compatibility fixes.

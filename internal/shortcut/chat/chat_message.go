@@ -714,15 +714,24 @@ var MessagesResourceURL = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型", Enum: []string{"mediaId"}},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "资源 ID（消息中的 mediaId）", Required: true},
-		{Name: "message-id", Type: shortcut.FlagString, Desc: "消息 openMessageId", Required: true},
+		{Name: "message-id", Type: shortcut.FlagString, Desc: "消息 openMessageId"},
+		{Name: "msg-id", Type: shortcut.FlagString, Desc: "--message-id 的别名", Hidden: true},
+		{Name: "open-message-id", Type: shortcut.FlagString, Desc: "--message-id 的别名", Hidden: true},
 		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
+	},
+	// message-id is required, but accept the natural aliases agents reach for
+	// (the message-list output field is openMessageId/msgId). Declared via a
+	// constraint rather than Required because a shortcut's Required check only
+	// looks at the primary flag name, so a hidden alias could not satisfy it.
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"message-id", "msg-id", "open-message-id"}},
 	},
 	Tips: []string{`dws chat +messages-resource-url --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("get_resource_download_url", map[string]any{
 			"resourceType":       rt.Str("type"),
 			"resourceId":         rt.Str("resource-id"),
-			"openMessageId":      rt.Str("message-id"),
+			"openMessageId":      rt.StrFirst("message-id", "msg-id", "open-message-id"),
 			"openConversationId": rt.Str("open-conversation-id"),
 		})
 	},
