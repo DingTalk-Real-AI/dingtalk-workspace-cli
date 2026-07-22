@@ -168,6 +168,7 @@ var (
 	runnerPreflightDocDownload          = (*runtimeRunner).preflightDocDownload
 	runnerCallTool                      = (*transport.Client).CallTool
 	runnerStdioEnsureInitialized        = (*transport.StdioClient).EnsureInitialized
+	runnerStdioListTools                = (*transport.StdioClient).ListTools
 	runnerStdioCallTool                 = (*transport.StdioClient).CallTool
 	runnerHandlePatAuthCheck            func(context.Context, *runtimeRunner, executor.Invocation, *apperrors.PATError, string, io.Writer) (executor.Result, error)
 	runnerRetryWithPatAuthRetry         func(context.Context, executor.Runner, executor.Invocation, *PatScopeError, string, io.Writer) (executor.Result, error)
@@ -235,7 +236,9 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 	// ~70ms on macOS; starting it here lets the load overlap with endpoint
 	// resolution and catalog loading below.
 	if prefetchToken {
-		go runnerGetCachedRuntimeToken(ctx)
+		go func() {
+			_, _ = runnerGetCachedRuntimeToken(ctx)
+		}()
 	}
 
 	if shouldUseDirectRuntime(invocation) {
@@ -483,7 +486,7 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
-		return r.executeStdioInvocation(ctx, invocation)
+		return r.executeStdioInvocationAtEndpoint(ctx, endpoint, invocation)
 	}
 
 	// Constructing the Cobra tree is also used for help, schema, and command
@@ -534,8 +537,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	authToken := ""
 	if hasPluginAuth {
 		authToken = pluginAuth.Token
-	} else {
-		authToken = r.resolveAuthToken(ctx)
+	} else if !invocation.DryRun && (r.globalFlags == nil || !r.globalFlags.Mock) {
+		var tokenErr error
+		authToken, tokenErr = r.resolveAuthToken(ctx)
+		if tokenErr != nil {
+			return executor.Result{}, tokenResolutionError(tokenErr)
+		}
 	}
 
 	var timeoutSec int
@@ -617,6 +624,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			}
 			return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 		}
+		if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, err, hasPluginAuth); handled {
+			if retryErr != nil {
+				runnerCaptureRuntimeFailure(invocation, err, retryErr)
+			}
+			return result, retryErr
+		}
 		runnerCaptureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
 	}
@@ -625,9 +638,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	callResult, err := runnerCallTool(tc, callCtx, endpoint, invocation.Tool, invocation.Params)
 	RecordTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
-		if isAuthError(err) {
+		if isRefreshableTransportAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
 				if overrideErr := fn(defaultConfigDir(), err); overrideErr != nil {
+					if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, overrideErr, hasPluginAuth); handled {
+						if retryErr != nil {
+							runnerCaptureRuntimeFailure(invocation, err, retryErr)
+						}
+						return result, retryErr
+					}
 					runnerCaptureRuntimeFailure(invocation, err, overrideErr)
 					return executor.Result{}, overrideErr
 				}
@@ -652,6 +671,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 				}
 				return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 			}
+			if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, editionErr, hasPluginAuth); handled {
+				if retryErr != nil {
+					runnerCaptureRuntimeFailure(invocation, editionErr, retryErr)
+				}
+				return result, retryErr
+			}
 			return executor.Result{}, editionErr
 		}
 	}
@@ -672,6 +697,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// patterns (PAT permission, gateway-auth) before generic handling.
 		if classify := edition.Get().ClassifyToolResult; classify != nil {
 			if hookErr := classify(callResult.Content); hookErr != nil {
+				if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, hookErr, hasPluginAuth); handled {
+					if retryErr != nil {
+						runnerCaptureRuntimeFailure(invocation, hookErr, retryErr)
+					}
+					return result, retryErr
+				}
 				runnerCaptureRuntimeFailure(invocation, hookErr, hookErr)
 				return executor.Result{}, hookErr
 			}
@@ -736,6 +767,14 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 // subprocess instead of the HTTP transport. This is used for plugin stdio
 // servers whose endpoints use the stdio:// scheme.
 func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	return r.executeStdioInvocationAtEndpoint(ctx, "", invocation)
+}
+
+func (r *runtimeRunner) executeStdioInvocationAtEndpoint(
+	ctx context.Context,
+	endpoint string,
+	invocation executor.Invocation,
+) (executor.Result, error) {
 	if invocation.DryRun {
 		return executor.Result{
 			Invocation: invocation,
@@ -748,10 +787,14 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 		}, nil
 	}
 
-	client, ok := LookupStdioClient(invocation.CanonicalProduct)
+	lookupKey := strings.Trim(strings.TrimPrefix(strings.TrimSpace(endpoint), stdioEndpointScheme), "/")
+	if lookupKey == "" {
+		lookupKey = invocation.CanonicalProduct
+	}
+	client, ok := LookupStdioClient(lookupKey)
 	if !ok {
 		return executor.Result{}, apperrors.NewInternal(
-			fmt.Sprintf("stdio client not found for %q", invocation.CanonicalProduct))
+			fmt.Sprintf("stdio client not found for %q", lookupKey))
 	}
 
 	callCtx := ctx
@@ -767,6 +810,27 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 			apperrors.WithReason("stdio_initialize_error"),
 		)
 	}
+
+	tools, err := runnerStdioListTools(client, callCtx)
+	if err != nil {
+		return executor.Result{}, apperrors.NewAPI(
+			fmt.Sprintf("stdio tools/list failed: %v", err),
+			apperrors.WithOperation("tools/list"),
+			apperrors.WithReason("stdio_tools_list_error"),
+		)
+	}
+	schema, ok := pluginToolInputSchema(tools, invocation.Tool)
+	if !ok {
+		return executor.Result{}, apperrors.NewValidation(
+			fmt.Sprintf("plugin tool %q is not declared by tools/list", invocation.Tool),
+			apperrors.WithReason("plugin_tool_not_found"),
+		)
+	}
+	normalizedParams, err := normalizePluginInputParams(invocation.Params, schema)
+	if err != nil {
+		return executor.Result{}, err
+	}
+	invocation.Params = normalizedParams
 
 	callResult, err := runnerStdioCallTool(client, callCtx, invocation.Tool, invocation.Params)
 	if err != nil {
@@ -796,67 +860,49 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 	}, nil
 }
 
-func (r *runtimeRunner) resolveAuthToken(ctx context.Context) string {
+func (r *runtimeRunner) resolveAuthToken(ctx context.Context) (string, error) {
 	explicitToken := ""
 	if r != nil && r.globalFlags != nil {
 		explicitToken = r.globalFlags.Token
 	}
-	if token := strings.TrimSpace(explicitToken); token != "" {
-		return token
-	}
-	if tp := edition.Get().TokenProvider; tp != nil {
-		token, _ := tp(ctx, func() (string, error) {
-			return resolveAccessTokenFromDir(ctx, defaultConfigDir())
-		})
-		return token
-	}
-	return getCachedRuntimeToken(ctx)
+	return resolveRuntimeAuthToken(ctx, explicitToken)
 }
 
-func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
-	if token := strings.TrimSpace(explicitToken); token != "" {
-		return token
+func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) (string, error) {
+	snapshot, err := runtimeTokenManager.Get(ctx, defaultConfigDir(), explicitToken)
+	if err != nil {
+		return "", err
 	}
-	// Use cached token to avoid repeated Keychain access (~70ms per call)
-	return getCachedRuntimeToken(ctx)
+	return snapshot.AccessToken, nil
 }
 
-// Cached token state for process lifetime
-var (
-	cachedRuntimeTokenMu sync.Mutex
-	cachedRuntimeTokens  = map[string]string{}
-)
-
-// getCachedRuntimeToken returns a cached access token, loading it only once per process.
-// This avoids repeated Keychain access which takes ~70ms each time.
-func getCachedRuntimeToken(ctx context.Context) string {
-	cacheKey := strings.TrimSpace(authpkg.RuntimeProfile())
-	if cacheKey == "" {
-		cacheKey = "__default__"
-	}
-	cachedRuntimeTokenMu.Lock()
-	if token := cachedRuntimeTokens[cacheKey]; token != "" {
-		cachedRuntimeTokenMu.Unlock()
-		return token
-	}
-	cachedRuntimeTokenMu.Unlock()
-
+// getCachedRuntimeToken is kept as the prefetch seam used by runner tests. The
+// cache itself lives exclusively in TokenManager.
+func getCachedRuntimeToken(ctx context.Context) (string, error) {
 	loadStart := time.Now()
 	defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+	return resolveRuntimeAuthToken(ctx, "")
+}
 
-	configDir := defaultConfigDir()
-	token, tokenErr := resolveAccessTokenFromDir(ctx, configDir)
-	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
-		slog.Error(tokenErr.Error())
-		return ""
+func tokenResolutionError(err error) error {
+	if err == nil {
+		return nil
 	}
-	if token == "" {
-		return ""
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
 	}
-	cachedRuntimeTokenMu.Lock()
-	cachedRuntimeTokens[cacheKey] = token
-	cachedRuntimeTokenMu.Unlock()
-	return token
+	if errors.Is(err, authpkg.ErrTokenDataNotFound) {
+		return apperrors.NewAuth(
+			"未登录，请先执行 dws auth login",
+			apperrors.WithReason("not_authenticated"),
+			apperrors.WithHint("运行 'dws auth login' 完成登录后重试"),
+			apperrors.WithActions("dws auth login"),
+			apperrors.WithCause(err),
+		)
+	}
+	// Keychain, parse, permission, lock, and refresh failures are real local or
+	// network errors. Preserve their cause instead of disguising them as logout.
+	return fmt.Errorf("resolve access token: %w", err)
 }
 
 // generateExecutionID returns a random 16-char hex string used to correlate
@@ -871,9 +917,7 @@ func generateExecutionID() string {
 // ResetRuntimeTokenCache clears the cached token, forcing a reload on next access.
 // This should be called after login/logout operations.
 func ResetRuntimeTokenCache() {
-	cachedRuntimeTokenMu.Lock()
-	defer cachedRuntimeTokenMu.Unlock()
-	cachedRuntimeTokens = map[string]string{}
+	runtimeTokenManager.Invalidate()
 }
 
 func newRuntimeContentScanner() safety.Scanner {

@@ -50,3 +50,9 @@ import (
 func Commands() []*cobra.Command {
 	return shortcut.Commands()
 }
+
+// BaseCommands returns only distribution-owned shortcuts for Schema and
+// interface generation.
+func BaseCommands() []*cobra.Command {
+	return shortcut.BuiltInCommands()
+}

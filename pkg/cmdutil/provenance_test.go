@@ -43,3 +43,19 @@ func TestMarkEnvelopeSourceNilDoesNotPanic(t *testing.T) {
 	t.Parallel()
 	MarkEnvelopeSource(nil)
 }
+
+func TestPluginSourceProvenance(t *testing.T) {
+	t.Parallel()
+	if IsPluginSourced(nil) {
+		t.Fatal("nil command should not be plugin sourced")
+	}
+	cmd := &cobra.Command{Use: "conference"}
+	MarkPluginSource(cmd)
+	if !IsPluginSourced(cmd) || IsEnvelopeSourced(cmd) {
+		t.Fatalf("plugin source annotation = %#v", cmd.Annotations)
+	}
+	if got := cmd.Annotations[SourceAnnotation]; got != SourcePlugin {
+		t.Fatalf("SourceAnnotation = %q, want %q", got, SourcePlugin)
+	}
+	MarkPluginSource(nil)
+}

@@ -53,8 +53,6 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-[ -z "$EXPECTED_VERSION" ] || need_cmd strings
-
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dws-package-verify-XXXXXX")"
 HOME_AGENT_PARENTS="
 .claude
@@ -145,8 +143,8 @@ verify_npm() {
   if [ -n "$EXPECTED_VERSION" ]; then
     vendor_bin="$npm_prefix/lib/node_modules/dingtalk-workspace-cli/vendor/dws"
     need_file "$vendor_bin"
-    strings "$vendor_bin" | grep -Fqx "v$EXPECTED_VERSION" || \
-      err "npm-installed binary does not embed expected version v$EXPECTED_VERSION"
+    LC_ALL=C grep -aFq "v$EXPECTED_VERSION" "$vendor_bin" || \
+      err "npm-installed binary does not contain expected version marker v$EXPECTED_VERSION"
     EXPECTED_VERSION="$EXPECTED_VERSION" node -e '
       const pkg = require(process.argv[1]);
       if (pkg.version !== process.env.EXPECTED_VERSION) process.exit(1);
@@ -193,8 +191,8 @@ verify_brew() {
   [ -x "$prefix/bin/dws" ] || err "brew install did not create $prefix/bin/dws"
   "$prefix/bin/dws" --help >/dev/null
   if [ -n "$EXPECTED_VERSION" ]; then
-    strings "$prefix/bin/dws" | grep -Fqx "v$EXPECTED_VERSION" || \
-      err "Homebrew-installed binary does not embed expected version v$EXPECTED_VERSION"
+    LC_ALL=C grep -aFq "v$EXPECTED_VERSION" "$prefix/bin/dws" || \
+      err "Homebrew-installed binary does not contain expected version marker v$EXPECTED_VERSION"
   fi
   need_file "$prefix/share/dingtalk-workspace-cli-local/skills/dws/SKILL.md"
 }

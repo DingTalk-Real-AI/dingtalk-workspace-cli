@@ -50,9 +50,9 @@ func TestCrossPlatformCoverageRunnerRemainingRoutingCoverage(t *testing.T) {
 
 	inv := executor.Invocation{CanonicalProduct: "product", Tool: "tool"}
 	prefetched := make(chan struct{}, 1)
-	runnerGetCachedRuntimeToken = func(context.Context) string {
+	runnerGetCachedRuntimeToken = func(context.Context) (string, error) {
 		prefetched <- struct{}{}
-		return ""
+		return "", nil
 	}
 	r := &runtimeRunner{
 		loader:    cli.CatalogLoaderFrom(cli.Catalog{}, wantErr),
@@ -197,7 +197,7 @@ func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
 		return nil
 	}
 
-	authErr := apperrors.NewAuth("expired")
+	authErr := apperrors.NewAuth("expired", apperrors.WithReason("http_401"))
 	runnerCallTool = func(*transport.Client, context.Context, string, string, map[string]any) (transport.ToolCallResult, error) {
 		return transport.ToolCallResult{}, authErr
 	}
@@ -290,10 +290,12 @@ func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
 
 func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *testing.T) {
 	oldStdioInit := runnerStdioEnsureInitialized
+	oldStdioList := runnerStdioListTools
 	oldStdioCall := runnerStdioCallTool
 	oldEdition := edition.Get()
 	t.Cleanup(func() {
 		runnerStdioEnsureInitialized = oldStdioInit
+		runnerStdioListTools = oldStdioList
 		runnerStdioCallTool = oldStdioCall
 		edition.Override(oldEdition)
 		StopAllStdioClients()
@@ -309,6 +311,14 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 		t.Fatalf("stdio initialize error = %v", err)
 	}
 	runnerStdioEnsureInitialized = func(*transport.StdioClient, context.Context) error { return nil }
+	runnerStdioListTools = func(*transport.StdioClient, context.Context) (transport.ToolsListResult, error) {
+		return transport.ToolsListResult{
+			Tools: []transport.ToolDescriptor{{
+				Name:        "tool",
+				InputSchema: map[string]any{"type": "object"},
+			}},
+		}, nil
+	}
 	runnerStdioCallTool = func(*transport.StdioClient, context.Context, string, map[string]any) (transport.ToolCallResult, error) {
 		return transport.ToolCallResult{}, wantErr
 	}
@@ -327,21 +337,31 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 	if got, err := r.executeStdioInvocation(context.Background(), inv); err != nil || !got.Invocation.Implemented {
 		t.Fatalf("stdio success = %#v, %v", got, err)
 	}
+	RegisterStdioClient("plugin/server-key", client)
+	overlayIDInvocation := inv
+	overlayIDInvocation.CanonicalProduct = "overlay-id"
+	if got, err := r.executeInvocation(
+		context.Background(),
+		"stdio://plugin/server-key",
+		overlayIDInvocation,
+	); err != nil || !got.Invocation.Implemented {
+		t.Fatalf("stdio endpoint-key lookup = %#v, %v", got, err)
+	}
 
 	r.globalFlags.Token = " explicit "
-	if got := r.resolveAuthToken(context.Background()); got != "explicit" {
-		t.Fatalf("explicit auth token = %q", got)
+	if got, err := r.resolveAuthToken(context.Background()); err != nil || got != "explicit" {
+		t.Fatalf("explicit auth token = %q, %v", got, err)
 	}
 	edition.Override(&edition.Hooks{TokenProvider: func(_ context.Context, fallback func() (string, error)) (string, error) {
 		_, _ = fallback()
 		return "provided", nil
 	}})
 	r.globalFlags.Token = ""
-	if got := r.resolveAuthToken(context.Background()); got != "provided" {
-		t.Fatalf("provided auth token = %q", got)
+	if got, err := r.resolveAuthToken(context.Background()); err != nil || got != "provided" {
+		t.Fatalf("provided auth token = %q, %v", got, err)
 	}
-	if got := resolveRuntimeAuthToken(context.Background(), " runtime "); got != "runtime" {
-		t.Fatalf("runtime explicit token = %q", got)
+	if got, err := resolveRuntimeAuthToken(context.Background(), " runtime "); err != nil || got != "runtime" {
+		t.Fatalf("runtime explicit token = %q, %v", got, err)
 	}
 
 	t.Setenv(envDWSChannel, "channel")

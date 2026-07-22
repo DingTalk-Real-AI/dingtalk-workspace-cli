@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -69,7 +70,8 @@ var (
 	rootPluginDescriptors           = (*plugin.Plugin).ToServerDescriptors
 	rootPluginStdioClients          = (*plugin.Plugin).StdioClients
 	rootRegisterPluginHTTPServer    = registerPluginHTTPServer
-	rootRegisterStdioManifest       = registerStdioServerFromManifest
+	rootPluginStdioDescriptor       = stdioServerDescriptorFromManifest
+	rootRegisterResolvedStdioServer = registerResolvedStdioServer
 	rootPluginLoadHooks             = (*plugin.Plugin).LoadHooks
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
@@ -306,13 +308,28 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 	if len(ctx) > 0 && ctx[0] != nil {
 		rootCtx = ctx[0]
 	}
-	return NewRootCommandWithEngine(rootCtx, nil)
+	return newRootCommandWithEngine(rootCtx, nil, true)
+}
+
+// NewSchemaSourceRootCommand constructs the distribution-owned command tree
+// used by Schema generation and command-surface policy. Installed plugins and
+// user-defined shortcuts must not change the reviewed embedded Schema.
+func NewSchemaSourceRootCommand(ctx ...context.Context) *cobra.Command {
+	var rootCtx context.Context
+	if len(ctx) > 0 && ctx[0] != nil {
+		rootCtx = ctx[0]
+	}
+	return newRootCommandWithEngine(rootCtx, nil, false)
 }
 
 // NewRootCommandWithEngine constructs the root CLI command with an
 // optional pipeline engine for input correction. When engine is nil,
 // no pipeline processing is applied.
 func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
+	return newRootCommandWithEngine(rootCtx, engine, true)
+}
+
+func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -396,15 +413,8 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	}
 	root.AddCommand(utilityCommands...)
 
-	root.AddCommand(newLegacyPublicCommands(runner, patCaller)...)
+	root.AddCommand(newLegacyPublicCommands(runner, patCaller, loadRuntimeExtensions)...)
 	root.AddCommand(newLegacyHiddenCommands(runner)...)
-
-	// --- Plugin loading: runs AFTER legacy commands so plugin endpoints can
-	// be appended on top of the static endpoint registry.
-	pluginCmds := rootLoadPlugins(engine, runner)
-	if len(pluginCmds) > 0 {
-		addPluginCommandsSafe(root, pluginCmds)
-	}
 
 	// PAT authorization commands (open-source core)
 	pat.RegisterCommands(root, patCaller)
@@ -413,6 +423,15 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		caller := newToolCallerAdapter(runner, flags)
 		fn(root, caller)
 		deduplicateCommands(root)
+	}
+	if loadRuntimeExtensions {
+		// Resolve plugins only after the complete distribution command tree is
+		// present, so endpoint and Cobra conflict checks see PAT and edition
+		// commands as well as the open-source base.
+		pluginCmds := rootLoadPlugins(root, engine, runner)
+		if len(pluginCmds) > 0 {
+			addPluginCommandsSafe(root, pluginCmds)
+		}
 	}
 	hideNonDirectRuntimeCommands(root)
 	configureRootHelp(root)
@@ -631,12 +650,17 @@ var reservedCommands = map[string]bool{
 	"schema": true, "mcp": true, "help": true,
 }
 
+var replaceablePluginFallbacks = map[string]bool{
+	"conference": true,
+}
+
 // addPluginCommandsSafe registers plugin commands with conflict detection.
 //
 // Rules:
 //   - Plugin vs reserved (auth/plugin/cache/...) → reject, warn
 //   - Plugin vs plugin (same name)               → reject later one, warn
-//   - Plugin vs Market dynamic command            → allow, plugin wins
+//   - Plugin vs hidden compatibility fallback     → allow, plugin wins
+//   - Plugin vs visible distribution command      → reject, warn
 func addPluginCommandsSafe(root *cobra.Command, pluginCmds []*cobra.Command) {
 	// Build index of existing commands before plugin registration.
 	existing := make(map[string]bool)
@@ -664,16 +688,46 @@ func addPluginCommandsSafe(root *cobra.Command, pluginCmds []*cobra.Command) {
 		}
 		pluginSeen[name] = true
 
-		// Rule 3: plugin vs Market — plugin wins, remove the old one.
+		// An alias must not bypass the same protections applied to primary
+		// plugin command names or shadow another root command.
+		filteredAliases := make([]string, 0, len(cmd.Aliases))
+		for _, rawAlias := range cmd.Aliases {
+			alias := strings.TrimSpace(rawAlias)
+			if alias == "" || alias == name || reservedCommands[alias] ||
+				existing[alias] || pluginSeen[alias] {
+				if alias != "" {
+					slog.Warn("plugin: command alias conflicts with an existing command, skipping",
+						"command", name, "alias", alias)
+				}
+				continue
+			}
+			pluginSeen[alias] = true
+			filteredAliases = append(filteredAliases, alias)
+		}
+		cmd.Aliases = filteredAliases
+
+		// Rule 3: an installed plugin may replace a hidden compatibility
+		// fallback (for example conference), but never a visible distribution
+		// command that participates in the reviewed base interface.
 		if existing[name] {
 			for _, old := range root.Commands() {
 				if old.Name() == name {
+					if !old.Hidden || !replaceablePluginFallbacks[name] ||
+						cmdutil.IsPluginSourced(old) {
+						slog.Warn("plugin: command conflicts with a visible distribution command, skipping",
+							"command", name)
+						cmd = nil
+						break
+					}
 					root.RemoveCommand(old)
-					slog.Debug("plugin: overriding Market command",
+					slog.Debug("plugin: overriding hidden compatibility command",
 						"command", name)
 					break
 				}
 			}
+		}
+		if cmd == nil {
+			continue
 		}
 
 		root.AddCommand(cmd)
@@ -811,7 +865,21 @@ func CloseFileLogger() {
 // loadPlugins registers versioned plugin manifests, stdio clients, hooks, and
 // skills. It deliberately does not initialize MCP transports or call
 // tools/list while constructing the command tree.
-func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
+type pluginServerCandidate struct {
+	owner       *plugin.Plugin
+	order       int
+	descriptor  mcptypes.ServerDescriptor
+	stdioClient *plugin.StdioServerClient
+}
+
+type pluginIdentityOwner struct {
+	plugin    *plugin.Plugin
+	serverKey string
+	rootName  string
+	shareable bool
+}
+
+func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
 	// 0a. Inject plugin config values from settings.json as environment
@@ -838,25 +906,34 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 
 	// 2. Load dev plugins (registered via `dws plugin dev`)
 	devPlugins := rootPluginLoadDev(pluginLoader)
+	sortPluginsForRegistration(userPlugins)
+	sortPluginsForRegistration(devPlugins)
 
 	allPlugins := append(userPlugins, devPlugins...)
+	descriptorsByPlugin := make(map[*plugin.Plugin][]mcptypes.ServerDescriptor, len(allPlugins))
 
-	// 3. Register HTTP descriptors and authentication from the manifest.
-	for _, p := range allPlugins {
-		for _, srv := range rootPluginDescriptors(p) {
-			rootRegisterPluginHTTPServer(srv)
+	// 3. Resolve every descriptor once, then choose identity winners before
+	// mutating endpoint, auth, or stdio-client registries. This keeps the
+	// visible command and its transport owned by the same plugin.
+	candidates := collectPluginServerCandidates(allPlugins, userCtx)
+	accepted := selectPluginServerCandidates(root, candidates)
+	for _, candidate := range accepted {
+		if candidate.stdioClient != nil {
+			rootRegisterResolvedStdioServer(
+				candidate.owner,
+				*candidate.stdioClient,
+				candidate.descriptor,
+			)
+		} else {
+			rootRegisterPluginHTTPServer(candidate.descriptor)
 		}
+		descriptorsByPlugin[candidate.owner] = append(
+			descriptorsByPlugin[candidate.owner],
+			candidate.descriptor,
+		)
 	}
 
-	// 4. Register stdio descriptors and unstarted clients. The subprocess is
-	// started and initialized only when a command is actually executed.
-	for _, p := range allPlugins {
-		for _, sc := range rootPluginStdioClients(p, userCtx) {
-			rootRegisterStdioManifest(p, sc)
-		}
-	}
-
-	// 5. Register plugin hooks into pipeline engine
+	// 4. Register plugin hooks into pipeline engine
 	if engine != nil {
 		for _, p := range allPlugins {
 			hooksCfg, err := rootPluginLoadHooks(p)
@@ -874,7 +951,7 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 		}
 	}
 
-	// 7. Sync plugin skills to agent directories
+	// 5. Sync plugin skills to agent directories
 	rootPluginSyncSkills(allPlugins)
 
 	if len(allPlugins) > 0 {
@@ -884,11 +961,228 @@ func loadPlugins(engine *pipeline.Engine, _ executor.Runner) []*cobra.Command {
 		)
 	}
 
-	return nil
+	var pluginCommands []*cobra.Command
+	for _, p := range allPlugins {
+		// Build each plugin independently. addPluginCommandsSafe deliberately
+		// resolves cross-plugin root conflicts with first-plugin-wins semantics.
+		pluginCommands = append(pluginCommands, buildPluginCommands(descriptorsByPlugin[p], runner, root)...)
+	}
+	return pluginCommands
+}
+
+func sortPluginsForRegistration(plugins []*plugin.Plugin) {
+	sort.SliceStable(plugins, func(i, j int) bool {
+		left := strings.TrimSpace(plugins[i].Manifest.Name) + "\x00" + strings.TrimSpace(plugins[i].Root)
+		right := strings.TrimSpace(plugins[j].Manifest.Name) + "\x00" + strings.TrimSpace(plugins[j].Root)
+		return left < right
+	})
+}
+
+func collectPluginServerCandidates(
+	plugins []*plugin.Plugin,
+	userCtx *plugin.UserContext,
+) []pluginServerCandidate {
+	var candidates []pluginServerCandidate
+	for order, owner := range plugins {
+		for _, descriptor := range rootPluginDescriptors(owner) {
+			candidates = append(candidates, pluginServerCandidate{
+				owner:      owner,
+				order:      order,
+				descriptor: descriptor,
+			})
+		}
+		for _, stdioClient := range rootPluginStdioClients(owner, userCtx) {
+			descriptor, ok := rootPluginStdioDescriptor(owner, stdioClient)
+			if !ok {
+				continue
+			}
+			clientCopy := stdioClient
+			candidates = append(candidates, pluginServerCandidate{
+				owner:       owner,
+				order:       order,
+				descriptor:  descriptor,
+				stdioClient: &clientCopy,
+			})
+		}
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].order != candidates[j].order {
+			return candidates[i].order < candidates[j].order
+		}
+		left := strings.TrimSpace(candidates[i].descriptor.Key)
+		right := strings.TrimSpace(candidates[j].descriptor.Key)
+		if left != right {
+			return left < right
+		}
+		return candidates[i].stdioClient == nil && candidates[j].stdioClient != nil
+	})
+	return candidates
+}
+
+func selectPluginServerCandidates(
+	root *cobra.Command,
+	candidates []pluginServerCandidate,
+) []pluginServerCandidate {
+	distributionProducts := DirectRuntimeProductIDs()
+	owners := make(map[string]pluginIdentityOwner)
+	for identity := range distributionProducts {
+		if replaceablePluginFallbacks[identity] {
+			continue
+		}
+		owners[identity] = pluginIdentityOwner{serverKey: "distribution"}
+	}
+
+	accepted := make([]pluginServerCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		descriptor := candidate.descriptor
+		if descriptor.CLI.Skip {
+			continue
+		}
+		if reason := unsupportedPluginDescriptor(root, descriptor); reason != "" {
+			slog.Warn("plugin: descriptor CLI semantics are unsupported, skipping",
+				"plugin", candidate.owner.Manifest.Name,
+				"server", descriptor.Key,
+				"field", reason)
+			continue
+		}
+		if pluginDescriptorConflictsWithDistribution(root, descriptor, distributionProducts) {
+			continue
+		}
+		claims := pluginDescriptorIdentityClaims(descriptor)
+		conflict := ""
+		for identity, shareable := range claims {
+			existing, exists := owners[identity]
+			if !exists {
+				continue
+			}
+			rootName := pluginDescriptorRootName(descriptor)
+			if shareable && existing.shareable &&
+				existing.plugin == candidate.owner &&
+				existing.rootName == rootName {
+				continue
+			}
+			conflict = identity
+			break
+		}
+		if conflict != "" {
+			slog.Warn("plugin: descriptor identity already owned, skipping",
+				"plugin", candidate.owner.Manifest.Name,
+				"server", descriptor.Key,
+				"identity", conflict)
+			continue
+		}
+		rootName := pluginDescriptorRootName(descriptor)
+		for identity, shareable := range claims {
+			if existing, exists := owners[identity]; exists &&
+				shareable && existing.shareable &&
+				existing.plugin == candidate.owner &&
+				existing.rootName == rootName {
+				continue
+			}
+			owners[identity] = pluginIdentityOwner{
+				plugin:    candidate.owner,
+				serverKey: descriptor.Key,
+				rootName:  rootName,
+				shareable: shareable,
+			}
+		}
+		accepted = append(accepted, candidate)
+	}
+	return accepted
+}
+
+func pluginDescriptorIdentityClaims(descriptor mcptypes.ServerDescriptor) map[string]bool {
+	claims := make(map[string]bool)
+	canonicalID := firstNonEmptyPluginString(descriptor.CLI.ID, descriptor.Key)
+	if canonicalID != "" {
+		claims[canonicalID] = false
+	}
+	for _, identity := range append(
+		[]string{pluginDescriptorRootName(descriptor)},
+		descriptor.CLI.Aliases...,
+	) {
+		identity = strings.TrimSpace(identity)
+		if identity == "" {
+			continue
+		}
+		if _, exists := claims[identity]; !exists {
+			claims[identity] = true
+		}
+	}
+	return claims
+}
+
+func pluginDescriptorRootName(descriptor mcptypes.ServerDescriptor) string {
+	return firstNonEmptyPluginString(
+		descriptor.CLI.Command,
+		descriptor.CLI.ID,
+		descriptor.Key,
+	)
+}
+
+func pluginDescriptorConflictsWithDistribution(
+	root *cobra.Command,
+	descriptor mcptypes.ServerDescriptor,
+	distributionProducts map[string]bool,
+) bool {
+	candidates := append(
+		[]string{
+			firstNonEmptyPluginString(descriptor.CLI.ID, descriptor.Key),
+			pluginDescriptorRootName(descriptor),
+		},
+		descriptor.CLI.Aliases...,
+	)
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if !reservedCommands[candidate] && replaceablePluginFallbacks[candidate] {
+			// The distribution ships only a hidden compatibility fallback for
+			// this name; plugins may claim it and the later command merge in
+			// addPluginCommandsSafe still rejects visible non-fallback owners.
+			continue
+		}
+		if reservedCommands[candidate] ||
+			distributionProducts[candidate] ||
+			distributionRootOwns(root, candidate) {
+			slog.Warn("plugin: descriptor conflicts with a distribution command, skipping",
+				"plugin", descriptor.DisplayName,
+				"server", descriptor.Key,
+				"identity", candidate)
+			return true
+		}
+	}
+	return false
+}
+
+func distributionRootOwns(root *cobra.Command, name string) bool {
+	if root == nil {
+		return false
+	}
+	for _, command := range root.Commands() {
+		if cmdutil.IsPluginSourced(command) {
+			continue
+		}
+		if command.Name() == name {
+			if command.Hidden && replaceablePluginFallbacks[name] {
+				return false
+			}
+			return true
+		}
+		for _, alias := range command.Aliases {
+			if strings.TrimSpace(alias) == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func registerPluginHTTPServer(srv mcptypes.ServerDescriptor) {
 	AppendDynamicServer(srv)
+	productID := firstNonEmptyPluginString(srv.CLI.ID, srv.Key)
+	ClearPluginAuth(productID)
 	if len(srv.AuthHeaders) > 0 {
 		registerPluginAuthFromHeaders(srv)
 	}
@@ -917,10 +1211,7 @@ func registerPluginAuthFromHeaders(srv mcptypes.ServerDescriptor) {
 		host := parsed.Hostname()
 		trustedDomains = []string{host, "*." + host}
 	}
-	productID := strings.TrimSpace(srv.CLI.ID)
-	if productID == "" {
-		productID = srv.Key
-	}
+	productID := firstNonEmptyPluginString(srv.CLI.ID, srv.Key)
 	RegisterPluginAuth(productID, &PluginAuth{
 		Token:          authToken,
 		ExtraHeaders:   extraHeaders,

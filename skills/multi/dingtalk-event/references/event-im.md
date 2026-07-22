@@ -15,25 +15,25 @@ dws auth login
 查看事件 schema：
 
 ```bash
-dws event schema user_im_message_receive_at
-dws event schema user_im_message_receive_o2o
-dws event schema user_im_message_receive_group
-dws event schema user_im_message_receive_user
-dws event schema user_im_message_receive_o2o_all
-dws event schema user_im_message_receive_group_all
-dws event schema user_im_message_read_o2o
-dws event schema user_im_message_read_group
-dws event schema user_im_message_recall_o2o
-dws event schema user_im_message_recall_group
-dws event schema user_im_message_reaction_o2o
-dws event schema user_im_message_reaction_group
-dws event schema user_im_group_updated
-dws event schema user_im_group_member_added
-dws event schema user_im_group_member_exited
-dws event schema user_im_group_disbanded
+dws event schema user_im_message_receive_at --flatten
+dws event schema user_im_message_receive_o2o --flatten
+dws event schema user_im_message_receive_group --flatten
+dws event schema user_im_message_receive_user --flatten
+dws event schema user_im_message_receive_o2o_all --flatten
+dws event schema user_im_message_receive_group_all --flatten
+dws event schema user_im_message_read_o2o --flatten
+dws event schema user_im_message_read_group --flatten
+dws event schema user_im_message_recall_o2o --flatten
+dws event schema user_im_message_recall_group --flatten
+dws event schema user_im_message_reaction_o2o --flatten
+dws event schema user_im_message_reaction_group --flatten
+dws event schema user_im_group_updated --flatten
+dws event schema user_im_group_member_added --flatten
+dws event schema user_im_group_member_exited --flatten
+dws event schema user_im_group_disbanded --flatten
 ```
 
-schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 当前固定为 `.`。
+schema 默认 JSON。Agent 使用 `--flatten` schema，业务字段在 `schema.properties`，`jq_root_path` 为 `.`。不传 `--flatten` 时查看兼容 transport envelope，其 `jq_root_path` 为 `.data | fromjson`。
 
 ## Event catalog
 
@@ -76,87 +76,102 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 
 
 ```bash
 # 被 @ 消息
-dws event consume user_im_message_receive_at -f ndjson
+dws event consume user_im_message_receive_at --flatten -f ndjson
 
 # 指定单聊消息
 dws event consume user_im_message_receive_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 通过 openDingtalkId 指定单聊对端
 dws event consume user_im_message_receive_o2o \
   --open-dingtalk-id open-user-1 \
+  --flatten \
   -f ndjson
 
 # 指定群消息
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定发送人的消息（单聊和群聊）
 dws event consume user_im_message_receive_user \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 通过 openDingtalkId 指定发送人
 dws event consume user_im_message_receive_user \
   --open-dingtalk-id open-user-1 \
+  --flatten \
   -f ndjson
 
 # 所有单聊消息
-dws event consume user_im_message_receive_o2o_all -f ndjson
+dws event consume user_im_message_receive_o2o_all --flatten -f ndjson
 
 # 所有群聊消息
-dws event consume user_im_message_receive_group_all -f ndjson
+dws event consume user_im_message_receive_group_all --flatten -f ndjson
 
 # 指定单聊已读事件
 dws event consume user_im_message_read_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 指定群聊已读事件
 dws event consume user_im_message_read_group \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定单聊撤回事件
 dws event consume user_im_message_recall_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 指定群聊撤回事件
 dws event consume user_im_message_recall_group \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定单聊表情回应事件
 dws event consume user_im_message_reaction_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 指定群聊表情回应事件
 dws event consume user_im_message_reaction_group \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定群标题变更
 dws event consume user_im_group_updated \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定群有成员加入
 dws event consume user_im_group_member_added \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定群有成员退出
 dws event consume user_im_group_member_exited \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定群解散
 dws event consume user_im_group_disbanded \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 ```
 
@@ -171,6 +186,7 @@ dws event consume \
   user_im_message_read_o2o \
   user_im_message_recall_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 同一群的消息和群生命周期
@@ -179,6 +195,7 @@ dws event consume \
   user_im_group_updated \
   user_im_group_disbanded \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 ```
 
@@ -202,22 +219,22 @@ dws event consume \
 
 | 事件码 | 自测参数 | 触发方式 |
 |---|---|---|
-| `user_im_message_receive_at` | `--duration 10m -f ndjson` | 让任意可触达用户在群里 @ 当前登录用户 |
-| `user_im_message_receive_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
-| `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
-| `user_im_message_receive_user` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 让指定用户分别在单聊或共同群聊中发送消息 |
-| `user_im_message_receive_o2o_all` | `--duration 10m -f ndjson` | 让任意其他用户给当前登录用户发送单聊消息 |
-| `user_im_message_receive_group_all` | `--duration 10m -f ndjson` | 让任意其他用户在当前登录用户所在的任意群发送消息 |
-| `user_im_message_read_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 当前用户给对端发送单聊消息，再让对端打开并阅读 |
-| `user_im_message_read_group` | `--group <openConversationId> --duration 10m -f ndjson` | 当前用户在群内发送消息，再让群成员打开并阅读 |
-| `user_im_message_recall_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 在指定单聊中发送并撤回一条消息 |
-| `user_im_message_recall_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中发送并撤回一条消息 |
-| `user_im_message_reaction_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 在指定单聊中给消息添加表情回应 |
-| `user_im_message_reaction_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中给消息添加表情回应 |
-| `user_im_group_updated` | `--group <openConversationId> --duration 10m -f ndjson` | 修改测试群的群标题 |
-| `user_im_group_member_added` | `--group <openConversationId> --duration 10m -f ndjson` | 邀请一名测试成员加入测试群 |
-| `user_im_group_member_exited` | `--group <openConversationId> --duration 10m -f ndjson` | 让一名测试成员主动退出测试群 |
-| `user_im_group_disbanded` | `--group <openConversationId> --duration 10m -f ndjson` | 确认是可销毁测试群后再解散；该操作不可逆 |
+| `user_im_message_receive_at` | `--flatten --duration 10m -f ndjson` | 让任意可触达用户在群里 @ 当前登录用户 |
+| `user_im_message_receive_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--flatten --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
+| `user_im_message_receive_group` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
+| `user_im_message_receive_user` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--flatten --duration 10m -f ndjson` | 让指定用户分别在单聊或共同群聊中发送消息 |
+| `user_im_message_receive_o2o_all` | `--flatten --duration 10m -f ndjson` | 让任意其他用户给当前登录用户发送单聊消息 |
+| `user_im_message_receive_group_all` | `--flatten --duration 10m -f ndjson` | 让任意其他用户在当前登录用户所在的任意群发送消息 |
+| `user_im_message_read_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--flatten --duration 10m -f ndjson` | 当前用户给对端发送单聊消息，再让对端打开并阅读 |
+| `user_im_message_read_group` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 当前用户在群内发送消息，再让群成员打开并阅读 |
+| `user_im_message_recall_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--flatten --duration 10m -f ndjson` | 在指定单聊中发送并撤回一条消息 |
+| `user_im_message_recall_group` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 在指定群聊中发送并撤回一条消息 |
+| `user_im_message_reaction_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--flatten --duration 10m -f ndjson` | 在指定单聊中给消息添加表情回应 |
+| `user_im_message_reaction_group` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 在指定群聊中给消息添加表情回应 |
+| `user_im_group_updated` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 修改测试群的群标题 |
+| `user_im_group_member_added` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 邀请一名测试成员加入测试群 |
+| `user_im_group_member_exited` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 让一名测试成员主动退出测试群 |
+| `user_im_group_disbanded` | `--group <openConversationId> --flatten --duration 10m -f ndjson` | 确认是可销毁测试群后再解散；该操作不可逆 |
 
 单事件以 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 为就绪标志；多事件以 `[event] ready event_count=<n> bus_pid=<pid>` 为整体就绪标志。父进程等对应 ready 行后再处理 stdout。stdout 每行是一个扁平事件 JSON。
 
@@ -225,7 +242,8 @@ dws event consume \
 
 | 参数 | 用途 |
 |---|---|
-| `-f ndjson` | 推荐输出，一行一个事件 JSON |
+| `--flatten` | 将 `ndjson/json/pretty` 的默认 transport envelope（或原 compact processor）投影为 Agent 可直接读取的顶层业务字段；不能与 `-f raw` 或 `--debug-raw-events` 同时使用 |
+| `-f ndjson` | 控制序列化为一行一个 JSON；不改变数据结构 |
 | `-f json` | 人工查看单条或少量样本；必须配合 `--max-events` 或 `--duration` |
 | `--max-events <n>` | 收到 N 条后退出 |
 | `--duration <duration>` | 到时退出，例如 `30s`、`10m` |
@@ -237,11 +255,11 @@ dws event consume \
 | `--filter-json <json>` | 使用个人事件 Filter DSL 过滤 |
 | `--debug-raw-events` | 单事件联调用：绕过本地过滤，输出当前 personal stream 实际收到的可解析事件 |
 
-正常 Agent 消费不要使用 `--debug-raw-events`。它会输出当前连接收到的所有可解析事件，只用于判断服务端是否推到了本机连接。
+正常 Agent 消费不要使用 `--debug-raw-events`。它会输出当前连接收到的所有可解析事件，只用于判断服务端是否推到了本机连接，并且不能与 `--flatten` 同时使用。
 
 ## Output parsing
 
-`-f ndjson` 的 stdout 每行就是一个扁平业务事件对象。消息接收事件常见顶层字段：
+Agent 使用 `--flatten -f ndjson`，stdout 每行是一个扁平业务事件对象。消息接收事件常见顶层字段：
 
 | 字段 | 说明 |
 |---|---|
@@ -257,7 +275,7 @@ dws event consume \
 | `create_time` | 消息创建时间 |
 | `event_time` | 消息事件时间戳 |
 
-直接按顶层字段解析，不要使用 `fromjson`，也不要依赖内部 transport payload 路径。图片、文件等媒体消息的 `content` 可能是可读描述；需要实际媒体文件时调用 `dws chat message download-media`。
+在 `--flatten` 模式下直接按顶层字段解析，不要再使用 `fromjson` 或内部 payload 路径。不传 `--flatten` 时保持兼容 transport envelope，字段为 `type/event_type/data/headers`，业务 payload 需从 `.data | fromjson` 读取。图片、文件等媒体消息的 `content` 可能是可读描述；需要实际媒体文件时调用 `dws chat message download-media`。
 
 所有动作事件都包含顶层 `type`、`event_id`、`timestamp`、`subscribe_id`、`message_id`、`conversation_id`、`sender`、`sender_open_dingtalk_id` 和 `event_time`。各类动作的专有字段如下：
 
@@ -291,6 +309,7 @@ dws event consume \
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
   --query "报警,故障" \
+  --flatten \
   -f ndjson
 ```
 

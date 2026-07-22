@@ -127,6 +127,10 @@ type Shortcut struct {
 	Tips []string
 	// Hidden hides the command from listings while keeping it invocable.
 	Hidden bool
+	// UserDefined identifies shortcuts loaded from the user's config
+	// directory. Distribution-owned Schema and interface snapshots exclude
+	// these runtime extensions even if another root loaded them earlier.
+	UserDefined bool
 
 	// Validate optionally checks resolved flag values before execution. Return a
 	// non-nil error to abort with a validation message. Runs after built-in

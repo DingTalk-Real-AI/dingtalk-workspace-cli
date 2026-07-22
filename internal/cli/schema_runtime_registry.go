@@ -284,7 +284,7 @@ func runtimeSchemaPayloadFromRegistry(registry SchemaRegistry, args []string) (m
 	}
 
 	raw := strings.TrimSpace(args[0])
-	if tool, ok := index.Resolve(raw); ok {
+	if tool, ok := index.ResolveQuery(raw); ok {
 		tool = schemaToolForResolvedPath(tool, raw)
 		return renderRegistryToolPayload(tool)
 	}
@@ -338,7 +338,7 @@ func runtimeSchemaAllPayloadFromRegistry(registry SchemaRegistry) (map[string]an
 }
 
 func schemaToolForResolvedPath(tool ToolSpec, raw string) ToolSpec {
-	normalized := normalizeSchemaCLIPath(raw)
+	normalized := normalizeSchemaQueryCLIPath(raw)
 	if normalized == "" || normalized == tool.Identity.CLIPath || normalized == tool.Identity.PrimaryCLIPath {
 		return tool
 	}

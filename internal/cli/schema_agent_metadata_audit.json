@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:a9356820431656f0071d1a0afb54e5091bf816aee2dcd325c355f9b9f7ecfabb",
+  "source_hash": "sha256:0e1f216a42ca76ecfe2f815f4f8f5f103fef03075fe27d58d4ae54abe0931efa",
   "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
   "source_files": 150,
   "hint_files": 46,
@@ -36,8 +36,8 @@
     "tools_with_avoid_when": 572,
     "tools_with_examples": 572,
     "tools_with_interface_mode": 572,
-    "unmatched_skill_tools": 122,
-    "unreviewed_skill_tools": 9
+    "unmatched_skill_tools": 124,
+    "unreviewed_skill_tools": 11
   },
   "source_products": [
     "agoal",
@@ -2867,6 +2867,26 @@
       }
     },
     {
+      "tool_path": "event consume user_im_message_receive_o2o_all",
+      "source": "skills/mono/references/products/event.md",
+      "line": 117,
+      "candidates": [
+        "event consume",
+        "event list",
+        "event schema"
+      ]
+    },
+    {
+      "tool_path": "event consume user_im_message_receive_group_all",
+      "source": "skills/mono/references/products/event.md",
+      "line": 118,
+      "candidates": [
+        "event consume",
+        "event list",
+        "event schema"
+      ]
+    },
+    {
       "tool_path": "event consume user_im_message_receive_o2o user_im_message_read_o2o user_im_message_recall_o2o",
       "source": "skills/mono/references/products/event.md",
       "line": 134,
@@ -2879,7 +2899,7 @@
     {
       "tool_path": "event consume user_im_message_receive_group user_im_group_updated user_im_group_disbanded",
       "source": "skills/mono/references/products/event.md",
-      "line": 141,
+      "line": 142,
       "candidates": [
         "event consume",
         "event list",

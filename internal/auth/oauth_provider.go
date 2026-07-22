@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net"
@@ -115,6 +116,12 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	// Smart degradation: try silent refresh before opening browser.
 	if !force {
 		data, err := oauthLoadToken(p.configDir)
+		if err != nil && !errors.Is(err, ErrTokenDataNotFound) && !os.IsNotExist(err) {
+			if preflightErr := preflightTokenPersistence(p.configDir); preflightErr != nil {
+				return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), preflightErr)
+			}
+			return nil, fmt.Errorf("load existing access token: %w", err)
+		}
 		if err == nil {
 			// Case 1: access_token still valid — no action needed.
 			if data.IsAccessTokenValid() {
@@ -295,7 +302,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			callbackTokenMu.Unlock()
 
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = fmt.Fprintf(w, "<html><body><h1>授权失败</h1><p>%s</p></body></html>", exchangeErr.Error())
+			_, _ = fmt.Fprintf(w, "<html><body><h1>授权失败</h1><p>%s</p></body></html>", html.EscapeString(oauthExchangeDisplayError(exchangeErr)))
 			select {
 			case resultCh <- callbackResult{err: exchangeErr}:
 			default:
@@ -636,36 +643,63 @@ continueLogin:
 	return tokenData, nil
 }
 
-// GetAccessToken returns a valid access token, auto-refreshing if needed.
-// Uses a file lock with double-check pattern to prevent concurrent refresh
-// from multiple CLI processes.
-func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
+func oauthExchangeDisplayError(err error) string {
+	var statusErr *HTTPStatusError
+	if errors.As(err, &statusErr) && statusErr != nil {
+		return fmt.Sprintf("HTTP %d: token exchange failed", statusErr.StatusCode)
+	}
+	return err.Error()
+}
+
+// GetTokenSnapshot returns a valid token together with its expiry metadata.
+// Storage and refresh failures retain their original cause; only a confirmed
+// missing credential is reported as ErrTokenDataNotFound.
+func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error) {
 	data, err := oauthLoadToken(p.configDir)
 	if err != nil {
-		return "", errors.New(i18n.T("未登录，请运行 dws auth login"))
+		if errors.Is(err, ErrTokenDataNotFound) || os.IsNotExist(err) {
+			return nil, fmt.Errorf("%s: %w", i18n.T("未登录，请运行 dws auth login"), ErrTokenDataNotFound)
+		}
+		return nil, fmt.Errorf("load access token: %w", err)
 	}
 
 	// Fast path: access_token still valid — no lock needed.
 	if data.IsAccessTokenValid() {
-		return data.AccessToken, nil
+		return data, nil
 	}
 
 	// Slow path: token expired — try locked refresh.
 	if data.IsRefreshTokenValid() {
 		refreshed, rErr := p.lockedRefresh(ctx)
 		if rErr == nil {
-			return refreshed.AccessToken, nil
+			return refreshed, nil
 		}
-		_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+		// A network, timeout, rate-limit or 5xx failure does not invalidate the
+		// refresh credential. Keep the profile active so a long-running source
+		// can retry after backoff. Terminal and unknown failures remain fatal.
+		if ClassifyRefreshFailure(rErr) != RefreshFailureTransient {
+			_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+		}
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
-		return "", fmt.Errorf("%s: %w", i18n.T("refresh_token 刷新失败"), rErr)
+		return nil, fmt.Errorf("%s: %w", i18n.T("refresh_token 刷新失败"), rErr)
 	} else {
 		_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
 	}
 
-	return "", errors.New(i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"))
+	return nil, fmt.Errorf("%s: %w", i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"), ErrTokenDataNotFound)
+}
+
+// GetAccessToken returns a valid access token, auto-refreshing if needed.
+// Uses a file lock with double-check pattern to prevent concurrent refresh
+// from multiple CLI processes.
+func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
+	data, err := p.GetTokenSnapshot(ctx)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(data.AccessToken), nil
 }
 
 // lockedRefresh attempts to refresh the token while holding dual-layer locks.
@@ -697,7 +731,7 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 
 	// Double-check: re-load from disk — another goroutine/process may have refreshed
 	// while we were waiting for the lock.
-	data, err := oauthLoadTokenLocked(p.configDir, RuntimeProfile())
+	data, err := loadOAuthTokenUnderHeldLock(p.configDir, RuntimeProfile())
 	if err != nil {
 		return nil, err
 	}

@@ -31,6 +31,31 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
+type consumeReadyWriter struct {
+	ready chan struct{}
+	once  sync.Once
+}
+
+func newConsumeReadyWriter() *consumeReadyWriter {
+	return &consumeReadyWriter{ready: make(chan struct{})}
+}
+
+func (w *consumeReadyWriter) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("[event] ready ")) {
+		w.once.Do(func() { close(w.ready) })
+	}
+	return len(p), nil
+}
+
+func waitForConsumerReady(t *testing.T, ready <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ready:
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not report ready")
+	}
+}
+
 // TestIntegration_HelloPushdownFiltersAtBus verifies the Hello-time
 // event_types pushdown contract (plan §4 unsung superpower): a consumer
 // subscribing to "im.*" must NOT receive "approval.*" events even when
@@ -49,40 +74,50 @@ func TestIntegration_HelloPushdownFiltersAtBus(t *testing.T) {
 	defer func() { cancel(); <-runDone }()
 
 	var imBuf, approvalBuf bytes.Buffer
-	var wg sync.WaitGroup
-	wg.Add(2)
+	imReady := newConsumeReadyWriter()
+	approvalReady := newConsumeReadyWriter()
+	consumeCtx, cancelConsumers := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelConsumers()
+	consumeDone := make(chan error, 2)
 
 	// Consumer A: im.* only
 	go func() {
-		defer wg.Done()
-		_ = Run(context.Background(), Config{
+		consumeDone <- Run(consumeCtx, Config{
 			WorkDir:     dir,
 			IPCEndpoint: sock,
 			ClientID:    "ding_test",
 			Stdout:      &imBuf,
-			Stderr:      io.Discard,
+			Stderr:      imReady,
 			EventTypes:  []string{"im.*"},
 			MaxEvents:   3, // 3 im events expected
 		})
 	}()
 	// Consumer B: approval.* only
 	go func() {
-		defer wg.Done()
-		_ = Run(context.Background(), Config{
+		consumeDone <- Run(consumeCtx, Config{
 			WorkDir:     dir,
 			IPCEndpoint: sock,
 			ClientID:    "ding_test",
 			Stdout:      &approvalBuf,
-			Stderr:      io.Discard,
+			Stderr:      approvalReady,
 			EventTypes:  []string{"approval.*"},
 			MaxEvents:   2, // 2 approval events expected
 		})
 	}()
 
-	// Give both consumers time to Hello + register.
-	time.Sleep(200 * time.Millisecond)
+	waitForConsumerReady(t, imReady.ready)
+	waitForConsumerReady(t, approvalReady.ready)
 	close(trigger)
-	wg.Wait()
+	for range 2 {
+		select {
+		case err := <-consumeDone:
+			if err != nil {
+				t.Fatalf("consume failed: %v", err)
+			}
+		case <-consumeCtx.Done():
+			t.Fatalf("consumers did not finish: %v", consumeCtx.Err())
+		}
+	}
 
 	// Verify consumer A got exactly the 3 im.* events.
 	imLines := nonEmptyLines(imBuf.String())
@@ -130,23 +165,32 @@ func TestIntegration_FilterRegexNarrowsFurther(t *testing.T) {
 	defer func() { cancel(); <-runDone }()
 
 	var buf bytes.Buffer
-	consumeDone := make(chan struct{})
+	ready := newConsumeReadyWriter()
+	consumeCtx, cancelConsumer := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelConsumer()
+	consumeDone := make(chan error, 1)
 	go func() {
-		defer close(consumeDone)
-		_ = Run(context.Background(), Config{
+		consumeDone <- Run(consumeCtx, Config{
 			WorkDir:     dir,
 			IPCEndpoint: sock,
 			ClientID:    "ding_test",
 			Stdout:      &buf,
-			Stderr:      io.Discard,
+			Stderr:      ready,
 			EventTypes:  []string{"im.*"},
 			Filter:      `\.at_v1$`, // only at_v1 events
 			MaxEvents:   1,
 		})
 	}()
-	time.Sleep(150 * time.Millisecond)
+	waitForConsumerReady(t, ready.ready)
 	close(trigger)
-	<-consumeDone
+	select {
+	case err := <-consumeDone:
+		if err != nil {
+			t.Fatalf("consume failed: %v", err)
+		}
+	case <-consumeCtx.Done():
+		t.Fatalf("consumer did not finish: %v", consumeCtx.Err())
+	}
 
 	lines := nonEmptyLines(buf.String())
 	if len(lines) != 1 {

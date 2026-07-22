@@ -236,7 +236,7 @@ func TestRunPersonalEventConsumeManyCreatesAndCleansAllSubscriptions(t *testing.
 	}
 	personalValidateConsumeConfig = func(consume.Config) error { return nil }
 	personalConsumeRunMany = func(_ context.Context, cfg consume.Config, specs []consume.ConsumerSpec) error {
-		if cfg.Projector == nil || len(specs) != 2 {
+		if !cfg.Flatten || cfg.Projector == nil || len(specs) != 2 {
 			t.Fatalf("consume config/specs = %#v / %#v", cfg, specs)
 		}
 		for i, spec := range specs {
@@ -250,6 +250,7 @@ func TestRunPersonalEventConsumeManyCreatesAndCleansAllSubscriptions(t *testing.
 	cmd := newPersonalCoverageCommand()
 	err := runPersonalEventConsume(cmd, personalConsumeOptions{
 		EventKeys: []string{personal.EventMention, personal.EventAllSingleChat},
+		Flatten:   true,
 	})
 	if err != nil {
 		t.Fatalf("runPersonalEventConsume() error = %v", err)

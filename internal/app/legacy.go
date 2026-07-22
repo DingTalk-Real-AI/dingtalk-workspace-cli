@@ -27,21 +27,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller) []*cobra.Command {
+func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool) []*cobra.Command {
 	injectStaticServers()
 	helpers.InitDeps(caller)
 	commands := helpers.NewPublicCommands(runner)
 	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
 	// command tree, so distilled high-frequency operations mount alongside the
 	// built-ins. Conflicts with built-ins are skipped inside Load.
-	if _, err := userdef.Load(); err != nil {
-		slog.Warn("shortcut: failed to load user-defined shortcuts", "error", err)
+	if loadUserShortcuts {
+		if _, err := userdef.Load(); err != nil {
+			slog.Warn("shortcut: failed to load user-defined shortcuts", "error", err)
+		}
 	}
 	// Built-in + user shortcuts (`dws <service> +<command>`) share the same
 	// command tree; mergeTopLevelCommands folds each shortcut's service parent
 	// into the matching helper command so the `+leaf` sits alongside existing
 	// subcommands.
-	commands = append(commands, builtin.Commands()...)
+	if loadUserShortcuts {
+		commands = append(commands, builtin.Commands()...)
+	} else {
+		commands = append(commands, builtin.BaseCommands()...)
+	}
 	return mergeTopLevelCommands(commands)
 }
 

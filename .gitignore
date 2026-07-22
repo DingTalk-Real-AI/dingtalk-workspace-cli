@@ -54,3 +54,11 @@ test/dev_functional/results.jsonl
 /coverage-policy.txt
 /coverage.html
 dwsbin
+
+# Local shortcut eval / real-backend capture artifacts — may contain real PII
+# (employee names/emails, userIds, conversation & message IDs). Never commit.
+/docs/shortcut-real-read-results.json
+/docs/shortcut-real-write-results.json
+/docs/shortcut-comparison.html
+/docs/shortcut-gsb-eval.*
+/scripts/run_shortcut_real_read_matrix.py

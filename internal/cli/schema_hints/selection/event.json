@@ -9,7 +9,7 @@
   },
   "tools": {
     "event.consume": {
-      "agent_summary": "订阅并持续消费一个或多个兼容的个人事件，输出 NDJSON 事件流",
+      "agent_summary": "订阅并持续消费一个或多个兼容的个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
       "use_when": [
         "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
         "用户明确要求监听当前身份的所有单聊或所有群消息",
@@ -23,8 +23,8 @@
         "只看事件目录/字段时用 event list / event schema"
       ],
       "examples": [
-        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-        "dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --max-events 2 --format ndjson"
+        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+        "dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --flatten --max-events 2 --format ndjson"
       ],
       "reviewed": true,
       "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
@@ -60,7 +60,7 @@
       ]
     },
     "event.schema": {
-      "agent_summary": "查询指定个人事件码的结构化输出字段",
+      "agent_summary": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
       "use_when": [
         "已知任一公开个人 IM event_key，消费前需要理解输出字段或保守 payload 契约"
       ],
@@ -69,7 +69,7 @@
         "要实际收事件时用 event consume"
       ],
       "examples": [
-        "dws event schema user_im_message_receive_at --format json"
+        "dws event schema user_im_message_receive_at --flatten --format json"
       ],
       "reviewed": true,
       "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",

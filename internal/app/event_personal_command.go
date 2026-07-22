@@ -63,6 +63,7 @@ type personalConsumeOptions struct {
 	Common           commonConsumeOptions
 	EventKey         string
 	EventKeys        []string
+	Flatten          bool
 	DebugRawEvents   bool
 	SubscribeID      string
 	Rule             string
@@ -135,6 +136,7 @@ var (
 	personalFindProcess                 = os.FindProcess
 	personalSignalProcess               = (*os.Process).Signal
 	personalResolveAuxiliaryAccessToken = ResolveAuxiliaryAccessToken
+	personalForceRefreshRejectedToken   = forceRefreshRejectedAccessToken
 	personalLoadTokenData               = authpkg.LoadTokenData
 	personalClientID                    = authpkg.ClientID
 	personalResolveAppCredentialsStrict = authpkg.ResolveAppCredentialsStrict
@@ -143,6 +145,7 @@ var (
 func newEventSchemaCommand() *cobra.Command {
 	var asIdentity string
 	var formatRaw string
+	var flatten bool
 	cmd := &cobra.Command{
 		Use:               "schema <event_key>",
 		Short:             "显示事件 schema",
@@ -160,11 +163,12 @@ func newEventSchemaCommand() *cobra.Command {
 			if !def.Public {
 				return personal.PublicAvailabilityError(args[0])
 			}
-			return renderPersonalSchema(c.OutOrStdout(), def, formatRaw)
+			return renderPersonalSchema(c.OutOrStdout(), def, formatRaw, flatten)
 		},
 	}
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
+	cmd.Flags().BoolVar(&flatten, "flatten", false, "显示 --flatten 消费模式对应的顶层业务字段 schema")
 	hideEventInternalFlags(cmd, "as")
 	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
 		Name:        "event_key",
@@ -192,7 +196,7 @@ func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
 	return tw.Flush()
 }
 
-func renderPersonalSchema(w io.Writer, def personal.Definition, format string) error {
+func renderPersonalSchema(w io.Writer, def personal.Definition, format string, flatten bool) error {
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format == "" {
 		format = "json"
@@ -202,7 +206,7 @@ func renderPersonalSchema(w io.Writer, def personal.Definition, format string) e
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(personal.BuildSchemaDocument(def))
+	return enc.Encode(personal.BuildSchemaDocumentForMode(def, flatten))
 }
 
 func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) error {
@@ -225,6 +229,19 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return err
 	}
+	rawFormat := ""
+	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
+		rawFormat = opts.Common.FormatRaw
+	}
+	normalised, fellback := consume.NormalizeFormat(rawFormat)
+	if fellback && !opts.Common.Quiet {
+		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
+	}
+	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+		return fmt.Errorf("event consume --as user: %w", err)
+	}
+	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
+
 	configDir := defaultConfigDir()
 	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
 	if err != nil {
@@ -239,16 +256,6 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
-	rawFormat := ""
-	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
-		rawFormat = opts.Common.FormatRaw
-	}
-	normalised, fellback := consume.NormalizeFormat(rawFormat)
-	if fellback && !opts.Common.Quiet {
-		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
-	}
-	projector := personalEventProjector(opts.DebugRawEvents)
-
 	if opts.Common.DryRun {
 		if strings.TrimSpace(opts.SubscribeID) == "" {
 			if err := validatePersonalSubscriptionOptions(opts); err != nil {
@@ -265,6 +272,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 			Duration:       opts.Common.Duration,
 			EventKey:       opts.EventKey,
 			Format:         normalised,
+			Flatten:        opts.Flatten,
 			OutputDir:      opts.Common.OutputDir,
 			Routes:         routes,
 			Projector:      projector,
@@ -278,7 +286,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		return personalConsumeRun(ctx, cfg)
 	}
 
-	client := personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	sub, eventKey, ruleType, err := personalEnsureSubscription(ctx, client, identity, opts)
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
@@ -321,6 +329,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		Duration:         opts.Common.Duration,
 		EventKey:         eventKey,
 		Format:           normalised,
+		Flatten:          opts.Flatten,
 		OutputDir:        opts.Common.OutputDir,
 		Routes:           routes,
 		Projector:        projector,
@@ -395,6 +404,19 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
+	rawFormat := ""
+	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
+		rawFormat = opts.Common.FormatRaw
+	}
+	normalised, fellback := consume.NormalizeFormat(rawFormat)
+	if fellback && !opts.Common.Quiet {
+		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
+	}
+	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+		return fmt.Errorf("event consume --as user: %w", err)
+	}
+	projector := personalEventProjector(false, opts.Flatten)
+
 	ctx := c.Context()
 	configDir := defaultConfigDir()
 	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
@@ -409,15 +431,6 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
-	rawFormat := ""
-	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
-		rawFormat = opts.Common.FormatRaw
-	}
-	normalised, fellback := consume.NormalizeFormat(rawFormat)
-	if fellback && !opts.Common.Quiet {
-		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
-	}
-
 	baseCfg := consume.Config{
 		WorkDir:        workDir,
 		IPCEndpoint:    ipcEndpoint,
@@ -427,9 +440,10 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 		MaxEvents:      opts.Common.MaxEvents,
 		Duration:       opts.Common.Duration,
 		Format:         normalised,
+		Flatten:        opts.Flatten,
 		OutputDir:      opts.Common.OutputDir,
 		Routes:         routes,
-		Projector:      personalEventProjector(false),
+		Projector:      projector,
 		Stdout:         c.OutOrStdout(),
 		Stderr:         c.ErrOrStderr(),
 		Quiet:          opts.Common.Quiet,
@@ -448,7 +462,7 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 		return nil
 	}
 
-	client := personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	created := make([]personalMultiSubscription, 0, len(plans))
 	cleanup := func() {
 		ids := make([]string, 0, len(created))
@@ -642,11 +656,27 @@ func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalC
 	}
 }
 
-func personalEventProjector(debugRawEvents bool) consume.Projector {
+func personalEventProjector(debugRawEvents, flatten bool) consume.Projector {
 	if debugRawEvents {
 		return func(ev transport.Event) (any, error) { return ev, nil }
 	}
-	return personal.ProjectOutput
+	if flatten {
+		return personal.ProjectOutput
+	}
+	return nil
+}
+
+func validatePersonalEventOutputMode(flatten, debugRawEvents bool, format consume.Format) error {
+	if !flatten {
+		return nil
+	}
+	if debugRawEvents {
+		return fmt.Errorf("--flatten and --debug-raw-events are mutually exclusive")
+	}
+	if format == consume.FormatRaw {
+		return fmt.Errorf("--flatten and --format raw are mutually exclusive")
+	}
+	return nil
 }
 
 func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOptions, subscribeID, eventKey string) {
@@ -775,7 +805,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 	if status == "" || status == "all" {
 		status = ""
 	}
-	subs, err := personalListSubscriptions(personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity), ctx, personal.ListOptions{
+	subs, err := personalListSubscriptions(newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity), ctx, personal.ListOptions{
 		Status:      status,
 		EventKey:    opts.EventKey,
 		SubscribeID: opts.SubscribeID,
@@ -890,7 +920,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
-	client := personal.NewClient(personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	for _, id := range subscribeIDs {
 		if err := personalDeleteSubscription(client, ctx, id); err != nil {
 			return fmt.Errorf("event stop --as user: cancel subscription %s: %w", id, err)
@@ -1011,7 +1041,10 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 	if err != nil {
 		return personal.Identity{}, err
 	}
-	tokenData, _ := personalLoadTokenData(configDir)
+	tokenData, err := personalLoadTokenData(configDir)
+	if err != nil && !errors.Is(err, authpkg.ErrTokenDataNotFound) {
+		return personal.Identity{}, fmt.Errorf("load OAuth identity metadata: %w", err)
+	}
 	var corpID, userID, clientID, refreshToken string
 	if tokenData != nil {
 		corpID = tokenData.CorpID
@@ -1055,6 +1088,15 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 		ClientID:     clientID,
 		SourceID:     sourceID,
 	}, nil
+}
+
+func newPersonalEventControlClient(configDir, baseURL string, identity personal.Identity) *personal.Client {
+	identity.AccessToken = ""
+	client := personal.NewClient(baseURL, identity)
+	client.AccessTokenProvider = func(ctx context.Context) (string, error) {
+		return personalResolveAuxiliaryAccessToken(ctx, configDir, "")
+	}
+	return client
 }
 
 func personalTokenSubject(kind, token string) string {
@@ -1105,7 +1147,12 @@ func newPersonalStreamSource(ctx context.Context, opts personalStreamSourceOptio
 	}
 	_ = ctx
 	return source.NewPersonal(source.PersonalConfig{
-		AccessToken:  opts.Identity.AccessToken,
+		AccessTokenProvider: func(ctx context.Context) (string, error) {
+			return personalResolveAuxiliaryAccessToken(ctx, opts.ConfigDir, "")
+		},
+		ForceRefreshToken: func(ctx context.Context, rejectedToken string) (string, error) {
+			return personalForceRefreshRejectedToken(ctx, opts.ConfigDir, rejectedToken)
+		},
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		SourceID:     opts.Identity.SourceID,

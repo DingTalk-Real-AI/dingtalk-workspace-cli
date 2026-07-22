@@ -112,7 +112,9 @@ func TestSubmit_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	submitFn := func(ctx context.Context) (string, error) { return "job-x", nil }
-	queryFn := func(ctx context.Context, jobID string) (QueryResult, error) { return QueryResult{Status: StatusProcessing}, nil }
+	queryFn := func(ctx context.Context, jobID string) (QueryResult, error) {
+		return QueryResult{Status: StatusProcessing}, nil
+	}
 	_, err := Submit(ctx, submitFn, queryFn, Options{Backoff: testBackoff, Timeout: 1 * time.Second})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expect ctx.Canceled, got %v", err)

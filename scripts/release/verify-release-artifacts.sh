@@ -94,7 +94,7 @@ verify_binary_version() {
     printf '%s does not contain the expected dws binary\n' "$asset" >&2
     return 1
   }
-  strings "$binary" | grep -Fqx "v$SEMVER" || {
+  LC_ALL=C grep -aFq "v$SEMVER" "$binary" || {
     printf '%s binary does not embed expected version v%s\n' "$asset" "$SEMVER" >&2
     return 1
   }

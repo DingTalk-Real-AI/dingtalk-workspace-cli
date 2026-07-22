@@ -52,6 +52,10 @@ func TestCrossPlatformCoverageMergePayloadsAndToolCallRequest(t *testing.T) {
 	if empty, err := MergePayloads(" ", "", nil); err != nil || len(empty) != 0 {
 		t.Fatalf("empty MergePayloads() = %#v, %v", empty, err)
 	}
+	merged, err = MergePayloads(`{"same":"json"}`, `{"same":"params"}`, nil)
+	if err != nil || merged["same"] != "params" {
+		t.Fatalf("MergePayloads() precedence = %#v, %v; want --params to win", merged, err)
+	}
 	for _, input := range []string{`{`, `[]`, `null`} {
 		if _, err := MergePayloads(input, "", nil); err == nil {
 			t.Errorf("MergePayloads(%q) error = nil", input)

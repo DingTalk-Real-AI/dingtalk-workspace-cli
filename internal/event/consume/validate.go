@@ -132,6 +132,7 @@ func PrintDryRun(w io.Writer, cfg Config) {
 		fmt.Fprintf(w, "  filter           : %s\n", cfg.Filter)
 	}
 	fmt.Fprintf(w, "  format           : %s\n", cfg.Format)
+	fmt.Fprintf(w, "  flatten          : %v\n", cfg.Flatten)
 	if cfg.OutputDir != "" {
 		fmt.Fprintf(w, "  output_dir       : %s\n", cfg.OutputDir)
 	}

@@ -617,6 +617,22 @@ func (i SchemaIndex) Resolve(path string) (ToolSpec, bool) {
 	return i.registry.Products[location.product].Tools[location.tool], true
 }
 
+// ResolveQuery adds compatibility for dotted and slash-separated CLI paths at
+// the user-facing query boundary. Resolve remains strict because Registry
+// validation uses it to detect missing canonical identities without falling
+// through to a similarly spelled CLI path.
+func (i SchemaIndex) ResolveQuery(path string) (ToolSpec, bool) {
+	if tool, ok := i.Resolve(path); ok {
+		return tool, true
+	}
+	canonical, ok := i.byCLIPath[normalizeSchemaQueryCLIPath(path)]
+	if !ok {
+		return ToolSpec{}, false
+	}
+	location := i.byCanonical[canonical]
+	return i.registry.Products[location.product].Tools[location.tool], true
+}
+
 // CanonicalPaths returns the complete tool identity set in stable order.
 func (i SchemaIndex) CanonicalPaths() []string {
 	paths := make([]string, 0, len(i.byCanonical))
