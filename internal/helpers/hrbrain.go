@@ -68,8 +68,8 @@ func newHrbrainCommand() *cobra.Command {
 	talentPoolListCmd.Flags().String("pool-type", "", "人才池类型 (可选)")
 	talentPoolListCmd.Flags().String("creator", "", "创建人 (可选)")
 	talentPoolListCmd.Flags().String("labels", "", "标签列表，逗号分隔 (可选)")
-	talentPoolListCmd.Flags().Int("page", 1, "当前页码 (必填，默认 1)")
-	talentPoolListCmd.Flags().Int("page-size", 20, "每页条数 (必填，默认 20)")
+	talentPoolListCmd.Flags().Int("page", 1, "当前页码 (默认 1)")
+	talentPoolListCmd.Flags().Int("page-size", 20, "每页条数 (默认 20)")
 
 	talentPoolDetailCmd := &cobra.Command{
 		Use:     "detail",
@@ -106,8 +106,8 @@ func newHrbrainCommand() *cobra.Command {
 		},
 	}
 	talentPoolEmployeesCmd.Flags().String("pool-code", "", "人才池编码 (必填)")
-	talentPoolEmployeesCmd.Flags().Int("page", 1, "当前页码 (必填，默认 1)")
-	talentPoolEmployeesCmd.Flags().Int("page-size", 20, "每页条数 (必填，默认 20)")
+	talentPoolEmployeesCmd.Flags().Int("page", 1, "当前页码 (默认 1)")
+	talentPoolEmployeesCmd.Flags().Int("page-size", 20, "每页条数 (默认 20)")
 
 	talentPoolCmd.AddCommand(talentPoolListCmd, talentPoolDetailCmd, talentPoolEmployeesCmd)
 
@@ -250,8 +250,8 @@ func newHrbrainCommand() *cobra.Command {
 	employeeSearchCmd.Flags().String("position-name", "", "职务名称 (可选)")
 	employeeSearchCmd.Flags().String("job-level", "", "职级 (可选)")
 	employeeSearchCmd.Flags().String("pool-code", "", "限定人才池编码 (可选)")
-	employeeSearchCmd.Flags().Int("page", 1, "当前页码 (必填，默认 1)")
-	employeeSearchCmd.Flags().Int("page-size", 20, "每页条数 (必填，默认 20)")
+	employeeSearchCmd.Flags().Int("page", 1, "当前页码 (默认 1)")
+	employeeSearchCmd.Flags().Int("page-size", 20, "每页条数 (默认 20)")
 
 	employeeSearchStructuredCmd := &cobra.Command{
 		Use:   "employees-structured",
@@ -292,8 +292,8 @@ func newHrbrainCommand() *cobra.Command {
 		},
 	}
 	employeeSearchStructuredCmd.Flags().String("origin-json", "", "搜索条件 JSON 表达式 (必填)")
-	employeeSearchStructuredCmd.Flags().Int("page", 1, "当前页码 (必填，默认 1)")
-	employeeSearchStructuredCmd.Flags().Int("page-size", 20, "每页条数 (必填，默认 20)")
+	employeeSearchStructuredCmd.Flags().Int("page", 1, "当前页码 (默认 1)")
+	employeeSearchStructuredCmd.Flags().Int("page-size", 20, "每页条数 (默认 20)")
 	employeeSearchStructuredCmd.Flags().String("order-by", "", "排序字段列表，逗号分隔 (可选)")
 	employeeSearchStructuredCmd.Flags().String("fields", "", "返回列定义 JSON 数组 (必填)")
 

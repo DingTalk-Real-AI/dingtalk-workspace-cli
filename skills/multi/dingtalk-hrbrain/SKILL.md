@@ -1,7 +1,7 @@
 ---
 name: dingtalk-hrbrain
 description: 钉钉组织大脑 Hrbrain。Use when 用户说 人才池/储备干部池/员工档案/职业历程/绩效记录/员工标签/组织大脑/人才搜索。Distinct from dingtalk-contact(通讯录/组织架构)、dingtalk-attendance(考勤)。命令前缀：dws hrbrain。
-cli_version: ">=1.0.54"
+cli_version: ">=1.0.54-0"
 metadata:
   category: product
   stability: experimental
