@@ -3143,21 +3143,32 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   # resource-id: 从 dws chat message list 返回的消息内容中获取 mediaId
   # message-id: 从 dws chat message list 返回的 openMessageId
   # open-conversation-id: 从 dws chat search 获取 openConversationId`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "type", "resource-id", "open-conversation-id", "output"); err != nil {
-				return err
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Cobra validates required flags after PreRunE. Copy a supplied alias
+			// into the canonical flag first so --message-id can remain a hard
+			// required fact in both the executable and Agent Schema contracts.
+			if !cmd.Flags().Changed("message-id") {
+				for _, alias := range []string{"msg-id", "open-message-id"} {
+					if cmd.Flags().Changed(alias) {
+						value, err := cmd.Flags().GetString(alias)
+						if err != nil {
+							return err
+						}
+						return cmd.Flags().Set("message-id", value)
+					}
+				}
 			}
-			// --message-id is required, but accept the natural aliases agents
-			// reach for (the message-list output field is openMessageId, so
-			// --msg-id / --open-message-id are common guesses).
-			if err := validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id"); err != nil {
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "type", "resource-id", "message-id", "open-conversation-id", "output"); err != nil {
 				return err
 			}
 
 			resourceType := mustGetFlag(cmd, "type")
 			resourceID := mustGetFlag(cmd, "resource-id")
 			conversationID := mustGetFlag(cmd, "open-conversation-id")
-			messageID := flagOrFallback(cmd, "message-id", "msg-id", "open-message-id")
+			messageID := mustGetFlag(cmd, "message-id")
 			outputPath := mustGetFlag(cmd, "output")
 
 			switch resourceType {
@@ -3231,6 +3242,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageDownloadMediaCmd.Flags().String("open-conversation-id", "", "会话 openConversationId (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("open-conversation-id")
 	chatMessageDownloadMediaCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
+	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("message-id")
 	// Hidden aliases: agents routinely pass --msg-id / --open-message-id since
 	// the message-list output exposes the field as openMessageId/msgId. Accept
 	// them transparently instead of failing with "unknown flag".

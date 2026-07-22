@@ -158,6 +158,7 @@ func CleanText(s string) string {
 
 	lines := strings.Split(s, "\n")
 	isJSON := make([]bool, len(lines))
+	isDecoration := make([]bool, len(lines))
 	extracted := make([][]string, len(lines))
 	anyExtracted := false
 	for i, line := range lines {
@@ -170,6 +171,7 @@ func CleanText(s string) string {
 			continue
 		}
 		isJSON[i] = true
+		isDecoration[i] = isKnownRichDecoration(v)
 		if texts := richItemTexts(v); len(texts) > 0 {
 			extracted[i] = texts
 			anyExtracted = true
@@ -188,9 +190,10 @@ func CleanText(s string) string {
 			out = append(out, extracted[i]...)
 			continue
 		}
-		// In card mode, drop the card's decorative JSON lines and "empty"
-		// placeholders, but keep ordinary text lines (e.g. "* 仅你和对方可见").
-		if isJSON[i] {
+		// In card mode, drop only JSON shapes known to be card decoration.
+		// Unrecognised JSON may be user-authored message content and must remain
+		// verbatim even when another line contains a rich-content block.
+		if isJSON[i] && isDecoration[i] {
 			continue
 		}
 		if t := strings.TrimSpace(line); t == "" || t == "empty" {
@@ -201,6 +204,21 @@ func CleanText(s string) string {
 	// anyExtracted is true here, so out always holds at least one non-empty
 	// extracted text — the joined result is never empty.
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// isKnownRichDecoration recognises the two decoration records emitted alongside
+// DingTalk rich-content bodies. Keep this deliberately narrow: an arbitrary JSON
+// object in the same message is user content unless its shape is known here.
+func isKnownRichDecoration(node any) bool {
+	m, ok := node.(map[string]any)
+	if !ok {
+		return false
+	}
+	_, hasPreviewURL := m["previewUrl"]
+	_, hasTitle := m["title"]
+	_, hasAutoLayout := m["autoLayout"]
+	_, hasEnableForward := m["enableForward"]
+	return (hasPreviewURL && hasTitle) || (hasAutoLayout && hasEnableForward)
 }
 
 // richItemTexts walks a decoded DingTalk rich-content blob and returns the

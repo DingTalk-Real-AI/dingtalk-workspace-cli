@@ -67,6 +67,15 @@ func TestCleanText(t *testing.T) {
 		t.Fatalf("mixed text was rewritten: got %q, want %q", got, mixed)
 	}
 
+	// An ordinary JSON line must also survive when a different line contains a
+	// recognised rich-content block. Card mode is not permission to discard
+	// unrelated user-authored JSON.
+	richAndPlain := `[{"items":[{"data":{"text":"卡片正文"}}]}]` + "\n" +
+		`{"approved":false}`
+	if got, want := CleanText(richAndPlain), "卡片正文\n{\"approved\":false}"; got != want {
+		t.Fatalf("mixed rich/plain JSON was rewritten: got %q, want %q", got, want)
+	}
+
 	// Malformed items (non-map item, item whose "data" isn't a map) are skipped;
 	// only the well-formed item's text is extracted.
 	blob := `[{"items":["notmap",{"data":"notmap"},{"data":{"text":"有效正文"}}]}]`
