@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows event bus spawn** (#760) — `dws event consume` no longer fails on Windows with `fork/exec ...: not supported by windows` when it needs to auto-start the bus daemon. The ready pipe now reaches the `event _bus` child via Windows handle inheritance (`SysProcAttr.AdditionalInheritedHandles`) instead of the Unix-only `cmd.ExtraFiles`; Unix behavior is unchanged.
+
 ## [1.0.54] - 2026-07-21
 
 This release promotes the validated `v1.0.54-beta.2` baseline to stable. It restores the default transport envelope for personal event output with opt-in flattening, plus Schema CLI path and plugin overlay compatibility fixes.
