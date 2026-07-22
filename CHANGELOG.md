@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **Message-read shortcut projection** (#706) — the message-list shortcuts (`chat +chat-messages` / `+messages-list` / `+messages-list-direct` / `+at-me` / `+search-msg` / `+thread-replies`) now render card and out-of-office rich-content JSON as readable text (without ever rewriting ordinary text that merely embeds a JSON fragment), expand a forwarded chat record's nested `forwardMessages` instead of collapsing to a "[卡片]" summary, and mark undecryptable encrypted card messages as `[加密消息]`; the speaker is read from the bare `sender` key, nested `{name:…}` sender objects yield their display name, and the literal string `"null"` is treated as absent. Shared projection helpers now live in `internal/shortcut/chatmsg`. `chat message download-media` also gains `--msg-id` / `--open-message-id` aliases for its `--message-id` flag so agents copying the `openMessageId`/`msgId` output field no longer hit "unknown flag".
+
 ## [1.0.54] - 2026-07-21
 
 This release promotes the validated `v1.0.54-beta.2` baseline to stable. It restores the default transport envelope for personal event output with opt-in flattening, plus Schema CLI path and plugin overlay compatibility fixes.
