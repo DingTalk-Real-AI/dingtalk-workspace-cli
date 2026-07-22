@@ -553,7 +553,7 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 	postUploadVerifyAttempts := shellDefaultInt(t, reconciler, "GITEE_POST_UPLOAD_VERIFY_ATTEMPTS")
 	verifyRetryDelay := shellDefaultInt(t, reconciler, "GITEE_VERIFY_RETRY_DELAY")
 	uploadRetryDelay := shellDefaultInt(t, reconciler, "GITEE_UPLOAD_RETRY_DELAY")
-	const minimumLargeAssetUploadSeconds = 720
+	const minimumLargeAssetUploadSeconds = 1200
 	if uploadSeconds < minimumLargeAssetUploadSeconds {
 		t.Fatalf(
 			"Gitee upload deadline = %ds, want at least %ds for near-10 MiB release assets",

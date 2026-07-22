@@ -14,7 +14,7 @@ GITEE_MUTATION_MAX_TIME="${GITEE_MUTATION_MAX_TIME:-20}"
 # From GitHub-hosted runners, a near-10 MiB DWS binary can legitimately take
 # more than five minutes, so keep the transfer deadline above that observed
 # floor while the per-asset and overall deadlines retain hard upper bounds.
-GITEE_UPLOAD_MAX_TIME="${GITEE_UPLOAD_MAX_TIME:-720}"
+GITEE_UPLOAD_MAX_TIME="${GITEE_UPLOAD_MAX_TIME:-1200}"
 # The per-asset deadline guarantees one complete slow upload. The second
 # attempt remains available for fast transport/API failures, but a first
 # attempt that consumes the full transfer deadline intentionally exhausts the
@@ -24,8 +24,8 @@ GITEE_UPLOAD_RETRY_DELAY="${GITEE_UPLOAD_RETRY_DELAY:-5}"
 GITEE_EXISTING_VERIFY_ATTEMPTS="${GITEE_EXISTING_VERIFY_ATTEMPTS:-1}"
 GITEE_POST_UPLOAD_VERIFY_ATTEMPTS="${GITEE_POST_UPLOAD_VERIFY_ATTEMPTS:-2}"
 GITEE_VERIFY_RETRY_DELAY="${GITEE_VERIFY_RETRY_DELAY:-5}"
-GITEE_ASSET_TIMEOUT_SECONDS="${GITEE_ASSET_TIMEOUT_SECONDS:-900}"
-GITEE_OVERALL_TIMEOUT_SECONDS="${GITEE_OVERALL_TIMEOUT_SECONDS:-7320}"
+GITEE_ASSET_TIMEOUT_SECONDS="${GITEE_ASSET_TIMEOUT_SECONDS:-1380}"
+GITEE_OVERALL_TIMEOUT_SECONDS="${GITEE_OVERALL_TIMEOUT_SECONDS:-11160}"
 
 err() {
   printf 'error: %s\n' "$*" >&2
