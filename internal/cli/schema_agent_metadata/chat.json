@@ -16120,14 +16120,14 @@
           ]
         },
         "interface_mode": {
-          "value": "composite",
+          "value": "mcp",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
           "candidates": [
             {
-              "value": "composite",
+              "value": "mcp",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -16141,38 +16141,20 @@
             }
           ]
         },
-        "interface_reason": {
-          "value": "文本和已有 mediaId 场景调用 send_personal_message；本地文件场景会先调用 im/init_conversation_file_upload，经本地 HTTP PUT 上传，再调用 im/commit_conversation_file_upload，最后发送 file 消息，不能绑定为单一 interface_ref",
+        "interface_ref": {
+          "value": "chat.send_personal_message",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
           "candidates": [
             {
-              "value": "文本和已有 mediaId 场景调用 send_personal_message；本地文件场景会先调用 im/init_conversation_file_upload，经本地 HTTP PUT 上传，再调用 im/commit_conversation_file_upload，最后发送 file 消息，不能绑定为单一 interface_ref",
+              "value": "chat.send_personal_message",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
               "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
-            }
-          ]
-        },
-        "interface_ref": {
-          "value": null,
-          "source": "internal/cli/schema_hints/metadata/chat.json",
-          "precedence": "reviewed_explicit",
-          "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
-          "candidates": [
-            {
-              "value": null,
-              "source": "internal/cli/schema_hints/metadata/chat.json",
-              "precedence": "reviewed_explicit",
-              "selected": true,
-              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
-            }
-          ],
-          "overridden_candidates": [
+            },
             {
               "value": "chat.send_personal_message",
               "source": "internal/cli/schema_mcp_metadata.json#tools.chat.send_personal_message.interface_ref",
@@ -16248,8 +16230,11 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "composite",
-      "interface_reason": "文本和已有 mediaId 场景调用 send_personal_message；本地文件场景会先调用 im/init_conversation_file_upload，经本地 HTTP PUT 上传，再调用 im/commit_conversation_file_upload，最后发送 file 消息，不能绑定为单一 interface_ref",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "send_personal_message"
+      },
       "reviewed": true,
       "risk": "medium",
       "source_refs": [

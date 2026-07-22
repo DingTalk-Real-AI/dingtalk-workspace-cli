@@ -497,9 +497,12 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "composite",
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "send_personal_message"
+      },
+      "interface_mode": "mcp",
       "availability": "available",
-      "interface_reason": "文本和已有 mediaId 场景调用 send_personal_message；本地文件场景会先调用 im/init_conversation_file_upload，经本地 HTTP PUT 上传，再调用 im/commit_conversation_file_upload，最后发送 file 消息，不能绑定为单一 interface_ref",
       "reviewed": true
     },
     "chat.send_robot_message": {
