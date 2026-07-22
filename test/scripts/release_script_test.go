@@ -703,7 +703,7 @@ case "$last" in
     printf '{"workflow_runs":[]}\n'
     ;;
   */actions/runs/29380892754/jobs*)
-    printf '{"jobs":[{"name":"release","status":"completed","conclusion":"success","head_sha":"%s"},{"name":"verify-darwin-signatures","status":"completed","conclusion":"success","head_sha":"%s"},{"name":"publish-release","status":"completed","conclusion":"%s","head_sha":"%s"}]}\n' "$WORKFLOW_SHA" "$WORKFLOW_SHA" "$PUBLISH_CONCLUSION" "$WORKFLOW_SHA"
+    printf '{"jobs":[{"name":"release","status":"completed","conclusion":"success","head_sha":"%s"},{"name":"publish-release","status":"completed","conclusion":"%s","head_sha":"%s"}]}\n' "$WORKFLOW_SHA" "$PUBLISH_CONCLUSION" "$WORKFLOW_SHA"
     ;;
   */actions/runs/29380892754)
     printf '{"event":"workflow_dispatch","status":"completed","conclusion":"success","head_sha":"%s","head_branch":"codex/recover-v1.0.52","run_attempt":1,"path":".github/workflows/release.yml","repository":{"full_name":"owner/repo"}}\n' "$RUN_HEAD_SHA"
@@ -761,7 +761,6 @@ case "$endpoint" in
   */actions/runs/42/jobs*)
     printf '{"jobs":['
     printf '{"name":"Build signed release artifacts","status":"completed","conclusion":"success","head_sha":"%s"},' "$WORKFLOW_SHA"
-    printf '{"name":"Verify Apple Developer ID signatures","status":"completed","conclusion":"success","head_sha":"%s"},' "$WORKFLOW_SHA"
     printf '{"name":"Publish immutable GitHub Release","status":"completed","conclusion":"success","head_sha":"%s"}' "$WORKFLOW_SHA"
     if [ "${MISSING_CHANNELS:-0}" != 1 ]; then
       printf ',{"name":"Publish npm and mirrors","status":"completed","conclusion":"success","head_sha":"%s"}' "$WORKFLOW_SHA"
@@ -855,7 +854,6 @@ required = [
     "Seal cloud release tag",
     "release-contract",
     "Build signed release artifacts",
-    "Verify Apple Developer ID signatures",
     "Publish immutable GitHub Release",
     "Publish npm and mirrors",
     "Release delivery gate",
@@ -1023,7 +1021,6 @@ commit = os.environ.get("JOB_SHA", os.environ["RELEASE_COMMIT"])
 core = [
     "release-contract",
     "Build signed release artifacts",
-    "Verify Apple Developer ID signatures",
     "Publish immutable GitHub Release",
 ]
 jobs = [{

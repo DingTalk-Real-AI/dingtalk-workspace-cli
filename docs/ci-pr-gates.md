@@ -5,7 +5,7 @@ The pull-request admission layer has exactly nine required external contexts:
 | Required context | Contract |
 |---|---|
 | `Lint` | Stable PR revision classification, formatting, `go vet`, and Actionlint |
-| `Test` | Race/unit/release-script tests plus fast cross-platform compilation |
+| `Test` | Race, unit, and release-script tests |
 | `Coverage` | Overall non-regression and 100% changed-code coverage |
 | `Policy` | Repository policy and the fail-closed CHANGELOG contract |
 | `Edition` | Edition contract tests |
@@ -67,11 +67,8 @@ Adding a second file therefore cannot bypass CHANGELOG validation.
 
 ## Platform and downstream boundaries
 
-Ordinary PRs run the primary Linux assurance plus fast Darwin/Windows compile
-checks. Full native macOS/Windows tests and platform coverage run on a PR only
-when its diff touches auth, keychain, OS-specific Go files, installers,
-packaging, Formulae, or release automation. Protected `main` pushes run the
-complete native matrix.
+All PR and protected `main` assurance runs on Linux runners. There are no
+native macOS/Windows test or coverage jobs.
 
 Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
 `Main Integration — 主干集成` workflow and runs only after a push to `main` (or
@@ -92,7 +89,6 @@ flowchart TB
   ADMISSION --> S["CLI Smoke"]
   ADMISSION --> M["Mock MCP"]
   ADMISSION --> MAIN["Protected main"]
-  MAIN --> NATIVE["Full native platform matrix"]
   MAIN --> E2E["Multi-profile E2E"]
   MAIN --> RELEASE["Release delivery"]
 ```
@@ -121,14 +117,14 @@ base_ref=$(git merge-base HEAD origin/main)
 ```
 
 `make coverage-gate` is an enforcement step, not a profile generator. CI
-generates the candidate, supporting, merge-base, and (when risk-selected)
-native profiles before the aggregate `Coverage` context evaluates them. The
-aggregate and native gates require 100% coverage for changed executable Go
-statements. Overall coverage remains an unrounded, zero-tolerance merge-base
-non-regression check. Candidate and baseline profiles are evaluated by the
-same block-deduplicating checker; supporting policy and shortcut profiles
-contribute to changed-code coverage only. The checked-in badge is presentation
-only and is never read as a gate input.
+generates the candidate, supporting, and merge-base profiles before the
+aggregate `Coverage` context evaluates them. The aggregate gate requires 100%
+coverage for changed executable Go statements. Overall coverage remains an
+unrounded, zero-tolerance merge-base non-regression check. Candidate and
+baseline profiles are evaluated by the same block-deduplicating checker;
+supporting policy and shortcut profiles contribute to changed-code coverage
+only. The checked-in badge is presentation only and is never read as a gate
+input.
 
 Compatibility checks derive authoritative Interface snapshots from the PR
 merge-base and the latest reachable stable release. The candidate cannot bless

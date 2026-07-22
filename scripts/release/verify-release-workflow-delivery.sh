@@ -221,7 +221,6 @@ required = (
     "Seal cloud release tag",
     "release-contract",
     "Build signed release artifacts",
-    "Verify Apple Developer ID signatures",
     "Publish immutable GitHub Release",
     "Publish npm and mirrors",
     "Release delivery gate",
@@ -376,7 +375,6 @@ def one_job(name):
 for name in (
     "release-contract",
     "Build signed release artifacts",
-    "Verify Apple Developer ID signatures",
     "Publish immutable GitHub Release",
 ):
     if one_job(name).get("conclusion") != "success":
@@ -540,7 +538,6 @@ def one_job(name):
 for name in (
     "release-contract",
     "Build signed release artifacts",
-    "Verify Apple Developer ID signatures",
 ):
     one_job(name)
 
@@ -717,7 +714,6 @@ for job in jobs:
 done
 for required_job in \
   "Build signed release artifacts" \
-  "Verify Apple Developer ID signatures" \
   "Publish immutable GitHub Release" \
   "Publish npm and mirrors"; do
   printf '%s\n' "$passed_jobs" | grep -Fqx "$required_job" || {

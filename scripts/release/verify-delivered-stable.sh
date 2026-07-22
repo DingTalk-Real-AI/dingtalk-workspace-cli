@@ -179,7 +179,7 @@ for job in json.load(sys.stdin).get("jobs", []):
     printf 'could not query reviewed recovery jobs for %s\n' "$TAG" >&2
     exit 1
   }
-  for recovery_job in release verify-darwin-signatures publish-release; do
+  for recovery_job in release publish-release; do
     printf '%s\n' "$recovery_jobs" | awk -F '\t' -v name="$recovery_job" -v sha="$recovery_workflow_sha" '
       $1 == name && $2 == "completed" && $3 == "success" && $4 == sha { found++ }
       END { exit(found == 1 ? 0 : 1) }
