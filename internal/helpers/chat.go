@@ -3147,18 +3147,20 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			// Cobra validates required flags after PreRunE. Copy a supplied alias
 			// into the canonical flag first so --message-id can remain a hard
 			// required fact in both the executable and Agent Schema contracts.
-			if !cmd.Flags().Changed("message-id") {
-				for _, alias := range []string{"msg-id", "open-message-id"} {
-					if cmd.Flags().Changed(alias) {
-						value, err := cmd.Flags().GetString(alias)
-						if err != nil {
-							return err
-						}
-						return cmd.Flags().Set("message-id", value)
-					}
-				}
+			if cmd.Flags().Changed("message-id") {
+				return nil
 			}
-			return nil
+			alias := ""
+			switch {
+			case cmd.Flags().Changed("msg-id"):
+				alias = "msg-id"
+			case cmd.Flags().Changed("open-message-id"):
+				alias = "open-message-id"
+			default:
+				return nil
+			}
+			value, _ := cmd.Flags().GetString(alias) // registered string flags above
+			return cmd.Flags().Set("message-id", value)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "type", "resource-id", "message-id", "open-conversation-id", "output"); err != nil {
