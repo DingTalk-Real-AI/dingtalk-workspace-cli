@@ -1735,7 +1735,7 @@ jobs:
     if: ${{ !cancelled() && vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
     needs: [release-contract, release, publish-channels]
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 160
     permissions:
       contents: read
     env:
@@ -1776,7 +1776,7 @@ jobs:
           path: dist
 
       - name: Mirror release to Gitee (China)
-        timeout-minutes: 100
+        timeout-minutes: 140
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ needs.release-contract.outputs.release_version }}
@@ -2180,7 +2180,7 @@ jobs:
     needs: dispatch-contract
     if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'repair_gitee' || needs.dispatch-contract.outputs.mode == 'repair_oss') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 160
     permissions:
       actions: read
       contents: read
@@ -2385,7 +2385,7 @@ jobs:
 
       - name: Mirror release to Gitee (China)
         if: ${{ needs.dispatch-contract.outputs.mode == 'repair_gitee' }}
-        timeout-minutes: 100
+        timeout-minutes: 140
         working-directory: tooling
         run: |
           "$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-gitee.sh"

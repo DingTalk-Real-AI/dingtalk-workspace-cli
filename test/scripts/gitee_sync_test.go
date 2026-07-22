@@ -547,7 +547,35 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 	}
 	perAssetSeconds := shellDefaultInt(t, reconciler, "GITEE_ASSET_TIMEOUT_SECONDS")
 	overallSeconds := shellDefaultInt(t, reconciler, "GITEE_OVERALL_TIMEOUT_SECONDS")
-	finalListSeconds := shellDefaultInt(t, reconciler, "GITEE_LIST_MAX_TIME")
+	listSeconds := shellDefaultInt(t, reconciler, "GITEE_LIST_MAX_TIME")
+	uploadSeconds := shellDefaultInt(t, reconciler, "GITEE_UPLOAD_MAX_TIME")
+	verifySeconds := shellDefaultInt(t, reconciler, "GITEE_VERIFY_MAX_TIME")
+	postUploadVerifyAttempts := shellDefaultInt(t, reconciler, "GITEE_POST_UPLOAD_VERIFY_ATTEMPTS")
+	verifyRetryDelay := shellDefaultInt(t, reconciler, "GITEE_VERIFY_RETRY_DELAY")
+	uploadRetryDelay := shellDefaultInt(t, reconciler, "GITEE_UPLOAD_RETRY_DELAY")
+	const minimumLargeAssetUploadSeconds = 720
+	if uploadSeconds < minimumLargeAssetUploadSeconds {
+		t.Fatalf(
+			"Gitee upload deadline = %ds, want at least %ds for near-10 MiB release assets",
+			uploadSeconds, minimumLargeAssetUploadSeconds,
+		)
+	}
+	oneSlowSuccessBudget := 2*listSeconds + uploadSeconds + verifySeconds
+	if oneSlowSuccessBudget > perAssetSeconds {
+		t.Fatalf(
+			"one complete slow upload budget = %ds, exceeds per-asset deadline %ds",
+			oneSlowSuccessBudget, perAssetSeconds,
+		)
+	}
+	fastFailureRetryBudget := uploadSeconds + (postUploadVerifyAttempts+3)*listSeconds +
+		verifySeconds + (postUploadVerifyAttempts-1)*verifyRetryDelay + uploadRetryDelay
+	if fastFailureRetryBudget > perAssetSeconds {
+		t.Fatalf(
+			"fast-failure retry budget = %ds, exceeds per-asset deadline %ds",
+			fastFailureRetryBudget, perAssetSeconds,
+		)
+	}
+	finalListSeconds := listSeconds
 	completeAssetBudget := perAssetSeconds*len(requiredGiteeAssets) + finalListSeconds
 	if completeAssetBudget > overallSeconds {
 		t.Fatalf(
@@ -562,11 +590,12 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 		)
 	}
 
-	completeSyncBudget := tagSeconds + lookupSeconds + createSeconds + reconcileSeconds
+	childDeadlineReserveSeconds := shellDefaultInt(t, syncScript, "GITEE_CHILD_DEADLINE_RESERVE_SECONDS")
+	completeSyncBudget := tagSeconds + lookupSeconds + createSeconds + reconcileSeconds + childDeadlineReserveSeconds
 	if completeSyncBudget > syncSeconds {
 		t.Fatalf(
-			"complete sync budget = %ds (tag=%d + lookup=%d + create=%d + reconcile=%d), exceeds sync deadline %ds",
-			completeSyncBudget, tagSeconds, lookupSeconds, createSeconds, reconcileSeconds, syncSeconds,
+			"complete sync budget = %ds (tag=%d + lookup=%d + create=%d + reconcile=%d + child reserve=%d), exceeds sync deadline %ds",
+			completeSyncBudget, tagSeconds, lookupSeconds, createSeconds, reconcileSeconds, childDeadlineReserveSeconds, syncSeconds,
 		)
 	}
 
@@ -594,6 +623,24 @@ func TestGiteeReleaseWorkflowUsesImmutableTagsAndBoundedRetryBudget(t *testing.T
 		t.Fatalf(
 			"sync deadline %ds plus reserve exceeds release fallback step %ds",
 			syncSeconds, releaseSyncStepSeconds,
+		)
+	}
+
+	const repairWorkflowReserveMinutes = 20
+	assertWorkflowBudget(
+		t,
+		string(releaseData),
+		"repair-channel:",
+		[]string{"name: Mirror release to Gitee (China)"},
+		repairWorkflowReserveMinutes,
+	)
+	repairSyncStepSeconds := workflowTimeoutMinutesAfter(
+		t, string(releaseData), "repair-channel:", "name: Mirror release to Gitee (China)",
+	) * 60
+	if syncSeconds+workflowReserveMinutes*60 > repairSyncStepSeconds {
+		t.Fatalf(
+			"sync deadline %ds plus reserve exceeds repair step %ds",
+			syncSeconds, repairSyncStepSeconds,
 		)
 	}
 
