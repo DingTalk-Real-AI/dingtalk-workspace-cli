@@ -12,7 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
@@ -35,11 +37,28 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 		copyArgs[key] = value
 	}
 	c.calls = append(c.calls, paramAliasToolCall{server: server, tool: tool, args: copyArgs})
-	text := `{}`
-	if tool == "list_calendar_events" {
-		text = `{"result":{"events":[]}}`
-	}
+	text := paramAliasResponseForTool(tool)
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
+}
+
+// paramAliasResponseForTool supplies deterministic, business-shape-valid
+// responses for the complete-command equivalence matrix. Most commands only
+// print the transport result and need an empty object; smart shortcuts that
+// inspect a read response receive the smallest shape that lets their full RunE
+// complete without falling back to a validation error.
+func paramAliasResponseForTool(tool string) string {
+	switch tool {
+	case "list_calendar_events":
+		return `{"result":{"events":[]}}`
+	case "search_mail_users":
+		return `{"users":[{"name":"Fixture User","email":"fixture@example.com","id":"fixture-user"}]}`
+	case "search_dept_by_keyword":
+		return `{"deptList":[{"deptId":1,"name":"Fixture Dept"}]}`
+	case "search_groups":
+		return `{"result":{"items":[{"openConversationId":"fixture-conversation","title":"Fixture Group"}]}}`
+	default:
+		return `{}`
+	}
 }
 
 func (*paramAliasCaptureCaller) Format() string { return "json" }
@@ -47,13 +66,40 @@ func (*paramAliasCaptureCaller) DryRun() bool   { return false }
 func (*paramAliasCaptureCaller) Fields() string { return "" }
 func (*paramAliasCaptureCaller) JQ() string     { return "" }
 
+// paramAliasCaptureRunner covers helpers (currently dev app) that dispatch
+// through executor.Runner instead of edition.ToolCaller. Keeping both capture
+// boundaries in one call list lets the matrix compare the final request shape
+// without knowing which transport adapter a command uses.
+type paramAliasCaptureRunner struct {
+	caller *paramAliasCaptureCaller
+}
+
+func (r *paramAliasCaptureRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+	copyArgs := make(map[string]any, len(invocation.Params))
+	for key, value := range invocation.Params {
+		copyArgs[key] = value
+	}
+	r.caller.calls = append(r.caller.calls, paramAliasToolCall{
+		server: invocation.CanonicalProduct,
+		tool:   invocation.Tool,
+		args:   copyArgs,
+	})
+	invocation.Implemented = true
+	return executor.Result{Invocation: invocation, Response: map[string]any{}}, nil
+}
+
 func executeParamAliasE2E(t *testing.T, caller *paramAliasCaptureCaller, args ...string) (*pipeline.Context, error) {
 	t.Helper()
 	originalArgs := os.Args
 	os.Args = append([]string{"dws"}, args...)
 	defer func() { os.Args = originalArgs }()
 
+	originalRunnerFactory := rootNewCommandRunnerWithFlags
+	rootNewCommandRunnerWithFlags = func(cli.CatalogLoader, *GlobalFlags) executor.Runner {
+		return &paramAliasCaptureRunner{caller: caller}
+	}
 	root := NewRootCommand()
+	rootNewCommandRunnerWithFlags = originalRunnerFactory
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
@@ -160,20 +206,65 @@ func TestParamAliasCanonicalConflictFailsBeforeRunE(t *testing.T) {
 	}
 }
 
-func TestParamAliasBlockedFlagReachesReviewedFinalError(t *testing.T) {
-	caller := &paramAliasCaptureCaller{}
-	ctx, err := executeParamAliasE2E(t, caller,
-		"chat", "message", "list-by-sender", "--time", "2026-03-10T00:00:00+08:00",
-	)
-	if ctx == nil || ctx.ProtectedFlags["time"] != pipeline.FlagProtectionBlocked {
-		t.Fatalf("blocked flag did not survive PreParse: %#v", ctx)
+func TestAllReviewedParamAliasGuardsReachFinalErrorsWithoutDispatch(t *testing.T) {
+	concepts, err := cli.LoadParamConcepts()
+	if err != nil {
+		t.Fatalf("LoadParamConcepts() error = %v", err)
 	}
-	var appErr *apperrors.Error
-	if !stderrors.As(err, &appErr) || appErr.Reason != "blocked_flag" || !strings.Contains(appErr.Hint, "--help") {
-		t.Fatalf("blocked final error = %T %v", err, err)
+
+	guardCounts := map[pipeline.FlagProtection]int{}
+	for _, fixture := range concepts.Fixture {
+		var wantProtection pipeline.FlagProtection
+		var wantReason string
+		switch fixture.Expect {
+		case "did-you-mean:blocked":
+			wantProtection = pipeline.FlagProtectionBlocked
+			wantReason = "blocked_flag"
+		case "did-you-mean:ambiguous":
+			wantProtection = pipeline.FlagProtectionAmbiguous
+			wantReason = "ambiguous_flag"
+		default:
+			continue
+		}
+		guardCounts[wantProtection]++
+
+		t.Run(fixture.Command+"/"+fixture.Emitted, func(t *testing.T) {
+			value := "FIXTURE_VALUE"
+			args := append(strings.Fields(fixture.Command), "--"+fixture.Emitted, value)
+			caller := &paramAliasCaptureCaller{}
+			ctx, executeErr := executeParamAliasE2E(t, caller, args...)
+
+			morphed := cmdutil.Morph(fixture.Emitted)
+			if ctx == nil || ctx.ProtectedFlags[morphed] != wantProtection {
+				t.Fatalf("guard protection = %#v, want %s for %q", ctx, wantProtection, morphed)
+			}
+			assertLeftUnchanged(t, ctx, fixture.Emitted, value)
+
+			var appErr *apperrors.Error
+			if !stderrors.As(executeErr, &appErr) {
+				t.Fatalf("final error = %T %v, want *errors.Error", executeErr, executeErr)
+			}
+			if appErr.Category != apperrors.CategoryValidation || appErr.Reason != wantReason || apperrors.ExitCode(executeErr) != 3 {
+				t.Fatalf("final error contract = category %q reason %q exit %d, want validation/%s/3", appErr.Category, appErr.Reason, apperrors.ExitCode(executeErr), wantReason)
+			}
+			if !strings.Contains(appErr.Message, "unknown flag: --"+fixture.Emitted) || !strings.Contains(appErr.Message, "See 'dws "+fixture.Command+" --help' for usage.") {
+				t.Fatalf("final error message = %q", appErr.Message)
+			}
+			if !strings.Contains(appErr.Hint, "--"+fixture.Emitted) || !strings.Contains(appErr.Hint, "--help") {
+				t.Fatalf("final error hint = %q", appErr.Hint)
+			}
+			wantAction := "Run 'dws " + fixture.Command + " --help' for valid flags"
+			if !reflect.DeepEqual(appErr.Actions, []string{wantAction}) || len(appErr.AvailableFlags) == 0 || appErr.Cause == nil {
+				t.Fatalf("final recovery fields = actions %v flags %v cause %v", appErr.Actions, appErr.AvailableFlags, appErr.Cause)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("guarded flag reached RunE/tool dispatch: %#v", caller.calls)
+			}
+		})
 	}
-	if len(caller.calls) != 0 {
-		t.Fatalf("blocked flag reached RunE/tool dispatch: %#v", caller.calls)
+
+	if guardCounts[pipeline.FlagProtectionBlocked] != 9 || guardCounts[pipeline.FlagProtectionAmbiguous] != 3 {
+		t.Fatalf("reviewed guard coverage = blocked %d ambiguous %d, want 9/3", guardCounts[pipeline.FlagProtectionBlocked], guardCounts[pipeline.FlagProtectionAmbiguous])
 	}
 }
 

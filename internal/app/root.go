@@ -73,6 +73,7 @@ var (
 	rootPluginLoadHooks             = (*plugin.Plugin).LoadHooks
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
+	rootNewCommandRunnerWithFlags   = newCommandRunnerWithFlags
 )
 
 // Execute runs the root command and returns the process exit code.
@@ -373,7 +374,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	loader := cli.EnvironmentLoader{
 		LookupEnv: os.LookupEnv,
 	}
-	runner := newCommandRunnerWithFlags(loader, flags)
+	runner := rootNewCommandRunnerWithFlags(loader, flags)
 
 	root := &cobra.Command{
 		Use:               "dws",
@@ -470,9 +471,30 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	configureRootHelp(root)
 	// Set custom flag error handler for better UX
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
+	installReviewedFlagProtectionHandlers(root)
 	root.SetContext(rootCtx)
 
 	return root
+}
+
+// installReviewedFlagProtectionHandlers makes reviewed blocked/ambiguous
+// parameters authoritative even when an older command subtree has installed a
+// local FlagErrorFunc. Commands without a reviewed guard keep their existing
+// handler or inherit the root handler as before.
+func installReviewedFlagProtectionHandlers(root *cobra.Command) {
+	if root == nil {
+		return
+	}
+	var visit func(*cobra.Command)
+	visit = func(cmd *cobra.Command) {
+		if entry, ok := cli.LookupParamAlias(cmd.CommandPath()); ok && (len(entry.Blocked) > 0 || len(entry.Ambiguous) > 0) {
+			cmd.SetFlagErrorFunc(flagErrorWithSuggestions)
+		}
+		for _, child := range cmd.Commands() {
+			visit(child)
+		}
+	}
+	visit(root)
 }
 
 func preparseProfileFlag(args []string) string {
