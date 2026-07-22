@@ -131,7 +131,7 @@ func TestCrossPlatformCoverageGenerateSchemaCatalogFailureEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageGenerateSchemaCatalogResolvesBuildExactlyOnce(t *testing.T) {
-	root := app.NewRootCommand()
+	root := app.NewSchemaSourceRootCommand()
 	resolveCalls := 0
 	resolvedRegistryHash := ""
 	resolver := func(candidate *cobra.Command) (cli.ResolvedSchemaBuild, error) {

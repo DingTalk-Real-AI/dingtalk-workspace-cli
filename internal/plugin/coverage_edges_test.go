@@ -131,22 +131,19 @@ func TestCrossPlatformCoveragePluginConverterEdges(t *testing.T) {
 		t.Fatalf("StdioClients(user) length = %d", len(got))
 	}
 	descriptors := p.ToServerDescriptors()
-	if len(descriptors) != 2 {
+	if len(descriptors) != 1 {
 		t.Fatalf("descriptors length = %d", len(descriptors))
 	}
-	seenDefault := false
 	seenOverlay := false
 	for _, d := range descriptors {
 		switch d.Key {
-		case "http-default":
-			seenDefault = d.CLI.ID == "http-default" && d.CLI.Command == "http-default" && d.HasCLIMeta
 		case "http-overlay":
 			seenOverlay = d.CLI.ID == "custom" && d.CLI.Command == "run" &&
 				d.AuthHeaders["Authorization"] == "Bearer secret"
 		}
 	}
-	if !seenDefault || !seenOverlay {
-		t.Fatalf("descriptor defaults/overlay not covered: %#v", descriptors)
+	if !seenOverlay {
+		t.Fatalf("valid descriptor overlay not covered: %#v", descriptors)
 	}
 	dataDir := filepath.Join(filepath.Dir(filepath.Dir(root)), "data")
 	if got := expandPluginVars("$"+"{DWS_PLUGIN_ROOT}|$"+"{DWS_PLUGIN_DATA}|$"+"{PLUGIN_TOKEN}", root); got != root+"|"+dataDir+"|secret" {
@@ -300,6 +297,7 @@ func TestCrossPlatformCoverageManifestEdges(t *testing.T) {
 func TestCrossPlatformCoverageLoaderDiscoveryLifecycle(t *testing.T) {
 	oldHome := pluginUserHomeDir
 	t.Cleanup(func() { pluginUserHomeDir = oldHome })
+	t.Setenv("DWS_CONFIG_DIR", "")
 	home := t.TempDir()
 	pluginUserHomeDir = func() (string, error) { return home, nil }
 	defaultLoader := NewLoader("1.2.3")
@@ -310,6 +308,12 @@ func TestCrossPlatformCoverageLoaderDiscoveryLifecycle(t *testing.T) {
 	if got := NewLoader("dev").PluginsDir; got != filepath.Join(".dws", "plugins") {
 		t.Fatalf("NewLoader error path = %q", got)
 	}
+	customConfig := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", customConfig)
+	if got := NewLoader("dev").PluginsDir; got != filepath.Join(customConfig, "plugins") {
+		t.Fatalf("NewLoader custom config path = %q", got)
+	}
+	t.Setenv("DWS_CONFIG_DIR", "")
 
 	root := t.TempDir()
 	l := &Loader{PluginsDir: root, CLIVersion: "1.0.0"}

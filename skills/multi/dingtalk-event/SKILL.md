@@ -19,8 +19,8 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 | Command | Purpose |
 |---|---|
 | `dws event list` | 查看当前个人事件目录；不要把它当能力菜单主动展示 |
-| `dws event schema <event_key>` | 查看事件参数和输出字段 schema，默认 JSON |
-| `dws event consume <event_key> [flags]` | 阻塞消费；事件写到 stdout，推荐 `-f ndjson` |
+| `dws event schema <event_key> --flatten` | 查看 Agent 使用的顶层业务字段 schema，默认 JSON |
+| `dws event consume <event_key> --flatten [flags]` | 阻塞消费；事件写到 stdout，推荐 `-f ndjson` |
 | `dws event status --event <event_key>` | 查看个人订阅、personal bus 和本地 consume |
 | `dws event stop <subscribe_id> --dry-run` / `--yes` | 先预览，再确认取消个人订阅并停止对应本地消费 |
 | `dws event stop --all --dry-run` / `--yes` | 先预览，再确认清理当前身份下本地记录的全部个人订阅 |
@@ -57,17 +57,17 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 - 用户只给群名时，先运行 `dws chat search --query "<group>" --format json` 解析 openConversationId；多候选必须让用户确认。
 - 用户要求执行“撤回消息”时使用 `dws chat`；只有“监听/订阅消息撤回”才使用 `dws event consume user_im_message_recall_*`。
 - 用户说“贴标签”且语义是给消息贴表情时，按消息表情回应事件处理，event key 使用 `reaction`。
-- 正常 Agent 消费使用 `-f ndjson`。抓一条样本可用 `--max-events 1 -f json`。
+- 正常 Agent 消费统一显式使用 `--flatten -f ndjson`。抓一条样本可用 `--flatten --max-events 1 -f json`。`--format` 只控制 JSON 序列化，`--flatten` 才控制数据结构。
 - 监听非默认组织时带 `--profile <corpId 或 profile 名>`；漏传会退回默认 profile 而失败。
 - 自己发的消息不作为事件回来（`isSelfLoop` 过滤）：边监听边 `dws chat message send` 回复不成环；测试投递用别人 / 机器人发（自发会看到 0 事件）。
-- `--debug-raw-events` 只用于联调确认服务端推送是否到达本地连接；正常任务不要使用。
+- `--debug-raw-events` 只用于联调确认服务端推送是否到达本地连接；正常任务不要使用。它和 `--flatten` 互斥，`-f raw` 也不能与 `--flatten` 同时使用。
 - 排查：consume 报 bus 启动失败 → 报错已带真实原因，先查 `dws --profile <x> auth status`（非默认组织带对 `--profile`）；本地日志见 `~/.dws/events/<edition>/personal_stream/<hash>/bus.log`（`hash` 见 `dws event status` 的 Workdir）；有残留先用 `dws event stop --all --dry-run` 预览，确认后加 `--yes` 清理。看着"挂住"无输出多是误加了 `--foreground`（那是跑 bus、不打印事件），去掉即可。
 
 ## Call flow
 
 1. 从用户意图选择事件码；人名或群名先解析成必填 ID。
-2. 需要了解字段时运行 `dws event schema <event_key>`，读取 `schema.properties`；`jq_root_path` 当前固定为 `.`。
-3. 启动 `dws event consume <event_key> ... -f ndjson`，等待 stderr 出现 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 后开始处理 stdout，不要用 `sleep` 猜测。
+2. 需要了解字段时运行 `dws event schema <event_key> --flatten`，读取 `schema.properties`；此模式的 `jq_root_path` 为 `.`。
+3. 启动 `dws event consume <event_key> ... --flatten -f ndjson`，等待 stderr 出现 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 后开始处理 stdout，不要用 `sleep` 猜测。
 4. stdout 每行是一个扁平事件 JSON；直接按该事件的 `schema.properties` 读取顶层字段。
 5. 需要确认监听状态时运行 `dws event status --event <event_key>`，查看 `Subscriptions` 和 `Consumers`。
 6. 任务完成后优雅结束 consume；本次新建的订阅会自动取消。复用已有订阅或需要从外部主动取消时，先用 `dws event stop <subscribe_id> --dry-run` 预览，向用户确认后再加 `--yes`；临时测试可用 `--max-events` 或 `--duration` 自动退出。
@@ -88,57 +88,67 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 
 ```bash
 # 当前用户被 @ 的消息
-dws event consume user_im_message_receive_at -f ndjson
+dws event consume user_im_message_receive_at --flatten -f ndjson
 
 # 当前用户与指定用户的单聊消息
 dws event consume user_im_message_receive_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 使用 openDingtalkId 监听外部联系人、机器人或跨组织身份的单聊消息
 dws event consume user_im_message_receive_o2o \
   --open-dingtalk-id open-user-1 \
+  --flatten \
   -f ndjson
 
 # 指定群聊/会话消息
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定发送人的消息（单聊和群聊）
 dws event consume user_im_message_receive_user \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 使用 openDingtalkId 监听指定发送人的消息
 dws event consume user_im_message_receive_user \
   --open-dingtalk-id open-user-1 \
+  --flatten \
   -f ndjson
 
 # 指定单聊消息已读
 dws event consume user_im_message_read_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 指定群聊消息撤回
 dws event consume user_im_message_recall_group \
   --group cidxxxxxxxx \
+  --flatten \
   -f ndjson
 
 # 指定单聊消息收到表情回应
 dws event consume user_im_message_reaction_o2o \
   --user test-user-001 \
+  --flatten \
   -f ndjson
 
 # 有界自测
 dws event consume user_im_message_receive_at \
   --duration 10m \
+  --flatten \
   -f ndjson
 
 # 抓一条样本
 dws event consume user_im_message_receive_o2o \
   --user test-user-001 \
   --max-events 1 \
+  --flatten \
   -f json
 ```
 
@@ -146,10 +156,10 @@ dws event consume user_im_message_receive_o2o \
 
 ## 输出处理
 
-- `dws event schema <event_key>` 是写解析逻辑的依据。
-- 顶层 `jq_root_path` 说明业务字段起点；当前值是 `.`。
+- `dws event schema <event_key> --flatten` 是 Agent 写解析逻辑的依据。
+- `--flatten` 模式的顶层 `jq_root_path` 为 `.`；不传时为兼容存量脚本的 transport envelope，业务 payload 在 `.data | fromjson`。
 - `schema.properties` 是业务字段列表，例如 `content`、`sender`、`conversation_id`、`message_id`、`event_time`。
-- 所有公开事件都是扁平业务对象，直接读取顶层字段；不要生成 `fromjson` 或内部 payload 路径。
+- Agent 命令已显式传 `--flatten`，直接读取顶层字段；不要对该模式再生成 `fromjson` 或内部 payload 路径。
 - 群自动回复使用事件顶层 `conversation_id`；单聊自动回复使用顶层 `sender_open_dingtalk_id`。
 - 已读事件读取顶层 `reader`、`reader_open_dingtalk_id`、`read_time`；撤回事件读取 `recaller`、`recaller_open_dingtalk_id`、`recall_time`。
 - 表情回应事件读取顶层 `operator`、`operator_open_dingtalk_id`、`reaction_name`、`reaction_text`、`operation_type`、`operation_time`。

@@ -82,7 +82,7 @@ if [ "$delivered_by_push" -ne 1 ]; then
   if DWS_RELEASE_OFFICIAL_REPOSITORY="$REPOSITORY" \
     DWS_RELEASE_GITHUB_TOKEN="$API_TOKEN" \
     "$SCRIPT_DIR/verify-release-workflow-delivery.sh" "$TAG" "$EXPECTED_COMMIT" 2>/dev/null; then
-    printf 'Delivered stable baseline verified through protected default-branch recovery: %s -> %s\n' \
+    printf 'Delivered stable baseline verified through trusted default-branch delivery: %s -> %s\n' \
       "$TAG" "$EXPECTED_COMMIT"
     exit 0
   fi

@@ -75,7 +75,7 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 		version, buildTime, gitCommit = oldVersion, oldBuild, oldCommit
 	})
 
-	rootLoadPlugins = func(*pipeline.Engine, executor.Runner) []*cobra.Command {
+	rootLoadPlugins = func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
 		return []*cobra.Command{{Use: "plugin-added", Run: func(*cobra.Command, []string) {}}}
 	}
 	preRunCalled := false
@@ -236,7 +236,8 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	oldDescriptors := rootPluginDescriptors
 	oldStdioClients := rootPluginStdioClients
 	oldHTTP := rootRegisterPluginHTTPServer
-	oldStdio := rootRegisterStdioManifest
+	oldStdioDescriptor := rootPluginStdioDescriptor
+	oldStdioRegister := rootRegisterResolvedStdioServer
 	oldHooks := rootPluginLoadHooks
 	oldSync := rootPluginSyncSkills
 	oldToken := rootAuthLoadTokenData
@@ -247,7 +248,8 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 		rootPluginDescriptors = oldDescriptors
 		rootPluginStdioClients = oldStdioClients
 		rootRegisterPluginHTTPServer = oldHTTP
-		rootRegisterStdioManifest = oldStdio
+		rootPluginStdioDescriptor = oldStdioDescriptor
+		rootRegisterResolvedStdioServer = oldStdioRegister
 		rootPluginLoadHooks = oldHooks
 		rootPluginSyncSkills = oldSync
 		rootAuthLoadTokenData = oldToken
@@ -264,9 +266,17 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	}
 	rootPluginDescriptors = func(p *plugin.Plugin) []mcptypes.ServerDescriptor {
 		if p == p1 {
-			return []mcptypes.ServerDescriptor{{Key: "http", Endpoint: "https://example.test"}}
+			return []mcptypes.ServerDescriptor{{
+				Key: "http", Endpoint: "https://example.test",
+				CLI: mcptypes.CLIOverlay{
+					ID: "http", Command: "one-http",
+					ToolOverrides: map[string]mcptypes.CLIToolOverride{
+						"ping": {CLIName: "ping"},
+					},
+				},
+			}}
 		}
-		return []mcptypes.ServerDescriptor{{Key: "no-cli", Endpoint: "https://example.test"}}
+		return []mcptypes.ServerDescriptor{{Key: p.Manifest.Name + "-no-cli", Endpoint: "https://example.test"}}
 	}
 	client := transport.NewStdioClient("ignored", nil, nil)
 	rootPluginStdioClients = func(p *plugin.Plugin, uc *plugin.UserContext) []plugin.StdioServerClient {
@@ -278,9 +288,23 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	httpCount := 0
 	stdioCount := 0
 	rootRegisterPluginHTTPServer = func(mcptypes.ServerDescriptor) { httpCount++ }
-	rootRegisterStdioManifest = func(*plugin.Plugin, plugin.StdioServerClient) mcptypes.ServerDescriptor {
+	rootPluginStdioDescriptor = func(*plugin.Plugin, plugin.StdioServerClient) (mcptypes.ServerDescriptor, bool) {
+		return mcptypes.ServerDescriptor{
+			Key: "local",
+			CLI: mcptypes.CLIOverlay{
+				ID: "local", Command: "one-stdio",
+				ToolOverrides: map[string]mcptypes.CLIToolOverride{
+					"pong": {CLIName: "pong"},
+				},
+			},
+		}, true
+	}
+	rootRegisterResolvedStdioServer = func(
+		*plugin.Plugin,
+		plugin.StdioServerClient,
+		mcptypes.ServerDescriptor,
+	) {
 		stdioCount++
-		return mcptypes.ServerDescriptor{}
 	}
 	rootPluginLoadHooks = func(p *plugin.Plugin) (*plugin.HooksConfig, error) {
 		switch p {
@@ -294,7 +318,8 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	}
 	synced := false
 	rootPluginSyncSkills = func([]*plugin.Plugin) { synced = true }
-	if got := loadPlugins(pipeline.NewEngine(), runnerCoverageFallback{}); got != nil {
+	got := loadPlugins(nil, pipeline.NewEngine(), runnerCoverageFallback{})
+	if len(got) != 2 || got[0].Name() != "one-http" || got[1].Name() != "one-stdio" {
 		t.Fatalf("loaded plugin commands = %#v", got)
 	}
 	if httpCount != 3 || stdioCount != 1 || !synced {

@@ -304,3 +304,14 @@ func splitSchemaPathTokens(raw string) []string {
 	}
 	return out
 }
+
+// normalizeSchemaQueryCLIPath accepts the historical query spellings while
+// keeping authored Registry CLI paths strict and space-separated. Canonical
+// identity lookup still runs before this compatibility normalization.
+func normalizeSchemaQueryCLIPath(path string) string {
+	parts := splitSchemaPathTokens(strings.TrimSpace(path))
+	if len(parts) > 0 && parts[0] == "dws" {
+		parts = parts[1:]
+	}
+	return strings.Join(parts, " ")
+}

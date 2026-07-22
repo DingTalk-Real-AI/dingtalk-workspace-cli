@@ -476,6 +476,8 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 
 `dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog currently covers messages that mention the current user, one-to-one messages with a specified user, and messages in a specified group.
 
+The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
+
 > **Prerequisite**: run `dws auth login`. Personal identity is resolved from the OAuth token and cannot be supplied through command-line identity flags.
 
 For an event-focused installation, use the official convenience installer:
@@ -487,19 +489,19 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 ```bash
 # Inspect the public personal event catalog and schema
 dws event list
-dws event schema user_im_message_receive_o2o
+dws event schema user_im_message_receive_o2o --flatten
 
 # Listen for messages that mention the current user
-dws event consume user_im_message_receive_at -f ndjson
+dws event consume user_im_message_receive_at --flatten -f ndjson
 
 # Listen for one-to-one messages with a specified user
-dws event consume user_im_message_receive_o2o --user <userId> -f ndjson
+dws event consume user_im_message_receive_o2o --user <userId> --flatten -f ndjson
 
 # Listen by openDingtalkId (external contact, bot, or cross-organization identity)
-dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> -f ndjson
+dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> --flatten -f ndjson
 
 # Listen for messages in a specified group
-dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
+dws event consume user_im_message_receive_group --group <openConversationId> --flatten -f ndjson
 
 # Inspect local consumers and cancel a subscription
 dws event status

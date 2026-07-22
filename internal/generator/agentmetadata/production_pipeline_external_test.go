@@ -18,7 +18,7 @@ func TestCrossPlatformCoverageGenerateProductionAgentMetadataPipeline(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := app.NewRootCommand()
+	root := app.NewSchemaSourceRootCommand()
 	if _, err := cli.ApplyEmbeddedManualSchemaHints(root); err != nil {
 		t.Fatal(err)
 	}

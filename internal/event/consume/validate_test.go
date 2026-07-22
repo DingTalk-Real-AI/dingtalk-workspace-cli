@@ -137,6 +137,7 @@ func TestPrintDryRun_RendersAllSetFields(t *testing.T) {
 	c.EventTypes = []string{"im.*", "approval.*"}
 	c.Filter = "^im\\."
 	c.Format = FormatCompact
+	c.Flatten = true
 	c.OutputDir = "/tmp/events"
 	c.Routes, _ = ParseRoutes([]string{`^im\.=dir:/tmp/im/`})
 	c.MaxEvents = 5
@@ -151,7 +152,7 @@ func TestPrintDryRun_RendersAllSetFields(t *testing.T) {
 	wants := []string{
 		"client_id", "workdir", "ipc_endpoint", "im.*,approval.*",
 		"^im\\.", "compact", "/tmp/events", "route[0]", "max_events       : 5",
-		"duration", "true",
+		"duration", "flatten          : true", "true",
 	}
 	for _, w := range wants {
 		if !strings.Contains(out, w) {

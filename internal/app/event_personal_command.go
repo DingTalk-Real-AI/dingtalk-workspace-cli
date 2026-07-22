@@ -61,6 +61,7 @@ type commonConsumeOptions struct {
 type personalConsumeOptions struct {
 	Common           commonConsumeOptions
 	EventKey         string
+	Flatten          bool
 	DebugRawEvents   bool
 	SubscribeID      string
 	Rule             string
@@ -131,6 +132,7 @@ var (
 	personalFindProcess                 = os.FindProcess
 	personalSignalProcess               = (*os.Process).Signal
 	personalResolveAuxiliaryAccessToken = ResolveAuxiliaryAccessToken
+	personalForceRefreshRejectedToken   = forceRefreshRejectedAccessToken
 	personalLoadTokenData               = authpkg.LoadTokenData
 	personalClientID                    = authpkg.ClientID
 	personalResolveAppCredentialsStrict = authpkg.ResolveAppCredentialsStrict
@@ -139,6 +141,7 @@ var (
 func newEventSchemaCommand() *cobra.Command {
 	var asIdentity string
 	var formatRaw string
+	var flatten bool
 	cmd := &cobra.Command{
 		Use:               "schema <event_key>",
 		Short:             "显示事件 schema",
@@ -156,11 +159,12 @@ func newEventSchemaCommand() *cobra.Command {
 			if !def.Public {
 				return personal.PublicAvailabilityError(args[0])
 			}
-			return renderPersonalSchema(c.OutOrStdout(), def, formatRaw)
+			return renderPersonalSchema(c.OutOrStdout(), def, formatRaw, flatten)
 		},
 	}
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
+	cmd.Flags().BoolVar(&flatten, "flatten", false, "显示 --flatten 消费模式对应的顶层业务字段 schema")
 	hideEventInternalFlags(cmd, "as")
 	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
 		Name:        "event_key",
@@ -188,7 +192,7 @@ func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
 	return tw.Flush()
 }
 
-func renderPersonalSchema(w io.Writer, def personal.Definition, format string) error {
+func renderPersonalSchema(w io.Writer, def personal.Definition, format string, flatten bool) error {
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format == "" {
 		format = "json"
@@ -198,7 +202,7 @@ func renderPersonalSchema(w io.Writer, def personal.Definition, format string) e
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(personal.BuildSchemaDocument(def))
+	return enc.Encode(personal.BuildSchemaDocumentForMode(def, flatten))
 }
 
 func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) error {
@@ -206,6 +210,19 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return err
 	}
+	rawFormat := ""
+	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
+		rawFormat = opts.Common.FormatRaw
+	}
+	normalised, fellback := consume.NormalizeFormat(rawFormat)
+	if fellback && !opts.Common.Quiet {
+		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
+	}
+	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+		return fmt.Errorf("event consume --as user: %w", err)
+	}
+	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
+
 	configDir := defaultConfigDir()
 	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
 	if err != nil {
@@ -220,16 +237,6 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
-	rawFormat := ""
-	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
-		rawFormat = opts.Common.FormatRaw
-	}
-	normalised, fellback := consume.NormalizeFormat(rawFormat)
-	if fellback && !opts.Common.Quiet {
-		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
-	}
-	projector := personalEventProjector(opts.DebugRawEvents)
-
 	if opts.Common.DryRun {
 		if strings.TrimSpace(opts.SubscribeID) == "" {
 			if err := validatePersonalSubscriptionOptions(opts); err != nil {
@@ -246,6 +253,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 			Duration:       opts.Common.Duration,
 			EventKey:       opts.EventKey,
 			Format:         normalised,
+			Flatten:        opts.Flatten,
 			OutputDir:      opts.Common.OutputDir,
 			Routes:         routes,
 			Projector:      projector,
@@ -302,6 +310,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		Duration:         opts.Common.Duration,
 		EventKey:         eventKey,
 		Format:           normalised,
+		Flatten:          opts.Flatten,
 		OutputDir:        opts.Common.OutputDir,
 		Routes:           routes,
 		Projector:        projector,
@@ -365,11 +374,27 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	return err
 }
 
-func personalEventProjector(debugRawEvents bool) consume.Projector {
+func personalEventProjector(debugRawEvents, flatten bool) consume.Projector {
 	if debugRawEvents {
 		return func(ev transport.Event) (any, error) { return ev, nil }
 	}
-	return personal.ProjectOutput
+	if flatten {
+		return personal.ProjectOutput
+	}
+	return nil
+}
+
+func validatePersonalEventOutputMode(flatten, debugRawEvents bool, format consume.Format) error {
+	if !flatten {
+		return nil
+	}
+	if debugRawEvents {
+		return fmt.Errorf("--flatten and --debug-raw-events are mutually exclusive")
+	}
+	if format == consume.FormatRaw {
+		return fmt.Errorf("--flatten and --format raw are mutually exclusive")
+	}
+	return nil
 }
 
 func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOptions, subscribeID, eventKey string) {
@@ -831,6 +856,9 @@ func newPersonalStreamSource(ctx context.Context, opts personalStreamSourceOptio
 	return source.NewPersonal(source.PersonalConfig{
 		AccessTokenProvider: func(ctx context.Context) (string, error) {
 			return personalResolveAuxiliaryAccessToken(ctx, opts.ConfigDir, "")
+		},
+		ForceRefreshToken: func(ctx context.Context, rejectedToken string) (string, error) {
+			return personalForceRefreshRejectedToken(ctx, opts.ConfigDir, rejectedToken)
 		},
 		ClientID:     clientID,
 		ClientSecret: clientSecret,

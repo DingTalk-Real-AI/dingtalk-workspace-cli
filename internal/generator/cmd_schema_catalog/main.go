@@ -48,7 +48,7 @@ func main() {
 		fail(err)
 	}
 
-	root := app.NewRootCommand()
+	root := app.NewSchemaSourceRootCommand()
 	if err := generateSchemaCatalog(root, resolvedSurfacePath, outputPath); err != nil {
 		fail(err)
 	}

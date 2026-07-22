@@ -120,12 +120,41 @@ git fetch --force --no-tags "$REMOTE" "+refs/tags/$VERSION:$recovery_ref"
 }
 tag_object="$(git rev-parse "$recovery_ref")"
 commit="$(git rev-parse "$recovery_ref^{commit}")"
+tag_message="$(git for-each-ref "$recovery_ref" --format='%(contents)')"
+cloud_run_id="$(printf '%s\n' "$tag_message" | awk -F ': ' '$1 == "Release-Run" { print $2 }')"
+cloud_run_attempt="$(printf '%s\n' "$tag_message" | awk -F ': ' '$1 == "Release-Run-Attempt" { print $2 }')"
+cloud_actor="$(printf '%s\n' "$tag_message" | awk -F ': ' '$1 == "Requested-By" { print $2 }')"
+cloud_actor_id="$(printf '%s\n' "$tag_message" | awk -F ': ' '$1 == "Requested-By-ID" { print $2 }')"
+cloud_sealed_commit="$(printf '%s\n' "$tag_message" | awk -F ': ' '$1 == "Sealed-Commit" { print $2 }')"
+cloud_marker_count=0
+for cloud_value in "$cloud_run_id" "$cloud_run_attempt" "$cloud_actor" "$cloud_actor_id" "$cloud_sealed_commit"; do
+  [ -z "$cloud_value" ] || cloud_marker_count=$((cloud_marker_count + 1))
+done
+if [ "$cloud_marker_count" -ne 0 ] && [ "$cloud_marker_count" -ne 5 ]; then
+  printf '%s contains incomplete cloud release metadata\n' "$VERSION" >&2
+  exit 1
+fi
+if [ "$cloud_marker_count" -eq 5 ]; then
+  for cloud_number in "$cloud_run_id" "$cloud_run_attempt" "$cloud_actor_id"; do
+    printf '%s\n' "$cloud_number" | grep -Eq '^[1-9][0-9]*$' || {
+      printf '%s contains invalid cloud release identity\n' "$VERSION" >&2
+      exit 1
+    }
+  done
+  [ "$cloud_sealed_commit" = "$commit" ] || {
+    printf '%s cloud release metadata is not bound to %s\n' "$VERSION" "$commit" >&2
+    exit 1
+  }
+fi
 git merge-base --is-ancestor "$commit" "refs/remotes/$REMOTE/main" || {
   printf '%s commit %s is not contained in %s/main\n' "$VERSION" "$commit" "$REMOTE" >&2
   exit 1
 }
 
-if [ -z "$FAILED_RUN_ID" ]; then
+if [ -z "$FAILED_RUN_ID" ] && [ "$cloud_marker_count" -eq 5 ]; then
+  FAILED_RUN_ID="$cloud_run_id"
+  FAILED_RUN_ATTEMPT="$cloud_run_attempt"
+elif [ -z "$FAILED_RUN_ID" ]; then
   candidate_runs="$(
     gh api \
       -H 'Accept: application/vnd.github+json' \
@@ -160,7 +189,7 @@ attempt_record="$(
   gh api \
     -H 'Accept: application/vnd.github+json' \
     "repos/$EXPECTED_REPOSITORY/actions/runs/$FAILED_RUN_ID/attempts/$FAILED_RUN_ATTEMPT" \
-    --jq '[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha] | @tsv'
+    --jq '[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha, .actor.login, .actor.id] | @tsv'
 )" || {
   printf 'could not query Release run %s attempt %s\n' "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT" >&2
   exit 1
@@ -174,6 +203,7 @@ attempt_status="$(printf '%s\n' "$attempt_record" | cut -f6)"
 attempt_conclusion="$(printf '%s\n' "$attempt_record" | cut -f7)"
 attempt_branch="$(printf '%s\n' "$attempt_record" | cut -f8)"
 attempt_commit="$(printf '%s\n' "$attempt_record" | cut -f9)"
+attempt_actor_id="$(printf '%s\n' "$attempt_record" | cut -f11)"
 case "$attempt_conclusion" in
   failure|cancelled|timed_out|startup_failure|stale) ;;
   *)
@@ -182,16 +212,31 @@ case "$attempt_conclusion" in
     exit 1
     ;;
 esac
+if [ "$cloud_marker_count" -eq 5 ]; then
+  expected_attempt_event="workflow_dispatch"
+  expected_attempt_branch="main"
+else
+  expected_attempt_event="push"
+  expected_attempt_branch="$VERSION"
+fi
 if [ "$attempt_id" != "$FAILED_RUN_ID" ] ||
    [ "$attempt_number" != "$FAILED_RUN_ATTEMPT" ] ||
    [ "$attempt_repository" != "$EXPECTED_REPOSITORY" ] ||
    [ "$attempt_path" != ".github/workflows/release.yml" ] ||
-   [ "$attempt_event" != "push" ] ||
+   [ "$attempt_event" != "$expected_attempt_event" ] ||
    [ "$attempt_status" != "completed" ] ||
-   [ "$attempt_branch" != "$VERSION" ] ||
+   [ "$attempt_branch" != "$expected_attempt_branch" ] ||
    [ "$attempt_commit" != "$commit" ]; then
   printf 'Release run %s attempt %s does not match %s at %s\n' \
     "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT" "$VERSION" "$commit" >&2
+  exit 1
+fi
+if [ "$cloud_marker_count" -eq 5 ] &&
+   { [ "$cloud_run_id" != "$FAILED_RUN_ID" ] ||
+     [ "$cloud_run_attempt" != "$FAILED_RUN_ATTEMPT" ] ||
+     [ "$cloud_actor_id" != "$attempt_actor_id" ]; }; then
+  printf 'Release run %s attempt %s is not bound by the cloud seal for %s\n' \
+    "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT" "$VERSION" >&2
   exit 1
 fi
 

@@ -1,0 +1,148 @@
+name: Withdraw release
+run-name: Withdraw ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact published version to withdraw (vX.Y.Z or vX.Y.Z-beta.N)"
+        required: true
+        type: string
+      reason:
+        description: "Public, single-line withdrawal reason (8-300 characters)"
+        required: true
+        type: string
+      confirmation:
+        description: "Type WITHDRAW followed by a space and the exact version"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Share the publication lock with release.yml. A withdrawal and a publication
+# must never mutate channel pointers concurrently.
+concurrency:
+  group: dws-release-publication
+  cancel-in-progress: false
+
+jobs:
+  withdraw:
+    name: Withdraw release from every distribution channel
+    environment: release-withdrawal
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Verify withdrawal environment protection
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.request(
+              "GET /repos/{owner}/{repo}/environments/{environment_name}",
+              { owner, repo, environment_name: "release-withdrawal" },
+            );
+            const reviewerRule = response.data.protection_rules.find(
+              (rule) => rule.type === "required_reviewers",
+            );
+            if (
+              !reviewerRule ||
+              reviewerRule.prevent_self_review !== true ||
+              !Array.isArray(reviewerRule.reviewers) ||
+              reviewerRule.reviewers.length === 0
+            ) {
+              core.setFailed("release-withdrawal must require a reviewer and prevent self-review");
+              return;
+            }
+            if (response.data.deployment_branch_policy?.protected_branches !== true) {
+              core.setFailed("release-withdrawal must allow only protected branches");
+            }
+            if (response.data.can_admins_bypass !== false) {
+              core.setFailed("release-withdrawal must not allow administrator bypass");
+            }
+
+      - name: Require the exact current official default-branch commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const expectedRepository = "DingTalk-Real-AI/dingtalk-workspace-cli";
+            const defaultBranch = context.payload.repository.default_branch;
+            if (context.eventName !== "workflow_dispatch") {
+              core.setFailed("release withdrawal accepts workflow_dispatch only");
+              return;
+            }
+            if (`${context.repo.owner}/${context.repo.repo}` !== expectedRepository) {
+              core.setFailed(`release withdrawal is restricted to ${expectedRepository}`);
+              return;
+            }
+            if (context.ref !== `refs/heads/${defaultBranch}`) {
+              core.setFailed(`release withdrawal must be dispatched from ${defaultBranch}`);
+              return;
+            }
+            const branch = await github.rest.git.getRef({
+              ...context.repo,
+              ref: `heads/${defaultBranch}`,
+            });
+            if (branch.data.object.sha !== context.sha) {
+              core.setFailed(
+                `default branch advanced to ${branch.data.object.sha}; re-dispatch from the new head`,
+              );
+            }
+
+      - name: Check out trusted withdrawal tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js for npm channel withdrawal
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Withdraw immutable release and roll back channels
+        id: withdrawal
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_EVENT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WITHDRAW_VERSION: ${{ inputs.version }}
+          WITHDRAW_REASON: ${{ inputs.reason }}
+          WITHDRAW_CONFIRMATION: ${{ inputs.confirmation }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USER: ${{ secrets.GITEE_USER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          DWS_GITEE_ENABLED: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && 'true' || 'false' }}
+          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
+        run: |
+          ./scripts/release/withdraw-release.sh \
+            "$WITHDRAW_VERSION" \
+            "$WITHDRAW_REASON" \
+            "$WITHDRAW_CONFIRMATION"
+
+      - name: Report withdrawal boundary
+        if: ${{ always() }}
+        env:
+          VERSION: ${{ inputs.version }}
+          RESULT: ${{ steps.withdrawal.outcome }}
+        run: |
+          {
+            echo "### Release withdrawal: ${VERSION}"
+            echo
+            echo "- Workflow result: ${RESULT}"
+            echo "- Success means every configured channel was verified and the permanent withdrawn/${VERSION} tombstone remains as the version-reuse barrier."
+            echo "- Failure may occur before or after the tombstone/channel mutations; inspect the failed step and rerun the exact same inputs after fixing the cause."
+            echo "- The problem GitHub Release and original tag are removed after npm and every tag-enabled/configured mirror are rolled back, so GitHub installers stop resolving the bad version while the Homebrew rollback PR is reviewed."
+            echo "- npm is deprecated rather than unpublished; already-installed clients cannot be remotely downgraded."
+            echo "- If a Homebrew rollback PR was opened, this run remains failed until that PR is independently reviewed, merged, and the workflow is rerun."
+          } >> "$GITHUB_STEP_SUMMARY"

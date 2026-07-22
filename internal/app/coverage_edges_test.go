@@ -1469,10 +1469,10 @@ func TestCrossPlatformCoveragePersonalEventPureCoverage(t *testing.T) {
 	if !ok {
 		t.Fatal("mention definition missing")
 	}
-	if err := renderPersonalSchema(io.Discard, def, ""); err != nil {
+	if err := renderPersonalSchema(io.Discard, def, "", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := renderPersonalSchema(io.Discard, def, "yaml"); err == nil {
+	if err := renderPersonalSchema(io.Discard, def, "yaml", true); err == nil {
 		t.Fatal("unsupported schema format succeeded")
 	}
 	for _, key := range []string{"", "unknown", personal.EventMention, personal.EventFromUser} {
