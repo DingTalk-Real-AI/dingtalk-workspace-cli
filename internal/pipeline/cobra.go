@@ -16,6 +16,7 @@ package pipeline
 import (
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -48,8 +49,13 @@ func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Co
 		return nil, nil
 	}
 
-	// Traverse the command tree to find the target command.
-	target, _, err := root.Traverse(rawArgs)
+	// Cobra's Traverse does not merge root persistent flags before deciding
+	// whether a leading flag consumes the next token. For example, it can treat
+	// the command name in `--dry-run calendar event list` as a value and resolve
+	// the unrelated root command `event list`. Remove only known root-persistent
+	// flags from the traversal copy; the original argv remains intact for the
+	// handlers and Cobra's real parse.
+	target, _, err := root.Traverse(argsForCommandTraversal(root, rawArgs))
 	if err != nil {
 		return nil, nil
 	}
@@ -88,6 +94,67 @@ func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Co
 		}
 	}
 	return ctx, nil
+}
+
+func argsForCommandTraversal(root *cobra.Command, rawArgs []string) []string {
+	if root == nil || len(rawArgs) == 0 {
+		return rawArgs
+	}
+	flags := root.PersistentFlags()
+	if flags == nil || !flags.HasFlags() {
+		return rawArgs
+	}
+
+	out := make([]string, 0, len(rawArgs))
+	for index := 0; index < len(rawArgs); index++ {
+		argument := rawArgs[index]
+		if argument == "--" {
+			out = append(out, rawArgs[index:]...)
+			break
+		}
+		flag, inlineValue, matched := persistentFlagToken(flags, argument)
+		if !matched {
+			out = append(out, argument)
+			continue
+		}
+		if !inlineValue && flag.NoOptDefVal == "" && index+1 < len(rawArgs) {
+			index++
+		}
+	}
+	return out
+}
+
+func persistentFlagToken(flags *pflag.FlagSet, argument string) (*pflag.Flag, bool, bool) {
+	if flags == nil || argument == "" || argument == "-" || argument == "--" {
+		return nil, false, false
+	}
+	if strings.HasPrefix(argument, "--") {
+		body := strings.TrimPrefix(argument, "--")
+		name, _, inlineValue := strings.Cut(body, "=")
+		flag := flags.Lookup(name)
+		return flag, inlineValue, flag != nil
+	}
+	if !strings.HasPrefix(argument, "-") {
+		return nil, false, false
+	}
+
+	body := strings.TrimPrefix(argument, "-")
+	if body == "" {
+		return nil, false, false
+	}
+	shorthands := []rune(body)
+	for index, shorthand := range shorthands {
+		flag := flags.ShorthandLookup(string(shorthand))
+		if flag == nil {
+			return nil, false, false
+		}
+		if flag.NoOptDefVal == "" {
+			// A value-taking shorthand consumes the next token only when it is
+			// last; otherwise the remainder is its attached value (`-vfjson`).
+			return flag, index < len(shorthands)-1, true
+		}
+	}
+	return flags.ShorthandLookup(string(shorthands[0])), true, true
 }
 
 // FlagInfoFromCommand extracts FlagInfo entries from a Cobra

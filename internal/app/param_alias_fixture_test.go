@@ -96,8 +96,8 @@ func TestParamAliasFixtureThroughEmbeddedDeliveryPath(t *testing.T) {
 				//      so the embedded table rewrites it to the canonical flag; or
 				//   2. native acceptance — the emitted synonym is still a genuine
 				//      (usually hidden) real flag the command accepts directly and
-				//      maps to the same entity via its fallback wiring. These are
-				//      the un-migrated commands pending §5 hidden-flag cleanup.
+				//      maps to the same entity via its fallback wiring. Native
+				//      compatibility flags intentionally remain command-owned.
 				flagArgs := ctx.Args[len(strings.Fields(c.Command)):]
 				if len(flagArgs) < 2 || flagArgs[1] != fixtureValue {
 					t.Fatalf("%q on %q lost its value: args=%v", c.Emitted, c.Command, ctx.Args)

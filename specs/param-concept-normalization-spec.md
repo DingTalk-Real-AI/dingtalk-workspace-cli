@@ -1,6 +1,6 @@
 # Spec：参数幻觉治理 —— 受审命令范围内的概念归一化
 
-- 状态：Implemented，待最终回归
+- 状态：Frozen，最终回归通过
 - 分支：`fix/param-hallucination`
 - 评测来源：`param_alias_map_merged_20260720`（440 条 badcase）及参数幻觉分析报告
 
@@ -157,21 +157,16 @@ SemanticAlias 命中保护项时：
 
 同一个拼写重复出现仍保持 Cobra 原有语义，本次不额外改变。
 
-## 6. Calendar 试点结论
+## 6. Calendar 边界结论
 
-保留 `calendar event list` 试点，不回退，也不扩面。
+`internal/helpers/calendar.go` 保持 `main` 原有实现，不迁移或删除它手写的 hidden compatibility flags 与 `flagOrFallback` 链。现存真实 flag 继续由 Cobra/RunE 原生处理，中央体系不得覆盖或重新解释。
 
-该试点已经移除一组手写 hidden spelling flag，改为在 PreParse 统一归一到：
+中央归一化只补充该命令没有注册的 reviewed spelling，例如：
 
-- `start`
-- `end`
-- `calendar-id`
-- `cursor`
-- `limit`
+- `date` → `start`
+- `from` / `since` → `start`
 
-保留 `count` 原生兼容 flag，因为它不被概念层认定为通用 `limit` 同义词。端到端测试验证 Calendar 幻觉参数最终只形成正确的 `startTime`、`endTime`、`calendarId`、`cursor`、`limit` payload。
-
-除这一已提交试点外，本次不继续修改 `internal/helpers/calendar.go`，也不要求其他 skill/helper 迁移 hidden flag 与 fallback。
+Calendar 原生兼容参数和中央 alias 的端到端测试都必须验证最终仍只形成正确的 `startTime`、`endTime`、`calendarId`、`cursor`、`limit` payload。本次不要求任何 skill/helper 迁移 hidden flag 与 fallback。
 
 ## 7. 测试与门禁
 
@@ -193,7 +188,7 @@ fixture 只有“被测参数名”而没有每个业务命令的完整必填业
 允许且有收益的影响：
 
 - 受审命令开始接受明确安全的语义别名。
-- Calendar 试点由 hidden flag/fallback 迁移到 PreParse canonical 读取。
+- Calendar 保留原生 hidden flag/fallback，同时接受不覆盖真实 flag 的 reviewed 中央 alias。
 - alias/canonical 混传从顺序覆盖变为确定性报错。
 - 某些曾被普通 fuzzy handler 猜中的危险名字现在明确失败。
 
@@ -207,12 +202,12 @@ fixture 只有“被测参数名”而没有每个业务命令的完整必填业
 
 ## 9. 回退
 
-本次修改只提交在 `fix/param-hallucination` 本地分支，不推送、不合并、不修改 main。
+最终冻结检查点只提交在本地 `fix/param-hallucination` 分支，不推送、不合并、不修改 main。此前已经存在的同名远端分支予以保留；GitHub PR #744 已关闭，最终冻结提交与标签均不发布到远端。
 
 - 本地提交后发现问题：对本次 commit 执行 `git revert <sha>`，保留完整可审计历史。
 - 如果日后已经合入 main：仍可在 main 上 `git revert <merge-or-commit-sha>`，再走正常审核与发布流程。
 - reviewed 源与 `param_aliases_generated.go` 必须一起回退，或回退源后重新生成并通过 drift gate。
-- Calendar 试点是更早的独立提交；若只回退本次安全加固，不会自动撤回 Calendar 试点。若需撤回试点，应单独 revert 对应提交。
+- `calendar.go` 不属于本次最终交付改动；回退中央体系时无需再单独恢复 Calendar helper。
 
 ## 10. 验收标准
 

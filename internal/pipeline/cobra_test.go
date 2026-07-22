@@ -114,3 +114,71 @@ func TestCrossPlatformCoverageRunPreParseAppliesCorrectionsOnlyOnSuccess(t *test
 		t.Fatalf("failed preparse execute = %q, %v", *value, err)
 	}
 }
+
+func TestRunPreParseResolvesCommandPastLeadingPersistentFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "boolean long flag", args: []string{"--dry-run", "calendar", "event", "list", "--date", "2026-03-10"}},
+		{name: "valued long flag", args: []string{"--profile", "corp:user", "calendar", "event", "list", "--date", "2026-03-10"}},
+		{name: "valued shorthand", args: []string{"-f", "json", "calendar", "event", "list", "--date", "2026-03-10"}},
+		{name: "attached shorthand", args: []string{"-fjson", "calendar", "event", "list", "--date", "2026-03-10"}},
+		{name: "clustered attached shorthand", args: []string{"-vfjson", "calendar", "event", "list", "--date", "2026-03-10"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+			root.PersistentFlags().Bool("dry-run", false, "")
+			root.PersistentFlags().String("profile", "", "")
+			root.PersistentFlags().StringP("format", "f", "json", "")
+			root.PersistentFlags().BoolP("verbose", "v", false, "")
+
+			// This similarly named root path makes the old traversal failure
+			// deterministic: `--dry-run` consumed "calendar" as a value and
+			// incorrectly selected `dws event list`.
+			misleadingEvent := &cobra.Command{Use: "event"}
+			misleadingEvent.AddCommand(&cobra.Command{Use: "list"})
+			root.AddCommand(misleadingEvent)
+
+			calendar := &cobra.Command{Use: "calendar"}
+			event := &cobra.Command{Use: "event"}
+			value := ""
+			list := &cobra.Command{Use: "list"}
+			list.Flags().StringVar(&value, "start", "", "")
+			event.AddCommand(list)
+			calendar.AddCommand(event)
+			root.AddCommand(calendar)
+
+			engine := NewEngine()
+			engine.Register(newStub("calendar-date-alias", PreParse, func(ctx *Context) error {
+				if ctx.Command != "dws calendar event list" {
+					t.Fatalf("resolved command = %q, want dws calendar event list", ctx.Command)
+				}
+				for index, argument := range ctx.Args {
+					if argument == "--date" {
+						ctx.Args[index] = "--start"
+						ctx.AddCorrection("calendar-date-alias", PreParse, "start", "--date", "--start", "test")
+					}
+				}
+				return nil
+			}))
+
+			root.SetArgs(test.args)
+			ctx, err := RunPreParseArgs(root, engine, test.args)
+			if err != nil {
+				t.Fatalf("RunPreParseArgs() error = %v", err)
+			}
+			if ctx == nil || len(ctx.Corrections) != 1 {
+				t.Fatalf("RunPreParseArgs() context = %#v", ctx)
+			}
+			if err := root.Execute(); err != nil {
+				t.Fatalf("corrected command failed: %v", err)
+			}
+			if value != "2026-03-10" {
+				t.Fatalf("canonical --start value = %q", value)
+			}
+		})
+	}
+}

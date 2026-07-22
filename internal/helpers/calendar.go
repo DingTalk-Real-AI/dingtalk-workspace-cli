@@ -237,7 +237,7 @@ func newCalendarCommand() *cobra.Command {
 			toolArgs := map[string]any{}
 			var startTime, endTime int64
 			var now time.Time
-			if v, _ := cmd.Flags().GetString("start"); v != "" {
+			if v := flagOrFallback(cmd, "start", "time-min", "min-time", "start-time", "startTime", "start_time", "start-date", "startDate"); v != "" {
 				var err error
 				startTime, err = parseISOTimeToMillis("start", v)
 				if err != nil {
@@ -249,7 +249,7 @@ func newCalendarCommand() *cobra.Command {
 				startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).UnixMilli()
 				toolArgs["startTime"] = startTime
 			}
-			if v, _ := cmd.Flags().GetString("end"); v != "" {
+			if v := flagOrFallback(cmd, "end", "time-max", "max-time", "end-time", "endTime", "end_time", "end-date", "endDate"); v != "" {
 				var err error
 				endTime, err = parseISOTimeToMillis("end", v)
 				if err != nil {
@@ -266,17 +266,21 @@ func newCalendarCommand() *cobra.Command {
 			if err := validateTimeRange(startTime, endTime); err != nil {
 				return err
 			}
-			if v, _ := cmd.Flags().GetString("calendar-id"); v != "" {
+			if v := flagOrFallback(cmd, "calendar-id", "calendarId", "calendar"); v != "" {
 				toolArgs["calendarId"] = v
 			}
-			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
+			if v := flagOrFallback(cmd, "cursor", "next-cursor", "nextCursor", "page-token", "pageToken", "next-token"); v != "" {
 				toolArgs["cursor"] = v
 			}
-			// Alias forms (size/page-size/max-results/maxResults) are normalized to
-			// --limit in the PreParse pipeline, so only --limit and --count reach the
-			// handler. --count stays a deliberately separate flag (pagination_size
-			// excludes it) that still maps onto the limit argument.
 			if lim, _ := cmd.Flags().GetInt("limit"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("max-results"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("maxResults"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("page-size"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("size"); lim > 0 {
 				toolArgs["limit"] = lim
 			} else if lim, _ := cmd.Flags().GetInt("count"); lim > 0 {
 				toolArgs["limit"] = lim
@@ -1045,15 +1049,60 @@ func newCalendarCommand() *cobra.Command {
 	// ListEvent flags
 	eventListCmd.Flags().String("start", "", "开始时间 ISO-8601 (例如 2026-03-10T14:00:00+08:00)")
 	eventListCmd.Flags().String("end", "", "结束时间 ISO-8601 (例如 2026-03-10T18:00:00+08:00)")
-	// P2 param-concept pilot: the hand-written hidden spelling variants for
-	// start / end / calendar-id / cursor / limit were removed. The reviewed
-	// concept dictionary (param_concepts.json) now reduces those synonyms to
-	// the canonical flag in the PreParse pipeline (AliasHandler morphology +
-	// SemanticAliasHandler), so only the canonical flags are registered here.
-	// --count is kept: pagination_size deliberately excludes it (count != limit).
+	eventListCmd.Flags().String("time-min", "", "")
+	_ = eventListCmd.Flags().MarkHidden("time-min")
+	eventListCmd.Flags().String("time-max", "", "")
+	_ = eventListCmd.Flags().MarkHidden("time-max")
+	eventListCmd.Flags().String("min-time", "", "")
+	_ = eventListCmd.Flags().MarkHidden("min-time")
+	eventListCmd.Flags().String("max-time", "", "")
+	_ = eventListCmd.Flags().MarkHidden("max-time")
+	eventListCmd.Flags().String("start-time", "", "")
+	_ = eventListCmd.Flags().MarkHidden("start-time")
+	eventListCmd.Flags().String("end-time", "", "")
+	_ = eventListCmd.Flags().MarkHidden("end-time")
+	eventListCmd.Flags().String("startTime", "", "")
+	_ = eventListCmd.Flags().MarkHidden("startTime")
+	eventListCmd.Flags().String("endTime", "", "")
+	_ = eventListCmd.Flags().MarkHidden("endTime")
+	eventListCmd.Flags().String("start_time", "", "")
+	_ = eventListCmd.Flags().MarkHidden("start_time")
+	eventListCmd.Flags().String("end_time", "", "")
+	_ = eventListCmd.Flags().MarkHidden("end_time")
+	eventListCmd.Flags().String("start-date", "", "")
+	_ = eventListCmd.Flags().MarkHidden("start-date")
+	eventListCmd.Flags().String("end-date", "", "")
+	_ = eventListCmd.Flags().MarkHidden("end-date")
+	eventListCmd.Flags().String("startDate", "", "")
+	_ = eventListCmd.Flags().MarkHidden("startDate")
+	eventListCmd.Flags().String("endDate", "", "")
+	_ = eventListCmd.Flags().MarkHidden("endDate")
 	eventListCmd.Flags().String("calendar-id", "", "日历 ID (默认 primary 主日历，仅在查询其他日历本时填写)")
+	eventListCmd.Flags().String("calendarId", "", "")
+	_ = eventListCmd.Flags().MarkHidden("calendarId")
+	eventListCmd.Flags().String("calendar", "", "")
+	_ = eventListCmd.Flags().MarkHidden("calendar")
 	eventListCmd.Flags().String("cursor", "", "分页游标 (首次查询无需传入，仅翻页时传入上一次返回的 nextCursor)")
+	eventListCmd.Flags().String("next-cursor", "", "")
+	_ = eventListCmd.Flags().MarkHidden("next-cursor")
+	eventListCmd.Flags().String("nextCursor", "", "")
+	_ = eventListCmd.Flags().MarkHidden("nextCursor")
+	eventListCmd.Flags().String("page-token", "", "")
+	_ = eventListCmd.Flags().MarkHidden("page-token")
+	eventListCmd.Flags().String("pageToken", "", "")
+	_ = eventListCmd.Flags().MarkHidden("pageToken")
+	eventListCmd.Flags().String("next-token", "", "")
+	_ = eventListCmd.Flags().MarkHidden("next-token")
+
 	eventListCmd.Flags().Int("limit", 0, "每页返回条数 (默认 100，最大 100)")
+	eventListCmd.Flags().Int("max-results", 0, "")
+	_ = eventListCmd.Flags().MarkHidden("max-results")
+	eventListCmd.Flags().Int("maxResults", 0, "")
+	_ = eventListCmd.Flags().MarkHidden("maxResults")
+	eventListCmd.Flags().Int("page-size", 0, "")
+	_ = eventListCmd.Flags().MarkHidden("page-size")
+	eventListCmd.Flags().Int("size", 0, "")
+	_ = eventListCmd.Flags().MarkHidden("size")
 	eventListCmd.Flags().Int("count", 0, "")
 	_ = eventListCmd.Flags().MarkHidden("count")
 	// GetEvent flags

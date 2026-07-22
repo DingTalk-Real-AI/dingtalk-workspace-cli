@@ -20,54 +20,47 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 )
 
-// TestCalendarEventListParamConceptPilotBehaviorUnchanged is the P2 pilot
-// behaviour-preservation gate. The hand-written hidden spelling variants on
-// `dws calendar event list` (start-time / min-time / end-time / max-results /
-// next-cursor / calendar / ...) were removed from the Cobra command and now
-// live only in the reviewed concept dictionary. This test drives the REAL
-// PreParse pipeline (newPipelineEngine → AliasHandler + SemanticAliasHandler
-// wired to cli.LookupParamAlias) exactly the way root.go's RunPreParse does,
-// then proves the corrected argv still parses onto the canonical flag with the
-// original value intact — i.e. every previously-accepted spelling keeps
-// working end to end even though its dedicated hidden flag is gone.
-func TestCalendarEventListParamConceptPilotBehaviorUnchanged(t *testing.T) {
+// TestCalendarEventListNativeFallbacksAndCentralAliasesCoexist locks the
+// boundary between the command's original hidden compatibility flags and the
+// new central semantic normalizer. Existing real flags stay untouched and are
+// handled by calendar.go's flagOrFallback chain; only spellings that are not
+// real flags (for example --date, --from, and --since) are rewritten centrally.
+func TestCalendarEventListNativeFallbacksAndCentralAliasesCoexist(t *testing.T) {
 	engine := newPipelineEngine()
 
 	cases := []struct {
-		emitted   string // spelling the model/user typed (dedicated flag removed)
+		emitted   string
 		value     string
-		canonical string // real flag the pipeline must reduce it to
+		canonical string
 		isInt     bool
+		native    bool
 	}{
-		// time_start concept members + scoped aliases → --start
-		{"start-time", "2026-03-10T14:00:00+08:00", "start", false},
-		{"startTime", "2026-03-10T14:00:00+08:00", "start", false},
-		{"start_time", "2026-03-10T14:00:00+08:00", "start", false},
-		{"start-date", "2026-03-10T14:00:00+08:00", "start", false},
-		{"min-time", "2026-03-10T14:00:00+08:00", "start", false},
-		{"time-min", "2026-03-10T14:00:00+08:00", "start", false},
-		{"from", "2026-03-10T14:00:00+08:00", "start", false},
-		{"since", "2026-03-10T14:00:00+08:00", "start", false},
-		{"date", "2026-03-10T14:00:00+08:00", "start", false},
-		// end family (scoped aliases; no global time_end concept) → --end
-		{"end-time", "2026-03-10T18:00:00+08:00", "end", false},
-		{"endTime", "2026-03-10T18:00:00+08:00", "end", false},
-		{"end-date", "2026-03-10T18:00:00+08:00", "end", false},
-		{"max-time", "2026-03-10T18:00:00+08:00", "end", false},
-		{"time-max", "2026-03-10T18:00:00+08:00", "end", false},
-		// pagination_size concept members → --limit (int)
-		{"max-results", "50", "limit", true},
-		{"maxResults", "50", "limit", true},
-		{"page-size", "50", "limit", true},
-		{"size", "50", "limit", true},
-		// page_cursor concept members → --cursor
-		{"next-cursor", "TOKEN123", "cursor", false},
-		{"nextCursor", "TOKEN123", "cursor", false},
-		{"page-token", "TOKEN123", "cursor", false},
-		{"next-token", "TOKEN123", "cursor", false},
-		// morphology / scoped alias → --calendar-id
-		{"calendar", "primary", "calendar-id", false},
-		{"calendarId", "primary", "calendar-id", false},
+		// Existing Calendar compatibility flags remain native.
+		{"start-time", "2026-03-10T14:00:00+08:00", "start", false, true},
+		{"startTime", "2026-03-10T14:00:00+08:00", "start", false, true},
+		{"start_time", "2026-03-10T14:00:00+08:00", "start", false, true},
+		{"start-date", "2026-03-10T14:00:00+08:00", "start", false, true},
+		{"min-time", "2026-03-10T14:00:00+08:00", "start", false, true},
+		{"time-min", "2026-03-10T14:00:00+08:00", "start", false, true},
+		{"end-time", "2026-03-10T18:00:00+08:00", "end", false, true},
+		{"endTime", "2026-03-10T18:00:00+08:00", "end", false, true},
+		{"end-date", "2026-03-10T18:00:00+08:00", "end", false, true},
+		{"max-time", "2026-03-10T18:00:00+08:00", "end", false, true},
+		{"time-max", "2026-03-10T18:00:00+08:00", "end", false, true},
+		{"max-results", "50", "limit", true, true},
+		{"maxResults", "50", "limit", true, true},
+		{"page-size", "50", "limit", true, true},
+		{"size", "50", "limit", true, true},
+		{"next-cursor", "TOKEN123", "cursor", false, true},
+		{"nextCursor", "TOKEN123", "cursor", false, true},
+		{"page-token", "TOKEN123", "cursor", false, true},
+		{"next-token", "TOKEN123", "cursor", false, true},
+		{"calendar", "primary", "calendar-id", false, true},
+		{"calendarId", "primary", "calendar-id", false, true},
+		// These spellings have no native Calendar flag and remain central aliases.
+		{"from", "2026-03-10T14:00:00+08:00", "start", false, false},
+		{"since", "2026-03-10T14:00:00+08:00", "start", false, false},
+		{"date", "2026-03-10T14:00:00+08:00", "start", false, false},
 	}
 
 	for _, tc := range cases {
@@ -85,39 +78,37 @@ func TestCalendarEventListParamConceptPilotBehaviorUnchanged(t *testing.T) {
 				t.Fatalf("PreParse error = %v", err)
 			}
 
-			joined := strings.Join(ctx.Args, " ")
-			if !strings.Contains(joined, "--"+tc.canonical+" "+tc.value) {
-				t.Fatalf("--%s not reduced to --%s: args = %v", tc.emitted, tc.canonical, ctx.Args)
-			}
-			// Token-level check so a canonical that is a prefix of the emitted
-			// spelling (e.g. --calendar → --calendar-id) is not a false match.
-			if tc.emitted != tc.canonical {
-				for _, a := range ctx.Args {
-					if !strings.HasPrefix(a, "--") {
-						continue
-					}
-					bare := strings.SplitN(strings.TrimPrefix(a, "--"), "=", 2)[0]
-					if bare == tc.emitted {
-						t.Fatalf("emitted spelling --%s survived after reduction: args = %v", tc.emitted, ctx.Args)
-					}
+			parsedFlag := tc.canonical
+			if tc.native {
+				parsedFlag = tc.emitted
+				if len(ctx.Corrections) != 0 {
+					t.Fatalf("native --%s triggered central corrections: %#v", tc.emitted, ctx.Corrections)
+				}
+				if joined := strings.Join(ctx.Args, " "); !strings.Contains(joined, "--"+tc.emitted+" "+tc.value) {
+					t.Fatalf("native --%s did not survive unchanged: args = %v", tc.emitted, ctx.Args)
+				}
+			} else {
+				if joined := strings.Join(ctx.Args, " "); !strings.Contains(joined, "--"+tc.canonical+" "+tc.value) {
+					t.Fatalf("--%s not reduced to --%s: args = %v", tc.emitted, tc.canonical, ctx.Args)
+				}
+				if len(ctx.Corrections) != 1 {
+					t.Fatalf("central --%s corrections = %#v, want one", tc.emitted, ctx.Corrections)
 				}
 			}
 
-			// Behaviour unchanged: Cobra parses the corrected argv onto the
-			// canonical flag, and the original value lands unmodified.
 			flagArgs := ctx.Args[3:]
 			if err := target.ParseFlags(flagArgs); err != nil {
 				t.Fatalf("Cobra ParseFlags(%v) error = %v", flagArgs, err)
 			}
 			if tc.isInt {
-				got, err := target.Flags().GetInt(tc.canonical)
+				got, err := target.Flags().GetInt(parsedFlag)
 				if err != nil || got != 50 {
-					t.Fatalf("flag --%s = %d (err %v), want 50", tc.canonical, got, err)
+					t.Fatalf("flag --%s = %d (err %v), want 50", parsedFlag, got, err)
 				}
 			} else {
-				got, err := target.Flags().GetString(tc.canonical)
+				got, err := target.Flags().GetString(parsedFlag)
 				if err != nil || got != tc.value {
-					t.Fatalf("flag --%s = %q (err %v), want %q", tc.canonical, got, err, tc.value)
+					t.Fatalf("flag --%s = %q (err %v), want %q", parsedFlag, got, err, tc.value)
 				}
 			}
 		})
