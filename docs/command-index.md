@@ -30,19 +30,19 @@ Every command inherits these flags (documented here once, not repeated per comma
 
 ## Contents
 
-- [`dws aitable` — AI Tables](#dws-aitable) · 41 commands
-- [`dws attendance` — Attendance](#dws-attendance) · 4 commands
-- [`dws calendar` — Calendar](#dws-calendar) · 14 commands
-- [`dws chat` — Group Chat / IM](#dws-chat) · 23 commands
-- [`dws contact` — Contact Directory](#dws-contact) · 6 commands
-- [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
-- [`dws ding` — DING Messages](#dws-ding) · 2 commands
-- [`dws doc` — DingTalk Doc](#dws-doc) · 21 commands
-- [`dws drive` — DingTalk Drive](#dws-drive) · 6 commands
-- [`dws minutes` — AI Minutes](#dws-minutes) · 19 commands
-- [`dws oa` — OA Approval](#dws-oa) · 9 commands
-- [`dws report` — Reports](#dws-report) · 7 commands
-- [`dws todo` — Todo Tasks](#dws-todo) · 6 commands
+- [`dws aitable` — AI Tables](#dws-aitable--ai-tables) · 41 commands
+- [`dws attendance` — Attendance](#dws-attendance--attendance) · 4 commands
+- [`dws calendar` — Calendar](#dws-calendar--calendar) · 14 commands
+- [`dws chat` — Group Chat / IM](#dws-chat--group-chat--im) · 23 commands
+- [`dws contact` — Contact Directory](#dws-contact--contact-directory) · 6 commands
+- [`dws devdoc` — Open Platform Docs](#dws-devdoc--open-platform-docs) · 2 commands
+- [`dws ding` — DING Messages](#dws-ding--ding-messages) · 2 commands
+- [`dws doc` — DingTalk Doc](#dws-doc--dingtalk-doc) · 21 commands
+- [`dws drive` — DingTalk Drive](#dws-drive--dingtalk-drive) · 6 commands
+- [`dws minutes` — AI Minutes](#dws-minutes--ai-minutes) · 19 commands
+- [`dws oa` — OA Approval](#dws-oa--oa-approval) · 9 commands
+- [`dws report` — Reports](#dws-report--reports) · 7 commands
+- [`dws todo` — Todo Tasks](#dws-todo--todo-tasks) · 6 commands
 
 ## `dws aitable` — AI Tables
 
