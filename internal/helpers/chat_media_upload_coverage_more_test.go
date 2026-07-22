@@ -13,6 +13,35 @@ import (
 	"testing"
 )
 
+func TestMediaResolveAppTokenUsesSecureCredentialResolver(t *testing.T) {
+	origResolve := mediaResolveCredentials
+	origTransport := http.DefaultTransport
+	t.Cleanup(func() {
+		mediaResolveCredentials = origResolve
+		http.DefaultTransport = origTransport
+	})
+
+	mediaResolveCredentials = func() (string, string, error) {
+		return "keychain-id", "keychain-secret", nil
+	}
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		query := req.URL.Query()
+		if query.Get("appkey") != "keychain-id" || query.Get("appsecret") != "keychain-secret" {
+			t.Fatalf("resolved credentials not used: %v", query)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"access_token":"token","errcode":0}`)),
+			Request:    req,
+		}, nil
+	})
+
+	if token, err := mediaResolveAppToken(context.Background()); err != nil || token != "token" {
+		t.Fatalf("token = %q, err = %v", token, err)
+	}
+}
+
 func TestCrossPlatformCoverageChatMediaUploadCommandRemainingCoverage(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "image.png")
 	if err := os.WriteFile(file, []byte("image"), 0o600); err != nil {

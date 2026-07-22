@@ -36,7 +36,27 @@ var (
 	mediaCreateFormFile      = func(w *multipart.Writer, field, name string) (io.Writer, error) { return w.CreateFormFile(field, name) }
 	mediaOpenFile            = os.Open
 	mediaCopyFile            = io.Copy
+	mediaResolveCredentials  = resolveMediaCredentialsFromEnv
 )
+
+func resolveMediaCredentialsFromEnv() (string, string, error) {
+	appKey := os.Getenv("DWS_CLIENT_ID")
+	appSecret := os.Getenv("DWS_CLIENT_SECRET")
+	if appKey == "" || appSecret == "" {
+		return "", "", fmt.Errorf("DWS_CLIENT_ID and DWS_CLIENT_SECRET must be set as a pair")
+	}
+	return appKey, appSecret, nil
+}
+
+// SetMediaCredentialResolver lets the host application provide credentials
+// from its secure config/keychain resolver without introducing an import cycle.
+func SetMediaCredentialResolver(resolve func() (string, string, error)) {
+	if resolve == nil {
+		mediaResolveCredentials = resolveMediaCredentialsFromEnv
+		return
+	}
+	mediaResolveCredentials = resolve
+}
 
 func newChatMediaGroup() *cobra.Command {
 	media := &cobra.Command{
@@ -109,12 +129,11 @@ func mediaResolveAppToken(ctx context.Context) (string, error) {
 type mediaRequestFactory func(context.Context, string, string, io.Reader) (*http.Request, error)
 
 func mediaResolveAppTokenWithRequest(ctx context.Context, newRequest mediaRequestFactory) (string, error) {
-	appKey := os.Getenv("DWS_CLIENT_ID")
-	appSecret := os.Getenv("DWS_CLIENT_SECRET")
-	if appKey == "" || appSecret == "" {
+	appKey, appSecret, err := mediaResolveCredentials()
+	if err != nil {
 		return "", apperrors.NewAuth(
-			"缺少应用凭证。chat media upload 需要 DWS_CLIENT_ID / DWS_CLIENT_SECRET 环境变量。\n" +
-				"请使用 dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET> 登录。")
+			"缺少或无法解析应用凭证。请运行 dws auth login，并通过交互式密码输入将 AppSecret 存入系统 Keychain。\n" +
+				"自动化环境仅可在受控进程环境中成对注入 DWS_CLIENT_ID / DWS_CLIENT_SECRET；不要把 AppSecret 写入命令行。详情: " + err.Error())
 	}
 	endpoint := url.URL{Scheme: "https", Host: "oapi.dingtalk.com", Path: "/gettoken"}
 	endpoint.RawQuery = url.Values{

@@ -17,11 +17,13 @@ import (
 	"log/slog"
 	"sort"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
@@ -30,6 +32,10 @@ import (
 func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool) []*cobra.Command {
 	injectStaticServers()
 	helpers.InitDeps(caller)
+	helpers.SetMediaCredentialResolver(func() (string, string, error) {
+		clientID, clientSecret, _, _, err := authpkg.ResolveAppCredentialsStrict(config.DefaultConfigDir())
+		return clientID, clientSecret, err
+	})
 	commands := helpers.NewPublicCommands(runner)
 	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
 	// command tree, so distilled high-frequency operations mount alongside the
