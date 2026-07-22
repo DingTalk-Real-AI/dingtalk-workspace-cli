@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 )
 
@@ -61,5 +62,59 @@ func TestPersonalBusSpawnArgs_ForwardsProfile(t *testing.T) {
 		if a == "--profile" {
 			t.Errorf("must not append --profile when CorpID is empty; got %v", bare)
 		}
+	}
+}
+
+func TestCrossPlatformCoveragePersonalBusSpawnArgsPreservesReservedBlankProfile(t *testing.T) {
+	configDir := t.TempDir()
+	cfg := &authpkg.ProfilesConfig{
+		Version: 2,
+		OrgCurrentProfiles: map[string]string{
+			"corp_event_fixture": "corp_event_fixture:identity_exact_fixture",
+		},
+		Profiles: []authpkg.Profile{
+			{
+				Name:     "Fixture Organization",
+				CorpID:   "corp_event_fixture",
+				CorpName: "Fixture Organization",
+			},
+			{
+				Name:     "Exact Fixture Account",
+				CorpID:   "corp_event_fixture",
+				CorpName: "Fixture Organization",
+				UserID:   "identity_exact_fixture",
+			},
+		},
+	}
+	if err := authpkg.SaveProfiles(configDir, cfg); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	identity := personal.Identity{CorpID: "corp_event_fixture", SourceID: "open"}
+	selector := personalBusProfileSelector(configDir, identity)
+	want := authpkg.ProfileSelectionSelector(cfg.Profiles[0], cfg)
+	if selector != want || selector == identity.CorpID {
+		t.Fatalf("personalBusProfileSelector(blank) = %q, want reserved %q", selector, want)
+	}
+	args := personalBusSpawnArgs(identity, "", "", selector)
+	found := false
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--profile" && args[i+1] == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("spawn args did not preserve reserved blank selector: %v", args)
+	}
+
+	authpkg.SetRuntimeProfile(want)
+	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
+	inferredExact := personal.Identity{
+		CorpID:   "corp_event_fixture",
+		UserID:   "identity_exact_fixture",
+		SourceID: "open",
+	}
+	if got := personalBusProfileSelector(configDir, inferredExact); got != want {
+		t.Fatalf("runtime blank selector changed after inferred userId: got %q, want %q", got, want)
 	}
 }

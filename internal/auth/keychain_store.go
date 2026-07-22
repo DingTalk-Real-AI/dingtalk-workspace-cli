@@ -219,12 +219,20 @@ func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
 			return fmt.Errorf("identity token slot %q is unreadable: %w", TokenAccountForIdentity(corpID, userID), err)
 		}
 	}
-	checkOrganizationMirror := true
-	if _, _, exact := ParseIdentitySelector(RuntimeProfile()); exact {
-		checkOrganizationMirror =
-			exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]) ==
-				profileSelector(corpID, userID)
+	runtimeSelector := strings.TrimSpace(RuntimeProfile())
+	persistenceSelector := runtimeSelector
+	if persistenceSelector == "" && userID == "" {
+		persistenceSelector = strings.TrimSpace(data.LegacyOrgScopedProfile)
 	}
+	makeCurrent := persistenceSelector == ""
+	existingIdentity := profileIndexByIdentity(cfg, corpID, userID) >= 0
+	upgradesLegacyProfile := !existingIdentity && userID != "" &&
+		len(profilesForCorpID(cfg, corpID)) == 1 && legacyProfileIndexByCorpID(cfg, corpID) >= 0
+	preserveUnresolvedOrg := userID != "" &&
+		unresolvedProfileForCorp(cfg, corpID) != nil && !upgradesLegacyProfile
+	checkOrganizationMirror := userID == "" || (!preserveUnresolvedOrg && (makeCurrent ||
+		exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]) ==
+			profileSelector(corpID, userID)))
 	if checkOrganizationMirror {
 		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 			return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)

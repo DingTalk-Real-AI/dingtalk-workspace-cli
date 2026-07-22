@@ -15,6 +15,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,8 +76,9 @@ func withProfilesLock(configDir string, fn func() error) error {
 }
 
 const (
-	profilesJSONFile = "profiles.json"
-	profilesVersion  = 2
+	profilesJSONFile                = "profiles.json"
+	profilesVersion                 = 2
+	unresolvedProfileSelectorPrefix = "@legacy/"
 )
 
 const (
@@ -240,6 +242,9 @@ func ensureProfilesMigrationLocked(configDir string) error {
 		cfg.OrgCurrentProfiles = make(map[string]string)
 	}
 	orgTokens := make(map[string]*TokenData)
+	var legacyToken *TokenData
+	var legacyTokenErr error
+	legacyTokenLoaded := false
 	for i := range cfg.Profiles {
 		p := &cfg.Profiles[i]
 		corpID := strings.TrimSpace(p.CorpID)
@@ -255,11 +260,74 @@ func ensureProfilesMigrationLocked(configDir string) error {
 			if loadErr != nil {
 				token = nil
 			}
+			var v2RepairProfile *Profile
+			if !legacySelectionState && errors.Is(loadErr, ErrTokenDataNotFound) {
+				v2RepairProfile = uniqueV2GlobalRepairProfile(cfg, corpID)
+				if v2RepairProfile != nil && strings.TrimSpace(v2RepairProfile.UserID) != "" {
+					_, identityErr := profilesLoadIdentity(corpID, v2RepairProfile.UserID)
+					switch {
+					case identityErr == nil:
+						// The exact identity is already usable. Do not let a stale
+						// global compatibility mirror recreate the organization slot.
+						v2RepairProfile = nil
+					case !errors.Is(identityErr, ErrTokenDataNotFound):
+						return identityErr
+					}
+				}
+			}
+			if (legacySelectionState || v2RepairProfile != nil) && errors.Is(loadErr, ErrTokenDataNotFound) {
+				// v1.0.50/1.0.51 installations can retain the selected
+				// organization only in the global compatibility slot. Consult
+				// that slot while migrating v1, or while repairing a non-empty
+				// v2 registry left half-migrated by an earlier CLI. The v2 path
+				// additionally requires one unambiguous profile, a missing exact
+				// slot when its userId is known, and a non-conflicting token userId.
+				// Persist the untouched organization mirror before identity
+				// enrichment below.
+				if !legacyTokenLoaded {
+					legacyToken, legacyTokenErr = profilesLoadLegacy()
+					legacyTokenLoaded = true
+				}
+				if legacyTokenErr != nil && !errors.Is(legacyTokenErr, ErrTokenDataNotFound) {
+					return legacyTokenErr
+				}
+				legacyMatchesProfile := legacySelectionState ||
+					legacyTokenMatchesV2RepairProfile(legacyToken, v2RepairProfile)
+				if legacyTokenErr == nil &&
+					legacyToken != nil &&
+					strings.TrimSpace(legacyToken.CorpID) == corpID &&
+					legacyMatchesProfile {
+					token = legacyToken
+					if err := profilesSaveCorp(corpID, token); err != nil {
+						return err
+					}
+				}
+			}
 			orgToken = token
 			orgTokens[corpID] = orgToken
 		}
 		if orgToken == nil {
 			continue
+		}
+		// v1.0.52 stored one token per organization. Some of those token blobs
+		// predate userId persistence even though profiles.json already recorded
+		// the account identity. Version 2 loads exact identities and therefore
+		// cannot safely use an organization mirror with no userId. A single
+		// profile with a known userId makes that association unambiguous,
+		// including when an earlier migration already bumped profiles.json to v2
+		// but failed before writing the identity slot. Enrich only the copy saved
+		// to that exact slot; never infer an identity for an organization with
+		// multiple accounts.
+		identityToken := orgToken
+		if strings.TrimSpace(orgToken.UserID) == "" &&
+			strings.TrimSpace(p.UserID) != "" &&
+			len(profilesForCorpID(cfg, corpID)) == 1 {
+			enriched := *orgToken
+			enriched.UserID = strings.TrimSpace(p.UserID)
+			if strings.TrimSpace(enriched.UserName) == "" {
+				enriched.UserName = strings.TrimSpace(p.UserName)
+			}
+			identityToken = &enriched
 		}
 		if strings.TrimSpace(p.UserID) == "" && strings.TrimSpace(orgToken.UserID) != "" {
 			if existing := findExactProfile(cfg, corpID, orgToken.UserID); existing != nil && existing != p {
@@ -273,12 +341,12 @@ func ensureProfilesMigrationLocked(configDir string) error {
 			}
 			changed = true
 		}
-		if strings.TrimSpace(p.UserID) == "" || strings.TrimSpace(orgToken.UserID) != strings.TrimSpace(p.UserID) {
+		if strings.TrimSpace(p.UserID) == "" || strings.TrimSpace(identityToken.UserID) != strings.TrimSpace(p.UserID) {
 			continue
 		}
 		_, identityErr := profilesLoadIdentity(corpID, p.UserID)
 		if errors.Is(identityErr, ErrTokenDataNotFound) {
-			if err := profilesSaveIdentity(corpID, p.UserID, orgToken); err != nil {
+			if err := profilesSaveIdentity(corpID, p.UserID, identityToken); err != nil {
 				return err
 			}
 		} else if identityErr != nil {
@@ -324,6 +392,10 @@ func ensureProfilesMigrationLocked(configDir string) error {
 		cfg.CurrentProfile = exact
 		changed = true
 	}
+	if exact := canonicalStoredSelector(cfg, cfg.PrimaryProfile); exact != "" && exact != cfg.PrimaryProfile {
+		cfg.PrimaryProfile = exact
+		changed = true
+	}
 	if legacySelectionState && cfg.CurrentProfile == "" {
 		if exact := canonicalStoredSelector(cfg, cfg.PrimaryProfile); exact != "" {
 			cfg.CurrentProfile = exact
@@ -349,6 +421,29 @@ func ensureProfilesMigrationLocked(configDir string) error {
 		return profilesSave(configDir, cfg)
 	}
 	return nil
+}
+
+// uniqueV2GlobalRepairProfile returns the only profile that may safely be
+// recovered from the legacy global token mirror. A v2 registry with multiple
+// accounts in one organization is deliberately ineligible, even if one token
+// happens to carry a matching userId: the global slot is a mutable compatibility
+// mirror and is not authoritative account-selection state. A sole unresolved
+// profile is eligible only for organization-slot repair; the token matcher below
+// rejects any global token that tries to attach a userId to it.
+func uniqueV2GlobalRepairProfile(cfg *ProfilesConfig, corpID string) *Profile {
+	profiles := profilesForCorpID(cfg, corpID)
+	if len(profiles) != 1 {
+		return nil
+	}
+	return profiles[0]
+}
+
+func legacyTokenMatchesV2RepairProfile(data *TokenData, profile *Profile) bool {
+	if data == nil || strings.TrimSpace(data.CorpID) != strings.TrimSpace(profile.CorpID) {
+		return false
+	}
+	tokenUserID := strings.TrimSpace(data.UserID)
+	return tokenUserID == "" || tokenUserID == strings.TrimSpace(profile.UserID)
 }
 
 // UpsertProfileFromToken updates profiles.json after a successful login or refresh.
@@ -392,7 +487,11 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 		previousCurrent, _, _ = resolveProfileSelection(configDir, cfg, cfg.CurrentProfile)
 	}
 	idx := profileIndexByIdentity(cfg, corpID, userID)
-	if idx < 0 && userID != "" {
+	if idx < 0 && userID != "" && len(profilesForCorpID(cfg, corpID)) == 1 {
+		// Upgrade an organization-scoped v1 profile only when it is the sole
+		// account in that organization. If exact identities already coexist
+		// with a blank profile, consuming the blank profile here would silently
+		// discard that unresolved historical account.
 		idx = legacyProfileIndexByCorpID(cfg, corpID)
 	}
 	if idx < 0 {
@@ -409,6 +508,7 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 			UpdatedAt:   now,
 		}
 		cfg.Profiles = append(cfg.Profiles, profile)
+		idx = len(cfg.Profiles) - 1
 	} else {
 		p := &cfg.Profiles[idx]
 		if userID != "" {
@@ -431,17 +531,33 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 		p.LastUsedAt = now
 		p.UpdatedAt = now
 	}
+	storedProfile := &cfg.Profiles[idx]
+	if userID == "" && len(profilesForCorpID(cfg, corpID)) > 1 &&
+		(strings.TrimSpace(storedProfile.Name) == corpID || profileNameTakenByOtherIdentity(cfg, storedProfile.Name, corpID, "")) {
+		// A blank profile needs a stable name when exact identities coexist in
+		// the same organization; the corpId selector denotes the organization
+		// as a whole and is therefore not an exact account selector.
+		storedProfile.Name = chooseProfileName(cfg, data)
+	}
 	if makeCurrent {
-		newSelector := profileSelector(corpID, userID)
-		if previousCurrent != nil && ProfileSelector(*previousCurrent) != newSelector {
-			cfg.PreviousProfile = ProfileSelector(*previousCurrent)
+		newSelector := storedProfileSelector(cfg, storedProfile)
+		if previousCurrent != nil && storedProfileSelector(cfg, previousCurrent) != newSelector {
+			cfg.PreviousProfile = storedProfileSelector(cfg, previousCurrent)
 		}
 		cfg.CurrentProfile = newSelector
-		setOrgCurrentProfile(cfg, corpID, newSelector)
+		if userID == "" {
+			delete(cfg.OrgCurrentProfiles, corpID)
+		} else {
+			setOrgCurrentProfile(cfg, corpID, newSelector)
+		}
 	}
 	if cfg.CurrentProfile == "" {
-		cfg.CurrentProfile = profileSelector(corpID, userID)
-		setOrgCurrentProfile(cfg, corpID, cfg.CurrentProfile)
+		cfg.CurrentProfile = storedProfileSelector(cfg, storedProfile)
+		if userID == "" {
+			delete(cfg.OrgCurrentProfiles, corpID)
+		} else {
+			setOrgCurrentProfile(cfg, corpID, cfg.CurrentProfile)
+		}
 	}
 	return profilesSave(configDir, cfg)
 }
@@ -452,6 +568,87 @@ func ProfileSelector(profile Profile) string {
 	return profileSelector(profile.CorpID, profile.UserID)
 }
 
+// storedProfileSelector returns a selector that remains exact inside
+// profiles.json. A blank userId has only an organization selector in the
+// public compatibility surface; when other accounts share that organization,
+// use the profile's unique local name so current/previous pointers do not
+// accidentally resolve to an exact account through OrgCurrentProfiles.
+func storedProfileSelector(cfg *ProfilesConfig, profile *Profile) string {
+	if profile == nil {
+		return ""
+	}
+	if strings.TrimSpace(profile.UserID) != "" {
+		return ProfileSelector(*profile)
+	}
+	if cfg == nil {
+		return strings.TrimSpace(profile.CorpID)
+	}
+	if len(profilesForCorpID(cfg, profile.CorpID)) <= 1 {
+		return strings.TrimSpace(profile.CorpID)
+	}
+	name := strings.TrimSpace(profile.Name)
+	if localProfileSelectorIsSafe(cfg, profile, name) {
+		return name
+	}
+	return unresolvedProfileSelector(profile.CorpID)
+}
+
+// ProfileSelectionSelector returns the stable selector used for one profile.
+// Exact identities use corpId:userId. A historical profile without userId
+// keeps the organization selector while it is the only account, and otherwise
+// uses either an unambiguous local name or a reserved, reversible selector.
+func ProfileSelectionSelector(profile Profile, cfg *ProfilesConfig) string {
+	return storedProfileSelector(cfg, &profile)
+}
+
+func localProfileSelectorIsSafe(cfg *ProfilesConfig, profile *Profile, name string) bool {
+	if cfg == nil || profile == nil {
+		return false
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || strings.Contains(name, ":") || strings.HasPrefix(name, unresolvedProfileSelectorPrefix) {
+		return false
+	}
+	nameMatches := 0
+	for i := range cfg.Profiles {
+		candidate := &cfg.Profiles[i]
+		if strings.TrimSpace(candidate.Name) == name {
+			nameMatches++
+		}
+		// Organization selectors are resolved before ordinary local names.
+		// Never persist a local selector that can be captured by that grammar.
+		if strings.TrimSpace(candidate.CorpID) == name || strings.TrimSpace(candidate.CorpName) == name {
+			return false
+		}
+	}
+	return nameMatches == 1
+}
+
+func unresolvedProfileSelector(corpID string) string {
+	corpID = strings.TrimSpace(corpID)
+	if corpID == "" {
+		return ""
+	}
+	return unresolvedProfileSelectorPrefix + base64.RawURLEncoding.EncodeToString([]byte(corpID))
+}
+
+func parseUnresolvedProfileSelector(selector string) (string, bool) {
+	selector = strings.TrimSpace(selector)
+	if !strings.HasPrefix(selector, unresolvedProfileSelectorPrefix) {
+		return "", false
+	}
+	encoded := strings.TrimPrefix(selector, unresolvedProfileSelectorPrefix)
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", false
+	}
+	corpID := strings.TrimSpace(string(decoded))
+	if corpID == "" || unresolvedProfileSelector(corpID) != selector {
+		return "", false
+	}
+	return corpID, true
+}
+
 // TokenProfileSelector returns the exact identity selector for token data when
 // its userId is known, otherwise it returns the historical corpId selector.
 func TokenProfileSelector(data *TokenData) string {
@@ -459,6 +656,34 @@ func TokenProfileSelector(data *TokenData) string {
 		return ""
 	}
 	return profileSelector(data.CorpID, data.UserID)
+}
+
+// StableTokenProfileSelector preserves the exact selector that loaded a token.
+// This matters for an unresolved historical account sharing an organization
+// with exact identities: reducing its selector to corpId would follow
+// OrgCurrentProfiles and could mark or reauthorize a different account.
+func StableTokenProfileSelector(configDir string, data *TokenData) string {
+	if selector := strings.TrimSpace(RuntimeProfile()); selector != "" {
+		return selector
+	}
+	fallback := TokenProfileSelector(data)
+	if data == nil {
+		return fallback
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil || cfg == nil || strings.TrimSpace(cfg.CurrentProfile) == "" {
+		return fallback
+	}
+	selector := canonicalStoredSelector(cfg, cfg.CurrentProfile)
+	if selector == "" {
+		selector = strings.TrimSpace(cfg.CurrentProfile)
+	}
+	profile, _, err := resolveProfileSelection(configDir, cfg, selector)
+	if err != nil || profile == nil ||
+		!sameProfileIdentity(profile.CorpID, profile.UserID, data.CorpID, data.UserID) {
+		return fallback
+	}
+	return storedProfileSelector(cfg, profile)
 }
 
 func profileSelector(corpID, userID string) string {
@@ -609,7 +834,8 @@ func setCurrentProfileLocked(configDir, selector string) (*Profile, error) {
 		return nil, err
 	}
 	originalCfg := cloneProfilesConfig(cfg)
-	mirrors, err := snapshotProfileSelectionMirrors(configDir, p.CorpID)
+	syncOrganization := shouldSyncOrganizationMirror(cfg, *p)
+	mirrors, err := snapshotProfileSelectionMirrors(configDir, p.CorpID, syncOrganization)
 	if err != nil {
 		return nil, err
 	}
@@ -617,20 +843,26 @@ func setCurrentProfileLocked(configDir, selector string) (*Profile, error) {
 	if strings.TrimSpace(cfg.CurrentProfile) != "" {
 		previousCurrent, _, _ = resolveProfileSelection(configDir, cfg, cfg.CurrentProfile)
 	}
-	storedSelector := ProfileSelector(*p)
+	storedSelector := storedProfileSelector(cfg, p)
 	if cfg.CurrentProfile != storedSelector {
 		if previousCurrent != nil {
-			cfg.PreviousProfile = ProfileSelector(*previousCurrent)
+			cfg.PreviousProfile = storedProfileSelector(cfg, previousCurrent)
 		}
 		cfg.CurrentProfile = storedSelector
 	}
-	setOrgCurrentProfile(cfg, p.CorpID, storedSelector)
+	if strings.TrimSpace(p.UserID) == "" {
+		delete(cfg.OrgCurrentProfiles, strings.TrimSpace(p.CorpID))
+	} else {
+		setOrgCurrentProfile(cfg, p.CorpID, storedSelector)
+	}
 	touchProfileUsage(p)
 	if err := profilesSave(configDir, cfg); err != nil {
 		return nil, err
 	}
-	if err := syncOrganizationTokenMirrorForProfile(*p); err != nil {
-		return nil, rollbackProfileSelection(configDir, originalCfg, p.CorpID, mirrors, err)
+	if syncOrganization {
+		if err := syncOrganizationTokenMirrorForProfile(*p); err != nil {
+			return nil, rollbackProfileSelection(configDir, originalCfg, p.CorpID, mirrors, err)
+		}
 	}
 	if err := profilesSyncLegacyMirror(configDir); err != nil {
 		return nil, rollbackProfileSelection(configDir, originalCfg, p.CorpID, mirrors, err)
@@ -669,7 +901,8 @@ func usePreviousProfileLocked(configDir string) (*Profile, error) {
 		return nil, fmt.Errorf("resolve previous profile %q: %w", prev, err)
 	}
 	originalCfg := cloneProfilesConfig(cfg)
-	mirrors, err := snapshotProfileSelectionMirrors(configDir, p.CorpID)
+	syncOrganization := shouldSyncOrganizationMirror(cfg, *p)
+	mirrors, err := snapshotProfileSelectionMirrors(configDir, p.CorpID, syncOrganization)
 	if err != nil {
 		return nil, err
 	}
@@ -677,19 +910,25 @@ func usePreviousProfileLocked(configDir string) (*Profile, error) {
 	if strings.TrimSpace(cfg.CurrentProfile) != "" {
 		current, _, _ = resolveProfileSelection(configDir, cfg, cfg.CurrentProfile)
 	}
-	cfg.CurrentProfile = ProfileSelector(*p)
+	cfg.CurrentProfile = storedProfileSelector(cfg, p)
 	if current != nil {
-		cfg.PreviousProfile = ProfileSelector(*current)
+		cfg.PreviousProfile = storedProfileSelector(cfg, current)
 	} else {
 		cfg.PreviousProfile = ""
 	}
-	setOrgCurrentProfile(cfg, p.CorpID, ProfileSelector(*p))
+	if strings.TrimSpace(p.UserID) == "" {
+		delete(cfg.OrgCurrentProfiles, strings.TrimSpace(p.CorpID))
+	} else {
+		setOrgCurrentProfile(cfg, p.CorpID, ProfileSelector(*p))
+	}
 	touchProfileUsage(p)
 	if err := profilesSave(configDir, cfg); err != nil {
 		return nil, err
 	}
-	if err := syncOrganizationTokenMirrorForProfile(*p); err != nil {
-		return nil, rollbackProfileSelection(configDir, originalCfg, p.CorpID, mirrors, err)
+	if syncOrganization {
+		if err := syncOrganizationTokenMirrorForProfile(*p); err != nil {
+			return nil, rollbackProfileSelection(configDir, originalCfg, p.CorpID, mirrors, err)
+		}
 	}
 	if err := profilesSyncLegacyMirror(configDir); err != nil {
 		return nil, rollbackProfileSelection(configDir, originalCfg, p.CorpID, mirrors, err)
@@ -733,6 +972,21 @@ func removeProfileLocked(configDir, selector string) (*Profile, error) {
 		return nil, err
 	}
 	removed := *p
+	originalCurrentSelector := strings.TrimSpace(cfg.CurrentProfile)
+	originalOrganizationCurrent := strings.TrimSpace(cfg.OrgCurrentProfiles[strings.TrimSpace(removed.CorpID)])
+	pointers := []*string{&cfg.PrimaryProfile, &cfg.CurrentProfile, &cfg.PreviousProfile}
+	pointerMatches := make([]bool, len(pointers))
+	for i, pointer := range pointers {
+		selected, _, resolveErr := resolveProfileSelection(configDir, cfg, *pointer)
+		if resolveErr == nil && selected != nil {
+			if exact {
+				pointerMatches[i] =
+					sameProfileIdentity(selected.CorpID, selected.UserID, removed.CorpID, removed.UserID)
+			} else {
+				pointerMatches[i] = strings.TrimSpace(selected.CorpID) == strings.TrimSpace(removed.CorpID)
+			}
+		}
+	}
 	kept := cfg.Profiles[:0]
 	for _, profile := range cfg.Profiles {
 		remove := profile.CorpID == removed.CorpID
@@ -748,7 +1002,7 @@ func removeProfileLocked(configDir, selector string) (*Profile, error) {
 	if exact && len(profilesForCorpID(cfg, removed.CorpID)) > 0 {
 		remaining := profilesForCorpID(cfg, removed.CorpID)
 		if len(remaining) == 1 {
-			replacementSelector = ProfileSelector(*remaining[0])
+			replacementSelector = storedProfileSelector(cfg, remaining[0])
 		}
 	}
 	if exact {
@@ -762,15 +1016,14 @@ func removeProfileLocked(configDir, selector string) (*Profile, error) {
 	} else {
 		delete(cfg.OrgCurrentProfiles, removed.CorpID)
 	}
-	pointers := []*string{&cfg.PrimaryProfile, &cfg.CurrentProfile, &cfg.PreviousProfile}
-	for _, pointer := range pointers {
+	for i, pointer := range pointers {
 		if exact {
-			if selectorMatchesIdentity(*pointer, removed) {
+			if pointerMatches[i] {
 				*pointer = replacementSelector
 			}
 			continue
 		}
-		if selectorTargetsCorp(*pointer, removed.CorpID) {
+		if pointerMatches[i] || selectorTargetsCorp(*pointer, removed.CorpID) {
 			*pointer = ""
 		}
 	}
@@ -779,11 +1032,26 @@ func removeProfileLocked(configDir, selector string) (*Profile, error) {
 			cfg.CurrentProfile = previous
 			cfg.PreviousProfile = ""
 		} else if len(cfg.Profiles) == 1 {
-			cfg.CurrentProfile = ProfileSelector(cfg.Profiles[0])
+			cfg.CurrentProfile = storedProfileSelector(cfg, &cfg.Profiles[0])
 		}
 	}
 	if cfg.PreviousProfile != "" && cfg.PreviousProfile == cfg.CurrentProfile {
 		cfg.PreviousProfile = ""
+	}
+	currentSelectionChanged := strings.TrimSpace(cfg.CurrentProfile) != originalCurrentSelector
+	organizationCurrentChanged := strings.TrimSpace(cfg.OrgCurrentProfiles[strings.TrimSpace(removed.CorpID)]) != originalOrganizationCurrent
+	if strings.TrimSpace(cfg.CurrentProfile) != "" {
+		if current, _, resolveErr := resolveProfileSelection(configDir, cfg, cfg.CurrentProfile); resolveErr == nil && current != nil {
+			if (currentSelectionChanged || organizationCurrentChanged) &&
+				strings.TrimSpace(current.CorpID) == strings.TrimSpace(removed.CorpID) &&
+				unresolvedProfileForCorp(cfg, removed.CorpID) != nil {
+				if strings.TrimSpace(current.UserID) == "" {
+					delete(cfg.OrgCurrentProfiles, strings.TrimSpace(current.CorpID))
+				} else {
+					setOrgCurrentProfile(cfg, current.CorpID, storedProfileSelector(cfg, current))
+				}
+			}
+		}
 	}
 	if len(cfg.Profiles) == 0 {
 		cfg.PrimaryProfile = ""
@@ -807,6 +1075,9 @@ func selectorTargetsCorp(selector, corpID string) bool {
 	corpID = strings.TrimSpace(corpID)
 	if selector == corpID {
 		return true
+	}
+	if selectedCorpID, unresolved := parseUnresolvedProfileSelector(selector); unresolved {
+		return selectedCorpID == corpID
 	}
 	selectedCorpID, _, exact := ParseIdentitySelector(selector)
 	return exact && selectedCorpID == corpID
@@ -856,12 +1127,16 @@ type profileSelectionMirrorSnapshot struct {
 	marker       tokenMarkerSnapshot
 }
 
-func snapshotProfileSelectionMirrors(configDir, corpID string) (profileSelectionMirrorSnapshot, error) {
-	organization, err := snapshotTokenSlot(func() (*TokenData, error) {
-		return profilesLoadCorp(corpID)
-	})
-	if err != nil {
-		return profileSelectionMirrorSnapshot{}, err
+func snapshotProfileSelectionMirrors(configDir, corpID string, includeOrganization bool) (profileSelectionMirrorSnapshot, error) {
+	var organization tokenSlotSnapshot
+	if includeOrganization {
+		var err error
+		organization, err = snapshotTokenSlot(func() (*TokenData, error) {
+			return profilesLoadCorp(corpID)
+		})
+		if err != nil {
+			return profileSelectionMirrorSnapshot{}, err
+		}
 	}
 	legacy, err := snapshotTokenSlot(profilesLoadLegacy)
 	if err != nil {
@@ -889,12 +1164,14 @@ func rollbackProfileSelection(
 	if err := profilesSave(configDir, cloneProfilesConfig(cfg)); err != nil {
 		rollbackErr = errors.Join(rollbackErr, err)
 	}
-	if mirrors.organization.exists {
-		if err := profilesSaveCorp(corpID, mirrors.organization.token); err != nil {
+	if mirrors.organization.known {
+		if mirrors.organization.exists {
+			if err := profilesSaveCorp(corpID, mirrors.organization.token); err != nil {
+				rollbackErr = errors.Join(rollbackErr, err)
+			}
+		} else if err := profilesDeleteCorp(corpID); err != nil {
 			rollbackErr = errors.Join(rollbackErr, err)
 		}
-	} else if err := profilesDeleteCorp(corpID); err != nil {
-		rollbackErr = errors.Join(rollbackErr, err)
 	}
 	if mirrors.legacy.exists {
 		if err := profilesSaveLegacy(mirrors.legacy.token); err != nil {
@@ -975,33 +1252,48 @@ func syncOrganizationTokenMirrorForProfile(profile Profile) error {
 }
 
 func loadTokenForProfileIdentity(profile Profile) (*TokenData, error) {
-	if strings.TrimSpace(profile.UserID) != "" {
-		data, err := profilesLoadIdentity(profile.CorpID, profile.UserID)
-		if err == nil {
-			return data, nil
-		}
-		if !errors.Is(err, ErrTokenDataNotFound) {
+	if strings.TrimSpace(profile.UserID) == "" {
+		data, err := profilesLoadCorp(profile.CorpID)
+		if err != nil {
 			return nil, err
 		}
-		orgData, orgErr := profilesLoadCorp(profile.CorpID)
-		if orgErr != nil {
-			if errors.Is(orgErr, ErrTokenDataNotFound) {
-				return nil, err
-			}
-			return nil, orgErr
+		if data == nil {
+			return nil, ErrTokenDataNotFound
 		}
-		if strings.TrimSpace(orgData.UserID) == "" {
-			return nil, fmt.Errorf("organization token mirror for corpId %q has no userId; cannot use it for profile %q", profile.CorpID, ProfileSelector(profile))
+		if strings.TrimSpace(data.UserID) != "" {
+			return nil, fmt.Errorf(
+				"organization token mirror for corpId %q belongs to userId %q; cannot use it for unresolved profile %q",
+				profile.CorpID,
+				data.UserID,
+				profile.Name,
+			)
 		}
-		if strings.TrimSpace(orgData.UserID) != strings.TrimSpace(profile.UserID) {
-			return nil, err
-		}
-		if saveErr := profilesSaveIdentity(profile.CorpID, profile.UserID, orgData); saveErr != nil {
-			return nil, saveErr
-		}
-		return orgData, nil
+		return data, nil
 	}
-	return profilesLoadCorp(profile.CorpID)
+	data, err := profilesLoadIdentity(profile.CorpID, profile.UserID)
+	if err == nil {
+		return data, nil
+	}
+	if !errors.Is(err, ErrTokenDataNotFound) {
+		return nil, err
+	}
+	orgData, orgErr := profilesLoadCorp(profile.CorpID)
+	if orgErr != nil {
+		if errors.Is(orgErr, ErrTokenDataNotFound) {
+			return nil, err
+		}
+		return nil, orgErr
+	}
+	if strings.TrimSpace(orgData.UserID) == "" {
+		return nil, fmt.Errorf("organization token mirror for corpId %q has no userId; cannot use it for profile %q", profile.CorpID, ProfileSelector(profile))
+	}
+	if strings.TrimSpace(orgData.UserID) != strings.TrimSpace(profile.UserID) {
+		return nil, err
+	}
+	if saveErr := profilesSaveIdentity(profile.CorpID, profile.UserID, orgData); saveErr != nil {
+		return nil, saveErr
+	}
+	return orgData, nil
 }
 
 func normalizeProfilesConfig(cfg *ProfilesConfig) {
@@ -1127,6 +1419,12 @@ func resolveProfileSelection(_ string, cfg *ProfilesConfig, selector string) (*P
 	if selector == "" {
 		return nil, false, fmt.Errorf("profile selector is empty")
 	}
+	if corpID, unresolved := parseUnresolvedProfileSelector(selector); unresolved {
+		if profile := unresolvedProfileForCorp(cfg, corpID); profile != nil {
+			return profile, true, nil
+		}
+		return nil, true, fmt.Errorf("historical profile for organization %q not found", corpID)
+	}
 
 	if organization, account, compound := ParseIdentitySelector(selector); compound {
 		corpID, err := resolveOrganizationCorpID(cfg, organization)
@@ -1218,6 +1516,12 @@ func resolveProfileDeletionSelection(cfg *ProfilesConfig, selector string) (*Pro
 	if selector == "" {
 		return nil, false, fmt.Errorf("profile selector is empty")
 	}
+	if corpID, unresolved := parseUnresolvedProfileSelector(selector); unresolved {
+		if profile := unresolvedProfileForCorp(cfg, corpID); profile != nil {
+			return profile, true, nil
+		}
+		return nil, true, fmt.Errorf("historical profile for organization %q not found", corpID)
+	}
 	if _, _, compound := ParseIdentitySelector(selector); compound {
 		return resolveProfileSelection("", cfg, selector)
 	}
@@ -1303,6 +1607,12 @@ func resolveOrganizationDefault(cfg *ProfilesConfig, corpID, displaySelector str
 			return p, false, nil
 		}
 	}
+	if unresolved := unresolvedProfileForCorp(cfg, corpID); unresolved != nil {
+		// With no exact organization-current selection, the organization slot
+		// belongs to the sole unresolved historical account. Do not choose an
+		// arbitrary exact identity merely because it shares the corpId.
+		return unresolved, false, nil
+	}
 	if len(profiles) == 1 {
 		return profiles[0], false, nil
 	}
@@ -1314,12 +1624,18 @@ func resolveOrganizationDefault(cfg *ProfilesConfig, corpID, displaySelector str
 }
 
 func profileSelectorCandidates(profiles []*Profile) []string {
+	cfg := &ProfilesConfig{Profiles: make([]Profile, 0, len(profiles))}
+	for _, profile := range profiles {
+		if profile != nil {
+			cfg.Profiles = append(cfg.Profiles, *profile)
+		}
+	}
 	candidates := make([]string, 0, len(profiles))
 	for _, p := range profiles {
 		if p == nil {
 			continue
 		}
-		candidates = append(candidates, ProfileSelector(*p))
+		candidates = append(candidates, storedProfileSelector(cfg, p))
 	}
 	sort.Strings(candidates)
 	return candidates
@@ -1341,18 +1657,35 @@ func canonicalStoredSelector(cfg *ProfilesConfig, selector string) string {
 	if selector == "" {
 		return ""
 	}
+	if corpID, unresolved := parseUnresolvedProfileSelector(selector); unresolved {
+		if profile := unresolvedProfileForCorp(cfg, corpID); profile != nil {
+			return storedProfileSelector(cfg, profile)
+		}
+		return ""
+	}
 	if corpID, userID, exact := ParseIdentitySelector(selector); exact {
 		if p := findExactProfile(cfg, corpID, userID); p != nil {
 			return ProfileSelector(*p)
 		}
+		// A colon-containing legacy local name is recoverable only when it does
+		// not name a real exact identity. Exact corpId:userId always wins.
+		if profile := unresolvedProfileForLocalName(cfg, selector); profile != nil {
+			return storedProfileSelector(cfg, profile)
+		}
 		return ""
+	}
+	// Older multi-account writers stored the unresolved profile's local name.
+	// Recover that intent before the organization grammar can capture a
+	// CorpName-like name, then persist the safe selector.
+	if profile := unresolvedProfileForLocalName(cfg, selector); profile != nil {
+		return storedProfileSelector(cfg, profile)
 	}
 	if profiles := profilesForCorpID(cfg, selector); len(profiles) > 0 {
 		if exact := exactProfileSelectorForCorp(cfg, selector, cfg.OrgCurrentProfiles[selector]); exact != "" {
 			return exact
 		}
 		if len(profiles) == 1 {
-			return ProfileSelector(*profiles[0])
+			return storedProfileSelector(cfg, profiles[0])
 		}
 		return ""
 	}
@@ -1360,7 +1693,7 @@ func canonicalStoredSelector(cfg *ProfilesConfig, selector string) string {
 	if err != nil || p == nil {
 		return ""
 	}
-	return ProfileSelector(*p)
+	return storedProfileSelector(cfg, p)
 }
 
 func setOrgCurrentProfile(cfg *ProfilesConfig, corpID, selector string) {
@@ -1445,6 +1778,51 @@ func profilesForCorpID(cfg *ProfilesConfig, corpID string) []*Profile {
 	return result
 }
 
+func unresolvedProfileForCorp(cfg *ProfilesConfig, corpID string) *Profile {
+	if cfg == nil {
+		return nil
+	}
+	corpID = strings.TrimSpace(corpID)
+	for i := range cfg.Profiles {
+		profile := &cfg.Profiles[i]
+		if strings.TrimSpace(profile.CorpID) == corpID && strings.TrimSpace(profile.UserID) == "" {
+			return profile
+		}
+	}
+	return nil
+}
+
+func unresolvedProfileForLocalName(cfg *ProfilesConfig, name string) *Profile {
+	if cfg == nil {
+		return nil
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	var match *Profile
+	for i := range cfg.Profiles {
+		profile := &cfg.Profiles[i]
+		if strings.TrimSpace(profile.UserID) != "" || strings.TrimSpace(profile.Name) != name ||
+			len(profilesForCorpID(cfg, profile.CorpID)) <= 1 {
+			continue
+		}
+		if match != nil {
+			return nil
+		}
+		match = profile
+	}
+	return match
+}
+
+// When a blank profile coexists with exact accounts, the organization slot is
+// that unresolved profile's only canonical credential. Exact identities must
+// remain in their identity slots and may still become global current without
+// overwriting the organization slot.
+func shouldSyncOrganizationMirror(cfg *ProfilesConfig, profile Profile) bool {
+	return strings.TrimSpace(profile.UserID) == "" || unresolvedProfileForCorp(cfg, profile.CorpID) == nil
+}
+
 func profileSelectorReferenceExists(cfg *ProfilesConfig, selector string) bool {
 	if cfg == nil {
 		return false
@@ -1452,6 +1830,12 @@ func profileSelectorReferenceExists(cfg *ProfilesConfig, selector string) bool {
 	selector = strings.TrimSpace(selector)
 	if selector == "" {
 		return false
+	}
+	if corpID, unresolved := parseUnresolvedProfileSelector(selector); unresolved {
+		return unresolvedProfileForCorp(cfg, corpID) != nil
+	}
+	if unresolvedProfileForLocalName(cfg, selector) != nil {
+		return true
 	}
 	if corpID, userID, exact := ParseIdentitySelector(selector); exact {
 		if findExactProfile(cfg, corpID, userID) != nil {

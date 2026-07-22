@@ -210,6 +210,45 @@ func TestExactNonOrgCurrentRefreshIgnoresUnreadableOrgMirror(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageExactRefreshAndSwitchIgnoreUnreadableReservedBlankOrgSlot(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	fixture := seedLegacyBlankAndExactIdentitySlots(t)
+	if err := os.WriteFile(profileCiphertextPathForTest(fixture.corpID), []byte("corrupt reserved blank slot"), 0o600); err != nil {
+		t.Fatalf("WriteFile(reserved blank ciphertext) error = %v", err)
+	}
+
+	SetRuntimeProfile("")
+	if err := preflightTokenRefreshPersistence(fixture.configDir, fixture.beta); err != nil {
+		t.Fatalf("preflightTokenRefreshPersistence(current exact with reserved blank) error = %v", err)
+	}
+	refreshed := *fixture.beta
+	refreshed.AccessToken = "at_identity_beta_refreshed"
+	if err := SaveTokenData(fixture.configDir, &refreshed); err != nil {
+		t.Fatalf("SaveTokenData(current exact with reserved blank) error = %v", err)
+	}
+	if raw, err := os.ReadFile(profileCiphertextPathForTest(fixture.corpID)); err != nil || string(raw) != "corrupt reserved blank slot" {
+		t.Fatalf("reserved blank slot changed during exact refresh: %q, %v", raw, err)
+	}
+
+	if selected, err := SetCurrentProfile(fixture.configDir, profileSelector(fixture.alpha.CorpID, fixture.alpha.UserID)); err != nil || selected.UserID != fixture.alpha.UserID {
+		t.Fatalf("SetCurrentProfile(exact with reserved blank) = %#v, %v", selected, err)
+	}
+	if selected, err := UsePreviousProfile(fixture.configDir); err != nil || selected.UserID != fixture.beta.UserID {
+		t.Fatalf("UsePreviousProfile(exact with reserved blank) = %#v, %v", selected, err)
+	}
+	if raw, err := os.ReadFile(profileCiphertextPathForTest(fixture.corpID)); err != nil || string(raw) != "corrupt reserved blank slot" {
+		t.Fatalf("reserved blank slot changed during exact switches: %q, %v", raw, err)
+	}
+
+	blankRefresh := *fixture.blank
+	blankRefresh.LegacyOrgScopedProfile = fixture.blankName
+	SetRuntimeProfile(fixture.blankName)
+	if err := preflightTokenRefreshPersistence(fixture.configDir, &blankRefresh); err == nil ||
+		!strings.Contains(err.Error(), "profile token slot") {
+		t.Fatalf("blank refresh preflight error = %v, want unreadable reserved slot", err)
+	}
+}
+
 func TestExchangeAuthCodePreflightsOrphanProfileCiphertextBeforeHTTP(t *testing.T) {
 	cleanupKeychain(t)
 	t.Setenv(keychain.DisableKeychainEnv, "1")

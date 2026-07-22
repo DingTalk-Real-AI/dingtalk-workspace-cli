@@ -59,27 +59,28 @@ var (
 		profile, _, err := resolveProfileForLoadLocked(configDir, selector)
 		return profile, err
 	}
-	tokenResolveDeletion        = resolveProfileDeletionSelection
-	tokenResolveSelection       = resolveProfileSelection
-	tokenUpsertProfile          = upsertProfileFromTokenWithCurrentLocked
-	tokenRemoveProfile          = removeProfileLocked
-	tokenSyncLegacyMirror       = syncLegacyTokenMirrorLocked
-	tokenSyncOrganizationMirror = syncOrganizationTokenMirrorForProfile
-	tokenLoadProfiles           = LoadProfiles
-	tokenSaveProfiles           = SaveProfiles
-	tokenWriteMarker            = WriteTokenMarker
-	tokenWriteManualMarker      = WriteManualTokenMarker
-	tokenDeleteMarker           = DeleteTokenMarker
-	tokenParseURL               = url.Parse
-	tokenNewRequest             = http.NewRequestWithContext
-	tokenDefaultConfigDir       = getDefaultConfigDir
-	tokenLoadData               = LoadTokenData
-	tokenRevokeURL              = GetRevokeTokenURL
-	tokenMCPBaseURL             = GetMCPBaseURL
-	tokenLogoutURL              = LogoutURL
-	tokenLogoutContinueURL      = LogoutContinueURL
-	tokenLogoutHTTPClient       = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	tokenRevokeHTTPClient       = &http.Client{Timeout: 10 * time.Second}
+	tokenResolveDeletion         = resolveProfileDeletionSelection
+	tokenResolveSelection        = resolveProfileSelection
+	tokenUpsertProfile           = upsertProfileFromTokenWithCurrentLocked
+	tokenRemoveProfile           = removeProfileLocked
+	tokenSyncLegacyMirror        = syncLegacyTokenMirrorLocked
+	tokenSyncOrganizationMirror  = syncOrganizationTokenMirrorForProfile
+	tokenLoadProfiles            = LoadProfiles
+	tokenEnsureProfilesMigration = ensureProfilesMigrationLocked
+	tokenSaveProfiles            = SaveProfiles
+	tokenWriteMarker             = WriteTokenMarker
+	tokenWriteManualMarker       = WriteManualTokenMarker
+	tokenDeleteMarker            = DeleteTokenMarker
+	tokenParseURL                = url.Parse
+	tokenNewRequest              = http.NewRequestWithContext
+	tokenDefaultConfigDir        = getDefaultConfigDir
+	tokenLoadData                = LoadTokenData
+	tokenRevokeURL               = GetRevokeTokenURL
+	tokenMCPBaseURL              = GetMCPBaseURL
+	tokenLogoutURL               = LogoutURL
+	tokenLogoutContinueURL       = LogoutContinueURL
+	tokenLogoutHTTPClient        = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	tokenRevokeHTTPClient        = &http.Client{Timeout: 10 * time.Second}
 )
 
 // TokenData holds the OAuth token set persisted to disk.
@@ -96,6 +97,10 @@ type TokenData struct {
 	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
 	UpdatedAt      string    `json:"updated_at,omitempty"`
 	Source         string    `json:"source,omitempty"`
+	// LegacyOrgScopedProfile is an in-memory destination for an explicitly
+	// matched historical profile whose userId was never resolved. It is never
+	// persisted as token material.
+	LegacyOrgScopedProfile string `json:"-"`
 }
 
 // IsAccessTokenValid returns true if the access token has not expired.
@@ -235,16 +240,44 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		if err != nil {
 			return err
 		}
+		// A login may be the first operation after upgrading. Finish a v1
+		// registry migration before an upsert can raise profiles.json to v2;
+		// otherwise untouched organizations would permanently lose their chance
+		// to receive exact identity token slots. Do not re-run v2 repair here:
+		// refresh has already rotated the remote credential at this point, and an
+		// unrelated damaged identity slot must not prevent the new token from
+		// being committed. Normal load/preflight paths repair v2 before exchange.
+		if cfg.Version < profilesVersion {
+			if err := tokenEnsureProfilesMigration(configDir); err != nil {
+				return err
+			}
+			cfg, err = tokenLoadProfiles(configDir)
+			if err != nil {
+				return err
+			}
+		}
 		if err := ensureProfilesWritable(cfg); err != nil {
 			return err
 		}
 		runtimeSelector := strings.TrimSpace(RuntimeProfile())
-		makeCurrent := runtimeSelector == ""
+		persistenceSelector := runtimeSelector
+		if persistenceSelector == "" && userID == "" {
+			persistenceSelector = strings.TrimSpace(data.LegacyOrgScopedProfile)
+		}
+		makeCurrent := persistenceSelector == ""
 		exactSelector := profileSelector(corpID, userID)
-		mirrorOrg := makeCurrent ||
-			exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]) == exactSelector
 		existingIdentity := profileIndexByIdentity(cfg, corpID, userID) >= 0
-		upgradesLegacyProfile := !existingIdentity && userID != "" && legacyProfileIndexByCorpID(cfg, corpID) >= 0
+		upgradesLegacyProfile := !existingIdentity && userID != "" &&
+			len(profilesForCorpID(cfg, corpID)) == 1 && legacyProfileIndexByCorpID(cfg, corpID) >= 0
+		preserveUnresolvedOrg := userID != "" && unresolvedProfileForCorp(cfg, corpID) != nil && !upgradesLegacyProfile
+		// An unresolved legacy identity has no exact slot by definition. Its
+		// organization slot is therefore the canonical credential even when an
+		// explicit runtime profile means this login should not become global
+		// current. When it coexists with exact accounts, those accounts remain
+		// identity-slot-only so profile switching or refresh cannot overwrite the
+		// unresolved account's sole credential.
+		mirrorOrg := userID == "" || (!preserveUnresolvedOrg && (makeCurrent ||
+			exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]) == exactSelector))
 		logging.AuthDebug(
 			"auth.token.persist.plan",
 			"corp_id", corpID,
@@ -255,6 +288,7 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 			"upgrades_legacy_profile", upgradesLegacyProfile,
 			"profiles_before", len(cfg.Profiles),
 			"runtime_profile", runtimeSelector,
+			"persistence_profile", persistenceSelector,
 			"write_identity_slot", userID != "",
 			"write_org_mirror", mirrorOrg,
 			"write_global_mirror", makeCurrent,
@@ -276,12 +310,6 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		if userID != "" {
 			if err := tokenSaveKeychainForIdentity(corpID, userID, data); err != nil {
 				return rollback(err)
-			}
-		} else {
-			for _, profile := range cfg.Profiles {
-				if strings.TrimSpace(profile.CorpID) == corpID && strings.TrimSpace(profile.UserID) != "" {
-					return fmt.Errorf("cannot store profile for corpId %q without userId because account identities already exist", corpID)
-				}
 			}
 		}
 		if err := tokenUpsertProfile(configDir, data, makeCurrent); err != nil {
@@ -459,7 +487,22 @@ func loadTokenDataForProfileLocked(configDir, profile string) (*TokenData, error
 
 func tokenLoadProfileIdentity(profile Profile) (*TokenData, error) {
 	if strings.TrimSpace(profile.UserID) == "" {
-		return tokenLoadKeychainForCorpID(profile.CorpID)
+		data, err := tokenLoadKeychainForCorpID(profile.CorpID)
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			return nil, ErrTokenDataNotFound
+		}
+		if strings.TrimSpace(data.UserID) != "" {
+			return nil, fmt.Errorf(
+				"organization token mirror for corpId %q belongs to userId %q; cannot use it for unresolved profile %q",
+				profile.CorpID,
+				data.UserID,
+				profile.Name,
+			)
+		}
+		return data, nil
 	}
 	data, err := tokenLoadKeychainIdentity(profile.CorpID, profile.UserID)
 	if err == nil {
@@ -561,12 +604,20 @@ func deleteTokenDataForProfileLocked(configDir, profile string) error {
 		removeSelector := removed.CorpID
 		orgCurrent := false
 		if exact {
-			removeSelector = ProfileSelector(removed)
-			orgCurrent = exactProfileSelectorForCorp(
-				cfg,
-				removed.CorpID,
-				cfg.OrgCurrentProfiles[removed.CorpID],
-			) == ProfileSelector(removed)
+			if strings.TrimSpace(removed.UserID) == "" {
+				// A blank profile is exact only when it was selected by its unique
+				// local name. Converting it back to corpId here would turn a
+				// one-profile logout into whole-organization deletion.
+				removeSelector = effectiveSelector
+				orgCurrent = true
+			} else {
+				removeSelector = ProfileSelector(removed)
+				orgCurrent = exactProfileSelectorForCorp(
+					cfg,
+					removed.CorpID,
+					cfg.OrgCurrentProfiles[removed.CorpID],
+				) == ProfileSelector(removed)
+			}
 		}
 		if _, err := tokenRemoveProfile(configDir, removeSelector); err != nil {
 			return err
@@ -592,7 +643,8 @@ func deleteTokenDataForProfileLocked(configDir, profile string) error {
 				return rollback(loadErr)
 			}
 			replacementSelector := updated.OrgCurrentProfiles[removed.CorpID]
-			if exact && replacementSelector != "" {
+			preserveUnresolvedOrg := unresolvedProfileForCorp(updated, removed.CorpID) != nil
+			if exact && replacementSelector != "" && !preserveUnresolvedOrg {
 				replacement, _, resolveErr := tokenResolveSelection(configDir, updated, replacementSelector)
 				if resolveErr != nil {
 					return rollback(resolveErr)
@@ -600,8 +652,10 @@ func deleteTokenDataForProfileLocked(configDir, profile string) error {
 				if err := tokenSyncOrganizationMirror(*replacement); err != nil {
 					return rollback(err)
 				}
-			} else if err := tokenDeleteKeychainForCorpID(removed.CorpID); err != nil {
-				return rollback(err)
+			} else if !preserveUnresolvedOrg {
+				if err := tokenDeleteKeychainForCorpID(removed.CorpID); err != nil {
+					return rollback(err)
+				}
 			}
 		}
 		preserveManualDefault := markerSnapshot.known &&

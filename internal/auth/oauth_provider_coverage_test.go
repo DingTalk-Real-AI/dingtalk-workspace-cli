@@ -685,7 +685,10 @@ func TestCrossPlatformCoverageOAuthRefreshAndParsingEdges(t *testing.T) {
 	resetAppConfigCache()
 	oauthHTTPClient = mcpSrv.Client()
 	mcpProvider := &OAuthProvider{configDir: configDir, httpClient: mcpSrv.Client()}
-	mcpOriginal := &TokenData{ClientID: "mcp-client", Source: "mcp", RefreshToken: "refresh", CorpID: "corp"}
+	mcpOriginal := &TokenData{
+		ClientID: "mcp-client", Source: "mcp", RefreshToken: "refresh",
+		CorpID: "corp", UserID: "user",
+	}
 	if updated, err := mcpProvider.refreshViaMCP(context.Background(), mcpOriginal); err != nil || updated.Source != "mcp" {
 		t.Fatalf("MCP refresh = %#v, %v", updated, err)
 	}

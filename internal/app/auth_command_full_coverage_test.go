@@ -262,7 +262,10 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"device": "true"}); err == nil {
 		t.Fatal("device error should propagate")
 	}
-	authDeviceLogin = func(*authpkg.DeviceFlowProvider, context.Context) (*authpkg.TokenData, error) {
+	authDeviceLogin = func(provider *authpkg.DeviceFlowProvider, _ context.Context) (*authpkg.TokenData, error) {
+		if provider.IdentityEnricher == nil {
+			t.Error("device login missing shared identity enricher")
+		}
 		return &authpkg.TokenData{AccessToken: "a", ExpiresAt: time.Now().Add(time.Hour)}, nil
 	}
 	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"device": "true", "no-browser": "true"}); err != nil {
@@ -275,7 +278,10 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 	if _, _, err := authCoverageRunLogin(t, nil, "table", true, nil); err == nil {
 		t.Fatal("oauth error should propagate")
 	}
-	authOAuthLogin = func(*authpkg.OAuthProvider, context.Context, bool) (*authpkg.TokenData, error) {
+	authOAuthLogin = func(provider *authpkg.OAuthProvider, _ context.Context, _ bool) (*authpkg.TokenData, error) {
+		if provider.IdentityEnricher == nil {
+			t.Error("OAuth login missing shared identity enricher")
+		}
 		return &authpkg.TokenData{
 			AccessToken: "a", ExpiresAt: time.Now().Add(time.Hour), RefreshToken: "r", RefreshExpAt: time.Now().Add(48 * time.Hour),
 			CorpName: "Corp", CorpID: "ding1", UserName: "User", UserID: "u",
@@ -356,8 +362,8 @@ func TestCrossPlatformCoverageAuthCoverageContactEnrichment(t *testing.T) {
 	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", &authCoverageCaller{}, complete); err != nil {
 		t.Fatal(err)
 	}
-	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", &authCoverageCaller{err: errors.New("call")}, &authpkg.TokenData{CorpID: "ding"}); err == nil {
-		t.Fatal("caller error should propagate")
+	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", &authCoverageCaller{err: errors.New("call")}, &authpkg.TokenData{CorpID: "ding"}); err != nil {
+		t.Fatalf("contact failure must remain best effort: %v", err)
 	}
 	if err := enrichAuthLoginProfileFromContact(
 		ctx,
@@ -374,8 +380,8 @@ func TestCrossPlatformCoverageAuthCoverageContactEnrichment(t *testing.T) {
 		}
 	}
 	mismatch := &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Text: `{"result":[{"orgEmployeeModel":{"corpId":"other"}}]}`}}}}
-	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", mismatch, &authpkg.TokenData{CorpID: "ding", AccessToken: "token"}); err == nil {
-		t.Fatal("corp mismatch should fail")
+	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", mismatch, &authpkg.TokenData{CorpID: "ding", AccessToken: "token"}); err != nil {
+		t.Fatalf("contact corp mismatch must remain best effort: %v", err)
 	}
 	same := &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Text: `{"result":[{"orgEmployeeModel":{"corpId":"ding","orgName":"Corp","userid":"u","name":"User"}}]}`}}}}
 	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", same, complete); err != nil {
@@ -390,11 +396,528 @@ func TestCrossPlatformCoverageAuthCoverageContactEnrichment(t *testing.T) {
 	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", same, data); err != nil || data.CorpName != "Corp" || data.UserID != "u" {
 		t.Fatalf("enriched = %#v, %v", data, err)
 	}
+	known := &authpkg.TokenData{CorpID: "ding", UserID: "exchange-user", AccessToken: "token"}
+	differentContactUser := &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Text: `{"result":[{"orgEmployeeModel":{"corpId":"ding","orgName":"Corp","userid":"other-user","name":"Other User"}}]}`}}}}
+	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", differentContactUser, known); err != nil {
+		t.Fatal(err)
+	}
+	if known.UserID != "exchange-user" || known.UserName != "" || known.CorpName != "Corp" {
+		t.Fatalf("token-exchange identity was overwritten: %#v", known)
+	}
+	multiOrg := &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Text: `{"result":[{"orgEmployeeModel":{"corpId":"other","userid":"other-user"}},{"orgEmployeeModel":{"corpId":"ding","orgName":"Target Corp","userid":"target-user","name":"Target User"}}]}`}}}}
+	multiOrgData := &authpkg.TokenData{CorpID: "ding", AccessToken: "token"}
+	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", multiOrg, multiOrgData); err != nil || multiOrgData.UserID != "target-user" || multiOrgData.CorpName != "Target Corp" {
+		t.Fatalf("multi-org contact selection = %#v, %v", multiOrgData, err)
+	}
+	if _, ok := contactProfileIdentityFromJSON(
+		[]byte(`{"result":[{"orgEmployeeModel":{"corpId":"other-a","userid":"user-a"}},{"orgEmployeeModel":{"corpId":"other-b","userid":"user-b"}}]}`),
+		"ding",
+	); ok {
+		t.Fatal("multiple nonmatching organizations must not select an arbitrary contact identity")
+	}
 	if _, ok := contactProfileIdentityFromToolResult(nil); ok {
 		t.Fatal("nil result should not parse")
 	}
 	if got := firstNonEmptyString(" ", " value ", "later"); got != "value" {
 		t.Fatalf("first non-empty = %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageContactFailureReusesUniqueSameCorpHistoricalIdentity(t *testing.T) {
+	configDir := t.TempDir()
+	if err := authpkg.SaveProfiles(configDir, &authpkg.ProfilesConfig{
+		Version: 1,
+		Profiles: []authpkg.Profile{{
+			CorpID:   "ding_ecological_worker",
+			CorpName: "Historical Corp",
+			UserID:   "external-user",
+			UserName: "Historical Worker",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		caller   edition.ToolCaller
+		wantCorp string
+	}{
+		{
+			name: "contact business error",
+			caller: &authCoverageCaller{err: apperrors.NewAPI(
+				"business error: success=false",
+				apperrors.WithReason("business_error"),
+			)},
+			wantCorp: "Fresh Corp",
+		},
+		{
+			name:     "contact has no identity",
+			caller:   &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Text: `{"success":false}`}}}},
+			wantCorp: "Fresh Corp",
+		},
+		{
+			name: "contact identity is missing user id",
+			caller: &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{
+				Text: `{"result":[{"orgEmployeeModel":{"corpId":"ding_ecological_worker","orgName":"Contact Corp"}}]}`,
+			}}}},
+			wantCorp: "Contact Corp",
+		},
+		{
+			name:     "ordinary contact error",
+			caller:   &authCoverageCaller{err: errors.New("network failure")},
+			wantCorp: "Fresh Corp",
+		},
+		{
+			name: "other contact business error",
+			caller: &authCoverageCaller{err: apperrors.NewAPI(
+				"permission denied",
+				apperrors.WithReason("business_error"),
+			)},
+			wantCorp: "Fresh Corp",
+		},
+		{
+			name:     "contact caller unavailable",
+			caller:   nil,
+			wantCorp: "Fresh Corp",
+		},
+		{
+			name: "contact returns another organization",
+			caller: &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{
+				Text: `{"result":[{"orgEmployeeModel":{"corpId":"ding_other","userid":"other-user"}}]}`,
+			}}}},
+			wantCorp: "Fresh Corp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := &authpkg.TokenData{
+				AccessToken:  "new-access",
+				RefreshToken: "new-refresh",
+				CorpID:       "ding_ecological_worker",
+				CorpName:     "Fresh Corp",
+			}
+			if err := enrichAuthLoginProfileFromContact(context.Background(), configDir, tc.caller, data); err != nil {
+				t.Fatalf("contact failure blocked historical identity recovery: %v", err)
+			}
+			if data.UserID != "external-user" || data.UserName != "Historical Worker" {
+				t.Fatalf("recovered identity = %#v", data)
+			}
+			if data.CorpName != tc.wantCorp {
+				t.Fatalf("corp name = %q, want %q", data.CorpName, tc.wantCorp)
+			}
+			if data.AccessToken != "new-access" || data.RefreshToken != "new-refresh" {
+				t.Fatalf("new token material was changed: %#v", data)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageContactFailureDoesNotGuessHistoricalIdentity(t *testing.T) {
+	businessErr := apperrors.NewAPI(
+		"business error: success=false",
+		apperrors.WithReason("business_error"),
+	)
+	for _, tc := range []struct {
+		name     string
+		corpID   string
+		profiles []authpkg.Profile
+		callErr  error
+	}{
+		{
+			name:   "same corp has two identities",
+			corpID: "ding_ecological_worker",
+			profiles: []authpkg.Profile{
+				{CorpID: "ding_ecological_worker", UserID: "external-user"},
+				{CorpID: "ding_ecological_worker", UserID: "external-user-b"},
+			},
+			callErr: businessErr,
+		},
+		{
+			name:   "same corp has one identity and one blank profile",
+			corpID: "ding_ecological_worker",
+			profiles: []authpkg.Profile{
+				{CorpID: "ding_ecological_worker", UserID: "external-user"},
+				{CorpID: "ding_ecological_worker"},
+			},
+			callErr: businessErr,
+		},
+		{
+			name:   "identity belongs to another corp",
+			corpID: "ding_ecological_worker",
+			profiles: []authpkg.Profile{
+				{CorpID: "ding_other", UserID: "external-user"},
+			},
+			callErr: businessErr,
+		},
+		{
+			name:    "no historical identity",
+			corpID:  "ding_ecological_worker",
+			callErr: businessErr,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			configDir := t.TempDir()
+			if err := authpkg.SaveProfiles(configDir, &authpkg.ProfilesConfig{Version: 2, Profiles: tc.profiles}); err != nil {
+				t.Fatalf("SaveProfiles() error = %v", err)
+			}
+			data := &authpkg.TokenData{AccessToken: "new-access", CorpID: tc.corpID}
+			err := enrichAuthLoginProfileFromContact(
+				context.Background(),
+				configDir,
+				&authCoverageCaller{err: tc.callErr},
+				data,
+			)
+			if err != nil {
+				t.Fatalf("contact failure must not block unresolved legacy login: %v", err)
+			}
+			if data.UserID != "" {
+				t.Fatalf("ambiguous/cross-corp identity was reused: %#v", data)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageContactHistoryFallbackEdges(t *testing.T) {
+	for _, data := range []*authpkg.TokenData{
+		nil,
+		{UserID: "known"},
+		{},
+	} {
+		reused, err := enrichAuthLoginProfileFromHistory(t.TempDir(), data)
+		if reused || err != nil {
+			t.Fatalf("ineligible history fallback = %v, %v", reused, err)
+		}
+	}
+
+	configDir := t.TempDir()
+	if err := authpkg.SaveProfiles(configDir, &authpkg.ProfilesConfig{
+		Version: 2,
+		Profiles: []authpkg.Profile{{
+			CorpID:   "ding_external",
+			CorpName: "Historical Corp",
+			UserID:   "external-user",
+			UserName: "Historical Worker",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	data := &authpkg.TokenData{CorpID: "ding_external"}
+	reused, err := enrichAuthLoginProfileFromHistory(configDir, data)
+	if err != nil || !reused {
+		t.Fatalf("history fallback = %v, %v", reused, err)
+	}
+	if data.CorpName != "Historical Corp" || data.UserName != "Historical Worker" || data.UserID != "external-user" {
+		t.Fatalf("history metadata = %#v", data)
+	}
+
+	corruptDir := t.TempDir()
+	if err := os.Mkdir(authpkg.ProfilesPath(corruptDir), 0o700); err != nil {
+		t.Fatalf("create unreadable profiles path: %v", err)
+	}
+	if reused, err := enrichAuthLoginProfileFromHistory(corruptDir, &authpkg.TokenData{CorpID: "ding_external"}); reused || err == nil {
+		t.Fatalf("corrupt history fallback = %v, %v; want load error", reused, err)
+	}
+
+	businessErr := apperrors.NewAPI(
+		"business error: success=false",
+		apperrors.WithReason("business_error"),
+	)
+	for _, tc := range []struct {
+		name   string
+		caller *authCoverageCaller
+	}{
+		{
+			name:   "contact business error",
+			caller: &authCoverageCaller{err: businessErr},
+		},
+		{
+			name:   "contact has no identity",
+			caller: &authCoverageCaller{result: &edition.ToolResult{}},
+		},
+		{
+			name: "contact identity is missing user id",
+			caller: &authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{
+				Text: `{"result":[{"orgEmployeeModel":{"corpId":"ding_external"}}]}`,
+			}}}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := enrichAuthLoginProfileFromContact(
+				context.Background(),
+				corruptDir,
+				tc.caller,
+				&authpkg.TokenData{CorpID: "ding_external", AccessToken: "new-access"},
+			)
+			if err != nil {
+				t.Fatalf("best-effort contact/history lookup blocked login: %v", err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAuthLoginConfigPreservesHistoryIdentityHint(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	oldResolve := authResolveProfile
+	oldLoad := authLoadProfiles
+	t.Cleanup(func() {
+		authResolveProfile = oldResolve
+		authLoadProfiles = oldLoad
+	})
+
+	explicit := &authpkg.Profile{CorpID: "ding_same", UserID: "user_2", Name: "second"}
+	current := &authpkg.Profile{CorpID: "ding_current", UserID: "current_user"}
+	authResolveProfile = func(_ string, selector string) (*authpkg.Profile, error) {
+		switch selector {
+		case "ding_same:user_2":
+			clone := *explicit
+			return &clone, nil
+		case "external-worker":
+			return &authpkg.Profile{Name: "external-worker", CorpID: "ding_external"}, nil
+		case "":
+			clone := *current
+			return &clone, nil
+		default:
+			return nil, errors.New("missing")
+		}
+	}
+	authLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) {
+		return &authpkg.ProfilesConfig{}, nil
+	}
+
+	cmd := newAuthLoginCommand(nil)
+	root, _, _ := authCoverageRoot(cmd, "table", true)
+	if err := root.PersistentFlags().Set("profile", "ding_same:user_2"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := resolveAuthLoginConfig(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TargetCorpID != "ding_same" || cfg.HistoryProfileSelector != "ding_same:user_2" || !cfg.HistoryProfileSelectorExplicit {
+		t.Fatalf("explicit login config = %#v", cfg)
+	}
+	if target, hint, exact, err := resolveAuthLoginTarget("cfg", "external-worker"); err != nil ||
+		target != "ding_external" || hint != "ding_external" || !exact {
+		t.Fatalf("blank-userId profile target = %q/%q/%v, %v", target, hint, exact, err)
+	}
+
+	if err := root.PersistentFlags().Set("profile", ""); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = resolveAuthLoginConfig(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TargetCorpID != "" || cfg.HistoryProfileSelector != "ding_current:current_user" || cfg.HistoryProfileSelectorExplicit {
+		t.Fatalf("implicit login config constrained authorization target: %#v", cfg)
+	}
+
+	if _, _, _, err := resolveAuthLoginTarget("cfg", "ding_same:missing"); err == nil {
+		t.Fatal("missing exact profile must not be reinterpreted as a corpId")
+	}
+	if target, hint, explicitHint, err := resolveAuthLoginTarget("cfg", "ding_new"); err != nil || target != "ding_new" || hint != "" || explicitHint {
+		t.Fatalf("new organization target = %q/%q/%v, %v", target, hint, explicitHint, err)
+	}
+	authLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) {
+		return &authpkg.ProfilesConfig{Profiles: []authpkg.Profile{
+			{CorpID: "ding_ambiguous", UserID: "user_1"},
+			{CorpID: "ding_ambiguous", UserID: "user_2"},
+		}}, nil
+	}
+	if _, _, _, err := resolveAuthLoginTarget("cfg", "ding_ambiguous"); err == nil {
+		t.Fatal("ambiguous known organization must require an exact profile")
+	}
+}
+
+func TestCrossPlatformCoverageOAuthAndDeviceApplyExactHistoryHint(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	oldResolve := authResolveProfile
+	oldLoad := authLoadProfiles
+	oldDevice := authDeviceLogin
+	oldOAuth := authOAuthLogin
+	oldInteractive := authLoginInteractiveTerminal
+	t.Cleanup(func() {
+		authResolveProfile = oldResolve
+		authLoadProfiles = oldLoad
+		authDeviceLogin = oldDevice
+		authOAuthLogin = oldOAuth
+		authLoginInteractiveTerminal = oldInteractive
+	})
+
+	selected := authpkg.Profile{CorpID: "ding_same", CorpName: "Same Corp", UserID: "user_2", UserName: "Second"}
+	authResolveProfile = func(_ string, selector string) (*authpkg.Profile, error) {
+		if selector != "ding_same:user_2" {
+			return nil, errors.New("missing")
+		}
+		clone := selected
+		return &clone, nil
+	}
+	authLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) {
+		return &authpkg.ProfilesConfig{
+			CurrentProfile: "ding_same:user_1",
+			OrgCurrentProfiles: map[string]string{
+				"ding_same": "ding_same:user_1",
+			},
+			Profiles: []authpkg.Profile{
+				{CorpID: "ding_same", UserID: "user_1", UserName: "First"},
+				selected,
+			},
+		}, nil
+	}
+	authLoginInteractiveTerminal = func() bool { return false }
+	caller := &authCoverageCaller{err: errors.New("contact unavailable")}
+	newToken := func() *authpkg.TokenData {
+		return &authpkg.TokenData{
+			AccessToken: "new-access",
+			CorpID:      "ding_same",
+			ExpiresAt:   time.Now().Add(time.Hour),
+		}
+	}
+	deviceApplied := false
+	authDeviceLogin = func(provider *authpkg.DeviceFlowProvider, ctx context.Context) (*authpkg.TokenData, error) {
+		data := newToken()
+		if provider.IdentityEnricher == nil {
+			return nil, errors.New("missing device identity enricher")
+		}
+		if err := provider.IdentityEnricher(ctx, data); err != nil {
+			return nil, err
+		}
+		deviceApplied = data.UserID == "user_2"
+		return data, nil
+	}
+	if _, _, err := authCoverageRunLogin(t, caller, "table", true, map[string]string{
+		"device":  "true",
+		"profile": "ding_same:user_2",
+	}); err != nil || !deviceApplied {
+		t.Fatalf("device exact history hint applied=%v err=%v", deviceApplied, err)
+	}
+
+	oauthApplied := false
+	authOAuthLogin = func(provider *authpkg.OAuthProvider, ctx context.Context, _ bool) (*authpkg.TokenData, error) {
+		if provider.TargetCorpID != "ding_same" {
+			return nil, fmt.Errorf("OAuth target corp = %q", provider.TargetCorpID)
+		}
+		data := newToken()
+		if provider.IdentityEnricher == nil {
+			return nil, errors.New("missing OAuth identity enricher")
+		}
+		if err := provider.IdentityEnricher(ctx, data); err != nil {
+			return nil, err
+		}
+		oauthApplied = data.UserID == "user_2"
+		return data, nil
+	}
+	if _, _, err := authCoverageRunLogin(t, caller, "table", true, map[string]string{
+		"profile": "ding_same:user_2",
+	}); err != nil || !oauthApplied {
+		t.Fatalf("OAuth exact history hint applied=%v err=%v", oauthApplied, err)
+	}
+}
+
+func TestCrossPlatformCoverageHistoricalIdentityPriorityAndBlankUserID(t *testing.T) {
+	oldLoad := authLoadProfiles
+	t.Cleanup(func() { authLoadProfiles = oldLoad })
+	authLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) { return nil, nil }
+	if reused, err := enrichAuthLoginProfileFromHistory("cfg", &authpkg.TokenData{CorpID: "ding_same"}); reused || err != nil {
+		t.Fatalf("nil history registry = reused=%v err=%v", reused, err)
+	}
+
+	cfg := &authpkg.ProfilesConfig{
+		CurrentProfile: "ding_same:user_1",
+		OrgCurrentProfiles: map[string]string{
+			"ding_same": "ding_same:user_2",
+		},
+		Profiles: []authpkg.Profile{
+			{CorpID: "ding_same", CorpName: "Same Corp", UserID: "user_1", UserName: "First"},
+			{CorpID: "ding_same", CorpName: "Same Corp", UserID: "user_2", UserName: "Second"},
+		},
+	}
+	authLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) { return cfg, nil }
+
+	explicitData := &authpkg.TokenData{CorpID: "ding_same"}
+	reused, err := enrichAuthLoginProfileFromHistory("cfg", explicitData, authLoginHistoryHint{Selector: "ding_same:user_1", Explicit: true})
+	if err != nil || !reused || explicitData.UserID != "user_1" {
+		t.Fatalf("explicit history selection = %#v, reused=%v err=%v", explicitData, reused, err)
+	}
+	mismatchedHintData := &authpkg.TokenData{CorpID: "ding_same"}
+	reused, err = enrichAuthLoginProfileFromHistory("cfg", mismatchedHintData, authLoginHistoryHint{Selector: "ding_other:user_9", Explicit: true})
+	if err != nil || reused || mismatchedHintData.UserID != "" {
+		t.Fatalf("cross-corp explicit hint reused another identity: %#v, reused=%v err=%v", mismatchedHintData, reused, err)
+	}
+	orgCurrentData := &authpkg.TokenData{CorpID: "ding_same"}
+	reused, err = enrichAuthLoginProfileFromHistory("cfg", orgCurrentData)
+	if err != nil || reused || orgCurrentData.UserID != "" {
+		t.Fatalf("implicit multi-account org-current was treated as identity proof: %#v, reused=%v err=%v", orgCurrentData, reused, err)
+	}
+
+	cfg.Profiles = []authpkg.Profile{cfg.Profiles[1]}
+	soleData := &authpkg.TokenData{CorpID: "ding_same"}
+	reused, err = enrichAuthLoginProfileFromHistory("cfg", soleData)
+	if err != nil || !reused || soleData.UserID != "user_2" {
+		t.Fatalf("sole history selection = %#v, reused=%v err=%v", soleData, reused, err)
+	}
+
+	cfg.Profiles = []authpkg.Profile{
+		{CorpID: "ding_same", CorpName: "Same Corp", UserID: "user_1", UserName: "First"},
+		{CorpID: "ding_same", CorpName: "Same Corp", UserID: "user_2", UserName: "Second"},
+	}
+	cfg.OrgCurrentProfiles = nil
+	currentData := &authpkg.TokenData{CorpID: "ding_same"}
+	reused, err = enrichAuthLoginProfileFromHistory("cfg", currentData)
+	if err != nil || reused || currentData.UserID != "" {
+		t.Fatalf("implicit multi-account current was treated as identity proof: %#v, reused=%v err=%v", currentData, reused, err)
+	}
+
+	cfg.CurrentProfile = ""
+	ambiguousData := &authpkg.TokenData{CorpID: "ding_same"}
+	reused, err = enrichAuthLoginProfileFromHistory("cfg", ambiguousData)
+	if err != nil || reused || ambiguousData.UserID != "" {
+		t.Fatalf("ambiguous history selection = %#v, reused=%v err=%v", ambiguousData, reused, err)
+	}
+
+	cfg.Profiles = []authpkg.Profile{{
+		Name: "external-worker", CorpID: "ding_same", CorpName: "Legacy Corp", UserName: "Legacy Worker",
+	}}
+	blankData := &authpkg.TokenData{CorpID: "ding_same"}
+	reused, err = enrichAuthLoginProfileFromHistory("cfg", blankData, authLoginHistoryHint{Selector: "external-worker", Explicit: true})
+	if err != nil || !reused || blankData.UserID != "" || blankData.LegacyOrgScopedProfile != "external-worker" || blankData.CorpName != "Legacy Corp" || blankData.UserName != "Legacy Worker" {
+		t.Fatalf("blank-userId history selection = %#v, reused=%v err=%v", blankData, reused, err)
+	}
+	contactBlankData := &authpkg.TokenData{CorpID: "ding_same", AccessToken: "new-token"}
+	if err := enrichAuthLoginProfileFromContact(
+		context.Background(),
+		"cfg",
+		&authCoverageCaller{err: errors.New("contact unavailable")},
+		contactBlankData,
+		authLoginHistoryHint{Selector: "external-worker", Explicit: true},
+	); err != nil {
+		t.Fatalf("blank-userId history must keep contact best effort: %v", err)
+	}
+	if contactBlankData.LegacyOrgScopedProfile != "external-worker" {
+		t.Fatalf("blank-userId contact fallback did not authorize the historical organization slot: %#v", contactBlankData)
+	}
+
+	profiles := []*authpkg.Profile{
+		nil,
+		{Name: "duplicate", CorpID: "ding_same", UserID: "user_1"},
+		{Name: "duplicate", CorpID: "ding_same", UserID: "user_2"},
+	}
+	for _, tc := range []struct {
+		name     string
+		selector string
+		profiles []*authpkg.Profile
+		want     *authpkg.Profile
+	}{
+		{name: "empty selector", selector: "", profiles: profiles},
+		{name: "missing exact identity", selector: "ding_same:missing", profiles: profiles},
+		{name: "duplicate name", selector: "duplicate", profiles: profiles},
+		{name: "unmatched name", selector: "not-found", profiles: profiles},
+		{name: "sole organization selector", selector: "ding_same", profiles: profiles[1:2], want: profiles[1]},
+	} {
+		t.Run("selector "+tc.name, func(t *testing.T) {
+			if got := historicalProfileForSelector("ding_same", tc.selector, tc.profiles); got != tc.want {
+				t.Fatalf("historicalProfileForSelector(%q) = %#v, want %#v", tc.selector, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -748,7 +1271,7 @@ func TestCrossPlatformCoverageAuthCoveragePortableExchangeAndReset(t *testing.T)
 	if err := importCmd.RunE(badForce, nil); err == nil {
 		t.Fatal("invalid force flag should fail")
 	}
-	_, out, _ = authCoverageRoot(importCmd, "table", false)
+	_, _, _ = authCoverageRoot(importCmd, "table", false)
 	if err := importCmd.RunE(importCmd, nil); err == nil {
 		t.Fatal("missing input should fail")
 	}

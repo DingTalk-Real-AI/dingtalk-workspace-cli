@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -662,6 +663,7 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 		}
 		return nil, fmt.Errorf("load access token: %w", err)
 	}
+	profileSelector := StableTokenProfileSelector(p.configDir, data)
 
 	// Fast path: access_token still valid — no lock needed.
 	if data.IsAccessTokenValid() {
@@ -678,14 +680,26 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 		// refresh credential. Keep the profile active so a long-running source
 		// can retry after backoff. Terminal and unknown failures remain fatal.
 		if ClassifyRefreshFailure(rErr) != RefreshFailureTransient {
-			_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+			_ = oauthMarkProfile(p.configDir, profileSelector, ProfileStatusExpired)
 		}
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
+		var exchangeErr *MCPTokenExchangeError
+		if errors.As(rErr, &exchangeErr) && exchangeErr.requiresReauthorization() {
+			command := "dws auth login"
+			if profileSelector != "" {
+				command += " --profile " + strconv.Quote(profileSelector)
+			}
+			return nil, fmt.Errorf(
+				"旧版登录态已无法由当前认证服务刷新；本地 profile 已保留，请运行 %s 完成一次重新授权: %w",
+				command,
+				rErr,
+			)
+		}
 		return nil, fmt.Errorf("%s: %w", i18n.T("refresh_token 刷新失败"), rErr)
 	} else {
-		_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+		_ = oauthMarkProfile(p.configDir, profileSelector, ProfileStatusExpired)
 	}
 
 	return nil, fmt.Errorf("%s: %w", i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"), ErrTokenDataNotFound)
@@ -817,9 +831,12 @@ func (p *OAuthProvider) prepareLoginToken(ctx context.Context, tokenData *TokenD
 			return fmt.Errorf("resolve login identity: %w", err)
 		}
 	}
-	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
-		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
-	}
+	// v1.0.52 and earlier deliberately persisted the freshly exchanged token
+	// before best-effort contact enrichment. External-worker accounts can have a
+	// valid organization token while contact cannot return a userId, so rejecting
+	// that shape here makes an otherwise successful reauthorization impossible.
+	// SaveTokenData remains the safety boundary: an unresolved organization token
+	// cannot overwrite an organization that already has exact account identities.
 	return nil
 }
 

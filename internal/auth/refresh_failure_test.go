@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -151,5 +152,96 @@ func TestCrossPlatformCoverageGetTokenSnapshotOnlyExpiresProfileForNonTransientR
 	}
 	if markCalls != 1 {
 		t.Fatalf("terminal refresh marked profile expired %d times, want 1", markCalls)
+	}
+
+	oauthRefreshToken = func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) {
+		return nil, &MCPTokenExchangeError{
+			Code:    legacyMCPRefreshRejectedCode,
+			Message: "不合法的临时授权码",
+		}
+	}
+	_, err := provider.GetTokenSnapshot(context.Background())
+	if err == nil || !strings.Contains(err.Error(), `dws auth login --profile "corp:user"`) ||
+		!strings.Contains(err.Error(), legacyMCPRefreshRejectedCode) {
+		t.Fatalf("legacy MCP refresh guidance = %v", err)
+	}
+	var exchangeErr *MCPTokenExchangeError
+	if !errors.As(err, &exchangeErr) || !exchangeErr.requiresReauthorization() {
+		t.Fatalf("legacy MCP refresh cause was not preserved: %v", err)
+	}
+	if markCalls != 2 {
+		t.Fatalf("legacy MCP rejection marked profile expired %d times, want 2", markCalls)
+	}
+
+	SetRuntimeProfile("External Worker")
+	_, err = provider.GetTokenSnapshot(context.Background())
+	SetRuntimeProfile("")
+	if err == nil || !strings.Contains(err.Error(), `dws auth login --profile "External Worker"`) {
+		t.Fatalf("legacy MCP refresh guidance did not quote spaced selector: %v", err)
+	}
+	if markCalls != 3 {
+		t.Fatalf("spaced legacy MCP rejection marked profile expired %d times, want 3", markCalls)
+	}
+}
+
+func TestCrossPlatformCoverageLegacyRefreshFailureKeepsBlankCurrentSelectorIsolated(t *testing.T) {
+	fixture := seedBlankProfileSelectorFixture(t, "Fixture Organization", "Fixture Organization", true)
+	expired := *fixture.blankToken
+	expired.ExpiresAt = time.Now().Add(-time.Hour)
+	expired.RefreshExpAt = time.Now().Add(time.Hour)
+
+	oldLoad := oauthLoadToken
+	oldLoadLocked := oauthLoadTokenLocked
+	oldAcquire := oauthAcquireLock
+	oldRefresh := oauthRefreshToken
+	oldMark := oauthMarkProfile
+	oldEdition := edition.Get()
+	t.Cleanup(func() {
+		oauthLoadToken = oldLoad
+		oauthLoadTokenLocked = oldLoadLocked
+		oauthAcquireLock = oldAcquire
+		oauthRefreshToken = oldRefresh
+		oauthMarkProfile = oldMark
+		edition.Override(oldEdition)
+	})
+	edition.Override(&edition.Hooks{})
+	oauthLoadToken = func(string) (*TokenData, error) { return &expired, nil }
+	oauthLoadTokenLocked = func(string, string) (*TokenData, error) { return &expired, nil }
+	oauthAcquireLock = func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil }
+	oauthRefreshToken = func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) {
+		return nil, &MCPTokenExchangeError{
+			Code:    legacyMCPRefreshRejectedCode,
+			Message: "legacy refresh rejected",
+		}
+	}
+	var markedSelector string
+	oauthMarkProfile = func(configDir, selector, status string) error {
+		markedSelector = selector
+		return MarkProfileStatus(configDir, selector, status)
+	}
+
+	provider := NewOAuthProvider(fixture.configDir, nil)
+	_, err := provider.GetTokenSnapshot(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "--profile "+strconv.Quote(fixture.blankSelector)) {
+		t.Fatalf("legacy blank refresh guidance = %v, want selector %q", err, fixture.blankSelector)
+	}
+	if markedSelector != fixture.blankSelector {
+		t.Fatalf("marked selector = %q, want blank %q", markedSelector, fixture.blankSelector)
+	}
+	cfg, loadErr := LoadProfiles(fixture.configDir)
+	if loadErr != nil {
+		t.Fatalf("LoadProfiles() error = %v", loadErr)
+	}
+	for _, profile := range cfg.Profiles {
+		switch profile.UserID {
+		case "":
+			if profile.Status != ProfileStatusExpired {
+				t.Fatalf("blank profile status = %q, want expired", profile.Status)
+			}
+		case fixture.exactUserID:
+			if profile.Status != ProfileStatusActive {
+				t.Fatalf("exact profile status = %q, want active", profile.Status)
+			}
+		}
 	}
 }

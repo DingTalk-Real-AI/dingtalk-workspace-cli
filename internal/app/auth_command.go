@@ -40,12 +40,14 @@ import (
 )
 
 type authLoginConfig struct {
-	Token        string
-	Force        bool
-	Device       bool
-	Recommend    bool
-	Yes          bool
-	TargetCorpID string
+	Token                          string
+	Force                          bool
+	Device                         bool
+	Recommend                      bool
+	Yes                            bool
+	TargetCorpID                   string
+	HistoryProfileSelector         string
+	HistoryProfileSelectorExplicit bool
 }
 
 type authLoginGuideAction string
@@ -148,7 +150,10 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider.Output = cmd.ErrOrStderr()
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
-					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data)
+					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data, authLoginHistoryHint{
+						Selector: cfg.HistoryProfileSelector,
+						Explicit: cfg.HistoryProfileSelectorExplicit,
+					})
 				}
 				tokenData, err = authDeviceLogin(provider, loginCtx)
 				if err != nil {
@@ -163,7 +168,10 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				provider.TargetCorpID = cfg.TargetCorpID
 				provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
-					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data)
+					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data, authLoginHistoryHint{
+						Selector: cfg.HistoryProfileSelector,
+						Explicit: cfg.HistoryProfileSelectorExplicit,
+					})
 				}
 				configureOAuthProviderCompatibility(provider, configDir)
 				tokenData, err = authOAuthLogin(provider, loginCtx, authLoginForcesAuthorization(cfg))
@@ -175,11 +183,23 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
+			postLoginSelector := authpkg.TokenProfileSelector(tokenData)
+			if tokenData != nil && strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
+				if profiles, loadErr := authLoadProfiles(configDir); loadErr == nil && profiles != nil {
+					for i := range profiles.Profiles {
+						profile := profiles.Profiles[i]
+						if strings.TrimSpace(profile.CorpID) == strings.TrimSpace(tokenData.CorpID) && strings.TrimSpace(profile.UserID) == "" {
+							postLoginSelector = profileCLISelector(profile, profiles)
+							break
+						}
+					}
+				}
+			}
 			runPostLoginAuthorization := func() error {
 				if !recommendAuthMode {
 					return nil
 				}
-				restoreProfile := replaceRuntimeProfile(authpkg.TokenProfileSelector(tokenData))
+				restoreProfile := replaceRuntimeProfile(postLoginSelector)
 				defer restoreProfile()
 				recommendScopeMode := pat.LoginRecommendScopeRecommended
 				var initialPlan *pat.LoginRecommendPlan
@@ -494,7 +514,9 @@ func newAuthStatusCommand() *cobra.Command {
 				if selected == nil {
 					return apperrors.NewValidation(fmt.Sprintf("profile %q not found", profileSelector))
 				}
-				profileSelector = authpkg.ProfileSelector(*selected)
+				if strings.TrimSpace(selected.UserID) != "" {
+					profileSelector = authpkg.ProfileSelector(*selected)
+				}
 			}
 			restoreProfile := pushRuntimeProfile(profileSelector)
 			defer restoreProfile()
@@ -522,7 +544,11 @@ func newAuthStatusCommand() *cobra.Command {
 						_ = authDeleteTokenData(configDir)
 					} else if tokenData != nil {
 						refreshFailure = refreshErr
-						_ = authMarkProfileStatus(configDir, authpkg.TokenProfileSelector(tokenData), authpkg.ProfileStatusExpired)
+						markSelector := profileSelector
+						if markSelector == "" {
+							markSelector = authpkg.StableTokenProfileSelector(configDir, tokenData)
+						}
+						_ = authMarkProfileStatus(configDir, markSelector, authpkg.ProfileStatusExpired)
 					}
 				}
 				if refreshFailure == nil && authStatusAuthenticated(tokenData) {
@@ -652,7 +678,14 @@ func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector
 	}
 	stableSelector := selected.CorpID
 	if exact {
-		stableSelector = authpkg.ProfileSelector(*selected)
+		if strings.TrimSpace(selected.UserID) == "" {
+			// A blank historical profile can coexist with exact accounts in the
+			// same organization. Preserve the exact local-name selector; reducing
+			// it to corpId would log out the entire organization.
+			stableSelector = strings.TrimSpace(selector)
+		} else {
+			stableSelector = authpkg.ProfileSelector(*selected)
+		}
 		if data, loadErr := authLoadTokenForProfile(configDir, stableSelector); loadErr == nil {
 			_ = authRevokeTokenForData(ctx, data)
 		}
@@ -661,7 +694,7 @@ func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector
 			if profile.CorpID != selected.CorpID {
 				continue
 			}
-			if data, tokenErr := authLoadTokenForProfile(configDir, authpkg.ProfileSelector(profile)); tokenErr == nil {
+			if data, tokenErr := authLoadTokenForProfile(configDir, profileCLISelector(profile, cfg)); tokenErr == nil {
 				_ = authRevokeTokenForData(ctx, data)
 			}
 		}
@@ -687,7 +720,7 @@ func logoutAllProfiles(_ *cobra.Command, ctx context.Context, configDir string) 
 		_ = authRevokeToken(ctx)
 	} else {
 		for _, profile := range cfg.Profiles {
-			if data, tokenErr := authLoadTokenForProfile(configDir, authpkg.ProfileSelector(profile)); tokenErr == nil {
+			if data, tokenErr := authLoadTokenForProfile(configDir, profileCLISelector(profile, cfg)); tokenErr == nil {
 				_ = authRevokeTokenForData(ctx, data)
 			}
 		}
@@ -1206,7 +1239,7 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 		yes, _ = cmd.Root().PersistentFlags().GetBool("yes")
 		profileSelector, _ = cmd.Root().PersistentFlags().GetString("profile")
 	}
-	targetCorpID, err := resolveAuthLoginTargetCorpID(defaultConfigDir(), profileSelector)
+	targetCorpID, historyProfileSelector, historyProfileSelectorExplicit, err := resolveAuthLoginTarget(defaultConfigDir(), profileSelector)
 	if err != nil {
 		return authLoginConfig{}, err
 	}
@@ -1221,15 +1254,18 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 		"flow", flow,
 		"profile_selector", strings.TrimSpace(profileSelector),
 		"target_corp_id", targetCorpID,
+		"history_profile_selector", historyProfileSelector,
 		"recommend", recommend,
 	)
 	return authLoginConfig{
-		Token:        strings.TrimSpace(token),
-		Force:        force,
-		Device:       device,
-		Recommend:    recommend,
-		Yes:          yes,
-		TargetCorpID: targetCorpID,
+		Token:                          strings.TrimSpace(token),
+		Force:                          force,
+		Device:                         device,
+		Recommend:                      recommend,
+		Yes:                            yes,
+		TargetCorpID:                   targetCorpID,
+		HistoryProfileSelector:         historyProfileSelector,
+		HistoryProfileSelectorExplicit: historyProfileSelectorExplicit,
 	}, nil
 }
 
@@ -1238,17 +1274,57 @@ func authLoginForcesAuthorization(_ authLoginConfig) bool {
 }
 
 func resolveAuthLoginTargetCorpID(configDir, selector string) (string, error) {
+	targetCorpID, _, _, err := resolveAuthLoginTarget(configDir, selector)
+	return targetCorpID, err
+}
+
+// resolveAuthLoginTarget keeps the authorization target separate from the
+// local identity hint used only when contact cannot resolve the logged-in
+// account. An implicit current profile must never constrain a fresh OAuth
+// authorization to that profile's organization.
+func resolveAuthLoginTarget(configDir, selector string) (targetCorpID, historySelector string, explicit bool, err error) {
 	selector = strings.TrimSpace(selector)
 	if selector == "" {
-		return "", nil
+		if profile, resolveErr := authResolveProfile(configDir, ""); resolveErr == nil && profile != nil {
+			return "", authLoginHistorySelector(configDir, profile), false, nil
+		}
+		return "", "", false, nil
 	}
 	if profile, err := authResolveProfile(configDir, selector); err == nil && profile != nil {
-		return strings.TrimSpace(profile.CorpID), nil
+		historySelector := authLoginHistorySelector(configDir, profile)
+		_, _, identityExact := authpkg.ParseIdentitySelector(selector)
+		if selector != strings.TrimSpace(profile.CorpID) && selector != strings.TrimSpace(profile.CorpName) {
+			identityExact = true
+		}
+		return strings.TrimSpace(profile.CorpID), historySelector, identityExact, nil
+	}
+	if _, _, exact := authpkg.ParseIdentitySelector(selector); exact || strings.Contains(selector, ":") {
+		return "", "", true, apperrors.NewValidation(fmt.Sprintf("profile %q not found", selector))
 	}
 	if strings.HasPrefix(selector, "ding") {
-		return selector, nil
+		// A known organization that failed resolution is ambiguous (for
+		// example, two local accounts without an org-current pointer), not a
+		// request to invent a new corpId.
+		if cfg, loadErr := authLoadProfiles(configDir); loadErr == nil && cfg != nil {
+			for i := range cfg.Profiles {
+				if strings.TrimSpace(cfg.Profiles[i].CorpID) == selector {
+					return "", "", true, apperrors.NewValidation(fmt.Sprintf("profile %q is ambiguous; use an exact corpId:userId selector", selector))
+				}
+			}
+		}
+		return selector, "", false, nil
 	}
-	return "", apperrors.NewValidation(fmt.Sprintf("profile %q not found", selector))
+	return "", "", true, apperrors.NewValidation(fmt.Sprintf("profile %q not found", selector))
+}
+
+func authLoginHistorySelector(configDir string, profile *authpkg.Profile) string {
+	if profile == nil {
+		return ""
+	}
+	if cfg, err := authLoadProfiles(configDir); err == nil && cfg != nil {
+		return authpkg.ProfileSelectionSelector(*profile, cfg)
+	}
+	return authpkg.ProfileSelector(*profile)
 }
 
 type contactProfileIdentity struct {
@@ -1258,12 +1334,23 @@ type contactProfileIdentity struct {
 	UserName string
 }
 
+type authLoginHistoryHint struct {
+	Selector string
+	Explicit bool
+}
+
 type tokenOverrideToolCaller interface {
 	CallToolWithToken(ctx context.Context, token, productID, toolName string, args map[string]any) (*edition.ToolResult, error)
 }
 
-func enrichAuthLoginProfileFromContact(ctx context.Context, _ string, caller edition.ToolCaller, data *authpkg.TokenData) error {
-	if caller == nil || data == nil {
+func enrichAuthLoginProfileFromContact(
+	ctx context.Context,
+	configDir string,
+	caller edition.ToolCaller,
+	data *authpkg.TokenData,
+	hints ...authLoginHistoryHint,
+) error {
+	if data == nil {
 		return nil
 	}
 	corpID := strings.TrimSpace(data.CorpID)
@@ -1288,6 +1375,27 @@ func enrichAuthLoginProfileFromContact(ctx context.Context, _ string, caller edi
 		)
 		return nil
 	}
+	hint := authLoginHistoryHint{}
+	if len(hints) > 0 {
+		hint = hints[0]
+	}
+	tryHistory := func() bool {
+		reused, historyErr := enrichAuthLoginProfileFromHistory(configDir, data, hint)
+		if historyErr != nil {
+			logging.AuthDebug(
+				"auth.login.identity.history.error",
+				"corp_id", corpID,
+				"error", historyErr,
+			)
+		}
+		return reused
+	}
+	if caller == nil {
+		if strings.TrimSpace(data.UserID) == "" {
+			tryHistory()
+		}
+		return nil
+	}
 
 	var (
 		result *edition.ToolResult
@@ -1297,7 +1405,7 @@ func enrichAuthLoginProfileFromContact(ctx context.Context, _ string, caller edi
 		result, err = tokenCaller.CallToolWithToken(ctx, data.AccessToken, "contact", "get_current_user_profile", nil)
 	} else {
 		if strings.TrimSpace(data.UserID) == "" {
-			return fmt.Errorf("login identity lookup requires an in-memory token override")
+			tryHistory()
 		}
 		return nil
 	}
@@ -1311,11 +1419,15 @@ func enrichAuthLoginProfileFromContact(ctx context.Context, _ string, caller edi
 		if strings.TrimSpace(data.UserID) != "" {
 			return nil
 		}
-		return err
+		tryHistory()
+		return nil
 	}
-	identity, ok := contactProfileIdentityFromToolResult(result)
+	identity, ok := contactProfileIdentityFromToolResult(result, corpID)
 	if !ok {
 		logging.AuthDebug("auth.login.identity.lookup.empty", "corp_id", corpID)
+		if strings.TrimSpace(data.UserID) == "" {
+			tryHistory()
+		}
 		return nil
 	}
 	logging.AuthDebug(
@@ -1327,18 +1439,41 @@ func enrichAuthLoginProfileFromContact(ctx context.Context, _ string, caller edi
 		"corp_name", strings.TrimSpace(identity.CorpName),
 	)
 	if identity.CorpID != "" && identity.CorpID != corpID {
-		return fmt.Errorf("contact profile corpId %q does not match login corpId %q", identity.CorpID, corpID)
+		logging.AuthDebug(
+			"auth.login.identity.lookup.mismatch",
+			"login_corp_id", corpID,
+			"contact_corp_id", strings.TrimSpace(identity.CorpID),
+		)
+		if strings.TrimSpace(data.UserID) == "" {
+			tryHistory()
+		}
+		return nil
 	}
 
 	updated := *data
+	exchangeUserID := strings.TrimSpace(data.UserID)
 	if identity.CorpName != "" {
 		updated.CorpName = identity.CorpName
 	}
-	if identity.UserID != "" {
+	if exchangeUserID == "" && identity.UserID != "" {
 		updated.UserID = identity.UserID
 	}
-	if identity.UserName != "" {
+	if identity.UserName != "" && (exchangeUserID == "" || identity.UserID == "" || identity.UserID == exchangeUserID) {
 		updated.UserName = identity.UserName
+	}
+	if strings.TrimSpace(updated.UserID) == "" {
+		reused, historyErr := enrichAuthLoginProfileFromHistory(configDir, &updated, hint)
+		if historyErr != nil {
+			logging.AuthDebug(
+				"auth.login.identity.history.error",
+				"corp_id", corpID,
+				"error", historyErr,
+			)
+		}
+		if reused {
+			*data = updated
+			return nil
+		}
 	}
 	if updated.CorpName == data.CorpName && updated.UserID == data.UserID && updated.UserName == data.UserName {
 		logging.AuthDebug(
@@ -1361,7 +1496,140 @@ func enrichAuthLoginProfileFromContact(ctx context.Context, _ string, caller edi
 	return nil
 }
 
-func contactProfileIdentityFromToolResult(result *edition.ToolResult) (contactProfileIdentity, bool) {
+// enrichAuthLoginProfileFromHistory recovers identity metadata when the
+// contact service cannot describe an external-worker account. Explicit
+// profile selection wins; otherwise only a sole same-corp profile is
+// deterministic.
+// Historical v1 profiles without userId are still useful: selecting one is a
+// successful fallback that preserves org-scoped token storage semantics.
+func enrichAuthLoginProfileFromHistory(configDir string, data *authpkg.TokenData, hints ...authLoginHistoryHint) (bool, error) {
+	if data == nil || strings.TrimSpace(data.UserID) != "" {
+		return false, nil
+	}
+	corpID := strings.TrimSpace(data.CorpID)
+	if corpID == "" {
+		return false, nil
+	}
+	cfg, err := authLoadProfiles(configDir)
+	if err != nil {
+		return false, err
+	}
+	if cfg == nil {
+		return false, nil
+	}
+	sameCorp := make([]*authpkg.Profile, 0, len(cfg.Profiles))
+	for i := range cfg.Profiles {
+		profile := &cfg.Profiles[i]
+		if strings.TrimSpace(profile.CorpID) != corpID {
+			continue
+		}
+		sameCorp = append(sameCorp, profile)
+	}
+	if len(sameCorp) == 0 {
+		return false, nil
+	}
+
+	hint := authLoginHistoryHint{}
+	if len(hints) > 0 {
+		hint = hints[0]
+	}
+	var candidate *authpkg.Profile
+	if hint.Explicit {
+		candidate = historicalProfileForSelector(corpID, hint.Selector, sameCorp)
+		if candidate == nil {
+			// An explicit account is a hard identity boundary. If that exact
+			// historical hint no longer matches the token's organization, do
+			// not silently substitute org-current, sole, or global-current.
+			return false, nil
+		}
+	} else if len(sameCorp) > 1 {
+		// Organization-current is a storage preference, not proof of which user
+		// completed a fresh authorization. With multiple accounts, only an exact
+		// user selection may be used when the token/contact response has no UID.
+		return false, nil
+	} else {
+		candidate = sameCorp[0]
+	}
+
+	updated := *data
+	updated.UserID = strings.TrimSpace(candidate.UserID)
+	if updated.UserID == "" && hint.Explicit {
+		updated.LegacyOrgScopedProfile = strings.TrimSpace(hint.Selector)
+	}
+	if strings.TrimSpace(updated.CorpName) == "" {
+		updated.CorpName = strings.TrimSpace(candidate.CorpName)
+	}
+	if strings.TrimSpace(updated.UserName) == "" {
+		updated.UserName = strings.TrimSpace(candidate.UserName)
+	}
+	*data = updated
+	logging.AuthDebug(
+		"auth.login.identity.resolved",
+		"source", "local_profile_history",
+		"corp_id", corpID,
+		"user_id", updated.UserID,
+		"user_name", updated.UserName,
+		"corp_name", updated.CorpName,
+	)
+	return true, nil
+}
+
+func historicalProfileForSelector(corpID, selector string, profiles []*authpkg.Profile) *authpkg.Profile {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return nil
+	}
+	cfg := &authpkg.ProfilesConfig{Profiles: make([]authpkg.Profile, 0, len(profiles))}
+	for _, profile := range profiles {
+		if profile != nil {
+			cfg.Profiles = append(cfg.Profiles, *profile)
+		}
+	}
+	var stableMatch *authpkg.Profile
+	for _, profile := range profiles {
+		if profile == nil || strings.TrimSpace(profile.CorpID) != strings.TrimSpace(corpID) ||
+			authpkg.ProfileSelectionSelector(*profile, cfg) != selector {
+			continue
+		}
+		if stableMatch != nil {
+			return nil
+		}
+		stableMatch = profile
+	}
+	if stableMatch != nil {
+		return stableMatch
+	}
+	if selectedCorpID, userID, exact := authpkg.ParseIdentitySelector(selector); exact {
+		if strings.TrimSpace(selectedCorpID) != strings.TrimSpace(corpID) {
+			return nil
+		}
+		for _, profile := range profiles {
+			if profile != nil && strings.TrimSpace(profile.UserID) == strings.TrimSpace(userID) {
+				return profile
+			}
+		}
+		return nil
+	}
+	var named *authpkg.Profile
+	for _, profile := range profiles {
+		if profile == nil || strings.TrimSpace(profile.Name) != selector {
+			continue
+		}
+		if named != nil {
+			return nil
+		}
+		named = profile
+	}
+	if named != nil {
+		return named
+	}
+	if selector == strings.TrimSpace(corpID) && len(profiles) == 1 {
+		return profiles[0]
+	}
+	return nil
+}
+
+func contactProfileIdentityFromToolResult(result *edition.ToolResult, expectedCorpIDs ...string) (contactProfileIdentity, bool) {
 	if result == nil {
 		return contactProfileIdentity{}, false
 	}
@@ -1369,14 +1637,14 @@ func contactProfileIdentityFromToolResult(result *edition.ToolResult) (contactPr
 		if strings.TrimSpace(block.Text) == "" {
 			continue
 		}
-		if identity, ok := contactProfileIdentityFromJSON([]byte(block.Text)); ok {
+		if identity, ok := contactProfileIdentityFromJSON([]byte(block.Text), expectedCorpIDs...); ok {
 			return identity, true
 		}
 	}
 	return contactProfileIdentity{}, false
 }
 
-func contactProfileIdentityFromJSON(data []byte) (contactProfileIdentity, bool) {
+func contactProfileIdentityFromJSON(data []byte, expectedCorpIDs ...string) (contactProfileIdentity, bool) {
 	var payload struct {
 		Result []struct {
 			OrgEmployeeModel struct {
@@ -1396,14 +1664,40 @@ func contactProfileIdentityFromJSON(data []byte) (contactProfileIdentity, bool) 
 	if len(payload.Result) == 0 {
 		return contactProfileIdentity{}, false
 	}
-	org := payload.Result[0].OrgEmployeeModel
-	identity := contactProfileIdentity{
-		CorpID:   strings.TrimSpace(org.CorpID),
-		CorpName: strings.TrimSpace(org.OrgName),
-		UserID:   firstNonEmptyString(org.UserID, org.UserIDLower, org.OrgUserID),
-		UserName: firstNonEmptyString(org.OrgUserName, org.Name),
+	identities := make([]contactProfileIdentity, 0, len(payload.Result))
+	for i := range payload.Result {
+		org := payload.Result[i].OrgEmployeeModel
+		identity := contactProfileIdentity{
+			CorpID:   strings.TrimSpace(org.CorpID),
+			CorpName: strings.TrimSpace(org.OrgName),
+			UserID:   firstNonEmptyString(org.UserID, org.UserIDLower, org.OrgUserID),
+			UserName: firstNonEmptyString(org.OrgUserName, org.Name),
+		}
+		if identity.CorpID != "" || identity.CorpName != "" || identity.UserID != "" || identity.UserName != "" {
+			identities = append(identities, identity)
+		}
 	}
-	return identity, identity.CorpID != "" || identity.CorpName != "" || identity.UserID != "" || identity.UserName != ""
+	if len(identities) == 0 {
+		return contactProfileIdentity{}, false
+	}
+	expectedCorpID := ""
+	if len(expectedCorpIDs) > 0 {
+		expectedCorpID = strings.TrimSpace(expectedCorpIDs[0])
+	}
+	if expectedCorpID != "" {
+		for _, identity := range identities {
+			if identity.CorpID == expectedCorpID {
+				return identity, true
+			}
+		}
+		// Older contact responses omit corpId. A single result is still
+		// unambiguous; multiple organization records without a target match
+		// must fall back to local history instead of choosing result[0].
+		if len(payload.Result) != 1 {
+			return contactProfileIdentity{}, false
+		}
+	}
+	return identities[0], true
 }
 
 func firstNonEmptyString(values ...string) string {
