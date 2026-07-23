@@ -39,8 +39,24 @@ func defaultHooks() *Hooks {
 			base["claw-type"] = DefaultOSSClawType
 			return base
 		},
-		StaticServers:   openStaticServers,
-		VisibleProducts: openVisibleProducts,
+		StaticServers:     openStaticServers,
+		SupplementServers: openSupplementServers,
+		VisibleProducts:   openVisibleProducts,
+	}
+}
+
+// openSupplementServers returns helper-only MCP endpoints owned by the open
+// CLI. They are callable by explicit server ID but are deliberately excluded
+// from VisibleProducts, so no top-level product command is generated. They
+// stay separate from syncdata.StaticServers because only explicitly wired CLI
+// helpers may call them; they are not public MCP product surfaces.
+func openSupplementServers() []ServerInfo {
+	return []ServerInfo{
+		{
+			ID:       "mcp-meta",
+			Name:     "MCP 元服务",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/89833ea5debf30c260a07ffcb5127ffa3bf0c830cd76babadb293d9861485d44",
+		},
 	}
 }
 

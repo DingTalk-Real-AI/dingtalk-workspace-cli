@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "source_hash": "sha256:5df496973c41b3b4f7ae8c856ff0e9e99bcabd4455419b7d41bb23c44df6f1af",
-  "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
+  "source_hash": "sha256:2b21f87e564139596d34db2f70443d81b41e16d9212eb60ec6e5a6b4b8d41ec7",
+  "surface_hash": "sha256:e85148774f65d34b01d50ebdc702b785afdb8ea78663b6f2eeecc35bc3cb3fd5",
   "coverage": {
-    "surface_products": 22,
-    "products_with_metadata": 22,
-    "surface_tools": 572,
-    "tools_with_metadata": 572,
-    "tools_with_agent_summary": 572,
-    "tools_with_use_when": 572,
-    "tools_with_avoid_when": 572,
-    "tools_with_examples": 572,
-    "tools_with_interface_mode": 572,
+    "surface_products": 23,
+    "products_with_metadata": 23,
+    "surface_tools": 573,
+    "tools_with_metadata": 573,
+    "tools_with_agent_summary": 573,
+    "tools_with_use_when": 573,
+    "tools_with_avoid_when": 573,
+    "tools_with_examples": 573,
+    "tools_with_interface_mode": 573,
     "unmatched_skill_tools": 120,
     "unreviewed_skill_tools": 7
   },
@@ -1089,6 +1089,74 @@
         "查收、搜索、阅读、回复、发送或整理邮件"
       ]
     },
+    "mcp": {
+      "agent_summary": "解析和管理当前身份可用的 MCP 服务连接信息",
+      "agent_summary_source": "dws-agent-selection/mcp",
+      "avoid_when": [
+        "查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "解析和管理当前身份可用的 MCP 服务连接信息",
+          "source": "internal/cli/schema_hints/selection/mcp.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "解析和管理当前身份可用的 MCP 服务连接信息",
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp"
+          ],
+          "source": "internal/cli/schema_hints/selection/mcp.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp"
+              ],
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端"
+          ],
+          "source": "internal/cli/schema_hints/selection/mcp.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端"
+              ],
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        }
+      },
+      "source_refs": [
+        "CommandRegistry:product=mcp",
+        "cobra-help:dws mcp --help",
+        "internal/cli/schema_command_registry.json#mcp",
+        "internal/cli/schema_hints/selection/mcp.json"
+      ],
+      "use_when": [
+        "需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端"
+      ]
+    },
     "minutes": {
       "agent_summary": "查询和维护钉钉听记的转写、摘要、待办、权限、录音、标签、说话人总结及文件上传会话。",
       "agent_summary_source": "dws-agent-selection/minutes",
@@ -1605,6 +1673,7 @@
     "event",
     "live",
     "mail",
+    "mcp",
     "minutes",
     "oa",
     "pat",

@@ -385,11 +385,16 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 
 	schemaCmd := newSchemaCommand(loader)
 	mcpCmd := newMCPCommand(rootCtx, loader, runner, engine)
-	mcpCmd.Hidden = true
+	// The legacy dynamic MCP surface remains disabled, but reviewed static MCP
+	// helpers registered below are part of the public CLI and Schema surface.
+	mcpCmd.Hidden = false
+	mcpCmd.Short = "管理 MCP 服务连接信息"
+	mcpCmd.Long = "管理经过审核并纳入 Schema 的 MCP 服务连接辅助能力。"
 	// Wrap the caller so every MCP tool call's shape is recorded to the local
 	// usage log (privacy-preserving; see internal/shortcut/usage). Powers
 	// `dws shortcut stats` and future high-frequency shortcut distillation.
 	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
+	mcpCmd.AddCommand(newMCPURLGroup(patCaller))
 
 	utilityCommands := []*cobra.Command{
 		newAuthCommand(patCaller),

@@ -70,4 +70,24 @@ func TestOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
 			t.Fatal("conference must remain compatibility-only and not be added to StaticServers")
 		}
 	}
+	if byID["mcp-meta"] {
+		t.Fatal("mcp-meta is helper-only and must not appear in VisibleProducts")
+	}
+}
+
+func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
+	servers := openSupplementServers()
+	for _, server := range servers {
+		if server.ID != "mcp-meta" {
+			continue
+		}
+		if server.Endpoint == "" {
+			t.Fatal("mcp-meta has empty endpoint")
+		}
+		if len(server.Prefixes) != 0 {
+			t.Fatal("mcp-meta must remain helper-only without command prefixes")
+		}
+		return
+	}
+	t.Fatal("openSupplementServers() missing mcp-meta")
 }
