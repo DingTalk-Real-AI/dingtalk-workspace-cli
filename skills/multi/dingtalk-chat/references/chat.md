@@ -184,8 +184,8 @@ Flags:
       --icon-media-id string  群头像 mediaId (必填)
 ```
 
-> `--icon-media-id` 必须是 `@` 开头的媒体 ID（如 dt_media_upload 返回值），非法格式会本地报错。
-> ⚠️ 本地格式校验只查前缀。格式合法但不真实存在的 mediaId 服务端仍会静默返回成功，头像并不会真正更新。务必用 `dt_media_upload` / `chat media upload` 上传真实图片拿到的 mediaId。
+> `--icon-media-id` 必须是 `@` 开头的、由可信上游提供的媒体 ID，非法格式会本地报错。
+> ⚠️ 本地格式校验只查前缀。格式合法但不真实存在的 mediaId 服务端仍会静默返回成功，头像并不会真正更新。务必使用真实上游媒体上传能力拿到有效 mediaId；DWS CLI 不提供本地文件到 mediaId 的上传命令。
 
 #### 更新群设置 — 更新指定群聊的设置项
 
@@ -529,17 +529,17 @@ Flags:
 --group 指定群聊 openConversationId 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。纯文本/Markdown 单聊传 --user 时直接走 userId 发送能力，不需要先手动查询 openDingTalkId。推荐使用 --text flag 传递消息内容（也支持位置参数）。可选 --title 作为消息标题。
 若用户只提供了数字群号而非 openConversationId，需先调用 `chat group get-by-group-id` 将群号转为 openConversationId，再传入 --group。
 --群聊时可选 --at-all @所有人，或 --at-open-dingtalk-ids 指定成员（仅群聊时生效）。
---富媒体消息：通过 --msg-type 指定类型（image/file/audio/video），audio/video 是 file 的语义别名，发给服务端仍按 file 发送；必须根据文件扩展名判断 msgType 后再发送。
+--本地图片、文件、音频或视频统一用 --msg-type file --file-path；图片会作为可下载的文件附件发送。--msg-type image --media-id 仅用于上游已经提供有效 mediaId 的场景。
 ```
 Usage:
   dws chat message send [flags] [<text>]
 
-富媒体消息 msgType 决策（必须按此规则判断，不可跳过）:
-  文件扩展名                               → msgType → 发送参数
-  .jpg/.jpeg/.png/.gif/.bmp/.webp          → image       → dt_media_upload 上传 → `python scripts/extract_media_id.py <URL>` 提取 mediaId → --msg-type image --media-id
-  .mp3/.wav/.m4a/.aac/.flac                → audio(file) → 本地 --file-path 或 conversation-info/drive 上传 → --msg-type audio
-  .mp4/.mov/.avi/.mkv/.webm                → video(file) → 本地 --file-path 或 conversation-info/drive 上传 → --msg-type video
-  其他所有（.pdf/.doc/.xls/.zip 等）         → file        → 本地 --file-path 或 conversation-info/drive 上传 → --msg-type file
+富媒体消息路由:
+  场景                                     → msgType → 发送参数
+  本地图片/文件/音频/视频                   → file    → --file-path <本地路径>
+  上游已提供有效 mediaId 的内联图片          → image   → --media-id <mediaId>
+
+  注意：本地 .png/.jpg 也按 file 发送，接收方看到的是可下载附件；DWS CLI 不能把本地文件转换成 mediaId。
 
 Example:
   dws chat message send --group <openconversation_id> --text "hello"
@@ -551,15 +551,13 @@ Example:
   dws chat message send --group <openconversation_id> --text "hello" --uuid "unique-id-123"
   dws chat message send --group <openconversation_id> --at-all "<@all> 请大家注意"
   dws chat message send --group <openconversation_id> --at-open-dingtalk-ids openDingTalkId1,openDingTalkId2 "<@openDingTalkId1> <@openDingTalkId2> 请查收"
-  # 发送图片
+  # 本地图片/文件/音频/视频统一作为 file 附件发送
+  dws chat message send --group <openconversation_id> --msg-type file --file-path ./screenshot.png
+  dws chat message send --group <openconversation_id> --msg-type file --file-path ./report.pdf
+  dws chat message send --group <openconversation_id> --msg-type file --file-path ./recording.mp3
+  dws chat message send --group <openconversation_id> --msg-type file --file-path ./demo.mp4
+  # 仅当上游已有有效 mediaId 时发送内联图片
   dws chat message send --group <openconversation_id> --msg-type image --media-id <mediaId>
-  # 发送文件/音频/视频（audio/video 是 file 的语义别名）
-  # 先 dws chat conversation-info --group <id> 获取 spaceId（取 newCSpaceIdIM）
-  # 再 dws drive upload --file <文件> --space-id <spaceId> 上传
-  # 再 dws drive info --file-id <fileId> --space-id <spaceId> 获取 dentryId
-  dws chat message send --group <openconversation_id> --msg-type file --dentry-id <dentryId> --space-id 24557356340 --file-name "report.pdf" --file-type "pdf" --file-path "/report.pdf" --file-size 234724
-  dws chat message send --group <openconversation_id> --msg-type audio --file-path ./recording.mp3
-  dws chat message send --group <openconversation_id> --msg-type video --file-path ./demo.mp4
 Flags:
       --text string              消息内容（推荐使用，也可用位置参数）
       --group string             群聊 openconversation_id（群聊时必填）
@@ -568,14 +566,14 @@ Flags:
       --title string             消息标题（可选，默认「消息」）
       --at-all                   @所有人（仅群聊时生效，可选，默认 false）
       --at-open-dingtalk-ids string  @指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）
-      --media-id string          图片 mediaId（dt_media_upload 上传后用 `python scripts/extract_media_id.py <URL>` 提取，仅 msgType=image）
-      --msg-type string          消息类型: image/file/audio/video（audio/video 是 file 别名；image 用 mediaId，file/audio/video 用钉盘上传）
-      --dentry-id int64          钉盘文件 dentryId（msgType=file 时必填，通过 drive info 获取）
-      --space-id int64           钉盘空间 ID（msgType=file 时必填）
-      --file-name string         文件名（msgType=file 时必填）
-      --file-type string         文件类型/扩展名（msgType=file 时必填）
-      --file-path string         文件路径（msgType=file 时必填）
-      --file-size int64          文件大小，单位字节（msgType=file 时必填）
+      --media-id string          上游提供的有效图片 mediaId（仅 msgType=image）
+      --msg-type string          消息类型: image/file/audio/video（本地文件统一使用 file；image 仅配合已有 mediaId）
+      --dentry-id int64          已有钉盘文件 dentryId（兼容参数，非本地文件发送的默认路径）
+      --space-id int64           已有钉盘文件空间 ID（元数据兼容模式）
+      --file-name string         已有钉盘文件名（元数据兼容模式）
+      --file-type string         已有钉盘文件类型/扩展名（元数据兼容模式）
+      --file-path string         本地文件路径（本地图片/文件/音视频配合 msgType=file 使用）
+      --file-size int64          已有钉盘文件大小，单位字节（元数据兼容模式）
       --uuid string             幂等 UUID，相同 uuid 在 24h 内不会重复发送（可选）
       --ai-tag                   消息是否带 AI 发送角标（可选，默认 true）
 
@@ -588,16 +586,13 @@ Flags:
   - **换行符**：消息内容按 Markdown 渲染，换行有两层要求，缺一不可：
     1. 必须使用**真实换行符**（Unicode `U+000A`），而非字面量字符串 `\n`（反斜杠 + 字母 n）。程序或大模型构造参数时，须确保已正确反转义；否则全部内容会渲染在同一行
     2. Markdown 规范下**单个换行不产生换行效果**。需要换行时请使用：段落分隔（连续两个真实换行符 `\n\n`）、行尾两个空格 + 真实换行符（硬换行 `<br>`），或直接写 HTML 的 `<br>` 标签
-  - 富媒体消息类型与参数对应关系：
-    - image（图片）：--msg-type image --media-id
-    - audio/video：file 的语义别名，发给服务端仍是 file；可直接传本地 --file-path，或先 conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type audio 或 --msg-type video --dentry-id --space-id --file-name --file-type --file-path --file-size
-    - file（文档/压缩包等其他非图片文件）：可直接传本地 --file-path，或先 conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type file --dentry-id --space-id --file-name --file-type --file-path --file-size
-  - mediaId 通过 dt_media_upload 上传获得，必须用脚本提取：`python scripts/extract_media_id.py "<URL>"`（输出如 @lQLPxxx，直接用于 --media-id）。禁止手动从 URL 中截取或拼接 mediaId，手动解析会因 URL 格式不稳定导致尺寸后缀残留
+  - 本地图片、文档、压缩包、音频和视频统一使用 `--msg-type file --file-path <本地路径>`；图片会成为可下载的 file 附件，不会内联渲染，也不会生成 mediaId
+  - `--msg-type image --media-id` 仅接受上游已经提供的有效 mediaId；DWS CLI 不提供本地文件到 mediaId 的上传或转换能力
+  - audio/video 仍是兼容的 file 语义别名，但本地文件的推荐路径保持为 `--msg-type file --file-path`
+  - dentryId/spaceId 等参数仅用于调用方已经持有钉盘文件元数据的兼容场景，不是发送本地文件的前置步骤
   - --uuid 用于幂等发送，传入相同 uuid 在 24h 内不会重复投递消息（可选，群聊和单聊均支持）
   - 富媒体消息的单聊优先使用 `--open-dingtalk-id`；传 `--user` 时 CLI 会尝试解析成 openDingTalkId 后发送
-  - 发送文件/媒体消息时，必须先根据文件扩展名判断 msgType：图片(.jpg/.png/.gif/.bmp/.webp)→image，音频(.mp3/.wav/.m4a/.aac/.flac)→audio，视频(.mp4/.mov/.avi/.mkv/.webm)→video，其他所有→file；不可跳过此判断步骤。audio/video 是 file 别名，不代表不支持音频/视频
-  - 20MB 降级：图片超过 20MB 时 dt_media_upload 会失败，必须降级走钉盘上传 + Markdown 嵌入方式发送（参见「发送图片+文字消息」章节）。音频/视频/文件走钉盘上传无 20MB 限制
-  - 发送文字 + 文件混合消息时的完整流程：除了将文件以 Markdown 链接内嵌到文字消息中发送一条 md 消息外，还必须额外逐个发送独立的文件消息（--msg-type file），确保接收方可以直接下载原始文件。即：先发一条包含文字和文件链接的 md 消息，再对每个涉及的文件各发一条 --msg-type file 的文件消息
+  - 发送文字 + 文件时，先发送 `--msg-type file --file-path` 文件消息，再补一条文本或 Markdown 说明；这是两条独立消息
 ```
 
 #### 查询消息发送状态 — 查询以当前用户身份发送的消息的发送状态
@@ -1130,7 +1125,7 @@ Flags:
 
 #### 获取会话基础信息 — 含会话关联的钉盘共享空间 ID
 
-获取指定会话的基础信息，包含会话关联的钉盘共享空间 ID (newCSpaceIdIM)。发送文件消息前需先调用此命令获取 spaceId，再用 drive upload --space-id 上传文件到共享空间。
+获取指定会话的基础信息，包含会话关联的钉盘共享空间 ID (newCSpaceIdIM)。该 ID 可用于独立的钉盘存储操作；发送本地图片或文件到聊天不需要先调用本命令，直接使用 `chat message send --msg-type file --file-path`。
 ```
 Usage:
   dws chat conversation-info [flags]
@@ -1146,8 +1141,8 @@ Flags:
 注意:
   - --group、--user、--open-dingtalk-id 互斥，必须且只能指定其一
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
-  - 返回值中的 newCSpaceIdIM 为会话共享空间 ID，用于 drive upload --space-id 参数
-  - 上传到共享空间的文件对方才能打开，上传到个人空间的文件对方无法访问
+  - 返回值中的 newCSpaceIdIM 为会话共享空间 ID，可用于调用方明确需要的钉盘存储流程
+  - 该 ID 不是发送本地聊天附件的前置条件；本地附件直接走 `chat message send --msg-type file --file-path`
 ```
 
 #### 引用回复消息 — 引用某条消息并回复文字（单聊/群聊均可）
@@ -1511,25 +1506,6 @@ Flags:
   - 支持单聊和群聊，openConversationId 可通过 chat search（群聊）或 chat conversation-info（单聊）获取
 ```
 
-### media (上传媒体获取 mediaId)
-
-#### 上传图片/媒体获取 mediaId — 用于 chat message send --msg-type image 等
-
-⚠️ 前置条件：本命令需要应用凭证。必须已通过 `dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>` 登录，或设置环境变量 `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET`；否则报"缺少应用凭证"。这与其他 chat 命令走用户登录态不同。
-```
-Usage:
-  dws chat media upload [flags]
-Example:
-  dws chat media upload --file ./screenshot.png
-  dws chat media upload --file ./photo.jpg --type image
-Flags:
-      --file string   本地文件路径 (必填)
-      --type string   媒体类型: image/voice/video/file（默认 image）
-
-注意:
-  - 返回的 mediaId 可直接用于 chat message send --msg-type image --media-id
-```
-
 ### hide (隐藏会话)
 
 #### 隐藏会话 — 在会话列表中隐藏指定会话（支持单聊/群聊），收到新消息时会重新出现
@@ -1855,7 +1831,8 @@ Flags:
 用户说"转发话题/转发话题消息" → `chat message forward-topic`
 用户说"置顶消息/把消息置顶" → `chat message set-top-msg`
 用户说"取消置顶消息/撤销消息置顶" → `chat message unset-top-msg`
-用户说"上传图片拿mediaId/上传媒体" → `chat media upload`
+用户说"发送/上传本地图片或媒体到聊天" → `chat message send --msg-type file --file-path <本地路径>`
+用户明确只要 mediaId → DWS CLI 当前不提供本地上传入口；仅在上游已有有效 mediaId 时使用 `chat message send --msg-type image --media-id`
 用户说"群机器人列表/群里有哪些机器人/查看群机器人" → `chat group bots`
 用户说"从群里移除机器人/踢出机器人" → `chat group members remove-bot`
 用户说"搜索机器人/找机器人/查机器人/帮我找XXX机器人" → `chat bot find`（全部可用机器人，额外返回 botOpenDingTalkId 可发单聊）
@@ -1881,7 +1858,7 @@ Flags:
 - `chat message list-topic-replies` — 拉取群话题的回复消息列表
 - `chat message list-focused` — 拉取特别关注人的消息，cursor 分页
 - `chat list-top-conversations` — 拉取置顶会话列表（用户询问"置顶会话"或"置顶消息"时路由到此），cursor 分页
-- `chat message send` — 以当前用户身份发消息（群聊或单聊），text 为位置参数；支持 --msg-type 发送富媒体消息：image（图片）、file/audio/video（audio/video 是 file 别名），图片的 mediaId 通过 dt_media_upload 上传获得，其他文件可直接用 --file-path 或先获取会话共享空间再上传钉盘
+- `chat message send` — 以当前用户身份发消息（群聊或单聊），text 为位置参数；本地图片/文件/音视频统一用 `--msg-type file --file-path`，其中图片显示为可下载附件而非内联图片；`--msg-type image --media-id` 只用于上游已经提供有效 mediaId 的场景，DWS CLI 不能从本地文件生成 mediaId
 - `chat message search` — 按关键词搜索消息内容（跨所有会话，可选指定群）
 - `chat search-common` — 搜索共同群，查询指定人共同所在的群聊（AND=所有人都在，OR=任一人在）
 - `chat message send-by-bot` — 以**机器人**身份发消息（群聊或单聊），text 为 --text flag
@@ -2028,34 +2005,16 @@ dws chat message send-by-bot --robot-code <robot-code> --group <openconversation
 ```
 
 
-### 发送图片+文字 / 文件+文字消息（跨产品: drive → chat）
+### 发送图片/文件 + 文字说明（两条消息）
 
-- **图片+文字**：图片**必须**通过 `dt_media_upload` 工具（非 dws 命令，是 agent 可调用的独立 tool）上传获取 mediaId，然后用 Markdown 嵌入方式发送。**禁止**使用钉盘上传图片。
-- **文件+文字**：文件通过钉盘上传 + Markdown 嵌入方式发送。
-
-纯发图片/文件（不带文字）的完整流程见 [intent-guide.md](./01-messaging.md) 对应章节。
+本地图片和文件先用 `--msg-type file --file-path` 发送，再补一条文本消息说明；这是两条独立消息，不需要媒体上传或钉盘前置步骤。图片会显示为可下载的文件附件，不会内联渲染。
 
 ```bash
-# === 图片+文字 ===
-# Step 1: 调用 dt_media_upload 工具上传图片（这是一个独立的 tool，不是 dws 命令）
-#    dt_media_upload 会返回 mediaId（如 @lQLPxxx）
-#    提取 mediaId 可使用脚本: python extract_media_id.py "<返回的URL>"
-
-# Step 2: 用 Markdown 语法发送（mediaId 作为图片引用）
-dws chat message send --group <openconversation_id> \
-  --text "![截图](mediaId) 这是本周的数据汇总" --format json
-
-# === 文件+文字 ===
-# Step 1: 上传文件到钉盘
-dws drive upload --file "报告.pdf" --format json
-
-# Step 2: 获取下载链接
-dws drive download --file-id <dentryUuid> --format json
-
-# Step 3: 用 Markdown 语法发送
-dws chat message send --group <openconversation_id> \
-  --text "[报告.pdf](下载链接) 这是季度报告" --format json
+dws chat message send --group <openconversation_id> --msg-type file --file-path ./screenshot.png --format json
+dws chat message send --group <openconversation_id> --text "这是本周的数据汇总" --format json
 ```
+
+如果调用方已经从上游取得有效 mediaId，可以先用 `--msg-type image --media-id` 发送内联图片，再补一条文本消息；DWS CLI 本身不能把本地图片转换成 mediaId。
 
 #### 创建并推送流式卡片 — 向群聊或单聊发送流式卡片消息
 
@@ -2111,14 +2070,13 @@ Flags:
 | `chat message search` | `nextCursor` | 下次 message search 的 --cursor |
 | `chat message search-advanced` | `nextCursor` | 下次 message search-advanced 的 --cursor |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |
-| `chat conversation-info` | `newCSpaceIdIM` | drive upload 的 --space-id（发送文件消息前获取共享空间） |
+| `chat conversation-info` | `newCSpaceIdIM` | 独立钉盘存储流程的共享空间 ID；不是发送本地聊天附件的前置条件 |
 | `chat message list` | `openMsgId` | message read-status 的 --message-id |
 | `chat group-role list` | `openRoleId` | group-role update/remove/set-user/remove-user 的 --role-id |
 | `chat message create-text-emotion` | `emotionId` | add-text-emotion 的 --emotion-id |
 | `chat category list` | `categoryId` | category list-conversations 的 --category-id |
 | `chat group get-by-group-id` | `openConversationId` | 同 chat search，将群号转为 openConversationId |
 | `chat message send-card` | `bizId` | update-card 的 --biz-id |
-| `drive download` | 下载链接 | message send 的 Markdown 图片/链接语法 |
 | `chat message list` | `openMessageId` | message reply 的 --ref-msg-id、message forward 的 --msg-id |
 | `chat search` | `openConversationId` | set-top 的 --conversation-id、group-mute / group-mute-member 的 --group |
 
@@ -2135,7 +2093,7 @@ Flags:
   - 如果不传 `--uuid`，每次调用都视为新消息，重试可能导致消息重复发送
   - 此参数适用于 `chat message send`（群聊和单聊均支持）
 - `--group` 为群聊会话 ID (openconversation_id)，可从群搜索或群聊信息中获取
-- `chat message send` 的 text 是位置参数（恰好 1 个），非 flag；群聊用 `--group`，单聊用 `--user`（userId）或 `--open-dingtalk-id`（openDingTalkId），三者互斥；纯文本/Markdown 单聊传 `--user` 时直接走 userId 发送能力；`--at-all`、`--at-open-dingtalk-ids` 仅在 `--group` 群聊时生效；富媒体消息通过 `--msg-type` 指定类型（image/file/audio/video），必须显式指定；发送文件/媒体消息时，必须先根据文件扩展名判断 msgType：图片→image，音频→audio，视频→video，其他→file，不可跳过此判断
+- `chat message send` 的 text 是位置参数（恰好 1 个），非 flag；群聊用 `--group`，单聊用 `--user`（userId）或 `--open-dingtalk-id`（openDingTalkId），三者互斥；纯文本/Markdown 单聊传 `--user` 时直接走 userId 发送能力；`--at-all`、`--at-open-dingtalk-ids` 仅在 `--group` 群聊时生效；本地图片/文件/音视频统一用 `--msg-type file --file-path`，其中图片是可下载附件；`--msg-type image --media-id` 仅用于上游已经提供有效 mediaId 的内联图片
 - `chat message list-all` 的四个参数（--start、--end、--limit、--cursor）每次请求都必须传递；翻页时用响应中的 nextCursor 值作为下次 --cursor
 - `chat message list` 的 `--group`、`--user`、`--open-dingtalk-id` 三者互斥，必须且只能指定其一
 - `chat message list-by-sender` 不需要指定单聊/群聊，返回结果自带会话类型标识；`--sender-user-id`（userId）与 `--sender-open-dingtalk-id`（openDingTalkId）二选一；时间用 `--start`/`--end`（ISO-8601），分页用 `--limit`/`--cursor`
@@ -2156,7 +2114,7 @@ Flags:
 - `chat group transfer-owner` 转让群主，需传 --group（openConversationId）；新群主 userId 用 `--user`，openDingTalkId 用 `--new-owner`
 - `chat group invite-url` 获取群邀请链接，需传 --group（openConversationId），可选 --expires-seconds 指定有效期（秒，0=永久）
 - `chat group quit` 退出群聊，需传 --group（openConversationId）
-- `chat group update-icon` 更新群头像，需传 --group（openConversationId）和 --icon-media-id（mediaId）
+- `chat group update-icon` 更新群头像，需传 --group（openConversationId）和由可信上游提供的有效 --icon-media-id（mediaId）；DWS CLI 不能从本地图片生成该 ID
 - `chat group update-settings` 更新群设置，需传 --group（openConversationId）、--setting-key（设置项 key）、--status（0=关闭 1=开启）
 - `chat message send-card` 创建并推送流式卡片，群聊传 --group，单聊传 --receiver，二者互斥；不传 content，后续通过 update-card 更新内容
 - `chat message update-card` 流式更新卡片内容，需传 --biz-id（创建卡片返回的业务 ID）、--content、--flow-status
@@ -2183,9 +2141,8 @@ Flags:
 |------|------|------|
 | [chat_export_messages.py](../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
 | [chat_history_with_user.py](../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
-| [extract_media_id.py](../scripts/extract_media_id.py) | 从 dt_media_upload URL 提取 mediaId | `python extract_media_id.py "<URL>"`（输出如 @lQLPxxx，直接用于 --media-id） |
 
 ## 相关产品
 
 - [contact](../../dingtalk-contact/references/contact.md) — 搜索同事/好友，获取 userId 用于 --user、send-by-bot --users、send-by-bot --at-user-ids、list-by-sender --sender-user-id；获取 openDingTalkId 用于 message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、send-by-bot --open-dingtalk-ids、send-by-bot --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id
-- [drive](../../dingtalk-drive/references/drive.md) — 上传文件获取下载链接，用于 Markdown 图片/文件消息
+- [drive](../../dingtalk-drive/references/drive.md) — 钉盘文件存储与下载；不是发送本地聊天图片/文件的前置步骤

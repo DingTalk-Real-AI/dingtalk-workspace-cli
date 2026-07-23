@@ -95,6 +95,7 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 		text := string(content)
 		for _, required := range []string{
 			"[event] ready",
+			"--flatten",
 			"conversation_id",
 			"sender_open_dingtalk_id",
 			"reader_open_dingtalk_id",
@@ -109,7 +110,6 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 			}
 		}
 		for _, retired := range []string{
-			".data | fromjson",
 			"payload.body.",
 			"尚无稳定业务样本",
 			"暂无稳定 payload schema",

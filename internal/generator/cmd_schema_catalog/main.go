@@ -27,6 +27,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	validateCatalogParameterBindings = cli.ValidateEmbeddedSchemaParameterBindings
+	buildCatalogSnapshot             = cli.BuildSchemaCatalogSnapshot
+	makeCatalogDirectory             = os.MkdirAll
+	writeCatalogFile                 = os.WriteFile
+	exitCatalogProcess               = os.Exit
+)
+
 func main() {
 	var rootPath string
 	var surfacePath string
@@ -40,7 +48,7 @@ func main() {
 		fail(err)
 	}
 
-	root := app.NewRootCommand()
+	root := app.NewSchemaSourceRootCommand()
 	if err := generateSchemaCatalog(root, resolvedSurfacePath, outputPath); err != nil {
 		fail(err)
 	}
@@ -103,7 +111,7 @@ func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputP
 	if err := validateDeprecatedSurface(surfacePath); err != nil {
 		return err
 	}
-	if err := cli.ValidateEmbeddedSchemaParameterBindings(); err != nil {
+	if err := validateCatalogParameterBindings(); err != nil {
 		return fmt.Errorf("validate reviewed parameter binding input: %w", err)
 	}
 
@@ -111,7 +119,7 @@ func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputP
 	if err != nil {
 		return fmt.Errorf("resolve final Schema build: %w", err)
 	}
-	snapshot, err := cli.BuildSchemaCatalogSnapshot(resolved, cli.SchemaCatalogBuildOptions{
+	snapshot, err := buildCatalogSnapshot(resolved, cli.SchemaCatalogBuildOptions{
 		RegistryHash: resolved.RegistryHash(),
 	})
 	if err != nil {
@@ -153,7 +161,7 @@ func writeSchemaCatalogShards(snapshot cli.SchemaCatalogSnapshot, outputDir stri
 		return fmt.Errorf("clear stale schema catalog output: %w", err)
 	}
 	toolsDir := filepath.Join(outputDir, "tools")
-	if err := os.MkdirAll(toolsDir, 0o755); err != nil {
+	if err := makeCatalogDirectory(toolsDir, 0o755); err != nil {
 		return fmt.Errorf("create schema catalog tools directory: %w", err)
 	}
 
@@ -207,7 +215,7 @@ func writeSchemaCatalogJSON(path string, value any) error {
 	if err != nil {
 		return fmt.Errorf("encode %s: %w", filepath.Base(path), err)
 	}
-	return os.WriteFile(path, append(encoded, '\n'), 0o644)
+	return writeCatalogFile(path, append(encoded, '\n'), 0o644)
 }
 
 func validateDeprecatedSurface(path string) error {
@@ -226,5 +234,5 @@ func validateDeprecatedSurface(path string) error {
 
 func fail(err error) {
 	_, _ = fmt.Fprintln(os.Stderr, "error:", err)
-	os.Exit(1)
+	exitCatalogProcess(1)
 }

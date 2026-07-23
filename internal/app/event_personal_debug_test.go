@@ -20,6 +20,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
+	"github.com/spf13/cobra"
 )
 
 func TestApplyPersonalConsumeFiltersDebugRawEvents(t *testing.T) {
@@ -52,11 +53,14 @@ func TestApplyPersonalConsumeFiltersDefault(t *testing.T) {
 	}
 }
 
-func TestPersonalEventProjectorUsesRawEnvelopeForDebug(t *testing.T) {
-	if personalEventProjector(false) == nil {
-		t.Fatal("normal personal consume projector = nil")
+func TestPersonalEventProjectorSelectsExplicitModes(t *testing.T) {
+	if personalEventProjector(false, false) != nil {
+		t.Fatal("default personal consume should preserve transport envelope")
 	}
-	projector := personalEventProjector(true)
+	if personalEventProjector(false, true) == nil {
+		t.Fatal("flatten personal consume projector = nil")
+	}
+	projector := personalEventProjector(true, false)
 	if projector == nil {
 		t.Fatal("debug raw personal consume projector = nil")
 	}
@@ -71,6 +75,69 @@ func TestPersonalEventProjectorUsesRawEnvelopeForDebug(t *testing.T) {
 	}
 	if got, ok := projected.(transport.Event); !ok || got.EventID != ev.EventID || got.Data != ev.Data || got.Headers["TOPIC"] != "raw" {
 		t.Fatalf("debug raw projection = %#v", projected)
+	}
+}
+
+func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "raw format",
+			args: []string{personal.EventMention, "--flatten", "--format", "raw"},
+			want: "--flatten and --format raw are mutually exclusive",
+		},
+		{
+			name: "raw debug",
+			args: []string{personal.EventMention, "--flatten", "--debug-raw-events"},
+			want: "--flatten and --debug-raw-events are mutually exclusive",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+			cmd := newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			cmd.SetArgs(tc.args)
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Execute() error = %v, want %q", err, tc.want)
+			}
+			if strings.Contains(err.Error(), "login") || strings.Contains(err.Error(), "token") {
+				t.Fatalf("output-mode validation ran after identity resolution: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePersonalEventOutputModeAllowsFlattenStructuredFormats(t *testing.T) {
+	for _, format := range []consume.Format{consume.FormatNDJSON, consume.FormatJSON, consume.FormatPretty, consume.FormatCompact} {
+		if err := validatePersonalEventOutputMode(true, false, format); err != nil {
+			t.Fatalf("validatePersonalEventOutputMode(true, false, %q) error = %v", format, err)
+		}
+	}
+}
+
+func TestEventConsumeFlattenFlagIsForwarded(t *testing.T) {
+	oldRun := eventRunPersonalConsume
+	t.Cleanup(func() { eventRunPersonalConsume = oldRun })
+
+	var got personalConsumeOptions
+	eventRunPersonalConsume = func(_ *cobra.Command, opts personalConsumeOptions) error {
+		got = opts
+		return nil
+	}
+	cmd := newEventConsumeCommand()
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{personal.EventMention, "--flatten", "--format", "compact"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !got.Flatten || got.Common.FormatRaw != "compact" {
+		t.Fatalf("forwarded options = %#v", got)
 	}
 }
 

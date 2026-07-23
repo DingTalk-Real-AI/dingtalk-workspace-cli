@@ -23,6 +23,7 @@
     "event": "metadata/event.json",
     "live": "metadata/live.json",
     "mail": "metadata/mail.json",
+    "mcp": "metadata/mcp.json",
     "minutes": "metadata/minutes.json",
     "oa": "metadata/oa.json",
     "pat": "metadata/pat.json",
@@ -47,6 +48,7 @@
     "event": "selection/event.json",
     "live": "selection/live.json",
     "mail": "selection/mail.json",
+    "mcp": "selection/mcp.json",
     "minutes": "selection/minutes.json",
     "oa": "selection/oa.json",
     "pat": "selection/pat.json",
@@ -434,10 +436,6 @@
       "status": "stale",
       "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
     },
-    "chat media upload": {
-      "status": "stale",
-      "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
-    },
     "chat message list-emotion-replies": {
       "status": "stale",
       "reason": "旧版 Skill 或说明性引用，当前公开命令面无等价 leaf，禁止词法模糊映射"
@@ -633,6 +631,11 @@
       "status": "alias",
       "target": "event consume",
       "reason": "已审查的带 event_key 和输出参数的 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_receive_at": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
     "event consume user_im_message_receive_group": {
       "status": "alias",

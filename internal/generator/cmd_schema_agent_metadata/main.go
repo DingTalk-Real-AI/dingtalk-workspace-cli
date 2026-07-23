@@ -46,7 +46,7 @@ var (
 	writeMetadataFileBytes = os.WriteFile
 	writeMetadataJSON      = writeJSON
 
-	newMetadataRoot              = app.NewRootCommand
+	newMetadataRoot              = app.NewSchemaSourceRootCommand
 	buildEffectiveMetadata       = cli.BuildEffectiveCommandRegistry
 	bindEffectiveMetadata        = cli.BindEffectiveCommandRegistry
 	loadSelectionMetadataHints   = cli.LoadAgentHintsFromSelectionForValidation

@@ -49,6 +49,15 @@ func RegisterPluginAuth(productID string, auth *PluginAuth) {
 	pluginAuthRegistry[productID] = auth
 }
 
+// ClearPluginAuth removes credentials for a plugin product. Registration uses
+// this before applying an accepted descriptor so a descriptor without custom
+// auth cannot inherit stale credentials from an earlier root construction.
+func ClearPluginAuth(productID string) {
+	pluginAuthMu.Lock()
+	defer pluginAuthMu.Unlock()
+	delete(pluginAuthRegistry, productID)
+}
+
 // LookupPluginAuth returns the authentication credentials registered
 // for the given product ID, or nil if none exists.
 func LookupPluginAuth(productID string) (*PluginAuth, bool) {

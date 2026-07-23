@@ -14,6 +14,7 @@
 package keychain
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,8 +26,15 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	_ = os.Setenv(StorageDirEnv, dir)
+	_ = os.Setenv(TestNamespaceEnv, dir)
 	_ = os.Setenv(DisableKeychainEnv, "1")
 	code := m.Run()
+	if err := RemoveAuthTokenEntries(Service); err != nil {
+		fmt.Fprintf(os.Stderr, "internal/keychain test cleanup: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }

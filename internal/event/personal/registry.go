@@ -258,8 +258,18 @@ func Catalog(category string, enabledOnly, includePending bool) []Definition {
 }
 
 func BuildSchemaDocument(def Definition) SchemaDocument {
+	return BuildSchemaDocumentForMode(def, false)
+}
+
+func BuildSchemaDocumentForMode(def Definition, flatten bool) SchemaDocument {
 	requiredParams := make([]string, 0, len(def.RequiredParams))
 	requiredParams = append(requiredParams, def.RequiredParams...)
+	jqRootPath := ".data | fromjson"
+	schema := transportEnvelopeSchema(def.EventKey)
+	if flatten {
+		jqRootPath = "."
+		schema = outputSchema(def.EventKey)
+	}
 	return SchemaDocument{
 		EventKey:       def.EventKey,
 		DisplayName:    def.DisplayName,
@@ -268,8 +278,8 @@ func BuildSchemaDocument(def Definition) SchemaDocument {
 		RuleType:       def.RuleType,
 		RequiredParams: requiredParams,
 		Constraints:    cloneParameterConstraints(def.Constraints),
-		JQRootPath:     ".",
-		Schema:         outputSchema(def.EventKey),
+		JQRootPath:     jqRootPath,
+		Schema:         schema,
 	}
 }
 

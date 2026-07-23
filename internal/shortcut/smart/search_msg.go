@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 // SearchMsg: search messages inside a single group chat by keyword in one step.
@@ -108,12 +109,7 @@ var SearchMsg = shortcut.Shortcut{
 		}
 		results := make([]map[string]any, 0, len(items))
 		for _, m := range items {
-			results = append(results, map[string]any{
-				"sender":    searchMsgSender(m),
-				"time":      searchMsgTime(m),
-				"text":      searchMsgText(m),
-				"messageId": searchMsgMessageID(m),
-			})
+			results = append(results, searchMsgProject(m))
 		}
 		return rt.Output(map[string]any{"messages": results})
 	},
@@ -152,28 +148,61 @@ func searchMsgToMaps(arr []any) []map[string]any {
 	return out
 }
 
+// searchMsgProject reshapes one matched message into {sender, time, text,
+// messageId}, running text through the shared chatmsg cleaning (card/auto-reply
+// JSON → readable, ciphertext → marker) and recursively expanding any forwarded
+// chat record under "forwarded".
+func searchMsgProject(m map[string]any) map[string]any {
+	row := map[string]any{
+		"sender":    searchMsgSender(m),
+		"time":      searchMsgTime(m),
+		"text":      searchMsgCleanText(m),
+		"messageId": searchMsgMessageID(m),
+	}
+	if forwarded := chatmsg.Forwarded(m, searchMsgProject); len(forwarded) > 0 {
+		row["forwarded"] = forwarded
+	}
+	return row
+}
+
+// searchMsgCleanText runs searchMsgText's extraction through chatmsg.CleanText.
+func searchMsgCleanText(m map[string]any) any {
+	if s, ok := searchMsgText(m).(string); ok {
+		return chatmsg.CleanText(s)
+	}
+	return searchMsgText(m)
+}
+
 // searchMsgSender reads a message's sender display name/id, tolerating the
-// common sender keys the gateway may use (including a nested sender object).
+// common sender keys the gateway may use (including a nested sender object). The
+// literal string "null" (carried by forwarded sub-messages) and the empty string
+// are both treated as absent so they never surface as the speaker.
 func searchMsgSender(m map[string]any) any {
+	norm := func(v any) string {
+		if s := searchMsgString(v); s != "" && s != "null" {
+			return s
+		}
+		return ""
+	}
 	for _, key := range []string{"senderName", "sender_name", "senderNick", "fromName", "senderStaffName"} {
-		if v := searchMsgString(m[key]); v != "" {
+		if v := norm(m[key]); v != "" {
 			return v
 		}
 	}
 	for _, key := range []string{"sender", "from", "senderUser"} {
 		if nested, ok := m[key].(map[string]any); ok {
 			for _, k2 := range []string{"name", "nick", "userName", "staffName", "displayName"} {
-				if v := searchMsgString(nested[k2]); v != "" {
+				if v := norm(nested[k2]); v != "" {
 					return v
 				}
 			}
 		}
-		if v := searchMsgString(m[key]); v != "" {
+		if v := norm(m[key]); v != "" {
 			return v
 		}
 	}
 	for _, key := range []string{"senderId", "sender_id", "senderUserId", "senderStaffId", "openDingTalkId"} {
-		if v := searchMsgString(m[key]); v != "" {
+		if v := norm(m[key]); v != "" {
 			return v
 		}
 	}

@@ -1433,19 +1433,25 @@ func newChatCommand() *cobra.Command {
 纯文本 / Markdown 消息（默认）：
   无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。
 
-富媒体消息（通过 --msg-type 指定类型）：
-  image — 发送图片：--msg-type image --media-id（通过 dt_media_upload 上传获得）
-  file/audio/video — 发送文件、音频、视频：传本地 --file-path，CLI 会上传后按 file 消息发送`,
+本地图片 / 文件消息：
+  统一使用 --msg-type file --file-path <本地路径>。CLI 会完成上传并按 file 消息发送；
+  .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。
+
+旧版内联图片消息：
+  仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。
+  当前 CLI 不提供本地文件到 mediaId 的上传能力。`,
 		Example: `  dws chat message send --group <openconversation_id> "hello"
   dws chat message send --user <userId> "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> "请查收"
   dws chat message send --group <openconversation_id> --title "周报提醒" "请大家本周五前提交周报"
-  # 发送图片
-  dws chat message send --group <openconversation_id> --msg-type image --media-id <mediaId>
-  # 发送本地文件/音频/视频（audio/video 是 file 的语义别名）
+  # 发送本地图片或文件（图片会作为可下载的 file 附件发送）
+  dws chat message send --group <openconversation_id> --msg-type file --file-path ./screenshot.png
   dws chat message send --group <openconversation_id> --msg-type file --file-path ./report.pdf
+  # 发送本地音频/视频（audio/video 是 file 的语义别名）
   dws chat message send --group <openconversation_id> --msg-type audio --file-path ./recording.mp3
   dws chat message send --group <openconversation_id> --msg-type video --file-path ./demo.mp4
+  # 旧版内联图片：仅当上游已经持有有效 mediaId 时使用
+  dws chat message send --group <openconversation_id> --msg-type image --media-id <mediaId>
 # 查询群 ID: dws chat search --query "群名"
 # 查询用户 ID: dws contact user search --query "姓名"`,
 		Args: cobra.MaximumNArgs(1),
@@ -2400,13 +2406,13 @@ func newChatCommand() *cobra.Command {
 	_ = chatMessageSendCmd.Flags().MarkHidden("markdown")
 	chatMessageSendCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效，可选）,设置时，消息内容中一定要包含对应的占位符<@all>")
 	chatMessageSendCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）,设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>")
-	chatMessageSendCmd.Flags().String("media-id", "", "图片 mediaId（通过 dt_media_upload 上传后用 extract_media_id.py 提取，仅 msgType=image）")
-	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video（audio/video 是 file 别名；纯文本/Markdown 无需指定，直接传内容即可）")
+	chatMessageSendCmd.Flags().String("media-id", "", "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）")
+	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）")
 	chatMessageSendCmd.Flags().Int64("dentry-id", 0, "文件 dentryId（与 --space-id 成对传入时跳过自动上传）")
 	chatMessageSendCmd.Flags().Int64("space-id", 0, "空间 ID（与 --dentry-id 成对传入时跳过自动上传）")
 	chatMessageSendCmd.Flags().String("file-name", "", "文件名")
 	chatMessageSendCmd.Flags().String("file-type", "", "文件类型/扩展名")
-	chatMessageSendCmd.Flags().String("file-path", "", "本地文件路径（msgType=file 时可直接上传发送）")
+	chatMessageSendCmd.Flags().String("file-path", "", "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）")
 	chatMessageSendCmd.Flags().Int64("file-size", 0, "文件大小，单位字节")
 	_ = chatMessageSendCmd.Flags().MarkHidden("dentry-id")
 	_ = chatMessageSendCmd.Flags().MarkHidden("space-id")
@@ -3143,6 +3149,25 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   # resource-id: 从 dws chat message list 返回的消息内容中获取 mediaId
   # message-id: 从 dws chat message list 返回的 openMessageId
   # open-conversation-id: 从 dws chat search 获取 openConversationId`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Cobra validates required flags after PreRunE. Copy a supplied alias
+			// into the canonical flag first so --message-id can remain a hard
+			// required fact in both the executable and Agent Schema contracts.
+			if cmd.Flags().Changed("message-id") {
+				return nil
+			}
+			alias := ""
+			switch {
+			case cmd.Flags().Changed("msg-id"):
+				alias = "msg-id"
+			case cmd.Flags().Changed("open-message-id"):
+				alias = "open-message-id"
+			default:
+				return nil
+			}
+			value, _ := cmd.Flags().GetString(alias) // registered string flags above
+			return cmd.Flags().Set("message-id", value)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "type", "resource-id", "message-id", "open-conversation-id", "output"); err != nil {
 				return err
@@ -3226,6 +3251,13 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("open-conversation-id")
 	chatMessageDownloadMediaCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("message-id")
+	// Hidden aliases: agents routinely pass --msg-id / --open-message-id since
+	// the message-list output exposes the field as openMessageId/msgId. Accept
+	// them transparently instead of failing with "unknown flag".
+	chatMessageDownloadMediaCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageDownloadMediaCmd.Flags().MarkHidden("msg-id")
+	chatMessageDownloadMediaCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageDownloadMediaCmd.Flags().MarkHidden("open-message-id")
 	chatMessageDownloadMediaCmd.Flags().String("output", "", "本地保存路径，文件或目录 (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("output")
 
@@ -3361,7 +3393,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			iconMediaID := strings.TrimSpace(mustGetFlag(cmd, "icon-media-id"))
 			if iconMediaID == "" {
-				return fmt.Errorf("invalid --icon-media-id: mediaId 不能为空\n  hint: 先通过媒体上传命令（dt_media_upload）上传图片，使用返回的 mediaId")
+				return fmt.Errorf("invalid --icon-media-id: mediaId 不能为空\n  hint: 请使用上游媒体上传能力返回的有效 mediaId；DWS CLI 不提供本地文件到 mediaId 的上传命令")
 			}
 			return callMCPToolOnServer("im", "update_group_icon", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),

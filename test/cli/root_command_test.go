@@ -13,9 +13,7 @@ import (
 // MCP architecture, products are discovered dynamically from MCP servers,
 // and their availability depends on the test environment's fixture data.
 
-func TestHiddenMCPHelpIsReachable(t *testing.T) {
-	t.Parallel()
-
+func TestPublicMCPHelpShowsReviewedURLCommand(t *testing.T) {
 	cmd := app.NewRootCommand()
 	var out strings.Builder
 	cmd.SetOut(&out)
@@ -27,14 +25,13 @@ func TestHiddenMCPHelpIsReachable(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "canonical MCP command surface is disabled") {
+	if !strings.Contains(got, "管理经过审核并纳入 Schema 的 MCP 服务连接辅助能力") ||
+		!strings.Contains(got, "url") {
 		t.Fatalf("mcp help missing expected text:\n%s", got)
 	}
 }
 
 func TestSkillCommandIsRegistered(t *testing.T) {
-	t.Parallel()
-
 	root := app.NewRootCommand()
 
 	var found bool

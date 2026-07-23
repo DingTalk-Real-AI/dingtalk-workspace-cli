@@ -11,7 +11,7 @@ run() {
 cd "$ROOT"
 
 run ./scripts/dev/lint.sh
-run go test ./...
+run make test
 COVERAGE_PROFILE="$(mktemp "${TMPDIR:-/tmp}/dws-coverage.XXXXXX")"
 run ./scripts/dev/coverage.sh "$COVERAGE_PROFILE"
 rm -f "$COVERAGE_PROFILE"

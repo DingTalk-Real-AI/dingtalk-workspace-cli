@@ -41,6 +41,17 @@ func Commands() []*cobra.Command {
 	return build(allShortcuts)
 }
 
+// BuiltInCommands compiles only distribution-owned shortcuts.
+func BuiltInCommands() []*cobra.Command {
+	builtins := make([]Shortcut, 0, len(allShortcuts))
+	for _, registered := range allShortcuts {
+		if !registered.UserDefined {
+			builtins = append(builtins, registered)
+		}
+	}
+	return build(builtins)
+}
+
 // All returns the registered shortcuts. Primarily for coverage tests that need
 // each shortcut's declared flags (types/enums/required) to synthesize inputs.
 func All() []Shortcut {

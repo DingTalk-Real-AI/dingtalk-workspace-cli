@@ -14,7 +14,7 @@ func TestRuntimeSchemaCompletenessCoversPublicCommandTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := NewRootCommand()
+	root := NewSchemaSourceRootCommand()
 	if err := cli.ValidateEmbeddedRuntimeSchemaCompleteness(root); err != nil {
 		t.Fatal(err)
 	}

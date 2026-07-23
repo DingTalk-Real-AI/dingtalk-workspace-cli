@@ -95,7 +95,7 @@ func TestDefinitionJSONHidesInternalSchemaIDs(t *testing.T) {
 	}
 }
 
-func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
+func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
@@ -117,16 +117,16 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 				"required_params",
 				"jq_root_path",
 				"schema",
+				"type",
+				"seq",
 				"event_id",
-				"timestamp",
+				"event_born_time",
+				"event_type",
 				"subscribe_id",
-				"content",
-				"sender",
-				"sender_open_dingtalk_id",
-				"conversation_id",
-				"message_id",
-				"create_time",
-				"event_time",
+				"source_id",
+				"data",
+				"headers",
+				"received_at_unix_ms",
 			} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("schema for %s missing %q: %s", eventKey, want, out)
@@ -144,7 +144,6 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 				"payload_schema",
 				"output_schema",
 				"data_json_path",
-				"headers",
 				"audit",
 				"tenant",
 				"subject",
@@ -152,16 +151,53 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 				"msgIdMetaq",
 				"at_users",
 				"sender_user_id",
+				"sender_open_dingtalk_id",
+				"conversation_id",
+				"message_id",
+				"create_time",
+				"event_time",
 			} {
 				if strings.Contains(out, leaked) {
 					t.Fatalf("schema for %s leaked %q: %s", eventKey, leaked, out)
 				}
 			}
-			if doc.JQRootPath != "." {
-				t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
+			if doc.JQRootPath != ".data | fromjson" {
+				t.Fatalf("jq_root_path = %q, want .data | fromjson", doc.JQRootPath)
 			}
 			if doc.RequiredParams == nil {
 				t.Fatalf("required_params = nil, want empty slice")
+			}
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("schema.properties = %#v, want object", doc.Schema["properties"])
+			}
+			wantProperties := []string{
+				"type", "seq", "event_id", "event_born_time", "event_corp_id",
+				"event_type", "event_unified_app_id", "event_scope", "subscribe_id",
+				"source_id", "rule_type", "data", "headers", "received_at_unix_ms",
+			}
+			if len(props) != len(wantProperties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d transport fields", props, len(wantProperties))
+			}
+			for _, name := range wantProperties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+		})
+	}
+}
+
+func TestFlattenedSchemaDocumentsUseMessageDTO(t *testing.T) {
+	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			doc := BuildSchemaDocumentForMode(def, true)
+			if doc.JQRootPath != "." {
+				t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
 			}
 			props, ok := doc.Schema["properties"].(map[string]any)
 			if !ok {
@@ -178,6 +214,11 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 			for _, name := range wantProperties {
 				if _, ok := props[name].(map[string]any); !ok {
 					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			for _, transportField := range []string{"data", "headers", "seq", "event_type"} {
+				if _, ok := props[transportField]; ok {
+					t.Fatalf("flattened schema exposed transport field %q", transportField)
 				}
 			}
 		})
@@ -286,7 +327,7 @@ func TestActionSchemaDocumentsMatchOutputDTOs(t *testing.T) {
 				if !ok {
 					t.Fatalf("Lookup(%q) failed", eventKey)
 				}
-				doc := BuildSchemaDocument(def)
+				doc := BuildSchemaDocumentForMode(def, true)
 				if doc.JQRootPath != "." {
 					t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
 				}

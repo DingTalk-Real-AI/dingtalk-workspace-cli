@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -164,7 +165,7 @@ func TestCrossPlatformCoverageRawAPIAndTokenCoverage(t *testing.T) {
 	}
 	newAccessTokenProvider = func(string) accessTokenGetter { return fakeAccessTokenGetter{} }
 	missing := t.TempDir()
-	if got, err := resolveAccessTokenFromDir(context.Background(), missing); err != nil || got != "" {
+	if got, err := resolveAccessTokenFromDir(context.Background(), missing); got != "" || !errors.Is(err, authpkg.ErrTokenDataNotFound) {
 		t.Fatalf("missing access token = %q, %v", got, err)
 	}
 	if _, err := ResolveAuxiliaryAccessToken(context.Background(), missing, ""); err == nil {

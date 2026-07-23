@@ -414,7 +414,7 @@ func TestCrossPlatformCoveragePortalStartEndToEndAndFailures(t *testing.T) {
 		return s
 	}
 	network := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errSourceInjected })}
-	s := makeSource(&PortalTicketConfig{TicketURL: "https://x", AccessToken: "t", SourceID: "s", HTTPClient: network})
+	s := makeSource(&PortalTicketConfig{TicketURL: "https://x", AccessToken: "t", SourceID: "s", HTTPClient: network, DisableReconnect: true})
 	if err := s.Start(context.Background(), func(*dwsevent.RawEvent) {}); err == nil {
 		t.Fatal("ticket failure expected")
 	}
@@ -483,7 +483,7 @@ func TestCrossPlatformCoveragePortalStartHandshakeReadAndAckErrors(t *testing.T)
 	makeSource := func(endpoint string) *DingtalkSource {
 		s, err := New(Config{PortalTicket: &PortalTicketConfig{
 			TicketURL: "https://ticket", AccessToken: "token", SourceID: "source",
-			HTTPClient: staticPersonalTicketClient(endpoint, ""),
+			HTTPClient: staticPersonalTicketClient(endpoint, ""), DisableReconnect: true,
 		}})
 		if err != nil {
 			t.Fatal(err)

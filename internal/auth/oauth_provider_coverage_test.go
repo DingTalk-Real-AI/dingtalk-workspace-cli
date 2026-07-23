@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 )
 
 type oauthLoginFixture struct {
@@ -33,8 +35,79 @@ type oauthLoginFixture struct {
 	exchangeError   atomic.Bool
 }
 
+type oauthLoginResult struct {
+	token *TokenData
+	err   error
+}
+
+type oauthHTTPResult struct {
+	status int
+	body   string
+	err    error
+}
+
+const oauthTestWaitTimeout = 5 * time.Second
+
+func isolateOAuthPersistence(t *testing.T) {
+	t.Helper()
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	cleanupKeychain(t)
+}
+
+func startOAuthLogin(t *testing.T, parent context.Context, f *oauthLoginFixture) <-chan oauthLoginResult {
+	t.Helper()
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan oauthLoginResult, 1)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		token, err := f.provider.Login(ctx, true)
+		done <- oauthLoginResult{token: token, err: err}
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-finished:
+		case <-time.After(oauthTestWaitTimeout):
+			t.Errorf("OAuth Login goroutine did not stop after cancellation")
+		}
+	})
+	return done
+}
+
+func awaitOAuthLogin(t *testing.T, done <-chan oauthLoginResult) oauthLoginResult {
+	t.Helper()
+	select {
+	case result := <-done:
+		return result
+	case <-time.After(oauthTestWaitTimeout):
+		t.Fatal("timed out waiting for OAuth Login")
+		return oauthLoginResult{}
+	}
+}
+
+func waitOAuthSignal(t *testing.T, signal <-chan struct{}, done <-chan oauthLoginResult, name string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case result := <-done:
+		t.Fatalf("OAuth Login returned before %s: token=%#v err=%v", name, result.token, result.err)
+	case <-time.After(oauthTestWaitTimeout):
+		t.Fatalf("timed out waiting for OAuth %s", name)
+	}
+}
+
+func closeOAuthRelease(ch chan struct{}) {
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
+}
+
 func newOAuthLoginFixture(t *testing.T, status func(int32) CLIAuthStatus) *oauthLoginFixture {
 	t.Helper()
+	isolateOAuthPersistence(t)
 	SetClientID("")
 	SetClientSecret("")
 	resetClientIDFromMCP()
@@ -91,6 +164,10 @@ func newOAuthLoginFixture(t *testing.T, status func(int32) CLIAuthStatus) *oauth
 		}
 	}))
 	t.Cleanup(f.server.Close)
+	t.Cleanup(func() {
+		closeOAuthRelease(f.exchangeRelease)
+		closeOAuthRelease(f.statusRelease)
+	})
 	f.configDir = setupMCPConfigDir(t, f.server.URL)
 
 	oldClient := oauthHTTPClient
@@ -118,17 +195,25 @@ func newOAuthLoginFixture(t *testing.T, status func(int32) CLIAuthStatus) *oauth
 
 func httpGetBody(t *testing.T, rawURL string) (int, string) {
 	t.Helper()
+	result := getHTTPBody(rawURL)
+	if result.err != nil {
+		t.Fatalf("GET %s: %v", rawURL, result.err)
+	}
+	return result.status, result.body
+}
+
+func getHTTPBody(rawURL string) oauthHTTPResult {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(rawURL)
 	if err != nil {
-		t.Fatalf("GET %s: %v", rawURL, err)
+		return oauthHTTPResult{err: err}
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		t.Fatal(err)
+		return oauthHTTPResult{err: err}
 	}
-	return resp.StatusCode, string(data)
+	return oauthHTTPResult{status: resp.StatusCode, body: string(data)}
 }
 
 func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
@@ -136,17 +221,7 @@ func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
 		return CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}}
 	})
 
-	loginDone := make(chan struct {
-		token *TokenData
-		err   error
-	}, 1)
-	go func() {
-		token, err := f.provider.Login(context.Background(), true)
-		loginDone <- struct {
-			token *TokenData
-			err   error
-		}{token, err}
-	}()
+	loginDone := startOAuthLogin(t, context.Background(), f)
 
 	for _, path := range []string{"/api/superAdmin", "/api/sendApply?adminStaffId=admin-1", "/api/cliAuthEnabled"} {
 		_, body := httpGetBody(t, f.callbackBase+path)
@@ -166,18 +241,17 @@ func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
 		t.Fatalf("success page = %q", body)
 	}
 
-	callbackDone := make(chan string, 1)
+	callbackDone := make(chan oauthHTTPResult, 1)
 	go func() {
-		_, callbackBody := httpGetBody(t, f.callbackBase+CallbackPath+"?code=good")
-		callbackDone <- callbackBody
+		callbackDone <- getHTTPBody(f.callbackBase + CallbackPath + "?code=good")
 	}()
-	<-f.exchangeEntered
+	waitOAuthSignal(t, f.exchangeEntered, loginDone, "token exchange")
 	_, body = httpGetBody(t, f.callbackBase+CallbackPath+"?authCode=good")
 	if !strings.Contains(body, "正在处理授权") {
 		t.Fatalf("concurrent callback = %q", body)
 	}
-	close(f.exchangeRelease)
-	<-f.statusEntered
+	closeOAuthRelease(f.exchangeRelease)
+	waitOAuthSignal(t, f.statusEntered, loginDone, "CLI auth status check")
 
 	_, body = httpGetBody(t, f.callbackBase+CallbackPath+"?code=good")
 	if !strings.Contains(body, "<html") {
@@ -204,11 +278,16 @@ func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
 		t.Fatalf("auth enabled API = %q", body)
 	}
 
-	close(f.statusRelease)
-	if callbackBody := <-callbackDone; !strings.Contains(callbackBody, "<html") {
-		t.Fatalf("callback body = %q", callbackBody)
+	closeOAuthRelease(f.statusRelease)
+	select {
+	case callback := <-callbackDone:
+		if callback.err != nil || !strings.Contains(callback.body, "<html") {
+			t.Fatalf("callback body = %q, %v", callback.body, callback.err)
+		}
+	case <-time.After(oauthTestWaitTimeout):
+		t.Fatal("timed out waiting for OAuth callback")
 	}
-	result := <-loginDone
+	result := awaitOAuthLogin(t, loginDone)
 	if result.err != nil || result.token == nil || result.token.AccessToken != "access" {
 		t.Fatalf("Login = %#v, %v", result.token, result.err)
 	}
@@ -228,23 +307,20 @@ func TestCrossPlatformCoverageOAuthLoginMissingCallbackCode(t *testing.T) {
 	f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
 		return CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}}
 	})
-	close(f.exchangeRelease)
-	close(f.statusRelease)
-	done := make(chan error, 1)
-	go func() {
-		_, err := f.provider.Login(context.Background(), true)
-		done <- err
-	}()
+	closeOAuthRelease(f.exchangeRelease)
+	closeOAuthRelease(f.statusRelease)
+	done := startOAuthLogin(t, context.Background(), f)
 	status, body := httpGetBody(t, f.callbackBase+CallbackPath)
 	if status != http.StatusBadRequest || strings.TrimSpace(body) == "" {
 		t.Fatalf("missing callback = %d %q", status, body)
 	}
-	if err := <-done; err == nil {
+	if result := awaitOAuthLogin(t, done); result.err == nil {
 		t.Fatal("missing callback code did not fail login")
 	}
 }
 
 func TestCrossPlatformCoverageOAuthLoginEarlyAndListenerEdges(t *testing.T) {
+	isolateOAuthPersistence(t)
 	var buf bytes.Buffer
 	p := &OAuthProvider{configDir: t.TempDir(), Output: &buf}
 	if p.output() != &buf || (*OAuthProvider)(nil).output() != io.Discard {
@@ -311,6 +387,7 @@ func TestCrossPlatformCoverageOAuthLoginTimeoutAndServerError(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageOAuthProviderOtherMethods(t *testing.T) {
+	isolateOAuthPersistence(t)
 	dir := t.TempDir()
 	_ = DeleteTokenDataKeychain()
 	t.Cleanup(func() { _ = DeleteTokenDataKeychain() })
@@ -363,6 +440,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func TestCrossPlatformCoverageOAuthPersistConfigEdges(t *testing.T) {
+	isolateOAuthPersistence(t)
 	p := &OAuthProvider{configDir: t.TempDir(), logger: slog.Default()}
 	SetClientID("")
 	SetClientSecret("")
@@ -425,16 +503,12 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 	for _, tt := range terminal {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return tt.status })
-			close(f.exchangeRelease)
-			close(f.statusRelease)
+			closeOAuthRelease(f.exchangeRelease)
+			closeOAuthRelease(f.statusRelease)
 			f.provider.NoBrowser = false
-			done := make(chan error, 1)
-			go func() {
-				_, err := f.provider.Login(context.Background(), true)
-				done <- err
-			}()
+			done := startOAuthLogin(t, context.Background(), f)
 			_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=denied")
-			if err := <-done; err == nil {
+			if result := awaitOAuthLogin(t, done); result.err == nil {
 				t.Fatal("denied login succeeded")
 			}
 		})
@@ -445,15 +519,11 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
 			return CLIAuthStatus{Success: true, Result: &CLIAuthResult{ChannelScope: "specified", AllowedChannels: []string{"allowed"}}}
 		})
-		close(f.exchangeRelease)
-		close(f.statusRelease)
-		done := make(chan error, 1)
-		go func() {
-			_, err := f.provider.Login(context.Background(), true)
-			done <- err
-		}()
+		closeOAuthRelease(f.exchangeRelease)
+		closeOAuthRelease(f.statusRelease)
+		done := startOAuthLogin(t, context.Background(), f)
 		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=denied")
-		if err := <-done; err == nil {
+		if result := awaitOAuthLogin(t, done); result.err == nil {
 			t.Fatal("channel-denied login succeeded")
 		}
 	})
@@ -463,15 +533,11 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
 			return CLIAuthStatus{Success: true, Result: &CLIAuthResult{}}
 		})
-		close(f.exchangeRelease)
-		close(f.statusRelease)
-		done := make(chan error, 1)
-		go func() {
-			_, err := f.provider.Login(context.Background(), true)
-			done <- err
-		}()
+		closeOAuthRelease(f.exchangeRelease)
+		closeOAuthRelease(f.statusRelease)
+		done := startOAuthLogin(t, context.Background(), f)
 		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending")
-		if err := <-done; err == nil {
+		if result := awaitOAuthLogin(t, done); result.err == nil {
 			t.Fatal("approval timeout login succeeded")
 		}
 		oauthApprovalTimeout = oldApproval
@@ -481,16 +547,12 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		f := newOAuthLoginFixture(t, func(call int32) CLIAuthStatus {
 			return CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: call > 1}}
 		})
-		close(f.exchangeRelease)
-		close(f.statusRelease)
-		done := make(chan error, 1)
-		go func() {
-			_, err := f.provider.Login(context.Background(), true)
-			done <- err
-		}()
+		closeOAuthRelease(f.exchangeRelease)
+		closeOAuthRelease(f.statusRelease)
+		done := startOAuthLogin(t, context.Background(), f)
 		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending")
-		if err := <-done; err != nil {
-			t.Fatalf("poll-enabled login failed: %v", err)
+		if result := awaitOAuthLogin(t, done); result.err != nil {
+			t.Fatalf("poll-enabled login failed: %v", result.err)
 		}
 	})
 
@@ -498,17 +560,13 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
 			return CLIAuthStatus{Success: true, Result: &CLIAuthResult{}}
 		})
-		close(f.exchangeRelease)
-		close(f.statusRelease)
+		closeOAuthRelease(f.exchangeRelease)
+		closeOAuthRelease(f.statusRelease)
 		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan error, 1)
-		go func() {
-			_, err := f.provider.Login(ctx, true)
-			done <- err
-		}()
+		done := startOAuthLogin(t, ctx, f)
 		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending")
 		cancel()
-		if err := <-done; err == nil {
+		if result := awaitOAuthLogin(t, done); result.err == nil {
 			t.Fatal("canceled pending login succeeded")
 		}
 	})
@@ -519,23 +577,20 @@ func TestCrossPlatformCoverageOAuthLoginExchangeFailure(t *testing.T) {
 		return CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}}
 	})
 	f.exchangeError.Store(true)
-	close(f.exchangeRelease)
-	close(f.statusRelease)
-	done := make(chan error, 1)
-	go func() {
-		_, err := f.provider.Login(context.Background(), true)
-		done <- err
-	}()
+	closeOAuthRelease(f.exchangeRelease)
+	closeOAuthRelease(f.statusRelease)
+	done := startOAuthLogin(t, context.Background(), f)
 	_, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=bad")
 	if !strings.Contains(body, "failed") {
 		t.Fatalf("exchange failure page = %q", body)
 	}
-	if err := <-done; err == nil {
+	if result := awaitOAuthLogin(t, done); result.err == nil {
 		t.Fatal("exchange failure login succeeded")
 	}
 }
 
 func TestCrossPlatformCoverageOAuthRefreshAndParsingEdges(t *testing.T) {
+	isolateOAuthPersistence(t)
 	t.Setenv("DWS_CLIENT_ID", "")
 	t.Setenv("DWS_CLIENT_SECRET", "")
 	dir := t.TempDir()
@@ -640,6 +695,7 @@ func TestCrossPlatformCoverageOAuthRefreshAndParsingEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
+	isolateOAuthPersistence(t)
 	oldLoad := oauthLoadToken
 	oldLoadLocked := oauthLoadTokenLocked
 	oldAcquire := oauthAcquireLock
@@ -800,29 +856,24 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 	oauthSuccessPause = 0
 	oauthSleep = func(time.Duration) {}
 
-	type loginResult struct {
-		token *TokenData
-		err   error
-	}
-	startLogin := func(ctx context.Context, f *oauthLoginFixture) <-chan loginResult {
+	finishExchange := func(t *testing.T, f *oauthLoginFixture, done <-chan oauthLoginResult, code string) string {
 		t.Helper()
-		done := make(chan loginResult, 1)
+		bodyCh := make(chan oauthHTTPResult, 1)
 		go func() {
-			token, err := f.provider.Login(ctx, true)
-			done <- loginResult{token: token, err: err}
+			bodyCh <- getHTTPBody(f.callbackBase + CallbackPath + "?code=" + url.QueryEscape(code))
 		}()
-		return done
-	}
-	finishExchange := func(t *testing.T, f *oauthLoginFixture, code string) string {
-		t.Helper()
-		bodyCh := make(chan string, 1)
-		go func() {
-			_, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code="+url.QueryEscape(code))
-			bodyCh <- body
-		}()
-		<-f.exchangeEntered
-		close(f.exchangeRelease)
-		return <-bodyCh
+		waitOAuthSignal(t, f.exchangeEntered, done, "token exchange")
+		closeOAuthRelease(f.exchangeRelease)
+		select {
+		case result := <-bodyCh:
+			if result.err != nil {
+				t.Fatalf("OAuth callback failed: %v", result.err)
+			}
+			return result.body
+		case <-time.After(oauthTestWaitTimeout):
+			t.Fatal("timed out waiting for OAuth callback")
+			return ""
+		}
 	}
 
 	t.Run("switch organization and cached disabled pages", func(t *testing.T) {
@@ -835,8 +886,8 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 			return &CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}}, nil
 		}
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
-		done := startLogin(context.Background(), f)
-		if body := finishExchange(t, f, "first"); !strings.Contains(body, "<html") {
+		done := startOAuthLogin(t, context.Background(), f)
+		if body := finishExchange(t, f, done, "first"); !strings.Contains(body, "<html") {
 			t.Fatalf("disabled callback body = %q", body)
 		}
 		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=first"); !strings.Contains(body, "<html") {
@@ -848,7 +899,7 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=second"); !strings.Contains(body, "<html") {
 			t.Fatalf("switched callback = %q", body)
 		}
-		result := <-done
+		result := awaitOAuthLogin(t, done)
 		if result.err != nil || result.token == nil || result.token.AccessToken != "access" {
 			t.Fatalf("switched login = %#v %v", result.token, result.err)
 		}
@@ -862,15 +913,15 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		oauthSendApply = func(context.Context, string, string) (*SendApplyResponse, error) { return nil, fail }
 		ctx, cancel := context.WithCancel(context.Background())
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
-		done := startLogin(ctx, f)
-		finishExchange(t, f, "errors")
+		done := startOAuthLogin(t, ctx, f)
+		finishExchange(t, f, done, "errors")
 		for _, path := range []string{"/api/superAdmin", "/api/sendApply?adminStaffId=admin", "/api/cliAuthEnabled"} {
 			if _, body := httpGetBody(t, f.callbackBase+path); !strings.Contains(body, "hook failure") {
 				t.Fatalf("API error %s = %q", path, body)
 			}
 		}
 		cancel()
-		if result := <-done; !errors.Is(result.err, context.Canceled) {
+		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
 			t.Fatalf("canceled error login = %v", result.err)
 		}
 	})
@@ -887,14 +938,14 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
 		var output bytes.Buffer
 		f.provider.Output = &output
-		done := startLogin(ctx, f)
-		finishExchange(t, f, "apply")
+		done := startOAuthLogin(t, ctx, f)
+		finishExchange(t, f, done, "apply")
 		if _, body := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin"); !strings.Contains(body, "true") {
 			t.Fatalf("apply response = %q", body)
 		}
 		time.Sleep(20 * time.Millisecond)
 		cancel()
-		if result := <-done; !errors.Is(result.err, context.Canceled) {
+		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
 			t.Fatalf("canceled apply login = %v", result.err)
 		}
 		if !strings.Contains(output.String(), "Waiting for admin approval") && !strings.Contains(output.String(), "等待管理员审批中") {
@@ -908,9 +959,9 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 			return &CLIAuthStatus{Success: false, ErrorCode: "ENTERPRISE_NOT_AUTHORIZED"}, nil
 		}
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
-		done := startLogin(context.Background(), f)
-		finishExchange(t, f, "enterprise")
-		if result := <-done; result.err == nil || !strings.Contains(result.err.Error(), "企业安全认证") {
+		done := startOAuthLogin(t, context.Background(), f)
+		finishExchange(t, f, done, "enterprise")
+		if result := awaitOAuthLogin(t, done); result.err == nil || !strings.Contains(result.err.Error(), "企业安全认证") {
 			t.Fatalf("enterprise denial = %v", result.err)
 		}
 	})
@@ -933,15 +984,16 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		fail := errors.New("save failure")
 		oauthSaveToken = func(string, *TokenData) error { return fail }
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
-		done := startLogin(context.Background(), f)
-		finishExchange(t, f, "save")
-		if result := <-done; !errors.Is(result.err, fail) {
+		done := startOAuthLogin(t, context.Background(), f)
+		finishExchange(t, f, done, "save")
+		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, fail) {
 			t.Fatalf("save failure login = %v", result.err)
 		}
 	})
 }
 
 func TestCrossPlatformCoverageOAuthHelperRemainingEdges(t *testing.T) {
+	isolateOAuthPersistence(t)
 	oldClient := oauthHTTPClient
 	oldRequest := oauthNewRequest
 	oldRetry := oauthRetryAfter

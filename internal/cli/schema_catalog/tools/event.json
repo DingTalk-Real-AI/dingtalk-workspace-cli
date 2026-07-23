@@ -13,7 +13,7 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
       ],
-      "agent_summary": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+      "agent_summary": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
       "agent_summary_source": "dws-agent-selection/event",
       "availability": "available",
       "avoid_when": [
@@ -32,13 +32,13 @@
           ]
         ]
       },
-      "description": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。",
+      "description": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         单行紧凑 JSON；不传 --flatten 时沿用原 compact processor\n\n数据结构：\n  ndjson/json/pretty 默认保持 transport envelope（type/event_type/data/headers）\n  --flatten          结构化格式输出稳定的顶层业务字段，适合 Agent / 脚本直接消费\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。",
       "display": "事件订阅 (DingTalk Stream 长连接)",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-        "dws event consume user_im_message_reaction_group --group cid-example --max-events 1 --format ndjson"
+        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+        "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -48,14 +48,14 @@
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/event.json",
-              "value": "订阅并持续消费指定个人事件，输出 NDJSON 事件流"
+              "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "source": "internal/cli/schema_hints/selection/event.json",
-          "value": "订阅并持续消费指定个人事件，输出 NDJSON 事件流"
+          "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON"
         },
         "availability": {
           "candidates": [
@@ -133,13 +133,13 @@
               "precedence": "cobra_help",
               "selected": true,
               "source": "cobra_help",
-              "value": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。"
+              "value": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         单行紧凑 JSON；不传 --flatten 时沿用原 compact processor\n\n数据结构：\n  ndjson/json/pretty 默认保持 transport envelope（type/event_type/data/headers）\n  --flatten          结构化格式输出稳定的顶层业务字段，适合 Agent / 脚本直接消费\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。"
             }
           ],
           "precedence": "cobra_help",
           "resolution": "highest_precedence",
           "source": "cobra_help",
-          "value": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。"
+          "value": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         单行紧凑 JSON；不传 --flatten 时沿用原 compact processor\n\n数据结构：\n  ndjson/json/pretty 默认保持 transport envelope（type/event_type/data/headers）\n  --flatten          结构化格式输出稳定的顶层业务字段，适合 Agent / 脚本直接消费\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。"
         },
         "effect": {
           "candidates": [
@@ -165,8 +165,8 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/event.json",
               "value": [
-                "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-                "dws event consume user_im_message_reaction_group --group cid-example --max-events 1 --format ndjson"
+                "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+                "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
               ]
             }
           ],
@@ -175,8 +175,8 @@
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "source": "internal/cli/schema_hints/selection/event.json",
           "value": [
-            "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --max-events 1 --format ndjson",
-            "dws event consume user_im_message_reaction_group --group cid-example --max-events 1 --format ndjson"
+            "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+            "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
           ]
         },
         "idempotency": {
@@ -327,7 +327,7 @@
       "interface_reason": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
       "is_alias": false,
       "name": "consume",
-      "parameter_count": 27,
+      "parameter_count": 28,
       "parameters": {
         "compact": {
           "description": "提示 bus 客户端期望 compact 渲染（语义透传，bus 仍按原 payload 投递）",
@@ -1006,6 +1006,90 @@
           "property": "filterJson",
           "required": false,
           "type": "string"
+        },
+        "flatten": {
+          "description": "将个人事件 transport envelope 投影为稳定的顶层业务字段",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "将个人事件 transport envelope 投影为稳定的顶层业务字段"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "将个人事件 transport envelope 投影为稳定的顶层业务字段"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "flatten"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "flatten"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "flatten",
+          "required": false,
+          "type": "boolean"
         },
         "force": {
           "description": "仅 --foreground 模式生效：跳过单实例锁 (慎用：会让云事件被随机切分)",
@@ -3347,7 +3431,7 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
       ],
-      "agent_summary": "查询指定个人事件码的 payload 字段结构",
+      "agent_summary": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
       "agent_summary_source": "dws-agent-selection/event",
       "availability": "available",
       "avoid_when": [
@@ -3363,7 +3447,7 @@
       "effect": "read",
       "effect_source": "agent-hint",
       "examples": [
-        "dws event schema user_im_message_receive_at --format json"
+        "dws event schema user_im_message_receive_at --flatten --format json"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -3373,14 +3457,14 @@
               "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/event.json",
-              "value": "查询指定个人事件码的 payload 字段结构"
+              "value": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "source": "internal/cli/schema_hints/selection/event.json",
-          "value": "查询指定个人事件码的 payload 字段结构"
+          "value": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式"
         },
         "availability": {
           "candidates": [
@@ -3490,7 +3574,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/event.json",
               "value": [
-                "dws event schema user_im_message_receive_at --format json"
+                "dws event schema user_im_message_receive_at --flatten --format json"
               ]
             }
           ],
@@ -3499,7 +3583,7 @@
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "source": "internal/cli/schema_hints/selection/event.json",
           "value": [
-            "dws event schema user_im_message_receive_at --format json"
+            "dws event schema user_im_message_receive_at --flatten --format json"
           ]
         },
         "idempotency": {
@@ -3646,8 +3730,92 @@
       "interface_reason": "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
       "is_alias": false,
       "name": "schema",
-      "parameter_count": 1,
+      "parameter_count": 2,
       "parameters": {
+        "flatten": {
+          "description": "显示 --flatten 消费模式对应的顶层业务字段 schema",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "显示 --flatten 消费模式对应的顶层业务字段 schema"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "显示 --flatten 消费模式对应的顶层业务字段 schema"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "flatten"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "flatten"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "flatten",
+          "required": false,
+          "type": "boolean"
+        },
         "format": {
           "default": "json",
           "description": "输出格式: json",

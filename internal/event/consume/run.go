@@ -90,6 +90,10 @@ type Config struct {
 	// NormalizeFormat; an empty Format here defaults to NDJSON inside
 	// BuildPipeline.
 	Format Format
+	// Flatten records whether the caller explicitly selected a structured
+	// business projection. Projector remains the executable behavior; this
+	// field is surfaced in dry-run output so users can verify the final mode.
+	Flatten bool
 	// OutputDir, if non-empty, switches the fallback sink from stdout to
 	// "file per event" under this directory.
 	OutputDir string

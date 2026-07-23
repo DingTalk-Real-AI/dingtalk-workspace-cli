@@ -56,7 +56,7 @@ var openBrowserFunc = tryOpenBrowser
 var (
 	patAuthorizationTimeout       = PatAuthRetryTimeout
 	patAuthorizationPollInterval  = PatAuthPollInterval
-	patLoadTokenData              = authpkg.LoadTokenData
+	patResolveAccessToken         = ResolveAuxiliaryAccessToken
 	patWaitForAuthorization       = WaitForPatAuthorization
 	patPollDeviceFlowWithInterval = pollPatDeviceFlowWithInterval
 	patSaveAppConfig              = authpkg.SaveAppConfig
@@ -272,7 +272,7 @@ func patAuthorizationURIFromData(data map[string]any) string {
 
 // WaitForPatAuthorization polls until the user completes authorization or timeout.
 // It returns true if authorization was completed, false if timed out or cancelled.
-func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Writer) bool {
+func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Writer) (bool, error) {
 	timeout := patAuthorizationTimeout
 	deadline := time.Now().Add(timeout)
 	pollTicker := time.NewTicker(patAuthorizationPollInterval)
@@ -290,27 +290,26 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 		select {
 		case <-ctx.Done():
 			fmt.Fprintf(output, "%s 操作已取消\n", tui.StateMark("error"))
-			return false
+			return false, ctx.Err()
 
 		case <-time.After(time.Until(deadline)):
 			fmt.Fprintf(output, "%s 等待授权超时 (%s)\n", tui.StateMark("error"), timeout)
 			fmt.Fprintf(output, "  %s 请重新执行命令\n", tui.Dim("ℹ"))
-			return false
+			return false, nil
 
 		case <-pollTicker.C:
 			pollCount++
 			elapsed := time.Since(start).Truncate(time.Second)
 			remaining := time.Until(deadline).Truncate(time.Second)
 
-			// Check if token is now valid
-			tokenData, err := patLoadTokenData(configDir)
-			if err == nil && tokenData != nil {
-				if tokenData.IsAccessTokenValid() || tokenData.IsRefreshTokenValid() {
-					fmt.Fprintf(output, "\r%s %s (%s 已用, %s 剩余)          \n",
-						tui.StateMark("ok"), tui.Bold("授权成功!"), elapsed, remaining)
-					fmt.Fprintln(output)
-					return true
-				}
+			// Check the same resolver used by every outbound bearer request.
+			if _, err := patResolveAccessToken(ctx, configDir, ""); err == nil {
+				fmt.Fprintf(output, "\r%s %s (%s 已用, %s 剩余)          \n",
+					tui.StateMark("ok"), tui.Bold("授权成功!"), elapsed, remaining)
+				fmt.Fprintln(output)
+				return true, nil
+			} else if !stderrors.Is(err, authpkg.ErrTokenDataNotFound) {
+				return false, fmt.Errorf("check authorization token: %w", err)
 			}
 
 			// Show polling status
@@ -340,7 +339,10 @@ func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocati
 	PrintPatAuthError(output, scopeErr)
 
 	// Wait for user to complete authorization
-	authorized := patWaitForAuthorization(ctx, configDir, output)
+	authorized, waitErr := patWaitForAuthorization(ctx, configDir, output)
+	if waitErr != nil {
+		return executor.Result{}, waitErr
+	}
 	if !authorized {
 		return executor.Result{}, apperrors.NewAuth(
 			"等待用户授权超时",
@@ -794,12 +796,6 @@ func pollPatDeviceFlowWithInterval(ctx context.Context, flowID string, configDir
 	pollURL := fmt.Sprintf("%s%s?flowId=%s",
 		authpkg.GetMCPBaseURL(), authpkg.DevicePollPath, url.QueryEscape(flowID))
 
-	// Load user access token for the poll request header.
-	var accessToken string
-	if tokenData, err := authpkg.LoadTokenData(configDir); err == nil && tokenData != nil {
-		accessToken = tokenData.AccessToken
-	}
-
 	// Use a client that does NOT follow redirects, so we can detect SSO 302.
 	noRedirectClient := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -827,6 +823,10 @@ func pollPatDeviceFlowWithInterval(ctx context.Context, flowID string, configDir
 			if err != nil {
 				slog.Debug("PAT poll: failed to create request", "error", err)
 				continue
+			}
+			accessToken, tokenErr := patResolveAccessToken(ctx, configDir, "")
+			if tokenErr != nil && !stderrors.Is(tokenErr, authpkg.ErrTokenDataNotFound) {
+				return "", "", fmt.Errorf("resolve PAT poll access token: %w", tokenErr)
 			}
 			if accessToken != "" {
 				req.Header.Set("x-user-access-token", accessToken)

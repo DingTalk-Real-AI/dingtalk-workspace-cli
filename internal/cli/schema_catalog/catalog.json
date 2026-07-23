@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
-  "source_hash": "sha256:522d4b43cf13f07430a407319a772cd11e9b1f268f8d98b4d68bdb385e4e585b",
+  "surface_hash": "sha256:e85148774f65d34b01d50ebdc702b785afdb8ea78663b6f2eeecc35bc3cb3fd5",
+  "source_hash": "sha256:360114d03cc3e8dc6cef30c6e617cc40f88e5577c29dd5b5946fe1cde91eb9de",
   "catalog": {
     "agent_metadata": {
-      "products_with_metadata": 22,
+      "products_with_metadata": 23,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:de587cba5051dd4c2715353012d8d9f2a7c5208a0c6dee4ea703cfc97b7351f0",
-      "surface_hash": "sha256:7ef588f38052f0104e027c8daff5fefd68698781f2c87715461183d4058288ed",
-      "surface_products": 22,
-      "surface_tools": 572,
-      "tools_with_agent_summary": 572,
-      "tools_with_metadata": 572,
-      "unmatched_skill_tools": 120,
+      "source_hash": "sha256:0977e2b3d4af77d348318fd0cd7ce36d325ba9ca4e7c9ed0d6daeb1be0a0c4ec",
+      "surface_hash": "sha256:e85148774f65d34b01d50ebdc702b785afdb8ea78663b6f2eeecc35bc3cb3fd5",
+      "surface_products": 23,
+      "surface_tools": 573,
+      "tools_with_agent_summary": 573,
+      "tools_with_metadata": 573,
+      "unmatched_skill_tools": 119,
       "version": 1
     },
-    "count": 22,
+    "count": 23,
     "interface_metadata": {
       "coverage": {
         "aliased_tools": 178,
@@ -7660,7 +7660,7 @@
             "cli_name": "send",
             "cli_path": "chat message send",
             "confirmation": "not_required",
-            "description": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n富媒体消息（通过 --msg-type 指定类型）：\n  image — 发送图片：--msg-type image --media-id（通过 dt_media_upload 上传获得）\n  file/audio/video — 发送文件、音频、视频：传本地 --file-path，CLI 会上传后按 file 消息发送",
+            "description": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n本地图片 / 文件消息：\n  统一使用 --msg-type file --file-path \u003c本地路径\u003e。CLI 会完成上传并按 file 消息发送；\n  .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。\n\n旧版内联图片消息：\n  仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。\n  当前 CLI 不提供本地文件到 mediaId 的上传能力。",
             "effect": "write",
             "group": "message",
             "idempotency": "unknown",
@@ -12178,7 +12178,7 @@
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "订阅并持续消费指定个人事件，输出 NDJSON 事件流",
+            "agent_summary": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
             "agent_summary_source": "dws-agent-selection/event",
             "availability": "available",
             "avoid_when": [
@@ -12189,7 +12189,7 @@
             "cli_name": "consume",
             "cli_path": "event consume",
             "confirmation": "not_required",
-            "description": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。",
+            "description": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         单行紧凑 JSON；不传 --flatten 时沿用原 compact processor\n\n数据结构：\n  ndjson/json/pretty 默认保持 transport envelope（type/event_type/data/headers）\n  --flatten          结构化格式输出稳定的顶层业务字段，适合 Agent / 脚本直接消费\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。",
             "effect": "write",
             "idempotency": "non_idempotent",
             "interface_mode": "composite",
@@ -12234,7 +12234,7 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询指定个人事件码的 payload 字段结构",
+            "agent_summary": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
             "agent_summary_source": "dws-agent-selection/event",
             "availability": "available",
             "avoid_when": [
@@ -13474,6 +13474,110 @@
         ],
         "use_when": [
           "查收、搜索、阅读、回复、发送或整理邮件"
+        ]
+      },
+      {
+        "agent_metadata_source": "embedded-skill-metadata",
+        "agent_source_refs": [
+          "CommandRegistry:product=mcp",
+          "cobra-help:dws mcp --help",
+          "internal/cli/schema_command_registry.json#mcp",
+          "internal/cli/schema_hints/selection/mcp.json"
+        ],
+        "agent_summary": "解析和管理当前身份可用的 MCP 服务连接信息",
+        "agent_summary_source": "dws-agent-selection/mcp",
+        "avoid_when": [
+          "查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp"
+        ],
+        "description": "管理 MCP 服务连接信息",
+        "field_provenance": {
+          "agent_summary": {
+            "candidates": [
+              {
+                "precedence": "reviewed_explicit",
+                "selected": true,
+                "source": "internal/cli/schema_hints/selection/mcp.json",
+                "value": "解析和管理当前身份可用的 MCP 服务连接信息"
+              }
+            ],
+            "precedence": "reviewed_explicit",
+            "resolution": "highest_precedence",
+            "source": "internal/cli/schema_hints/selection/mcp.json",
+            "value": "解析和管理当前身份可用的 MCP 服务连接信息"
+          },
+          "avoid_when": {
+            "candidates": [
+              {
+                "precedence": "reviewed_explicit",
+                "selected": true,
+                "source": "internal/cli/schema_hints/selection/mcp.json",
+                "value": [
+                  "查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp"
+                ]
+              }
+            ],
+            "precedence": "reviewed_explicit",
+            "resolution": "highest_precedence",
+            "source": "internal/cli/schema_hints/selection/mcp.json",
+            "value": [
+              "查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp"
+            ]
+          },
+          "use_when": {
+            "candidates": [
+              {
+                "precedence": "reviewed_explicit",
+                "selected": true,
+                "source": "internal/cli/schema_hints/selection/mcp.json",
+                "value": [
+                  "需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端"
+                ]
+              }
+            ],
+            "precedence": "reviewed_explicit",
+            "resolution": "highest_precedence",
+            "source": "internal/cli/schema_hints/selection/mcp.json",
+            "value": [
+              "需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端"
+            ]
+          }
+        },
+        "id": "mcp",
+        "name": "管理 MCP 服务连接信息",
+        "runtime": true,
+        "tool_count": 1,
+        "tools": [
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "按 MCP 市场 mcpId 获取当前用户和组织可用的 Streamable HTTP 地址",
+            "agent_summary_source": "dws-agent-selection/mcp",
+            "availability": "available",
+            "avoid_when": [
+              "只是查询 DWS 已公开命令或参数时使用 dws schema",
+              "用户要求把返回的凭据 URL 发送到群聊、文档、邮件、日志或代码仓库时不要执行或传播"
+            ],
+            "canonical_path": "mcp.url_get",
+            "cli_name": "get",
+            "cli_path": "mcp url get",
+            "confirmation": "not_required",
+            "description": "输入 MCP 市场 mcpId，返回以当前用户和组织身份访问该 MCP 的 Streamable HTTP 服务地址。\n\n安全提示：返回的 mcpURL 和 mcpJSON 可能包含身份凭据，仅限个人使用，请勿分享到群聊、文档、邮件、代码仓库或日志。",
+            "effect": "read",
+            "group": "url",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: the public CLI wrapper calls the helper-only mcp-meta/get_mcp_server_url endpoint, which is intentionally absent from the public product catalog and pinned MCP metadata.",
+            "name": "url_get",
+            "primary_cli_path": "mcp url get",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "按 mcpId 获取 MCP 的 Streamable HTTP 服务地址",
+            "use_when": [
+              "已知钉钉 MCP 市场 mcpId，需要获得当前身份可用的 Streamable HTTP 连接地址"
+            ]
+          }
+        ],
+        "use_when": [
+          "需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端"
         ]
       },
       {
@@ -19153,6 +19257,6 @@
       }
     ],
     "source": "embedded-command-catalog",
-    "tool_count": 572
+    "tool_count": 573
   }
 }

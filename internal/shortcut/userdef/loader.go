@@ -196,6 +196,7 @@ func Compile(s Spec) shortcut.Shortcut {
 		Intent:      intent,
 		Risk:        risk,
 		Flags:       flags,
+		UserDefined: true,
 		Execute: func(rt *shortcut.RuntimeContext) error {
 			params := map[string]any{}
 			for key, tmpl := range bind {

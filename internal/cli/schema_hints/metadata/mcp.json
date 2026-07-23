@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/mcp",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "mcp.url_get": {
+      "effect": "read",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the public CLI wrapper calls the helper-only mcp-meta/get_mcp_server_url endpoint, which is intentionally absent from the public product catalog and pinned MCP metadata.",
+      "runtime_gate": "none",
+      "reviewed": true,
+      "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output."
+    }
+  }
+}

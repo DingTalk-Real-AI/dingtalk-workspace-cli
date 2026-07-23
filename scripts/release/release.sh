@@ -134,16 +134,44 @@ require_github_publication_authority() {
   }
 
   sealed_commit="$(git rev-parse HEAD)"
-  passed_gate="$(
+  admission_check_runs="$(
     gh api -H 'Accept: application/vnd.github+json' \
-      "repos/$github_repository/commits/$sealed_commit/check-runs?check_name=CI%20Gate&filter=latest&per_page=100" \
-      --jq '[.check_runs[] | select(.name == "CI Gate" and .conclusion == "success")] | length'
+      "repos/$github_repository/commits/$sealed_commit/check-runs?filter=latest&per_page=100" \
+      --jq '.check_runs | group_by(.name) | map(max_by(.id)) | .[] | [.name, (.conclusion // .status // "unknown")] | @tsv'
   )" || {
-    printf 'could not query CI Gate for %s\n' "$sealed_commit" >&2
+    printf 'could not query Code Admission contexts for %s\n' "$sealed_commit" >&2
     return 1
   }
-  [ "$passed_gate" -gt 0 ] || {
-    printf 'CI Gate has not succeeded for sealed commit %s in %s\n' "$sealed_commit" "$github_repository" >&2
+
+  missing_contexts=""
+  non_success_contexts=""
+  while IFS= read -r required_context; do
+    context_state="$(
+      printf '%s\n' "$admission_check_runs" |
+        awk -F '\t' -v required="$required_context" '$1 == required { state = $2 } END { print state }'
+    )"
+    if [ -z "$context_state" ]; then
+      missing_contexts="${missing_contexts}${missing_contexts:+, }$required_context"
+    elif [ "$context_state" != "success" ]; then
+      non_success_contexts="${non_success_contexts}${non_success_contexts:+, }$required_context=$context_state"
+    fi
+  done <<'ADMISSION_CONTEXTS'
+Lint
+Test
+Coverage
+Policy
+Edition
+Interface Integrity
+AI Behavior
+CLI Smoke
+Mock MCP
+ADMISSION_CONTEXTS
+  [ -z "$missing_contexts" ] && [ -z "$non_success_contexts" ] || {
+    printf 'Code Admission contexts are not all successful for sealed commit %s in %s; missing: %s; non-success: %s\n' \
+      "$sealed_commit" \
+      "$github_repository" \
+      "${missing_contexts:-none}" \
+      "${non_success_contexts:-none}" >&2
     return 1
   }
 
@@ -260,8 +288,12 @@ build_policy_binary() {
 }
 
 fetch_release_tags() {
-  git fetch --force "$REMOTE" '+refs/tags/v*:refs/tags/v*'
-  git fetch --force --no-tags "$OFFICIAL_TAGS_URL" '+refs/tags/v*:refs/tags/v*'
+  git fetch --force "$REMOTE" \
+    '+refs/tags/v*:refs/tags/v*' \
+    '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
+  git fetch --force --no-tags "$OFFICIAL_TAGS_URL" \
+    '+refs/tags/v*:refs/tags/v*' \
+    '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 }
 
 printf '==> Refreshing %s/%s and release tags\n' "$REMOTE" "$BRANCH"
@@ -319,7 +351,7 @@ else
   if [ -n "$previous_stable" ]; then
     printf '==> Comparing command tree with %s\n' "$previous_stable"
     "$ROOT/scripts/policy/check-command-compatibility.sh" \
-      --base-ref "$REMOTE/$BRANCH" \
+      --base-ref HEAD \
       --stable-ref "$previous_stable"
   fi
 
@@ -373,7 +405,7 @@ if [ "$previous_stable" != "$previous_stable_before_refresh" ]; then
   printf '==> Stable authority advanced from %s to %s; rechecking command compatibility\n' \
     "${previous_stable_before_refresh:-none}" "$previous_stable"
   "$ROOT/scripts/policy/check-command-compatibility.sh" \
-    --base-ref "$REMOTE/$BRANCH" \
+    --base-ref HEAD \
     --stable-ref "$previous_stable"
 fi
 
@@ -384,9 +416,9 @@ fi
 
 # Delivery, compatibility, and publication checks above may take long enough
 # for main or stable authority to move. This last refresh must be followed only
-# by local proof/tag creation. The atomic push advertises main with the tag, so
-# an already-advanced remote main rejects the whole transaction; a later main
-# advance is safe because the sealed commit remains in protected main history.
+# by local proof/tag creation. Only the tag is pushed: the sealed commit is
+# already contained in protected main history, so a later main advance never
+# invalidates the release.
 printf '==> Settling final %s/%s and stable authority\n' "$REMOTE" "$BRANCH"
 git fetch --force "$REMOTE" "+refs/heads/$BRANCH:refs/remotes/$REMOTE/$BRANCH"
 fetch_release_tags
@@ -415,8 +447,7 @@ else
   git tag -a "$VERSION" -m "Release $VERSION" -m 'Channel: prerelease'
 fi
 
-if ! git push --atomic "$push_url" \
-  "HEAD:refs/heads/$BRANCH" "refs/tags/$VERSION"; then
+if ! git push "$push_url" "refs/tags/$VERSION"; then
   set +e
   remote_refs="$(git ls-remote --tags "$push_url" "refs/tags/$VERSION" "refs/tags/$VERSION^{}")"
   query_status=$?

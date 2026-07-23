@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -31,6 +32,41 @@ var expectedPackagedSkillTargets = []string{
 	".trae/skills/dws",
 	".openclaw/skills/dws",
 	".hermes/skills/dws",
+}
+
+var expectedReleaseAdmissionContexts = []string{
+	"Lint",
+	"Test",
+	"Coverage",
+	"Policy",
+	"Edition",
+	"Interface Integrity",
+	"AI Behavior",
+	"CLI Smoke",
+	"Mock MCP",
+}
+
+func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-package-managers.sh"))
+	if err != nil {
+		t.Fatalf("Abs(verify-package-managers.sh) error = %v", err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	script := string(data)
+	for _, binary := range []string{`"$vendor_bin"`, `"$prefix/bin/dws"`} {
+		want := `LC_ALL=C grep -aFq "v$EXPECTED_VERSION" ` + binary
+		if !strings.Contains(script, want) {
+			t.Errorf("package-manager verifier is missing raw binary marker check %q", want)
+		}
+	}
+	if strings.Contains(script, `strings "$vendor_bin"`) || strings.Contains(script, `strings "$prefix/bin/dws"`) {
+		t.Fatal("package-manager verifier still requires the version marker to occupy a strings(1) line")
+	}
 }
 
 func seedDistArchive(t *testing.T, path string) {
@@ -624,17 +660,48 @@ func releaseWorkflowSection(t *testing.T, workflow, startMarker, endMarker strin
 	return workflow[start : start+len(startMarker)+end]
 }
 
+func releaseWorkflowRunScript(t *testing.T, workflow, stepName, nextStepName string) string {
+	t.Helper()
+	section := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: "+stepName+"\n",
+		"\n      - name: "+nextStepName+"\n",
+	)
+	const runMarker = "        run: |\n"
+	start := strings.Index(section, runMarker)
+	if start == -1 {
+		t.Fatalf("release workflow step %q is missing a run block", stepName)
+	}
+
+	lines := strings.Split(section[start+len(runMarker):], "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "          ") {
+			t.Fatalf("release workflow step %q has an unexpected run indentation: %q", stepName, line)
+		}
+		lines[i] = strings.TrimPrefix(line, "          ")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
 
 	const (
 		checksCall    = "github.rest.checks.listForRef"
+		paginatedCall = "github.paginate(github.rest.checks.listForRef"
 		immutableCall = `"GET /repos/{owner}/{repo}/immutable-releases"`
 		governanceID  = `github-token: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}`
 	)
 	if got := strings.Count(workflow, checksCall); got != 2 {
 		t.Fatalf("release workflow Checks API call count = %d, want one tag check and one preflight check", got)
+	}
+	if got := strings.Count(workflow, paginatedCall); got != 2 {
+		t.Fatalf("release workflow paginated Checks API call count = %d, want one tag check and one preflight check", got)
 	}
 	if got := strings.Count(workflow, immutableCall); got != 2 {
 		t.Fatalf("release workflow immutable governance call count = %d, want one tag check and one preflight check", got)
@@ -651,6 +718,12 @@ func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 		for _, required := range []string{
 			"checks: read",
 			checksCall,
+			paginatedCall,
+			"run.head_sha !== sha",
+			"const missing = requiredContexts.filter",
+			"const nonSuccess = requiredContexts.flatMap",
+			"missing:",
+			"non-success:",
 			immutableCall,
 			governanceID,
 			"RELEASE_GOVERNANCE_TOKEN with repository Administration read permission is required",
@@ -659,12 +732,65 @@ func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 				t.Errorf("%s governance path is missing %q", name, required)
 			}
 		}
+		for _, context := range expectedReleaseAdmissionContexts {
+			if !strings.Contains(section, fmt.Sprintf("%q", context)) {
+				t.Errorf("%s governance path is missing exact Code Admission context %q", name, context)
+			}
+		}
+		if strings.Contains(section, "check_name:") {
+			t.Errorf("%s governance path must fetch all check runs in one exact-SHA query", name)
+		}
 		if strings.Contains(section, "contents: write") {
 			t.Errorf("%s governance path must not grant contents write permission", name)
 		}
 		if strings.Contains(section, `github-token: ${{ secrets.GITHUB_TOKEN }}`) {
 			t.Errorf("%s immutable governance path must not fall back to GITHUB_TOKEN", name)
 		}
+	}
+	if strings.Contains(workflow, "CI"+" Gate") {
+		t.Error("release workflow must not retain the retired aggregate gate name")
+	}
+}
+
+func TestReleaseScriptRequiresExactCodeAdmissionContexts(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(release.sh) error = %v", err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	script := string(data)
+
+	const checksQuery = `commits/$sealed_commit/check-runs?filter=latest&per_page=100`
+	if got := strings.Count(script, checksQuery); got != 1 {
+		t.Fatalf("release script exact-SHA Checks API query count = %d, want 1", got)
+	}
+	for _, required := range []string{
+		`group_by(.name) | map(max_by(.id))`,
+		`missing_contexts=""`,
+		`non_success_contexts=""`,
+		`"$context_state" != "success"`,
+		"Code Admission contexts are not all successful for sealed commit",
+		"missing: %s; non-success: %s",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("release script Code Admission gate is missing %q", required)
+		}
+	}
+	for _, context := range expectedReleaseAdmissionContexts {
+		if !strings.Contains(script, "\n"+context+"\n") {
+			t.Errorf("release script is missing exact Code Admission context %q", context)
+		}
+	}
+	if strings.Contains(script, "check_name=") {
+		t.Error("release script must fetch all check runs in one exact-SHA query")
+	}
+	if strings.Contains(script, "CI"+" Gate") {
+		t.Error("release script must not retain the retired aggregate gate name")
 	}
 }
 
@@ -683,7 +809,7 @@ func TestReleaseWorkflowGovernancePreflightCannotPublish(t *testing.T) {
 		"EXPECTED_REPOSITORY: DingTalk-Real-AI/dingtalk-workspace-cli",
 		`DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}`,
 		`test "$PREFLIGHT_COMMIT" = "$GITHUB_SHA"`,
-		`ref: ${{ inputs.governance_preflight_commit }}`,
+		`ref: ${{ needs.dispatch-contract.outputs.mode == 'create_release' && github.sha || inputs.governance_preflight_commit }}`,
 		"persist-credentials: false",
 		"governance preflight cannot be combined with npm repair",
 	} {
@@ -703,10 +829,10 @@ func TestReleaseWorkflowGovernancePreflightCannotPublish(t *testing.T) {
 			t.Errorf("governance preflight must not contain publishing behavior %q", forbidden)
 		}
 	}
-	ciGate := strings.Index(preflight, "Require successful CI Gate on the preflight commit")
+	admission := strings.Index(preflight, "Require successful Code Admission contexts on the preflight commit")
 	homebrewCanary := strings.Index(preflight, "Verify Homebrew PR automation permission")
-	if ciGate == -1 || homebrewCanary == -1 || ciGate > homebrewCanary {
-		t.Error("governance preflight must validate the exact CI Gate before exposing Homebrew credentials")
+	if admission == -1 || homebrewCanary == -1 || admission > homebrewCanary {
+		t.Error("governance preflight must validate all exact Code Admission contexts before exposing Homebrew credentials")
 	}
 
 	mirror := releaseWorkflowSection(t, workflow, "  mirror-gitee-release:\n", "\n  repair-npm:\n")
@@ -717,10 +843,384 @@ func TestReleaseWorkflowGovernancePreflightCannotPublish(t *testing.T) {
 	for _, required := range []string{
 		"needs: dispatch-contract",
 		"needs.dispatch-contract.outputs.mode == 'repair_npm'",
+		`ref: ` + "`tags/withdrawn/${version}`",
+		"was withdrawn and cannot be repaired",
+		"verify-release-workflow-delivery.sh --npm-repair",
 	} {
 		if !strings.Contains(repair, required) {
 			t.Errorf("npm repair dispatch contract is missing %q", required)
 		}
+	}
+}
+
+func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	planStart := strings.Index(workflow, "  release-plan:\n")
+	sealStart := strings.Index(workflow, "  seal-release:\n")
+	if planStart == -1 || sealStart == -1 || planStart >= sealStart {
+		t.Fatal("cloud release plan and seal jobs are missing or out of order")
+	}
+	plan := workflow[planStart:sealStart]
+	seal := workflow[sealStart:]
+
+	for _, required := range []string{
+		"release_operation:",
+		"- none",
+		"- plan",
+		"- publish",
+		"release_channel:",
+		"release_bump:",
+		"release_confirmation:",
+		`release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery`,
+		`echo "mode=plan_release"`,
+		`echo "mode=create_release"`,
+		`release_confirmation must be exactly: PUBLISH $RELEASE_CHANNEL`,
+		`needs.dispatch-contract.outputs.mode == 'plan_release'`,
+		`needs.governance-preflight.result == 'success'`,
+		"actions: read",
+		"contents: read",
+		`github.event.repository.default_branch`,
+		`GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY`,
+		`GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH`,
+		`ref: ${{ github.sha }}`,
+		"persist-credentials: false",
+		`refs/remotes/origin/main)" = "$GITHUB_SHA`,
+		"next-release-version.sh",
+		`'refs/tags/v*' 'refs/tags/withdrawn/v*'`,
+		"release ref manifest is empty after fetching allocated tags",
+		"refs_fingerprint",
+		"Validate the candidate release contract before sealing",
+		"release-contract.sh",
+		"Require delivered previous stable baseline before sealing",
+		"Require delivered beta before sealing stable",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("cloud release contract is missing %q", required)
+		}
+	}
+	if strings.Contains(plan, "contents: write") {
+		t.Error("cloud release planning must remain read-only")
+	}
+	if strings.Contains(plan, "refs/tags/v refs/tags/withdrawn/v") {
+		t.Error("cloud release planning must use wildcard ref patterns that match the seal API prefixes")
+	}
+
+	for _, required := range []string{
+		"name: Seal cloud release tag",
+		"contents: write",
+		"name: Create one immutable annotated release tag",
+		`branch.data.commit.sha !== commit`,
+		`actualFingerprint !== expectedFingerprint`,
+		`github.rest.git.createTag`,
+		`github.rest.git.createRef`,
+		`ref: ` + "`refs/tags/${version}`",
+		"`Release-Run: ${context.runId}`",
+		"`Requested-By: ${context.actor}`",
+		"`Requested-By-ID: ${context.payload.sender?.id || \"\"}`",
+		"`Sealed-Commit: ${commit}`",
+		"`Workflow-Commit: ${context.sha}`",
+		"`Allocation-Fingerprint: ${expectedFingerprint}`",
+	} {
+		if !strings.Contains(seal, required) {
+			t.Errorf("cloud release seal is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"actions/checkout",
+		"github.rest.git.updateRef",
+		"github.rest.git.deleteRef",
+		"git push",
+		"--force",
+	} {
+		if strings.Contains(seal, forbidden) {
+			t.Errorf("write-capable cloud seal must not contain %q", forbidden)
+		}
+	}
+}
+
+func TestReleaseFingerprintRefPatternsMatchAllAllocatedTags(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	mustRun(t, repo, "git", "config", "user.name", "Release Fingerprint Test")
+	mustRun(t, repo, "git", "config", "user.email", "release-fingerprint@example.com")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("fixture\n"), 0o644)
+	mustRun(t, repo, "git", "add", "tracked")
+	mustRun(t, repo, "git", "commit", "-m", "fixture")
+
+	allocatedTags := []string{
+		"v1.0.52",
+		"v1.0.53-beta.5",
+		"withdrawn/v1.0.51",
+	}
+	for _, tag := range allocatedTags {
+		mustRun(t, repo, "git", "tag", "-a", tag, "-m", "Release "+tag)
+	}
+	mustRun(t, repo, "git", "tag", "-a", "release/v1.0.52", "-m", "unrelated namespace")
+	legacy := exec.Command(
+		"git", "for-each-ref", "--format=%(refname)=%(objectname)",
+		"refs/tags/v", "refs/tags/withdrawn/v",
+	)
+	legacy.Dir = repo
+	legacyOutput, err := legacy.CombinedOutput()
+	if err != nil {
+		t.Fatalf("legacy git for-each-ref error = %v\noutput:\n%s", err, legacyOutput)
+	}
+	if strings.TrimSpace(string(legacyOutput)) != "" {
+		t.Fatalf("legacy component patterns unexpectedly matched flat release refs:\n%s", legacyOutput)
+	}
+
+	cmd := exec.Command(
+		"git", "for-each-ref", "--format=%(refname)=%(objectname)",
+		"refs/tags/v*", "refs/tags/withdrawn/v*",
+	)
+	cmd.Dir = repo
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git for-each-ref error = %v\noutput:\n%s", err, output)
+	}
+	got := strings.Split(strings.TrimSpace(string(output)), "\n")
+	sort.Strings(got)
+
+	want := make([]string, 0, len(allocatedTags))
+	for _, tag := range allocatedTags {
+		object := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/"+tag))
+		want = append(want, "refs/tags/"+tag+"="+object)
+	}
+	sort.Strings(want)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("release ref set differs from the seal API set\ngot:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	workflowDigest := sha256.Sum256([]byte(strings.Join(got, "\n") + "\n"))
+	sealDigest := sha256.Sum256([]byte(strings.Join(want, "\n") + "\n"))
+	if workflowDigest != sealDigest {
+		t.Fatalf("release ref fingerprint differs from seal fingerprint: workflow=%x seal=%x", workflowDigest, sealDigest)
+	}
+}
+
+func TestReleaseWorkflowAcceptsGuardedLocalTagMetadata(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+
+	for _, required := range []string{
+		`const cloudOnlyKeys = [`,
+		`const cloudKeys = ["Channel", ...cloudOnlyKeys];`,
+		`const hasAnyCloudMetadata = cloudOnlyKeys.some((key) => tagFields.has(key));`,
+		`const isCloudSeal = cloudKeys.every((key) => tagFields.has(key));`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("local tag metadata compatibility is missing %q", required)
+		}
+	}
+	if strings.Contains(workflow, `const hasAnyCloudMetadata = cloudKeys.some((key) => tagFields.has(key));`) {
+		t.Error("Channel-only guarded local tags must not be classified as partial cloud seals")
+	}
+}
+
+func TestReleaseWorkflowRequiresOSSOnlyWhenMirrorIsEnabled(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	releaseContract := releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n")
+	targetAuthority := releaseWorkflowSection(
+		t,
+		releaseContract,
+		"      - name: Resolve and verify exact release target\n",
+		"\n      - name: Check out repository\n",
+	)
+	ossStep := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: Sync release artifacts to China OSS mirror\n",
+		"\n  mirror-gitee-release:\n",
+	)
+
+	for _, required := range []string{
+		`if: ${{ needs.release-contract.outputs.oss_mirror == 'enabled' }}`,
+		`run: ./scripts/release/sync-to-oss.sh`,
+		`DWS_REQUIRE_OSS: "1"`,
+	} {
+		if !strings.Contains(ossStep, required) {
+			t.Errorf("opt-in OSS publication is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		`OSS_MIRROR: ${{ vars.ENABLE_OSS_MIRROR == 'true' && 'enabled' || 'deferred' }}`,
+		`OSS-Mirror: ${ossMirror}`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("immutable OSS release policy is missing %q", required)
+		}
+	}
+	if strings.Contains(ossStep, "vars.ENABLE_OSS_MIRROR") {
+		t.Error("channel publication must use the immutable tag policy, not the current repository variable")
+	}
+	for _, required := range []string{
+		`const ossMirror = tagFields.has("OSS-Mirror")`,
+		`? tagFields.get("OSS-Mirror")`,
+		`: "enabled";`,
+		`!["enabled", "deferred"].includes(ossMirror)`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(targetAuthority, required) {
+			t.Errorf("release target OSS policy authority is missing %q", required)
+		}
+	}
+}
+
+func TestReleaseWorkflowChannelRepairUsesSealedReleaseAuthority(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	dispatch := releaseWorkflowSection(t, workflow, "  dispatch-contract:\n", "\n  authorize-recovery:\n")
+	start := strings.Index(workflow, "  repair-channel:\n")
+	if start == -1 {
+		t.Fatal("release workflow is missing the channel repair job")
+	}
+	end := strings.Index(workflow[start:], "\n  release-plan:\n")
+	if end == -1 {
+		t.Fatal("release workflow channel repair job is missing its end marker")
+	}
+	repair := workflow[start : start+end]
+	authority := releaseWorkflowSection(
+		t,
+		repair,
+		"      - name: Verify immutable release authority\n",
+		"\n      - name: Require sealed OSS policy for repair\n",
+	)
+	tagAuthority := releaseWorkflowSection(
+		t,
+		repair,
+		"      - name: Fetch and verify sealed release tag\n",
+		"\n      - name: Require successful Release workflow delivery\n",
+	)
+
+	for _, required := range []string{
+		"repair_gitee_version:",
+		`format('Release Gitee repair {0}', inputs.repair_gitee_version)`,
+		`REPAIR_GITEE_VERSION: ${{ inputs.repair_gitee_version }}`,
+		"repair_oss_version:",
+		`format('Release OSS repair {0}', inputs.repair_oss_version)`,
+		`REPAIR_OSS_VERSION: ${{ inputs.repair_oss_version }}`,
+		"gitee_repair=0",
+		"oss_repair=0",
+		`test -z "$REPAIR_GITEE_VERSION" || gitee_repair=1`,
+		`test -z "$REPAIR_OSS_VERSION" || oss_repair=1`,
+		"release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery",
+		`echo "mode=repair_gitee" >> "$GITHUB_OUTPUT"`,
+		`echo "mode=repair_oss" >> "$GITHUB_OUTPUT"`,
+	} {
+		if !strings.Contains(dispatch, required) && !strings.Contains(workflow, required) {
+			t.Errorf("channel repair dispatch contract is missing %q", required)
+		}
+	}
+
+	for _, required := range []string{
+		"needs: dispatch-contract",
+		`if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'repair_gitee' || needs.dispatch-contract.outputs.mode == 'repair_oss') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}`,
+		`github.ref == format('refs/heads/{0}', github.event.repository.default_branch)`,
+		`github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli'`,
+		"actions: read",
+		"contents: read",
+		`ref: ${{ github.sha }}`,
+		"path: tooling",
+		"persist-credentials: false",
+		"release_is_stable_version",
+		"release_is_prerelease_version",
+		`ref: ` + "`tags/withdrawn/${version}`",
+		"was withdrawn and cannot be repaired",
+		`ref: ` + "`tags/${version}`",
+		`["ahead", "identical"].includes(comparison.data.status)`,
+		"!release.data.immutable",
+		`release.data.prerelease !== expectedPrerelease`,
+		"assetNames.length !== expectedAssets.size",
+		"new Set(assetNames).size !== expectedAssets.size",
+		`core.setOutput("tag_object", ref.data.object.sha)`,
+		"Require sealed OSS policy for repair",
+		"OSS repair is unavailable because this immutable release deferred the OSS channel.",
+		`ref: ${{ steps.authority.outputs.commit_sha }}`,
+		"path: release-source",
+		"verify-github-tag-authority.sh",
+		`GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`,
+		"verify-release-workflow-delivery.sh",
+		`REPAIR_MODE: ${{ needs.dispatch-contract.outputs.mode }}`,
+		"repair_gitee) target=gitee",
+		"repair_oss) target=oss",
+		`--channel-repair "$target"`,
+		`DWS_RELEASE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`,
+		"verify-release-artifacts.sh",
+		`--repo "$GITHUB_REPOSITORY"`,
+		`if: ${{ needs.dispatch-contract.outputs.mode == 'repair_gitee' }}`,
+		`DWS_REQUIRE_GITEE: "1"`,
+		`if: ${{ needs.dispatch-contract.outputs.mode == 'repair_oss' }}`,
+		`DWS_REQUIRE_OSS: "1"`,
+		`OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}`,
+		`OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}`,
+		`OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}`,
+		`OSS_BUCKET: ${{ secrets.OSS_BUCKET }}`,
+		`OSS_PREFIX: ${{ secrets.OSS_PREFIX }}`,
+		"working-directory: release-source",
+		"working-directory: tooling\n        run: |\n          " +
+			`"$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-gitee.sh"`,
+		`"$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-oss.sh"`,
+	} {
+		if !strings.Contains(repair, required) {
+			t.Errorf("channel repair authority is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		`const tagFields = new Map();`,
+		`const ossMirror = tagFields.has("OSS-Mirror")`,
+		`? tagFields.get("OSS-Mirror")`,
+		`: "enabled";`,
+		`!["enabled", "deferred"].includes(ossMirror)`,
+		`core.setOutput("oss_mirror", ossMirror);`,
+	} {
+		if !strings.Contains(authority, required) {
+			t.Errorf("channel repair tag policy authority is missing %q", required)
+		}
+	}
+	npmRepair := releaseWorkflowSection(t, workflow, "  repair-npm:\n", "\n  release-delivery-gate:\n")
+	if strings.Contains(npmRepair, `const ossMirror`) || strings.Contains(npmRepair, `core.setOutput("oss_mirror"`) {
+		t.Error("npm repair must not parse or export the channel-only OSS policy")
+	}
+	if strings.Contains(repair, "ENABLE_OSS_MIRROR") {
+		t.Error("OSS repair must use the immutable tag policy, not the current repository variable")
+	}
+	for _, asset := range []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"dws-linux-amd64.tar.gz",
+		"dws-linux-arm64.tar.gz",
+		"dws-windows-amd64.zip",
+		"dws-windows-arm64.zip",
+		"dws-skills.zip",
+		"checksums.txt",
+	} {
+		if strings.Count(repair, `"`+asset+`"`) != 1 {
+			t.Errorf("channel repair must require exactly one %s asset declaration", asset)
+		}
+	}
+	if strings.Contains(repair, "contents: write") {
+		t.Error("channel repair must not grant contents write permission")
+	}
+	for _, forbidden := range []string{
+		"RELEASE_GOVERNANCE_TOKEN",
+		"HOMEBREW_PR_TOKEN",
+		"NPM_TOKEN",
+	} {
+		if strings.Contains(repair, forbidden) {
+			t.Errorf("channel repair must not expose unrelated credential %s", forbidden)
+		}
+	}
+	if strings.Contains(repair, "ref: ${{ github.event.repository.default_branch }}") {
+		t.Error("channel repair must not check out a floating default branch")
+	}
+	if !strings.Contains(tagAuthority, `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`) {
+		t.Error("remote annotated-tag authority step must receive the read-only GitHub token")
+	}
+	if got := strings.Count(repair, "working-directory: tooling"); got < 4 {
+		t.Errorf("channel repair trusted tooling working-directory count = %d, want at least 4", got)
 	}
 }
 
@@ -745,12 +1245,14 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		"protected_branches !== true",
 		"can_admins_bypass !== false",
 		`run.path !== ".github/workflows/release.yml"`,
-		`run.event !== "push"`,
+		`const expectedEvent = failedByCloud ? "workflow_dispatch" : "push"`,
+		`run.event !== expectedEvent`,
+		`tagFields.get("Release-Run") !== failedRunId`,
 		`"GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}"`,
 		"attempt_number: Number(failedRunAttempt)",
 		"run.run_attempt !== Number(failedRunAttempt)",
 		`["failure", "cancelled", "timed_out", "startup_failure", "stale"].includes(run.conclusion)`,
-		`run.head_branch !== version`,
+		`run.head_branch !== expectedBranch`,
 		`run.head_sha !== commit`,
 		`tagObject !== expectedTagObject`,
 		`["ahead", "identical"].includes(comparison.data.status)`,
@@ -759,10 +1261,11 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		"dws-release-recovery run=%s tag-object=%s commit=%s",
 		"Public release is not bound to this exact recovery run.",
 		"Public recovery asset differs from this run's sealed artifact",
-		`ref: process.env.RELEASE_COMMIT`,
+		`const sha = process.env.RELEASE_COMMIT`,
+		`ref: sha`,
 		`path: tmp/trusted-release-tooling`,
 		`ref: ${{ github.sha }}`,
-		`step.name === "Require immutable published GitHub Release"`,
+		"verify-release-workflow-delivery.sh",
 		"Require a clean sealed source before GoReleaser",
 		`git status --porcelain --untracked-files=all`,
 	} {
@@ -799,6 +1302,94 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	publishJob := releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n")
+	publishStep := releaseWorkflowSection(
+		t,
+		publishJob,
+		"      - name: Publish or reuse immutable GitHub Release\n",
+		"\n      - name: Require immutable published GitHub Release\n",
+	)
+
+	for _, required := range []string{
+		"id: publish",
+		"--json databaseId",
+		`"repos/$GITHUB_REPOSITORY/releases/$release_id"`,
+		`uploaded_release_id="$(`,
+		`test "$uploaded_release_id" = "$release_id"`,
+		"Draft GitHub Release ID $release_id targets",
+		"Draft GitHub Release notes differ from the sealed CHANGELOG.",
+		"Draft GitHub Release is not bound to this exact recovery run.",
+		`DWS_GITHUB_RELEASE_ID="$release_id"`,
+		`tmp/trusted-release-tooling/scripts/release/verify-github-release-assets.sh`,
+		`tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh`,
+		`cmp -s "$local_asset" "$remote_asset"`,
+		"-F draft=false",
+		`echo "release_id=$release_id" >> "$GITHUB_OUTPUT"`,
+	} {
+		if !strings.Contains(publishStep, required) {
+			t.Errorf("Draft release lifecycle is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		`gh release download "$RELEASE_VERSION"`,
+		`gh release edit "$RELEASE_VERSION" --draft=false`,
+		`"repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION"`,
+	} {
+		if strings.Contains(publishStep, forbidden) {
+			t.Errorf("Draft release lifecycle must not switch back from the locked release ID via %q", forbidden)
+		}
+	}
+
+	tagGuard := strings.Index(publishStep, "Draft GitHub Release ID $release_id targets")
+	draftPatch := strings.Index(publishStep, "-F draft=true")
+	bodyVerify := strings.Index(publishStep, "Draft GitHub Release notes differ from the sealed CHANGELOG.")
+	markerVerify := strings.Index(publishStep, "Draft GitHub Release is not bound to this exact recovery run.")
+	upload := strings.Index(publishStep, `gh release upload "$RELEASE_VERSION"`)
+	idRecheck := strings.Index(publishStep, `test "$uploaded_release_id" = "$release_id"`)
+	verify := strings.Index(publishStep, "tmp/trusted-release-tooling/scripts/release/verify-github-release-assets.sh")
+	download := strings.LastIndex(publishStep, "tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh")
+	byteCompare := strings.Index(publishStep, `cmp -s "$local_asset" "$remote_asset"`)
+	publish := strings.Index(publishStep, "-F draft=false")
+	if tagGuard == -1 || draftPatch == -1 || bodyVerify == -1 || markerVerify == -1 ||
+		upload == -1 || idRecheck == -1 || verify == -1 || download == -1 || byteCompare == -1 || publish == -1 ||
+		!(tagGuard < draftPatch && draftPatch < bodyVerify && bodyVerify < markerVerify && markerVerify < upload &&
+			upload < idRecheck && idRecheck < verify && verify < download && download < byteCompare && byteCompare < publish) {
+		t.Fatal("Draft must retain one release ID through upload, exact verification, download, byte comparison, and publication")
+	}
+
+	terminalStep := publishJob[strings.Index(publishJob, "      - name: Require immutable published GitHub Release\n"):]
+	for _, required := range []string{
+		`RELEASE_ID: ${{ steps.publish.outputs.release_id }}`,
+		`RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}`,
+		`"repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"`,
+		`DWS_GITHUB_RELEASE_ID="$RELEASE_ID"`,
+		`tmp/trusted-release-tooling/scripts/release/verify-github-release-assets.sh`,
+		`tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh`,
+		`[.tag_name, .draft, .prerelease, .immutable] | @tsv`,
+		`printf '%s\tfalse\t%s\ttrue' "$RELEASE_VERSION" "$expected_prerelease"`,
+		"Immutable GitHub Release notes differ from the sealed CHANGELOG.",
+		"Immutable GitHub Release is not bound to this exact recovery run.",
+		`DWS_PACKAGE_DIST_DIR="$immutable_dir"`,
+		`cmp -s "$sealed_asset" "$immutable_asset"`,
+	} {
+		if !strings.Contains(terminalStep, required) {
+			t.Errorf("terminal immutable release gate is missing %q", required)
+		}
+	}
+	immutableState := strings.Index(terminalStep, `[.tag_name, .draft, .prerelease, .immutable] | @tsv`)
+	immutableBody := strings.Index(terminalStep, "Immutable GitHub Release notes differ from the sealed CHANGELOG.")
+	immutableDownload := strings.Index(terminalStep, "tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh")
+	immutableVerify := strings.Index(terminalStep, `DWS_PACKAGE_DIST_DIR="$immutable_dir"`)
+	immutableCompare := strings.Index(terminalStep, `cmp -s "$sealed_asset" "$immutable_asset"`)
+	if immutableState == -1 || immutableBody == -1 || immutableDownload == -1 || immutableVerify == -1 || immutableCompare == -1 ||
+		!(immutableState < immutableBody && immutableBody < immutableDownload && immutableDownload < immutableVerify && immutableVerify < immutableCompare) {
+		t.Fatal("terminal gate must reverify immutable notes and exact sealed bytes on the locked release ID")
+	}
+}
+
 func TestRecoverReleaseBindsOneFailedRunAttempt(t *testing.T) {
 	t.Parallel()
 	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "recover-release.sh"))
@@ -819,7 +1410,11 @@ func TestRecoverReleaseBindsOneFailedRunAttempt(t *testing.T) {
 		"actions/runs/$find_run_id/attempts/$find_attempt",
 		`select(.head_sha == \"$commit\" and .head_branch == \"$VERSION\")`,
 		"Release run %s has no failed attempt",
-		`[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha] | @tsv`,
+		`[.id, .run_attempt, .repository.full_name, .path, .event, .status, .conclusion, .head_branch, .head_sha, .actor.login, .actor.id] | @tsv`,
+		`Release-Run`,
+		`Release-Run-Attempt`,
+		`expected_attempt_event="workflow_dispatch"`,
+		`is not bound by the cloud seal`,
 		"actions/runs/%s/attempts/%s",
 		`-f "recover_failed_run_attempt=$FAILED_RUN_ATTEMPT"`,
 	} {
@@ -843,7 +1438,7 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 			name:      "release contract",
 			start:     "  release-contract:\n",
 			end:       "\n  release:\n",
-			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success')) }}`,
+			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}`,
 		},
 		{
 			name:      "build",
@@ -890,11 +1485,7 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
-	start := strings.Index(workflow, "  release-delivery-gate:\n")
-	if start == -1 {
-		t.Fatal("release workflow is missing the terminal delivery gate")
-	}
-	gate := workflow[start:]
+	gate := releaseWorkflowSection(t, workflow, "  release-delivery-gate:\n", "\n  repair-channel:\n")
 
 	for _, required := range []string{
 		"name: Release delivery gate",
@@ -909,6 +1500,12 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		"- publish-channels",
 		"- mirror-gitee-release",
 		"- repair-npm",
+		"- repair-channel",
+		"- release-plan",
+		"- seal-release",
+		`REPAIR_CHANNEL_RESULT: ${{ needs.repair-channel.result }}`,
+		`RELEASE_PLAN_RESULT: ${{ needs.release-plan.result }}`,
+		`SEAL_RELEASE_RESULT: ${{ needs.seal-release.result }}`,
 		"require_publication",
 		`require_result release-contract "$RELEASE_CONTRACT_RESULT" success`,
 		`require_result release "$RELEASE_RESULT" success`,
@@ -916,8 +1513,14 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		`require_result publish-release "$PUBLISH_RELEASE_RESULT" success`,
 		`require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success`,
 		"workflow_dispatch:recover_release",
+		"workflow_dispatch:create_release",
+		"workflow_dispatch:plan_release",
 		"workflow_dispatch:governance_preflight",
 		"workflow_dispatch:repair_npm",
+		"workflow_dispatch:repair_gitee",
+		"workflow_dispatch:repair_oss",
+		`require_result repair-channel "$REPAIR_CHANNEL_RESULT" success`,
+		`require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped`,
 		"unsupported release mode",
 	} {
 		if !strings.Contains(gate, required) {
@@ -1090,7 +1693,7 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 	}
 
 	codesign := strings.Index(workflow[verifyJob:publishJob], "codesign --verify --strict --verbose=4")
-	publish := strings.Index(workflow[publishJob:], `gh release edit "$RELEASE_VERSION" --draft=false`)
+	publish := strings.Index(workflow[publishJob:], "-F draft=false")
 	if codesign == -1 || publish == -1 {
 		t.Fatal("macOS codesign verification and explicit Draft publication are required")
 	}
@@ -1166,10 +1769,10 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 		t.Errorf("Homebrew PR permission preflight count = %d, want one default-branch preflight and one tag contract", got)
 	}
 	tagContract := releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n")
-	tagCI := strings.Index(tagContract, "Require successful CI Gate on the sealed commit")
+	tagAdmission := strings.Index(tagContract, "Require successful Code Admission contexts on the sealed commit")
 	tagHomebrew := strings.Index(tagContract, "Verify Homebrew PR automation permission")
-	if tagCI == -1 || tagHomebrew == -1 || tagCI > tagHomebrew {
-		t.Error("tag contract must validate the sealed CI Gate before exposing Homebrew credentials")
+	if tagAdmission == -1 || tagHomebrew == -1 || tagAdmission > tagHomebrew {
+		t.Error("tag contract must validate all exact Code Admission contexts before exposing Homebrew credentials")
 	}
 
 	start := strings.Index(workflow, "- name: Open stable Homebrew formula PR")
@@ -1238,6 +1841,133 @@ func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
 	}
 	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
 		t.Error("Homebrew beta Formula PRs must use the dedicated token so their CI is triggered")
+	}
+}
+
+func TestReleaseWorkflowWaitsForNPMDistTagPropagation(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	script := releaseWorkflowRunScript(
+		t,
+		workflow,
+		"Verify npm channel delivery",
+		"Sync release artifacts to China OSS mirror",
+	)
+
+	tests := []struct {
+		name        string
+		sequence    string
+		wantSuccess bool
+		wantCalls   int
+		wantSleeps  int
+		wantOutput  string
+	}{
+		{
+			name:        "stale beta converges to target",
+			sequence:    "1.0.53-beta.6\n1.0.53-beta.6\n1.0.53-beta.7\n",
+			wantSuccess: true,
+			wantCalls:   3,
+			wantSleeps:  2,
+		},
+		{
+			name:       "stale beta never converges",
+			sequence:   "1.0.53-beta.6\n",
+			wantCalls:  12,
+			wantSleeps: 11,
+			wantOutput: "still reports older v1.0.53-beta.6 after 12 attempts",
+		},
+		{
+			name:       "permanent registry error fails immediately",
+			sequence:   "__NPM_ERROR__\n",
+			wantCalls:  1,
+			wantSleeps: 0,
+			wantOutput: "permanent npm registry error",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			fakeBin := filepath.Join(root, "bin")
+			if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+				t.Fatalf("MkdirAll(%s) error = %v", fakeBin, err)
+			}
+			sequencePath := filepath.Join(root, "sequence")
+			statePath := filepath.Join(root, "state")
+			npmLogPath := filepath.Join(root, "npm.log")
+			sleepLogPath := filepath.Join(root, "sleep.log")
+			mustWriteFile(t, sequencePath, []byte(test.sequence), 0o644)
+			mustWriteFile(t, filepath.Join(fakeBin, "npm"), []byte(`#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$NPM_CALL_LOG"
+test "$*" = "view dingtalk-workspace-cli dist-tags.beta --registry=https://registry.npmjs.org --prefer-online" || {
+  echo "unexpected npm mutation: $*" >&2
+  exit 97
+}
+call=0
+if test -f "$NPM_STATE"; then call="$(cat "$NPM_STATE")"; fi
+call=$((call + 1))
+printf '%s\n' "$call" > "$NPM_STATE"
+value="$(sed -n "${call}p" "$NPM_SEQUENCE")"
+if test -z "$value"; then value="$(tail -n 1 "$NPM_SEQUENCE")"; fi
+if test "$value" = "__NPM_ERROR__"; then
+  echo "permanent npm registry error" >&2
+  exit 42
+fi
+printf '%s\n' "$value"
+`), 0o755)
+			mustWriteFile(t, filepath.Join(fakeBin, "sleep"), []byte(`#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$SLEEP_CALL_LOG"
+`), 0o755)
+
+			repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+			if err != nil {
+				t.Fatalf("Abs(repository root) error = %v", err)
+			}
+			cmd := exec.Command("sh", "-c", script)
+			cmd.Dir = repoRoot
+			cmd.Env = append(os.Environ(),
+				"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"NPM_TAG=beta",
+				"SEMVER=1.0.53-beta.7",
+				"NPM_SEQUENCE="+sequencePath,
+				"NPM_STATE="+statePath,
+				"NPM_CALL_LOG="+npmLogPath,
+				"SLEEP_CALL_LOG="+sleepLogPath,
+			)
+			output, runErr := cmd.CombinedOutput()
+			if test.wantSuccess && runErr != nil {
+				t.Fatalf("npm delivery verification error = %v\noutput:\n%s", runErr, output)
+			}
+			if !test.wantSuccess && runErr == nil {
+				t.Fatalf("npm delivery verification unexpectedly succeeded\noutput:\n%s", output)
+			}
+			if test.wantOutput != "" && !strings.Contains(string(output), test.wantOutput) {
+				t.Errorf("npm delivery verification output is missing %q:\n%s", test.wantOutput, output)
+			}
+
+			npmLog, err := os.ReadFile(npmLogPath)
+			if err != nil {
+				t.Fatalf("ReadFile(%s) error = %v", npmLogPath, err)
+			}
+			npmCalls := strings.Split(strings.TrimSpace(string(npmLog)), "\n")
+			if got := len(npmCalls); got != test.wantCalls {
+				t.Errorf("npm view call count = %d, want %d; log:\n%s", got, test.wantCalls, npmLog)
+			}
+			if strings.Contains(string(npmLog), "dist-tag add") || strings.Contains(string(npmLog), "publish") {
+				t.Errorf("delivery verification must remain read-only; log:\n%s", npmLog)
+			}
+
+			sleepCalls := 0
+			if sleepLog, err := os.ReadFile(sleepLogPath); err == nil {
+				sleepCalls = len(strings.Fields(string(sleepLog)))
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("ReadFile(%s) error = %v", sleepLogPath, err)
+			}
+			if sleepCalls != test.wantSleeps {
+				t.Errorf("sleep call count = %d, want %d", sleepCalls, test.wantSleeps)
+			}
+		})
 	}
 }
 

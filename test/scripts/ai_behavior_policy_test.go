@@ -24,6 +24,7 @@ func TestAIBehaviorPolicyProtectsEnforcementInputs(t *testing.T) {
 
 	workflow := string(data)
 	for _, want := range []string{
+		"filename.startsWith('scripts/ci/')",
 		"filename.startsWith('scripts/policy/')",
 		"filename === 'test/fixtures/cli-interface-baseline.txt'",
 		"previous_filename",

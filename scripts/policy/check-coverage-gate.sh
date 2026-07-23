@@ -4,17 +4,17 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BASE_REF=""
 OVERALL_PROFILE="coverage.txt"
-ADDITIONAL_PROFILE="${COVERAGE_ADDITIONAL_PROFILE:-}"
+ADDITIONAL_DIFF_PROFILE="${COVERAGE_ADDITIONAL_DIFF_PROFILE:-${COVERAGE_ADDITIONAL_PROFILE:-}}"
 BASELINE_PROFILE="coverage-base.txt"
 DIFF_PROFILE="coverage-policy.txt"
-TARGET="${COVERAGE_TARGET:-80}"
-OVERALL_TOLERANCE="${COVERAGE_OVERALL_TOLERANCE:-0.1}"
+TARGET="${COVERAGE_TARGET:-100}"
+OVERALL_TOLERANCE="${COVERAGE_OVERALL_TOLERANCE:-0}"
 ENFORCE_OVERALL="${COVERAGE_ENFORCE_OVERALL:-false}"
 CHANGED_ONLY="false"
 SCOPE_BUILDABLE="false"
 
 usage() {
-  printf '%s\n' "usage: $0 --base-ref <ref> [--changed-only] [--scope-buildable] [--overall-profile <file>] [--additional-profile <file>] [--baseline-profile <file>] [--diff-profile <file>]" >&2
+  printf '%s\n' "usage: $0 --base-ref <ref> [--changed-only] [--scope-buildable] [--overall-profile <file>] [--additional-diff-profile <file>] [--baseline-profile <file>] [--diff-profile <file>]" >&2
 }
 
 while [ "$#" -gt 0 ]; do
@@ -29,9 +29,9 @@ while [ "$#" -gt 0 ]; do
       OVERALL_PROFILE="$2"
       shift 2
       ;;
-    --additional-profile)
+    --additional-diff-profile|--additional-profile)
       [ "$#" -ge 2 ] || { usage; exit 2; }
-      ADDITIONAL_PROFILE="$2"
+      ADDITIONAL_DIFF_PROFILE="$2"
       shift 2
       ;;
     --baseline-profile)
@@ -87,19 +87,12 @@ set -- "$CHECKER" \
 if [ "$CHANGED_ONLY" = "true" ]; then
   set -- "$@" --changed-only
 else
-  baseline="$(go tool cover -func="$BASELINE_PROFILE" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')"
-  [ -n "$baseline" ] || {
-    printf 'error: cannot parse authoritative coverage from %s\n' "$BASELINE_PROFILE" >&2
-    exit 2
-  }
   set -- "$@" \
     --overall-profile "$OVERALL_PROFILE" \
     --diff-profile "$OVERALL_PROFILE" \
-    --baseline-overall "$baseline"
-  if [ -n "$ADDITIONAL_PROFILE" ]; then
-    set -- "$@" \
-      --overall-profile "$ADDITIONAL_PROFILE" \
-      --diff-profile "$ADDITIONAL_PROFILE"
+    --baseline-profile "$BASELINE_PROFILE"
+  if [ -n "$ADDITIONAL_DIFF_PROFILE" ]; then
+    set -- "$@" --diff-profile "$ADDITIONAL_DIFF_PROFILE"
   fi
 fi
 if [ "$SCOPE_BUILDABLE" = "true" ]; then

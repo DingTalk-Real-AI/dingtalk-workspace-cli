@@ -394,6 +394,39 @@ func outputSchema(eventKey string) map[string]any {
 	}
 }
 
+func transportEnvelopeSchema(eventKey string) map[string]any {
+	eventType := reflect.TypeOf(transport.Event{})
+	properties := make(map[string]any, eventType.NumField())
+	for i := 0; i < eventType.NumField(); i++ {
+		field := eventType.Field(i)
+		name := strings.Split(field.Tag.Get("json"), ",")[0]
+		property := map[string]any{"type": schemaType(field.Type)}
+		switch name {
+		case "type":
+			property["description"] = "transport frame 类型"
+			property["enum"] = []string{string(transport.FrameTypeEvent)}
+		case "event_type":
+			property["description"] = "事件类型"
+			property["enum"] = []string{eventKey}
+		case "data":
+			property["description"] = "服务端业务 payload JSON 字符串"
+			property["content_media_type"] = "application/json"
+		case "headers":
+			property["description"] = "Stream transport headers"
+			property["additionalProperties"] = map[string]any{"type": "string"}
+		case "event_id":
+			property["description"] = "transport 事件 ID"
+		case "subscribe_id":
+			property["description"] = "个人事件订阅 ID"
+		}
+		properties[name] = property
+	}
+	return map[string]any{
+		"type":       "object",
+		"properties": properties,
+	}
+}
+
 func outputTypeForEvent(eventKey string) reflect.Type {
 	switch {
 	case isMessageReceiveEvent(eventKey):

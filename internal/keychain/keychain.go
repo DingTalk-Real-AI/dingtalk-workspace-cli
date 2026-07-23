@@ -36,6 +36,11 @@ const (
 	// parallel. When empty, the platform default applies.
 	StorageDirEnv = "DWS_KEYCHAIN_DIR"
 
+	// TestNamespaceEnv isolates the Windows HKCU registry backend for tests.
+	// Production code must not set it. Other platforms already isolate secure
+	// storage through StorageDirEnv and ignore this value.
+	TestNamespaceEnv = "DWS_KEYCHAIN_TEST_NAMESPACE"
+
 	// DisableKeychainEnv opts the macOS implementation out of system
 	// Keychain access for the DEK, falling back to a file-based DEK
 	// (same scheme as Linux). Intended for sandboxed runtimes where

@@ -69,6 +69,9 @@ func TestCrossPlatformCoverageCompileFlagsAndDefaults(t *testing.T) {
 	if sc.Service != "chat" || sc.Command != "+notify-team" {
 		t.Fatalf("bad identity: %+v", sc)
 	}
+	if !sc.UserDefined {
+		t.Fatal("compiled user shortcut is missing user-defined provenance")
+	}
 	if sc.Risk != shortcut.RiskRead {
 		t.Errorf("risk default = %q, want read", sc.Risk)
 	}

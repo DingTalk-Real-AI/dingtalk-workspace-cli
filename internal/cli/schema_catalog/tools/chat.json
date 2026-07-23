@@ -42170,7 +42170,7 @@
           ]
         ]
       },
-      "description": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n富媒体消息（通过 --msg-type 指定类型）：\n  image — 发送图片：--msg-type image --media-id（通过 dt_media_upload 上传获得）\n  file/audio/video — 发送文件、音频、视频：传本地 --file-path，CLI 会上传后按 file 消息发送",
+      "description": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n本地图片 / 文件消息：\n  统一使用 --msg-type file --file-path \u003c本地路径\u003e。CLI 会完成上传并按 file 消息发送；\n  .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。\n\n旧版内联图片消息：\n  仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。\n  当前 CLI 不提供本地文件到 mediaId 的上传能力。",
       "display": "群聊 / 消息 / 机器人",
       "effect": "write",
       "effect_source": "agent-hint",
@@ -42287,7 +42287,7 @@
               "precedence": "cobra_help",
               "selected": true,
               "source": "cobra_help",
-              "value": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n富媒体消息（通过 --msg-type 指定类型）：\n  image — 发送图片：--msg-type image --media-id（通过 dt_media_upload 上传获得）\n  file/audio/video — 发送文件、音频、视频：传本地 --file-path，CLI 会上传后按 file 消息发送"
+              "value": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n本地图片 / 文件消息：\n  统一使用 --msg-type file --file-path \u003c本地路径\u003e。CLI 会完成上传并按 file 消息发送；\n  .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。\n\n旧版内联图片消息：\n  仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。\n  当前 CLI 不提供本地文件到 mediaId 的上传能力。"
             },
             {
               "precedence": "mcp_metadata",
@@ -42299,7 +42299,7 @@
           "precedence": "cobra_help",
           "resolution": "highest_precedence",
           "source": "cobra_help",
-          "value": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n富媒体消息（通过 --msg-type 指定类型）：\n  image — 发送图片：--msg-type image --media-id（通过 dt_media_upload 上传获得）\n  file/audio/video — 发送文件、音频、视频：传本地 --file-path，CLI 会上传后按 file 消息发送"
+          "value": "以当前用户身份发送消息。\n\n⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。\n\n目标选择（三选一，必填）：\n  --group              群聊 openconversation_id\n  --user               单聊接收人 userId\n  --open-dingtalk-id   单聊接收人 openDingTalkId\n\n纯文本 / Markdown 消息（默认）：\n  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。\n\n本地图片 / 文件消息：\n  统一使用 --msg-type file --file-path \u003c本地路径\u003e。CLI 会完成上传并按 file 消息发送；\n  .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。\n\n旧版内联图片消息：\n  仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。\n  当前 CLI 不提供本地文件到 mediaId 的上传能力。"
         },
         "effect": {
           "candidates": [
@@ -42863,7 +42863,7 @@
           "type": "string"
         },
         "file-path": {
-          "description": "本地文件路径（msgType=file 时可直接上传发送）",
+          "description": "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）",
           "field_provenance": {
             "description": {
               "candidates": [
@@ -42871,7 +42871,7 @@
                   "precedence": "cobra_contract",
                   "selected": true,
                   "source": "cobra_usage",
-                  "value": "本地文件路径（msgType=file 时可直接上传发送）"
+                  "value": "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）"
                 },
                 {
                   "precedence": "default",
@@ -42883,7 +42883,7 @@
               "precedence": "cobra_contract",
               "resolution": "highest_precedence",
               "source": "cobra_usage",
-              "value": "本地文件路径（msgType=file 时可直接上传发送）"
+              "value": "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）"
             },
             "format": {
               "candidates": [
@@ -43085,7 +43085,7 @@
           "type": "string"
         },
         "media-id": {
-          "description": "图片 mediaId（通过 dt_media_upload 上传后用 extract_media_id.py 提取，仅 msgType=image）",
+          "description": "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）",
           "example": "@lADP_schema_smoke",
           "field_provenance": {
             "description": {
@@ -43094,7 +43094,7 @@
                   "precedence": "cobra_contract",
                   "selected": true,
                   "source": "cobra_usage",
-                  "value": "图片 mediaId（通过 dt_media_upload 上传后用 extract_media_id.py 提取，仅 msgType=image）"
+                  "value": "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）"
                 },
                 {
                   "precedence": "default",
@@ -43106,7 +43106,7 @@
               "precedence": "cobra_contract",
               "resolution": "highest_precedence",
               "source": "cobra_usage",
-              "value": "图片 mediaId（通过 dt_media_upload 上传后用 extract_media_id.py 提取，仅 msgType=image）"
+              "value": "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）"
             },
             "example": {
               "candidates": [
@@ -43204,7 +43204,7 @@
           "type": "string"
         },
         "msg-type": {
-          "description": "富媒体消息类型: image/file/audio/video（audio/video 是 file 别名；纯文本/Markdown 无需指定，直接传内容即可）",
+          "description": "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）",
           "enum": [
             "image",
             "file",
@@ -43218,7 +43218,7 @@
                   "precedence": "cobra_contract",
                   "selected": true,
                   "source": "cobra_usage",
-                  "value": "富媒体消息类型: image/file/audio/video（audio/video 是 file 别名；纯文本/Markdown 无需指定，直接传内容即可）"
+                  "value": "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）"
                 },
                 {
                   "precedence": "mcp_metadata",
@@ -43236,7 +43236,7 @@
               "precedence": "cobra_contract",
               "resolution": "highest_precedence",
               "source": "cobra_usage",
-              "value": "富媒体消息类型: image/file/audio/video（audio/video 是 file 别名；纯文本/Markdown 无需指定，直接传内容即可）"
+              "value": "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）"
             },
             "enum": {
               "candidates": [
