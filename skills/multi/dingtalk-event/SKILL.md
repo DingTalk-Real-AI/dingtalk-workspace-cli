@@ -79,7 +79,7 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 1. 从用户意图选择事件码；人名或群名先解析成必填 ID。
 2. 需要了解字段时运行 `dws event schema <event_key> --flatten`，读取 `schema.properties`；此模式的 `jq_root_path` 为 `.`。
 3. 启动 `dws event consume <event_key> [event_key...] ... --flatten -f ndjson`。单事件等待 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`；多事件先记录每条 `[event] subscription event_key=<key> subscribe_id=<id>`，再等待 `[event] ready event_count=<n> bus_pid=<pid>`。不要用 `sleep` 猜测。
-4. stdout 每行是一个扁平事件 JSON；消息和动作事件直接读取顶层业务字段，群生命周期事件只读取公共字段与 `payload` 中实际存在的字段。
+4. stdout 每行是一个扁平事件 JSON；消息、动作及群成员加入/退出事件直接读取顶层业务字段。群标题变更和群解散只读取公共字段与 `payload` 中实际存在的字段。
 5. 需要确认监听状态时运行 `dws event status --event <event_key>`，查看 `Subscriptions` 和 `Consumers`。
 6. 任务完成后优雅结束 consume；本次新建的订阅会自动取消。复用已有订阅或需要从外部主动取消时，先用 `dws event stop <subscribe_id> --dry-run` 预览，向用户确认后再加 `--yes`；临时测试可用 `--max-events` 或 `--duration` 自动退出。
 
@@ -219,6 +219,7 @@ dws event consume user_im_message_receive_o2o \
 - `--flatten` 模式的顶层 `jq_root_path` 为 `.`；不传时为兼容存量脚本的 transport envelope，业务 payload 在 `.data | fromjson`。
 - `schema.properties` 是业务字段列表，例如 `content`、`sender`、`conversation_id`、`message_id`、`event_time`。
 - Agent 命令已显式传 `--flatten`，消息接收、已读、撤回和表情回应事件直接读取顶层业务字段；不要对该模式再生成 `fromjson` 或内部 transport 路径。
+- 群成员加入/退出事件读取顶层 `conversation_id`、`operator`、`operator_open_dingtalk_id`、`members`、`event_time`。`operator` 是执行操作的人，`members` 是本次加入或退出的成员数组；成员项读取 `nick` 和 `open_dingtalk_id`。系统操作或成员自行退出时，操作人字段可能为空。
 - 群标题变更和群解散当前只承诺顶层 `type/event_id/timestamp/subscribe_id/payload`。读取 `payload` 时以实际键为准，不猜测群标题、操作者等尚未确认的字段；完整原始协议用 `-f raw` 或 `--debug-raw-events` 排查。
 - 群自动回复使用事件顶层 `conversation_id`；单聊自动回复使用顶层 `sender_open_dingtalk_id`。
 - 已读事件读取顶层 `reader`、`reader_open_dingtalk_id`、`read_time`；撤回事件读取 `recaller`、`recaller_open_dingtalk_id`、`recall_time`。

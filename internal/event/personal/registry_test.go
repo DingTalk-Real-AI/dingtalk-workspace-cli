@@ -387,7 +387,7 @@ func TestActionSchemaDocumentsMatchOutputDTOs(t *testing.T) {
 
 func TestGroupLifecycleSchemaDocumentsUseConservativePayload(t *testing.T) {
 	wantProperties := []string{"type", "event_id", "timestamp", "subscribe_id", "payload"}
-	for _, eventKey := range []string{EventGroupUpdated, EventGroupMemberAdded, EventGroupMemberExited, EventGroupDisbanded} {
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
 			if !ok {
@@ -412,6 +412,54 @@ func TestGroupLifecycleSchemaDocumentsUseConservativePayload(t *testing.T) {
 			payload := props["payload"].(map[string]any)
 			if payload["type"] != "object" || payload["additionalProperties"] != true {
 				t.Fatalf("schema.properties.payload = %#v, want open object", payload)
+			}
+		})
+	}
+}
+
+func TestGroupMemberSchemaDocumentsMatchOutputDTO(t *testing.T) {
+	wantProperties := []string{
+		"type", "event_id", "timestamp", "subscribe_id", "conversation_id",
+		"operator", "operator_open_dingtalk_id", "members", "event_time",
+	}
+	for _, eventKey := range []string{EventGroupMemberAdded, EventGroupMemberExited} {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			if want := []string{"group"}; !reflect.DeepEqual(def.RequiredParams, want) {
+				t.Fatalf("required_params = %#v, want %#v", def.RequiredParams, want)
+			}
+			doc := BuildSchemaDocumentForMode(def, true)
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok || len(props) != len(wantProperties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d fields", doc.Schema["properties"], len(wantProperties))
+			}
+			for _, name := range wantProperties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			members := props["members"].(map[string]any)
+			if members["type"] != "array" {
+				t.Fatalf("schema.properties.members = %#v, want array", members)
+			}
+			items, ok := members["items"].(map[string]any)
+			if !ok || items["type"] != "object" {
+				t.Fatalf("schema.properties.members.items = %#v, want object", members["items"])
+			}
+			memberProps, ok := items["properties"].(map[string]any)
+			if !ok || len(memberProps) != 2 {
+				t.Fatalf("schema.properties.members.items.properties = %#v", items["properties"])
+			}
+			for _, name := range []string{"nick", "open_dingtalk_id"} {
+				if _, ok := memberProps[name].(map[string]any); !ok {
+					t.Fatalf("member schema missing %q: %#v", name, memberProps)
+				}
+			}
+			if _, ok := props["payload"]; ok {
+				t.Fatalf("group member schema exposed generic payload: %#v", props)
 			}
 		})
 	}

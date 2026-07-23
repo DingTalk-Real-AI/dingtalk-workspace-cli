@@ -107,6 +107,23 @@ type GroupLifecycleEventOutput struct {
 	Payload     map[string]any `json:"payload" description:"群生命周期事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
 }
 
+type GroupMemberEventOutput struct {
+	Type                   string                   `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID                string                   `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp              int64                    `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID            string                   `json:"subscribe_id" description:"订阅 ID"`
+	ConversationID         string                   `json:"conversation_id" description:"发生成员变更的群会话 ID" format:"open_conversation_id"`
+	Operator               string                   `json:"operator" description:"执行成员变更操作的用户展示名，系统操作或成员自行退出时可能为空"`
+	OperatorOpenDingTalkID string                   `json:"operator_open_dingtalk_id" description:"执行成员变更操作的用户开放 ID，系统操作或成员自行退出时可能为空" format:"open_dingtalk_id"`
+	Members                []GroupMemberEventMember `json:"members" description:"本次加入或退出的成员列表"`
+	EventTime              int64                    `json:"event_time" description:"群成员变更事件时间戳" format:"timestamp_ms"`
+}
+
+type GroupMemberEventMember struct {
+	Nick           string `json:"nick" description:"成员展示名"`
+	OpenDingTalkID string `json:"open_dingtalk_id" description:"成员开放 ID" format:"open_dingtalk_id"`
+}
+
 type personalEventData struct {
 	EventID      string          `json:"eventId"`
 	EventKey     string          `json:"eventKey"`
@@ -171,6 +188,23 @@ type personalReactionBody struct {
 	SenderOpenDingTalkID   string `json:"senderOpenDingTalkId"`
 }
 
+type personalGroupMemberPayload struct {
+	EventTime int64                   `json:"event_time"`
+	Body      personalGroupMemberBody `json:"body"`
+}
+
+type personalGroupMemberBody struct {
+	ConversationID         string                      `json:"openConversationId"`
+	Operator               string                      `json:"operNick"`
+	OperatorOpenDingTalkID string                      `json:"-"`
+	Members                []personalGroupMemberRecord `json:"members"`
+}
+
+type personalGroupMemberRecord struct {
+	Nick           string `json:"nick"`
+	OpenDingTalkID string `json:"openDingTalkId"`
+}
+
 func (b *personalReactionBody) UnmarshalJSON(data []byte) error {
 	// encoding/json otherwise falls back to case-insensitive field matching.
 	// Read this protocol field from a map so only operOpenDingtalkId is accepted.
@@ -191,6 +225,29 @@ func (b *personalReactionBody) UnmarshalJSON(data []byte) error {
 	}
 
 	*b = personalReactionBody(decoded)
+	return nil
+}
+
+func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
+	// Keep the protocol spelling strict: encoding/json would otherwise accept
+	// operOpenDingTalkId through case-insensitive fallback matching.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+
+	type bodyAlias personalGroupMemberBody
+	var decoded bodyAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	if raw, ok := fields["operOpenDingtalkId"]; ok {
+		if err := json.Unmarshal(raw, &decoded.OperatorOpenDingTalkID); err != nil {
+			return fmt.Errorf("decode operOpenDingtalkId: %w", err)
+		}
+	}
+
+	*b = personalGroupMemberBody(decoded)
 	return nil
 }
 
@@ -244,6 +301,8 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		return projectRecallEvent(ev, base, data.Payload)
 	case isReactionEvent(eventType):
 		return projectReactionEvent(ev, base, data.Payload)
+	case isGroupMemberEvent(eventType):
+		return projectGroupMemberEvent(ev, base, data.Payload)
 	case isGroupLifecycleEvent(eventType):
 		payload, err := decodeGroupLifecyclePayload(data.Payload)
 		if err != nil {
@@ -348,6 +407,38 @@ func projectReactionEvent(ev transport.Event, base baseEventOutput, raw json.Raw
 	}, nil
 }
 
+func projectGroupMemberEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalGroupMemberPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return ev, fmt.Errorf("decode personal group member payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Body.ConversationID) == "" {
+		return ev, fmt.Errorf("decode personal group member payload: openConversationId is required")
+	}
+	if len(payload.Body.Members) == 0 {
+		return ev, fmt.Errorf("decode personal group member payload: members is required")
+	}
+
+	members := make([]GroupMemberEventMember, 0, len(payload.Body.Members))
+	for _, member := range payload.Body.Members {
+		members = append(members, GroupMemberEventMember{
+			Nick:           member.Nick,
+			OpenDingTalkID: member.OpenDingTalkID,
+		})
+	}
+	return GroupMemberEventOutput{
+		Type:                   base.Type,
+		EventID:                base.EventID,
+		Timestamp:              base.Timestamp,
+		SubscribeID:            base.SubscribeID,
+		ConversationID:         payload.Body.ConversationID,
+		Operator:               payload.Body.Operator,
+		OperatorOpenDingTalkID: payload.Body.OperatorOpenDingTalkID,
+		Members:                members,
+		EventTime:              payload.EventTime,
+	}, nil
+}
+
 func decodeRequiredPayload(raw json.RawMessage, target any) error {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -409,16 +500,26 @@ func decodePersonalEventData(raw string) (personalEventData, error) {
 
 func outputSchema(eventKey string) map[string]any {
 	outputType := outputTypeForEvent(eventKey)
-	properties := make(map[string]any, outputType.NumField())
-	for i := 0; i < outputType.NumField(); i++ {
-		field := outputType.Field(i)
+	schema := schemaForStruct(outputType)
+	properties := schema["properties"].(map[string]any)
+	if property, ok := properties["type"].(map[string]any); ok {
+		property["enum"] = []string{eventKey}
+	}
+	return schema
+}
+
+func schemaForStruct(t reflect.Type) map[string]any {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	properties := make(map[string]any, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
 		if name == "" || name == "-" {
 			continue
 		}
-		property := map[string]any{
-			"type": schemaType(field.Type),
-		}
+		property := schemaForType(field.Type)
 		if description := field.Tag.Get("description"); description != "" {
 			property["description"] = description
 		}
@@ -428,14 +529,28 @@ func outputSchema(eventKey string) map[string]any {
 		if field.Tag.Get("additional_properties") == "true" {
 			property["additionalProperties"] = true
 		}
-		if name == "type" {
-			property["enum"] = []string{eventKey}
-		}
 		properties[name] = property
 	}
 	return map[string]any{
 		"type":       "object",
 		"properties": properties,
+	}
+}
+
+func schemaForType(t reflect.Type) map[string]any {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		return schemaForStruct(t)
+	case reflect.Slice, reflect.Array:
+		return map[string]any{
+			"type":  "array",
+			"items": schemaForType(t.Elem()),
+		}
+	default:
+		return map[string]any{"type": schemaType(t)}
 	}
 }
 
@@ -482,6 +597,8 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(RecallEventOutput{})
 	case isReactionEvent(eventKey):
 		return reflect.TypeOf(ReactionEventOutput{})
+	case isGroupMemberEvent(eventKey):
+		return reflect.TypeOf(GroupMemberEventOutput{})
 	case isGroupLifecycleEvent(eventKey):
 		return reflect.TypeOf(GroupLifecycleEventOutput{})
 	default:
@@ -501,10 +618,12 @@ func isReactionEvent(eventKey string) bool {
 	return eventKey == EventReactionO2O || eventKey == EventReactionGroup
 }
 
+func isGroupMemberEvent(eventKey string) bool {
+	return eventKey == EventGroupMemberAdded || eventKey == EventGroupMemberExited
+}
+
 func isGroupLifecycleEvent(eventKey string) bool {
 	return eventKey == EventGroupUpdated ||
-		eventKey == EventGroupMemberAdded ||
-		eventKey == EventGroupMemberExited ||
 		eventKey == EventGroupDisbanded
 }
 

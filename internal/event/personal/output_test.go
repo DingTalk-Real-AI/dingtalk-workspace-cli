@@ -124,6 +124,32 @@ func personalReactionData(eventKey, messageID, conversationID string) string {
 	}`, eventKey, conversationID, messageID)
 }
 
+func personalGroupMemberData(eventKey string) string {
+	return fmt.Sprintf(`{
+		"eventId":"group-member-event",
+		"eventKey":%q,
+		"occurredAtMs":1784782513647,
+		"subId":"group-member-sub",
+		"payload":{
+			"uid":100001,
+			"clientId":"internal-client",
+			"corpid":"internal-corp",
+			"bizid":"internal-biz",
+			"filterSubId":"internal-filter",
+			"body":{
+				"operNick":"测试用户甲",
+				"members":[
+					{"nick":"测试用户乙","openDingTalkId":"member-open-id-1"},
+					{"nick":"测试用户丙","openDingTalkId":"member-open-id-2"}
+				],
+				"operOpenDingtalkId":"operator-open-id",
+				"openConversationId":"cid-group-1"
+			},
+			"event_time":1784782513502
+		}
+	}`, eventKey)
+}
+
 func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
 	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat} {
 		t.Run(eventKey, func(t *testing.T) {
@@ -163,7 +189,7 @@ func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageProjectOutputGroupLifecycleEvents(t *testing.T) {
-	for _, eventKey := range []string{EventGroupUpdated, EventGroupMemberAdded, EventGroupMemberExited, EventGroupDisbanded} {
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			data := fmt.Sprintf(`{
 				"eventId":"group-event",
@@ -214,6 +240,135 @@ func TestCrossPlatformCoverageProjectOutputGroupLifecycleEvents(t *testing.T) {
 			operator := body["operator"].(map[string]any)
 			if operator["uid"] != "business-user-1" {
 				t.Fatalf("nested business uid was removed: %#v", operator)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupMemberEvents(t *testing.T) {
+	for _, eventKey := range []string{EventGroupMemberAdded, EventGroupMemberExited} {
+		t.Run(eventKey, func(t *testing.T) {
+			projected, err := ProjectOutput(transport.Event{
+				EventID:       "outer-event",
+				EventBornTime: 11,
+				EventType:     eventKey,
+				SubscribeID:   "outer-sub",
+				Data:          personalGroupMemberData(eventKey),
+			})
+			if err != nil {
+				t.Fatalf("ProjectOutput() error = %v", err)
+			}
+			want := GroupMemberEventOutput{
+				Type:                   eventKey,
+				EventID:                "group-member-event",
+				Timestamp:              1784782513647,
+				SubscribeID:            "outer-sub",
+				ConversationID:         "cid-group-1",
+				Operator:               "测试用户甲",
+				OperatorOpenDingTalkID: "operator-open-id",
+				Members: []GroupMemberEventMember{
+					{Nick: "测试用户乙", OpenDingTalkID: "member-open-id-1"},
+					{Nick: "测试用户丙", OpenDingTalkID: "member-open-id-2"},
+				},
+				EventTime: 1784782513502,
+			}
+			if !reflect.DeepEqual(projected, want) {
+				t.Fatalf("ProjectOutput() = %#v, want %#v", projected, want)
+			}
+			assertNoInternalActionFields(t, projected)
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupMemberAllowsMissingOperator(t *testing.T) {
+	data := strings.ReplaceAll(personalGroupMemberData(EventGroupMemberExited), `"operNick":"测试用户甲",`, "")
+	data = strings.ReplaceAll(data, `"operOpenDingtalkId":"operator-open-id",`, "")
+	projected, err := ProjectOutput(transport.Event{EventType: EventGroupMemberExited, Data: data})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got := projected.(GroupMemberEventOutput)
+	if got.Operator != "" || got.OperatorOpenDingTalkID != "" {
+		t.Fatalf("operator fields = %q/%q, want empty", got.Operator, got.OperatorOpenDingTalkID)
+	}
+	if len(got.Members) != 2 {
+		t.Fatalf("members = %#v, want two members", got.Members)
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupMemberRejectsLegacyOperatorOpenIDSpellings(t *testing.T) {
+	for _, legacyField := range []string{"operOpenDingtlkId", "operOpenDingTalkId"} {
+		t.Run(legacyField, func(t *testing.T) {
+			data := strings.Replace(personalGroupMemberData(EventGroupMemberAdded), "operOpenDingtalkId", legacyField, 1)
+			projected, err := ProjectOutput(transport.Event{EventType: EventGroupMemberAdded, Data: data})
+			if err != nil {
+				t.Fatalf("ProjectOutput() error = %v", err)
+			}
+			got := projected.(GroupMemberEventOutput)
+			if got.OperatorOpenDingTalkID != "" {
+				t.Fatalf("operator_open_dingtalk_id = %q, want empty for legacy field %s", got.OperatorOpenDingTalkID, legacyField)
+			}
+			if got.Members[0].OpenDingTalkID != "member-open-id-1" {
+				t.Fatalf("members[0].open_dingtalk_id = %q, want protocol openDingTalkId value", got.Members[0].OpenDingTalkID)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageGroupMemberBodyUnmarshalErrors(t *testing.T) {
+	var malformed personalGroupMemberBody
+	if err := malformed.UnmarshalJSON([]byte(`{`)); err == nil {
+		t.Fatal("UnmarshalJSON() error = nil, want malformed object error")
+	}
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{name: "invalid members", data: `{"members":"invalid"}`},
+		{name: "invalid operator open id", data: `{"operOpenDingtalkId":{"unexpected":true}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body personalGroupMemberBody
+			if err := json.Unmarshal([]byte(tt.data), &body); err == nil {
+				t.Fatal("json.Unmarshal() error = nil, want protocol error")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputRejectsInvalidGroupMemberPayloads(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{
+			name: "missing conversation",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"members":[{"nick":"测试用户甲","openDingTalkId":"member-1"}]},"event_time":1}}`,
+		},
+		{
+			name: "empty conversation",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"openConversationId":" ","members":[{"nick":"测试用户甲","openDingTalkId":"member-1"}]},"event_time":1}}`,
+		},
+		{
+			name: "missing members",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"openConversationId":"cid-1"},"event_time":1}}`,
+		},
+		{
+			name: "empty members",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"openConversationId":"cid-1","members":[]},"event_time":1}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{EventID: "outer-event", EventType: EventGroupMemberAdded, Data: tt.data}
+			projected, err := ProjectOutput(ev)
+			if err == nil {
+				t.Fatal("ProjectOutput() error = nil, want group member validation error")
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
 			}
 		})
 	}
@@ -422,6 +577,8 @@ func TestCrossPlatformCoverageProjectOutputRejectsEmptyPayloads(t *testing.T) {
 		EventRecallGroup,
 		EventReactionO2O,
 		EventReactionGroup,
+		EventGroupMemberAdded,
+		EventGroupMemberExited,
 	}
 	payloads := []struct {
 		name string
@@ -465,5 +622,36 @@ func TestCrossPlatformCoverageProjectOutputMalformedDataReturnsRawEnvelope(t *te
 	got, ok := projected.(transport.Event)
 	if !ok || !reflect.DeepEqual(got, ev) {
 		t.Fatalf("ProjectOutput() fallback = %#v", projected)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaReflectionSupportsNestedArraysAndPointers(t *testing.T) {
+	type nested struct {
+		Value  string `json:"value" description:"nested value" format:"nested_id"`
+		Hidden string `json:"-"`
+	}
+	type fixture struct {
+		Items []*nested      `json:"items" description:"nested items"`
+		Meta  map[string]any `json:"meta" additional_properties:"true"`
+	}
+
+	schema := schemaForStruct(reflect.TypeOf((*fixture)(nil)))
+	properties := schema["properties"].(map[string]any)
+	if len(properties) != 2 {
+		t.Fatalf("schema properties = %#v, want items and meta", properties)
+	}
+	items := properties["items"].(map[string]any)
+	itemSchema := items["items"].(map[string]any)
+	itemProperties := itemSchema["properties"].(map[string]any)
+	if items["type"] != "array" || itemSchema["type"] != "object" || len(itemProperties) != 1 {
+		t.Fatalf("nested items schema = %#v", items)
+	}
+	value := itemProperties["value"].(map[string]any)
+	if value["type"] != "string" || value["description"] != "nested value" || value["format"] != "nested_id" {
+		t.Fatalf("nested value schema = %#v", value)
+	}
+	meta := properties["meta"].(map[string]any)
+	if meta["type"] != "object" || meta["additionalProperties"] != true {
+		t.Fatalf("meta schema = %#v", meta)
 	}
 }

@@ -110,6 +110,9 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 			"user_im_group_member_added",
 			"user_im_group_member_exited",
 			"user_im_group_disbanded",
+			"operator_open_dingtalk_id",
+			"members",
+			"open_dingtalk_id",
 		} {
 			if !strings.Contains(text, required) {
 				t.Errorf("%s missing event contract %q", path, required)

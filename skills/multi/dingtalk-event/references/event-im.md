@@ -287,7 +287,19 @@ Agent 使用 `--flatten -f ndjson`，stdout 每行是一个扁平业务事件对
 
 正常输出不会暴露 `payload`、`uid`、`corpid`、`clientId`、`filterSubId`、`bizid` 等内部字段。需要检查原始协议时才使用 `-f raw` 或 `--debug-raw-events`。
 
-群生命周期事件当前采用保守输出：顶层只承诺 `type`、`event_id`、`timestamp`、`subscribe_id` 和 `payload`。`payload` 会保留服务端推送的未知业务字段，并移除已知的顶层身份/路由字段；不要猜测群标题、成员、操作者等尚未由真实样本确认的键。
+群成员加入/退出事件使用稳定的顶层字段：
+
+| 字段 | 说明 |
+|---|---|
+| `conversation_id` | 发生成员变更的群会话 ID |
+| `operator` | 执行操作的人；系统操作或成员自行退出时可能为空 |
+| `operator_open_dingtalk_id` | 执行操作人的开放 ID；可能为空 |
+| `members` | 本次加入或退出的成员数组，支持多人 |
+| `members[].nick` | 成员展示名 |
+| `members[].open_dingtalk_id` | 成员开放 ID |
+| `event_time` | 群成员变更事件时间戳 |
+
+群标题变更和群解散仍采用保守输出：顶层只承诺 `type`、`event_id`、`timestamp`、`subscribe_id` 和 `payload`。`payload` 会保留服务端推送的未知业务字段，并移除已知的顶层身份/路由字段；不要猜测尚未由真实样本确认的键。
 
 ## Event-driven replies
 
