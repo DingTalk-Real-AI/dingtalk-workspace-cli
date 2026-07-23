@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -746,8 +747,8 @@ func assertProfileSwitchRolledBack(t *testing.T, configDir string, before *Profi
 func TestFutureProfilesVersionIsNotDowngradedOrOverwritten(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
-	future := []byte(`{
-  "version": 3,
+	future := []byte(fmt.Sprintf(`{
+  "version": %d,
   "currentProfile": "corp_future:user_1",
   "orgCurrentProfiles": {"corp_future": "corp_future:user_1"},
   "futureField": {"preserve": true},
@@ -758,7 +759,7 @@ func TestFutureProfilesVersionIsNotDowngradedOrOverwritten(t *testing.T) {
     "futureProfileField": "preserve"
   }]
 }
-`)
+`, profilesMaxVersion+1))
 	if err := os.WriteFile(ProfilesPath(configDir), future, 0o600); err != nil {
 		t.Fatalf("write future profiles fixture: %v", err)
 	}
@@ -1614,7 +1615,7 @@ func TestOAuthLoginIdentityFailureLeavesExistingSameCorpAccountUntouched(t *test
 	}
 }
 
-func TestOAuthLoginMissingIdentityCannotOverwriteLegacySameCorpAccount(t *testing.T) {
+func TestCrossPlatformCoverageOAuthLoginMissingIdentityRefreshesLegacySameCorpAccount(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
@@ -1628,18 +1629,136 @@ func TestOAuthLoginMissingIdentityCannotOverwriteLegacySameCorpAccount(t *testin
 	incoming := testToken("at_incoming", "corp_same", "同一组织")
 	incoming.UserID = ""
 	incoming.UserName = ""
+	// Explicit profile logins do not become global current. A legacy identity
+	// still has to replace its organization slot because no exact slot exists.
+	SetRuntimeProfile("corp_same")
 	provider := NewOAuthProvider(configDir, nil)
 	provider.IdentityEnricher = func(context.Context, *TokenData) error { return nil }
-	if err := provider.persistLoginToken(context.Background(), incoming); err == nil {
-		t.Fatal("persistLoginToken() error = nil, want missing identity failure")
+	if err := provider.persistLoginToken(context.Background(), incoming); err != nil {
+		t.Fatalf("persistLoginToken() error = %v", err)
 	}
 
 	loaded, err := LoadTokenDataForProfile(configDir, "corp_same")
 	if err != nil {
 		t.Fatalf("LoadTokenDataForProfile(existing) error = %v", err)
 	}
-	if loaded.AccessToken != "at_existing" {
-		t.Fatalf("legacy account changed after missing identity: %#v", loaded)
+	if loaded.AccessToken != "at_incoming" || loaded.UserID != "" {
+		t.Fatalf("legacy account was not refreshed in its organization slot: %#v", loaded)
+	}
+}
+
+func TestCrossPlatformCoverageOAuthLoginMissingIdentityUsesSeparateOrgSlotBesideExactAccount(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	existing := testToken("at_existing_exact", "corp_same", "同一组织")
+	existing.UserID = "user_1"
+	if err := SaveTokenData(configDir, existing); err != nil {
+		t.Fatalf("SaveTokenData(existing) error = %v", err)
+	}
+
+	incoming := testToken("at_incoming_unknown", "corp_same", "同一组织")
+	incoming.UserID = ""
+	incoming.UserName = ""
+	provider := NewOAuthProvider(configDir, nil)
+	provider.IdentityEnricher = func(context.Context, *TokenData) error { return nil }
+	if err := provider.persistLoginToken(context.Background(), incoming); err != nil {
+		t.Fatalf("persistLoginToken(unresolved organization identity) error = %v", err)
+	}
+
+	loaded, err := LoadTokenDataKeychainForIdentity(existing.CorpID, existing.UserID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForIdentity(existing) error = %v", err)
+	}
+	if loaded.AccessToken != existing.AccessToken || loaded.UserID != existing.UserID {
+		t.Fatalf("exact account changed after unresolved login: %#v", loaded)
+	}
+	organization, err := LoadTokenDataKeychainForCorpID(existing.CorpID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForCorpID(unresolved) error = %v", err)
+	}
+	if organization.AccessToken != incoming.AccessToken || organization.UserID != "" {
+		t.Fatalf("unresolved login was not isolated in the organization slot: %#v", organization)
+	}
+	current, err := LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData(current unresolved organization identity) error = %v", err)
+	}
+	if current.AccessToken != incoming.AccessToken || current.UserID != "" {
+		t.Fatalf("current login did not resolve the isolated organization slot: %#v", current)
+	}
+}
+
+func TestCrossPlatformCoverageOAuthLoginUpdatesExplicitLegacyProfileBesideExactAccount(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	exact := testToken("at_exact", "corp_same", "同一组织")
+	exact.UserID = "user_1"
+	if err := SaveTokenData(configDir, exact); err != nil {
+		t.Fatalf("SaveTokenData(exact) error = %v", err)
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	cfg.Profiles = append(cfg.Profiles, Profile{
+		Name: "external-worker", CorpID: exact.CorpID, CorpName: exact.CorpName,
+	})
+	cfg.Profiles = append(cfg.Profiles, Profile{
+		Name: "unrelated-worker", CorpID: "corp_other", UserID: "other-user",
+	})
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		t.Fatalf("SaveProfiles(with legacy profile) error = %v", err)
+	}
+
+	incoming := testToken("at_external_new", exact.CorpID, exact.CorpName)
+	incoming.UserID = ""
+	incoming.UserName = ""
+	incoming.LegacyOrgScopedProfile = "external-worker"
+	provider := NewOAuthProvider(configDir, nil)
+	provider.IdentityEnricher = func(context.Context, *TokenData) error { return nil }
+	if err := provider.persistLoginToken(context.Background(), incoming); err != nil {
+		t.Fatalf("persistLoginToken(explicit legacy profile) error = %v", err)
+	}
+
+	loadedExact, err := LoadTokenDataKeychainForIdentity(exact.CorpID, exact.UserID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForIdentity(exact) error = %v", err)
+	}
+	if loadedExact.AccessToken != exact.AccessToken {
+		t.Fatalf("exact identity token was overwritten: %#v", loadedExact)
+	}
+	orgToken, err := LoadTokenDataKeychainForCorpID(exact.CorpID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForCorpID() error = %v", err)
+	}
+	if orgToken.AccessToken != incoming.AccessToken || orgToken.UserID != "" {
+		t.Fatalf("legacy organization slot was not updated: %#v", orgToken)
+	}
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != exact.AccessToken || global.UserID != exact.UserID {
+		t.Fatalf("explicit legacy login replaced the global exact account: %#v", global)
+	}
+
+	// A later refresh reloads TokenData from disk, so the transient destination
+	// is gone. The existing runtime --profile selector remains sufficient.
+	refreshed := testToken("at_external_refreshed", exact.CorpID, exact.CorpName)
+	refreshed.UserID = ""
+	refreshed.UserName = ""
+	SetRuntimeProfile("external-worker")
+	if err := provider.persistLoginToken(context.Background(), refreshed); err != nil {
+		t.Fatalf("persistLoginToken(runtime legacy profile) error = %v", err)
+	}
+	orgToken, err = LoadTokenDataKeychainForCorpID(exact.CorpID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForCorpID(after refresh) error = %v", err)
+	}
+	if orgToken.AccessToken != refreshed.AccessToken || orgToken.UserID != "" {
+		t.Fatalf("runtime-selected legacy organization slot was not refreshed: %#v", orgToken)
 	}
 }
 
@@ -1820,6 +1939,348 @@ func TestLegacyCorpScopedTokenMigratesToIdentitySlot(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageV1052CorpTokenWithoutUserIDMigratesFromSingleProfileIdentity(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	legacy := testToken("at_v1052", "corp_legacy", "Legacy Org")
+	legacy.UserID = ""
+	legacy.UserName = ""
+	if err := SaveTokenDataKeychainForCorpID(legacy.CorpID, legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+	}
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        1,
+		PrimaryProfile: legacy.CorpID,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+			UserID:   "user_v1052",
+			UserName: "Legacy User",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	// The ordinary first read after upgrading performs the migration; no
+	// explicit repair command or login flow is required.
+	loaded, err := LoadTokenDataForProfile(configDir, "corp_legacy:user_v1052")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile() error = %v", err)
+	}
+	if loaded.AccessToken != legacy.AccessToken || loaded.UserID != "user_v1052" {
+		t.Fatalf("loaded token = %#v", loaded)
+	}
+	migrated, err := LoadTokenDataKeychainForIdentity(legacy.CorpID, "user_v1052")
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForIdentity() error = %v", err)
+	}
+	if migrated.AccessToken != legacy.AccessToken || migrated.UserID != "user_v1052" || migrated.UserName != "Legacy User" {
+		t.Fatalf("migrated token = %#v", migrated)
+	}
+	// Keep the organization mirror byte-compatible with the old writer. The
+	// inferred identity belongs only in the exact identity slot.
+	orgMirror, err := LoadTokenDataKeychainForCorpID(legacy.CorpID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForCorpID() error = %v", err)
+	}
+	if orgMirror.UserID != "" {
+		t.Fatalf("legacy organization mirror userId = %q, want empty", orgMirror.UserID)
+	}
+}
+
+func TestCrossPlatformCoverageV1052CorpTokenWithoutUserIDDoesNotGuessAmongMultipleProfiles(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	legacy := testToken("at_v1052", "corp_shared", "Shared Org")
+	legacy.UserID = ""
+	if err := SaveTokenDataKeychainForCorpID(legacy.CorpID, legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+	}
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        1,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{
+			{Name: "one", CorpID: legacy.CorpID, UserID: "user_one"},
+			{Name: "two", CorpID: legacy.CorpID, UserID: "user_two"},
+		},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		t.Fatalf("EnsureProfilesMigration() error = %v", err)
+	}
+	if TokenDataExistsKeychainForIdentity(legacy.CorpID, "user_one") ||
+		TokenDataExistsKeychainForIdentity(legacy.CorpID, "user_two") {
+		t.Fatal("ambiguous organization token was copied into an identity slot")
+	}
+}
+
+func TestCrossPlatformCoverageV1052MigrationCompletesEveryOrganizationOnFirstRead(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	tokens := []*TokenData{
+		testToken("at_org_one", "corp_one", "Org One"),
+		testToken("at_org_two", "corp_two", "Org Two"),
+		testToken("at_org_three", "corp_three", "Org Three"),
+	}
+	profiles := make([]Profile, 0, len(tokens))
+	for i, token := range tokens {
+		token.UserID = ""
+		token.UserName = ""
+		if err := SaveTokenDataKeychainForCorpID(token.CorpID, token); err != nil {
+			t.Fatalf("SaveTokenDataKeychainForCorpID(%q) error = %v", token.CorpID, err)
+		}
+		profiles = append(profiles, Profile{
+			Name:     token.CorpName,
+			CorpID:   token.CorpID,
+			CorpName: token.CorpName,
+			UserID:   fmt.Sprintf("user_%d", i+1),
+			UserName: fmt.Sprintf("User %d", i+1),
+		})
+	}
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:         1,
+		PrimaryProfile:  profiles[0].CorpID,
+		CurrentProfile:  profiles[1].CorpID,
+		PreviousProfile: profiles[0].CorpID,
+		Profiles:        profiles,
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	// Reading only the current organization must perform the one-time schema
+	// migration for the complete v1 registry, including inactive organizations.
+	loaded, err := LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
+	}
+	if loaded.CorpID != profiles[1].CorpID || loaded.UserID != profiles[1].UserID {
+		t.Fatalf("current token after migration = %#v", loaded)
+	}
+	for i, profile := range profiles {
+		migrated, loadErr := LoadTokenDataKeychainForIdentity(profile.CorpID, profile.UserID)
+		if loadErr != nil {
+			t.Fatalf("LoadTokenDataKeychainForIdentity(%q, %q) error = %v", profile.CorpID, profile.UserID, loadErr)
+		}
+		if migrated.AccessToken != tokens[i].AccessToken ||
+			migrated.UserID != profile.UserID ||
+			migrated.UserName != profile.UserName {
+			t.Fatalf("migrated token for %q = %#v", profile.CorpID, migrated)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageV2DamagedRegistryRepairsSingleIdentitySlot(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	legacy := testToken("at_v2_repair", "corp_v2_repair", "V2 Repair Org")
+	legacy.UserID = ""
+	legacy.UserName = ""
+	if err := SaveTokenDataKeychainForCorpID(legacy.CorpID, legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+	}
+	profile := Profile{
+		Name:     legacy.CorpName,
+		CorpID:   legacy.CorpID,
+		CorpName: legacy.CorpName,
+		UserID:   "user_v2_repair",
+		UserName: "V2 Repair User",
+	}
+	selector := ProfileSelector(profile)
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:            profilesVersion,
+		PrimaryProfile:     selector,
+		CurrentProfile:     selector,
+		OrgCurrentProfiles: map[string]string{legacy.CorpID: selector},
+		Profiles:           []Profile{profile},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	if TokenDataExistsKeychainForIdentity(legacy.CorpID, profile.UserID) {
+		t.Fatal("identity slot unexpectedly existed before repair")
+	}
+
+	loaded, err := LoadTokenDataForProfile(configDir, selector)
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile() error = %v", err)
+	}
+	if loaded.AccessToken != legacy.AccessToken || loaded.RefreshToken != legacy.RefreshToken ||
+		loaded.UserID != profile.UserID || loaded.UserName != profile.UserName {
+		t.Fatalf("loaded repaired token = %#v", loaded)
+	}
+
+	// Re-running migration is intentionally harmless: an existing exact slot
+	// wins and the old organization mirror remains untouched.
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		t.Fatalf("second EnsureProfilesMigration() error = %v", err)
+	}
+	repaired, err := LoadTokenDataKeychainForIdentity(legacy.CorpID, profile.UserID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForIdentity() error = %v", err)
+	}
+	if repaired.AccessToken != legacy.AccessToken || repaired.RefreshToken != legacy.RefreshToken ||
+		repaired.UserID != profile.UserID || repaired.UserName != profile.UserName {
+		t.Fatalf("identity token after idempotent repair = %#v", repaired)
+	}
+	orgMirror, err := LoadTokenDataKeychainForCorpID(legacy.CorpID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForCorpID() error = %v", err)
+	}
+	if orgMirror.UserID != "" || orgMirror.UserName != "" {
+		t.Fatalf("organization mirror changed during repair = %#v", orgMirror)
+	}
+}
+
+func TestCrossPlatformCoverageV2DamagedRegistryRepairsEveryOrganization(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	tokens := []*TokenData{
+		testToken("at_v2_one", "corp_v2_one", "V2 Org One"),
+		testToken("at_v2_two", "corp_v2_two", "V2 Org Two"),
+		testToken("at_v2_three", "corp_v2_three", "V2 Org Three"),
+	}
+	profiles := make([]Profile, 0, len(tokens))
+	orgCurrent := make(map[string]string, len(tokens))
+	for i, token := range tokens {
+		token.UserID = ""
+		token.UserName = ""
+		if err := SaveTokenDataKeychainForCorpID(token.CorpID, token); err != nil {
+			t.Fatalf("SaveTokenDataKeychainForCorpID(%q) error = %v", token.CorpID, err)
+		}
+		profile := Profile{
+			Name:     token.CorpName,
+			CorpID:   token.CorpID,
+			CorpName: token.CorpName,
+			UserID:   fmt.Sprintf("user_v2_%d", i+1),
+			UserName: fmt.Sprintf("V2 User %d", i+1),
+		}
+		profiles = append(profiles, profile)
+		orgCurrent[token.CorpID] = ProfileSelector(profile)
+	}
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:            profilesVersion,
+		PrimaryProfile:     ProfileSelector(profiles[0]),
+		CurrentProfile:     ProfileSelector(profiles[1]),
+		PreviousProfile:    ProfileSelector(profiles[0]),
+		OrgCurrentProfiles: orgCurrent,
+		Profiles:           profiles,
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	// A single ordinary read repairs all organizations, including inactive
+	// ones, even though the registry already advertises the v2 schema.
+	loaded, err := LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
+	}
+	if loaded.CorpID != profiles[1].CorpID || loaded.UserID != profiles[1].UserID {
+		t.Fatalf("current token after repair = %#v", loaded)
+	}
+	for i, profile := range profiles {
+		repaired, loadErr := LoadTokenDataKeychainForIdentity(profile.CorpID, profile.UserID)
+		if loadErr != nil {
+			t.Fatalf("LoadTokenDataKeychainForIdentity(%q, %q) error = %v", profile.CorpID, profile.UserID, loadErr)
+		}
+		if repaired.AccessToken != tokens[i].AccessToken || repaired.RefreshToken != tokens[i].RefreshToken ||
+			repaired.UserID != profile.UserID || repaired.UserName != profile.UserName {
+			t.Fatalf("repaired token for %q = %#v", profile.CorpID, repaired)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageV2DamagedRegistryDoesNotGuessIdentity(t *testing.T) {
+	t.Run("multiple profiles", func(t *testing.T) {
+		cleanupKeychain(t)
+		configDir := t.TempDir()
+		legacy := testToken("at_v2_shared", "corp_v2_shared", "V2 Shared Org")
+		legacy.UserID = ""
+		if err := SaveTokenDataKeychainForCorpID(legacy.CorpID, legacy); err != nil {
+			t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+		}
+		profiles := []Profile{
+			{Name: "one", CorpID: legacy.CorpID, UserID: "user_one"},
+			{Name: "two", CorpID: legacy.CorpID, UserID: "user_two"},
+		}
+		if err := SaveProfiles(configDir, &ProfilesConfig{
+			Version:  profilesVersion,
+			Profiles: profiles,
+		}); err != nil {
+			t.Fatalf("SaveProfiles() error = %v", err)
+		}
+
+		if err := EnsureProfilesMigration(configDir); err != nil {
+			t.Fatalf("EnsureProfilesMigration() error = %v", err)
+		}
+		for _, profile := range profiles {
+			if TokenDataExistsKeychainForIdentity(profile.CorpID, profile.UserID) {
+				t.Fatalf("ambiguous organization token was copied to %q", ProfileSelector(profile))
+			}
+		}
+	})
+
+	t.Run("mismatched token identity", func(t *testing.T) {
+		cleanupKeychain(t)
+		configDir := t.TempDir()
+		orgToken := testToken("at_v2_mismatch", "corp_v2_mismatch", "V2 Mismatch Org")
+		orgToken.UserID = "different_user"
+		if err := SaveTokenDataKeychainForCorpID(orgToken.CorpID, orgToken); err != nil {
+			t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+		}
+		profile := Profile{Name: "expected", CorpID: orgToken.CorpID, UserID: "expected_user"}
+		if err := SaveProfiles(configDir, &ProfilesConfig{
+			Version:  profilesVersion,
+			Profiles: []Profile{profile},
+		}); err != nil {
+			t.Fatalf("SaveProfiles() error = %v", err)
+		}
+
+		if err := EnsureProfilesMigration(configDir); err != nil {
+			t.Fatalf("EnsureProfilesMigration() error = %v", err)
+		}
+		if TokenDataExistsKeychainForIdentity(profile.CorpID, profile.UserID) {
+			t.Fatal("mismatched organization token was copied into the profile identity slot")
+		}
+	})
+}
+
+func TestCrossPlatformCoverageV2DamagedRegistryDoesNotGuessBesideUnresolvedProfile(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	legacy := testToken("at_v2_unresolved", "corp_v2_unresolved", "V2 Unresolved Org")
+	legacy.UserID = ""
+	legacy.UserName = ""
+	if err := SaveTokenDataKeychainForCorpID(legacy.CorpID, legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+	}
+	known := Profile{
+		Name:     "known",
+		CorpID:   legacy.CorpID,
+		CorpName: legacy.CorpName,
+		UserID:   "known_user",
+		UserName: "Known User",
+	}
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version: profilesVersion,
+		Profiles: []Profile{
+			{Name: "legacy-corp-only", CorpID: legacy.CorpID},
+			known,
+		},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		t.Fatalf("EnsureProfilesMigration() error = %v", err)
+	}
+	if TokenDataExistsKeychainForIdentity(known.CorpID, known.UserID) {
+		t.Fatal("ambiguous organization token was copied beside an unresolved profile")
+	}
+}
+
 func TestTokenDataExistsKeychain(t *testing.T) {
 	cleanupKeychain(t)
 
@@ -1960,7 +2421,7 @@ func TestV2EmptyProfilesDoesNotRestoreLegacyToken(t *testing.T) {
 	}
 }
 
-func TestIdentityLoadRejectsOrganizationMirrorWithoutUserID(t *testing.T) {
+func TestCrossPlatformCoverageIdentityLoadRepairsOrganizationMirrorWithoutUserID(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 	if err := SaveProfiles(configDir, &ProfilesConfig{
@@ -1983,12 +2444,15 @@ func TestIdentityLoadRejectsOrganizationMirrorWithoutUserID(t *testing.T) {
 		t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
 	}
 
-	_, err := LoadTokenDataForProfile(configDir, "corp_same:user_1")
-	if err == nil || !strings.Contains(err.Error(), "has no userId") {
-		t.Fatalf("LoadTokenDataForProfile() error = %v, want missing mirror identity error", err)
+	loaded, err := LoadTokenDataForProfile(configDir, "corp_same:user_1")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile() error = %v", err)
 	}
-	if TokenDataExistsKeychainForIdentity("corp_same", "user_1") {
-		t.Fatal("organization mirror without userId was persisted as an identity token")
+	if loaded.AccessToken != legacy.AccessToken || loaded.UserID != "user_1" {
+		t.Fatalf("repaired identity token = %#v", loaded)
+	}
+	if !TokenDataExistsKeychainForIdentity("corp_same", "user_1") {
+		t.Fatal("organization mirror without userId was not repaired into an identity token")
 	}
 }
 
@@ -2095,7 +2559,7 @@ func TestMissingCurrentIdentityClearsLegacyMirror(t *testing.T) {
 	}
 }
 
-func TestOAuthLoginRequiresIdentityForFirstProfile(t *testing.T) {
+func TestCrossPlatformCoverageOAuthLoginAllowsLegacyOrgScopedFirstProfile(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 	incoming := testToken("at_missing_identity", "corp_first", "First Org")
@@ -2104,12 +2568,50 @@ func TestOAuthLoginRequiresIdentityForFirstProfile(t *testing.T) {
 
 	provider := NewOAuthProvider(configDir, nil)
 	provider.IdentityEnricher = func(context.Context, *TokenData) error { return nil }
-	if err := provider.persistLoginToken(context.Background(), incoming); err == nil ||
-		!strings.Contains(err.Error(), "userId is required") {
-		t.Fatalf("persistLoginToken() error = %v, want required userId", err)
+	if err := provider.persistLoginToken(context.Background(), incoming); err != nil {
+		t.Fatalf("persistLoginToken() error = %v", err)
 	}
-	if TokenDataExistsKeychain() || TokenDataExistsKeychainForCorpID("corp_first") {
-		t.Fatal("missing-identity login persisted token data")
+	if !TokenDataExistsKeychain() || !TokenDataExistsKeychainForCorpID("corp_first") {
+		t.Fatal("legacy organization-scoped login did not persist token data")
+	}
+	loaded, err := LoadTokenDataForProfile(configDir, "corp_first")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile() error = %v", err)
+	}
+	if loaded.AccessToken != incoming.AccessToken || loaded.UserID != "" {
+		t.Fatalf("loaded organization-scoped token = %#v", loaded)
+	}
+}
+
+func TestCrossPlatformCoverageSaveTokenMigrationErrors(t *testing.T) {
+	oldLoadProfiles := tokenLoadProfiles
+	oldEnsureMigration := tokenEnsureProfilesMigration
+	t.Cleanup(func() {
+		tokenLoadProfiles = oldLoadProfiles
+		tokenEnsureProfilesMigration = oldEnsureMigration
+	})
+
+	fail := errors.New("save-time legacy migration failed")
+	incoming := &TokenData{CorpID: "ding_legacy", AccessToken: "new-access"}
+	tokenLoadProfiles = func(string) (*ProfilesConfig, error) {
+		return &ProfilesConfig{Version: 1}, nil
+	}
+	tokenEnsureProfilesMigration = func(string) error { return fail }
+	if err := saveTokenDataLocked("cfg", incoming); !errors.Is(err, fail) {
+		t.Fatalf("saveTokenDataLocked(migration error) = %v, want %v", err, fail)
+	}
+
+	loadCount := 0
+	tokenLoadProfiles = func(string) (*ProfilesConfig, error) {
+		loadCount++
+		if loadCount == 1 {
+			return &ProfilesConfig{Version: 1}, nil
+		}
+		return nil, fail
+	}
+	tokenEnsureProfilesMigration = func(string) error { return nil }
+	if err := saveTokenDataLocked("cfg", incoming); !errors.Is(err, fail) {
+		t.Fatalf("saveTokenDataLocked(post-migration reload error) = %v, want %v", err, fail)
 	}
 }
 
@@ -2127,6 +2629,447 @@ func TestDeleteAllTokenDataRemovesOrphanIdentitySlots(t *testing.T) {
 	}
 	if TokenDataExistsKeychainForIdentity(orphan.CorpID, orphan.UserID) {
 		t.Fatal("DeleteAllTokenData() left orphan identity token behind")
+	}
+}
+
+type legacyBlankLifecycleFixture struct {
+	configDir string
+	corpID    string
+	blankName string
+	blank     *TokenData
+	alpha     *TokenData
+	beta      *TokenData
+}
+
+func seedLegacyBlankAndExactIdentitySlots(t *testing.T) legacyBlankLifecycleFixture {
+	t.Helper()
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+	corpID := "corp_lifecycle"
+	corpName := "Lifecycle Organization"
+
+	alpha := testToken("at_identity_alpha", corpID, corpName)
+	alpha.UserID = "identity_alpha"
+	alpha.UserName = "Account Alpha"
+	if err := SaveTokenData(configDir, alpha); err != nil {
+		t.Fatalf("SaveTokenData(alpha) error = %v", err)
+	}
+
+	blank := testToken("at_legacy_blank", corpID, corpName)
+	blank.UserID = ""
+	blank.UserName = ""
+	if err := SaveTokenData(configDir, blank); err != nil {
+		t.Fatalf("SaveTokenData(blank) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles(after blank) error = %v", err)
+	}
+	blankName := unresolvedProfileNameForTest(t, cfg, corpID)
+
+	beta := testToken("at_identity_beta", corpID, corpName)
+	beta.UserID = "identity_beta"
+	beta.UserName = "Account Beta"
+	if err := SaveTokenData(configDir, beta); err != nil {
+		t.Fatalf("SaveTokenData(beta) error = %v", err)
+	}
+
+	return legacyBlankLifecycleFixture{
+		configDir: configDir,
+		corpID:    corpID,
+		blankName: blankName,
+		blank:     blank,
+		alpha:     alpha,
+		beta:      beta,
+	}
+}
+
+func unresolvedProfileNameForTest(t *testing.T, cfg *ProfilesConfig, corpID string) string {
+	t.Helper()
+	var name string
+	for i := range cfg.Profiles {
+		profile := cfg.Profiles[i]
+		if profile.CorpID != corpID || profile.UserID != "" {
+			continue
+		}
+		if name != "" {
+			t.Fatalf("multiple unresolved profiles for %q: %#v", corpID, cfg.Profiles)
+		}
+		name = profile.Name
+	}
+	if name == "" {
+		t.Fatalf("unresolved profile for %q not found: %#v", corpID, cfg.Profiles)
+	}
+	return name
+}
+
+func assertIdentityTokenAccessForTest(t *testing.T, corpID, userID, wantAccess string) {
+	t.Helper()
+	loaded, err := LoadTokenDataKeychainForIdentity(corpID, userID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForIdentity(%q, %q) error = %v", corpID, userID, err)
+	}
+	if loaded.AccessToken != wantAccess || loaded.UserID != userID {
+		t.Fatalf("identity token %q:%q = %#v, want access %q", corpID, userID, loaded, wantAccess)
+	}
+}
+
+func assertOrganizationTokenAccessForTest(t *testing.T, corpID, wantAccess, wantUserID string) {
+	t.Helper()
+	loaded, err := LoadTokenDataKeychainForCorpID(corpID)
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychainForCorpID(%q) error = %v", corpID, err)
+	}
+	if loaded.AccessToken != wantAccess || loaded.UserID != wantUserID {
+		t.Fatalf("organization token %q = %#v, want access %q and user %q", corpID, loaded, wantAccess, wantUserID)
+	}
+}
+
+func TestCrossPlatformCoverageLegacyBlankAndExactIdentitySlotsPersistAcrossRepeatedSaves(t *testing.T) {
+	fixture := seedLegacyBlankAndExactIdentitySlots(t)
+
+	assertOrganizationTokenAccessForTest(t, fixture.corpID, fixture.blank.AccessToken, "")
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.alpha.UserID, fixture.alpha.AccessToken)
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.beta.UserID, fixture.beta.AccessToken)
+
+	refreshedBlank := *fixture.blank
+	refreshedBlank.AccessToken = "at_legacy_blank_refreshed"
+	refreshedBlank.RefreshToken = "rt_legacy_blank_refreshed"
+	refreshedBlank.LegacyOrgScopedProfile = fixture.blankName
+	if err := SaveTokenData(fixture.configDir, &refreshedBlank); err != nil {
+		t.Fatalf("SaveTokenData(repeated blank) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(fixture.configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles(after repeated blank) error = %v", err)
+	}
+	if got := unresolvedProfileNameForTest(t, cfg, fixture.corpID); got != fixture.blankName {
+		t.Fatalf("blank profile name after repeated save = %q, want %q", got, fixture.blankName)
+	}
+	if got := len(profilesForCorpID(cfg, fixture.corpID)); got != 3 {
+		t.Fatalf("same-organization profiles after repeated blank save = %d, want 3: %#v", got, cfg.Profiles)
+	}
+	assertOrganizationTokenAccessForTest(t, fixture.corpID, refreshedBlank.AccessToken, "")
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.alpha.UserID, fixture.alpha.AccessToken)
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.beta.UserID, fixture.beta.AccessToken)
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != fixture.beta.AccessToken || global.UserID != fixture.beta.UserID {
+		t.Fatalf("repeated blank save changed global exact account: %#v", global)
+	}
+}
+
+func TestCrossPlatformCoverageSwitchFromLegacyBlankToExactPreservesBlankOrganizationSlot(t *testing.T) {
+	fixture := seedLegacyBlankAndExactIdentitySlots(t)
+
+	selectedBlank, err := SetCurrentProfile(fixture.configDir, fixture.blankName)
+	if err != nil {
+		t.Fatalf("SetCurrentProfile(blank) error = %v", err)
+	}
+	if selectedBlank.UserID != "" {
+		t.Fatalf("selected blank profile = %#v", selectedBlank)
+	}
+	assertOrganizationTokenAccessForTest(t, fixture.corpID, fixture.blank.AccessToken, "")
+
+	selectedExact, err := SetCurrentProfile(
+		fixture.configDir,
+		ProfileSelector(Profile{CorpID: fixture.corpID, UserID: fixture.alpha.UserID}),
+	)
+	if err != nil {
+		t.Fatalf("SetCurrentProfile(exact) error = %v", err)
+	}
+	if selectedExact.UserID != fixture.alpha.UserID {
+		t.Fatalf("selected exact profile = %#v", selectedExact)
+	}
+	assertOrganizationTokenAccessForTest(t, fixture.corpID, fixture.blank.AccessToken, "")
+	blankLoaded, err := LoadTokenDataForProfile(fixture.configDir, fixture.blankName)
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile(blank after exact switch) error = %v", err)
+	}
+	if blankLoaded.AccessToken != fixture.blank.AccessToken || blankLoaded.UserID != "" {
+		t.Fatalf("blank token after exact switch = %#v", blankLoaded)
+	}
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != fixture.alpha.AccessToken || global.UserID != fixture.alpha.UserID {
+		t.Fatalf("global token after exact switch = %#v", global)
+	}
+}
+
+func TestCrossPlatformCoverageExactIdentityRefreshDoesNotOverwriteLegacyBlankOrganizationSlot(t *testing.T) {
+	fixture := seedLegacyBlankAndExactIdentitySlots(t)
+	refreshedAlpha := *fixture.alpha
+	refreshedAlpha.AccessToken = "at_identity_alpha_refreshed"
+	refreshedAlpha.RefreshToken = "rt_identity_alpha_refreshed"
+
+	SetRuntimeProfile(ProfileSelector(Profile{CorpID: fixture.corpID, UserID: fixture.alpha.UserID}))
+	if err := SaveTokenData(fixture.configDir, &refreshedAlpha); err != nil {
+		t.Fatalf("SaveTokenData(exact refresh) error = %v", err)
+	}
+	SetRuntimeProfile("")
+
+	assertOrganizationTokenAccessForTest(t, fixture.corpID, fixture.blank.AccessToken, "")
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.alpha.UserID, refreshedAlpha.AccessToken)
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.beta.UserID, fixture.beta.AccessToken)
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != fixture.beta.AccessToken || global.UserID != fixture.beta.UserID {
+		t.Fatalf("non-current exact refresh changed global account: %#v", global)
+	}
+}
+
+func TestCrossPlatformCoverageNonCurrentLegacyBlankRefreshDoesNotChangeGlobalExactAccount(t *testing.T) {
+	fixture := seedLegacyBlankAndExactIdentitySlots(t)
+	refreshedBlank := *fixture.blank
+	refreshedBlank.AccessToken = "at_legacy_blank_noncurrent_refreshed"
+	refreshedBlank.RefreshToken = "rt_legacy_blank_noncurrent_refreshed"
+
+	SetRuntimeProfile(fixture.blankName)
+	if err := SaveTokenData(fixture.configDir, &refreshedBlank); err != nil {
+		t.Fatalf("SaveTokenData(non-current blank refresh) error = %v", err)
+	}
+	SetRuntimeProfile("")
+
+	assertOrganizationTokenAccessForTest(t, fixture.corpID, refreshedBlank.AccessToken, "")
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.alpha.UserID, fixture.alpha.AccessToken)
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.beta.UserID, fixture.beta.AccessToken)
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != fixture.beta.AccessToken || global.UserID != fixture.beta.UserID {
+		t.Fatalf("non-current blank refresh changed global exact account: %#v", global)
+	}
+	cfg, err := LoadProfiles(fixture.configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	wantCurrent := ProfileSelector(Profile{CorpID: fixture.corpID, UserID: fixture.beta.UserID})
+	if cfg.CurrentProfile != wantCurrent {
+		t.Fatalf("current profile after non-current blank refresh = %q, want %q", cfg.CurrentProfile, wantCurrent)
+	}
+}
+
+func TestCrossPlatformCoverageLegacyBlankAndExactIdentityDeletionIsolation(t *testing.T) {
+	t.Run("delete non-current exact identity", func(t *testing.T) {
+		fixture := seedLegacyBlankAndExactIdentitySlots(t)
+		selector := ProfileSelector(Profile{CorpID: fixture.corpID, UserID: fixture.alpha.UserID})
+		if err := DeleteTokenDataForProfile(fixture.configDir, selector); err != nil {
+			t.Fatalf("DeleteTokenDataForProfile(non-current exact) error = %v", err)
+		}
+		if TokenDataExistsKeychainForIdentity(fixture.corpID, fixture.alpha.UserID) {
+			t.Fatal("deleted non-current exact identity slot still exists")
+		}
+		assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.beta.UserID, fixture.beta.AccessToken)
+		assertOrganizationTokenAccessForTest(t, fixture.corpID, fixture.blank.AccessToken, "")
+		blankLoaded, err := LoadTokenDataForProfile(fixture.configDir, fixture.blankName)
+		if err != nil || blankLoaded.AccessToken != fixture.blank.AccessToken {
+			t.Fatalf("blank profile after non-current exact delete = %#v, %v", blankLoaded, err)
+		}
+	})
+
+	t.Run("delete current exact identity", func(t *testing.T) {
+		fixture := seedLegacyBlankAndExactIdentitySlots(t)
+		if _, err := SetCurrentProfile(fixture.configDir, profileSelector(fixture.corpID, fixture.alpha.UserID)); err != nil {
+			t.Fatalf("SetCurrentProfile(alpha) error = %v", err)
+		}
+		if _, err := SetCurrentProfile(fixture.configDir, profileSelector(fixture.corpID, fixture.beta.UserID)); err != nil {
+			t.Fatalf("SetCurrentProfile(beta) error = %v", err)
+		}
+		selector := ProfileSelector(Profile{CorpID: fixture.corpID, UserID: fixture.beta.UserID})
+		if err := DeleteTokenDataForProfile(fixture.configDir, selector); err != nil {
+			t.Fatalf("DeleteTokenDataForProfile(current exact) error = %v", err)
+		}
+		if TokenDataExistsKeychainForIdentity(fixture.corpID, fixture.beta.UserID) {
+			t.Fatal("deleted current exact identity slot still exists")
+		}
+		assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.alpha.UserID, fixture.alpha.AccessToken)
+		assertOrganizationTokenAccessForTest(t, fixture.corpID, fixture.blank.AccessToken, "")
+		blankLoaded, err := LoadTokenDataForProfile(fixture.configDir, fixture.blankName)
+		if err != nil || blankLoaded.AccessToken != fixture.blank.AccessToken {
+			t.Fatalf("blank profile after current exact delete = %#v, %v", blankLoaded, err)
+		}
+		cfg, err := LoadProfiles(fixture.configDir)
+		if err != nil {
+			t.Fatalf("LoadProfiles(after current exact delete) error = %v", err)
+		}
+		wantCurrent := profileSelector(fixture.corpID, fixture.alpha.UserID)
+		if cfg.CurrentProfile != wantCurrent || cfg.OrgCurrentProfiles[fixture.corpID] != wantCurrent {
+			t.Fatalf("selection after current exact delete = current %q org %q, want %q", cfg.CurrentProfile, cfg.OrgCurrentProfiles[fixture.corpID], wantCurrent)
+		}
+		resolved, err := ResolveProfile(fixture.configDir, fixture.corpID)
+		if err != nil || resolved.UserID != fixture.alpha.UserID {
+			t.Fatalf("organization selector after current exact delete = %#v, %v", resolved, err)
+		}
+	})
+
+	t.Run("delete blank identity by unique name", func(t *testing.T) {
+		fixture := seedLegacyBlankAndExactIdentitySlots(t)
+		if _, err := SetCurrentProfile(fixture.configDir, fixture.blankName); err != nil {
+			t.Fatalf("SetCurrentProfile(blank) error = %v", err)
+		}
+		if err := DeleteTokenDataForProfile(fixture.configDir, fixture.blankName); err != nil {
+			t.Fatalf("DeleteTokenDataForProfile(blank name) error = %v", err)
+		}
+		if _, err := LoadTokenDataForProfile(fixture.configDir, fixture.blankName); err == nil {
+			t.Fatal("deleted blank profile is still loadable by name")
+		}
+		assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.alpha.UserID, fixture.alpha.AccessToken)
+		assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.beta.UserID, fixture.beta.AccessToken)
+		if TokenDataExistsKeychainForCorpID(fixture.corpID) {
+			t.Fatal("deleting current blank profile left an arbitrary exact organization mirror")
+		}
+		cfg, err := LoadProfiles(fixture.configDir)
+		if err != nil {
+			t.Fatalf("LoadProfiles(after blank delete) error = %v", err)
+		}
+		if got := len(profilesForCorpID(cfg, fixture.corpID)); got != 2 {
+			t.Fatalf("same-organization profiles after blank delete = %d, want 2: %#v", got, cfg.Profiles)
+		}
+		wantCurrent := profileSelector(fixture.corpID, fixture.beta.UserID)
+		if cfg.CurrentProfile != wantCurrent || cfg.OrgCurrentProfiles[fixture.corpID] != "" {
+			t.Fatalf("selection after current blank delete = current %q org %q, want current %q with organization unselected", cfg.CurrentProfile, cfg.OrgCurrentProfiles[fixture.corpID], wantCurrent)
+		}
+		if resolved, err := ResolveProfile(fixture.configDir, fixture.corpID); err == nil || resolved != nil {
+			t.Fatalf("organization selector after current blank delete = %#v, %v; want explicit account requirement", resolved, err)
+		}
+	})
+
+	t.Run("delete entire organization only", func(t *testing.T) {
+		fixture := seedLegacyBlankAndExactIdentitySlots(t)
+		other := testToken("at_other_identity", "corp_other_lifecycle", "Other Organization")
+		other.UserID = "identity_other"
+		other.UserName = "Other Account"
+		if err := SaveTokenData(fixture.configDir, other); err != nil {
+			t.Fatalf("SaveTokenData(other organization) error = %v", err)
+		}
+
+		if err := DeleteTokenDataForProfile(fixture.configDir, fixture.corpID); err != nil {
+			t.Fatalf("DeleteTokenDataForProfile(entire organization) error = %v", err)
+		}
+		if TokenDataExistsKeychainForCorpID(fixture.corpID) ||
+			TokenDataExistsKeychainForIdentity(fixture.corpID, fixture.alpha.UserID) ||
+			TokenDataExistsKeychainForIdentity(fixture.corpID, fixture.beta.UserID) {
+			t.Fatal("organization deletion left one of its token slots behind")
+		}
+		assertIdentityTokenAccessForTest(t, other.CorpID, other.UserID, other.AccessToken)
+		assertOrganizationTokenAccessForTest(t, other.CorpID, other.AccessToken, other.UserID)
+		loadedOther, err := LoadTokenDataForProfile(fixture.configDir, ProfileSelector(Profile{
+			CorpID: other.CorpID,
+			UserID: other.UserID,
+		}))
+		if err != nil || loadedOther.AccessToken != other.AccessToken {
+			t.Fatalf("unrelated organization after deletion = %#v, %v", loadedOther, err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageDeleteCurrentLegacyBlankOrganizationFallsBackToOtherOrganization(t *testing.T) {
+	fixture := seedLegacyBlankAndExactIdentitySlots(t)
+	other := testToken("at_fallback_identity", "corp_fallback", "Fallback Organization")
+	other.UserID = "identity_fallback"
+	other.UserName = "Fallback Account"
+	if err := SaveTokenData(fixture.configDir, other); err != nil {
+		t.Fatalf("SaveTokenData(fallback organization) error = %v", err)
+	}
+	selected, err := SetCurrentProfile(fixture.configDir, fixture.blankName)
+	if err != nil {
+		t.Fatalf("SetCurrentProfile(blank local name) error = %v", err)
+	}
+	if selected.CorpID != fixture.corpID || selected.UserID != "" {
+		t.Fatalf("selected blank profile = %#v", selected)
+	}
+
+	if err := DeleteTokenDataForProfile(fixture.configDir, fixture.corpID); err != nil {
+		t.Fatalf("DeleteTokenDataForProfile(blank organization) error = %v", err)
+	}
+
+	if TokenDataExistsKeychainForCorpID(fixture.corpID) ||
+		TokenDataExistsKeychainForIdentity(fixture.corpID, fixture.alpha.UserID) ||
+		TokenDataExistsKeychainForIdentity(fixture.corpID, fixture.beta.UserID) {
+		t.Fatal("deleted blank organization left one of its token slots behind")
+	}
+	cfg, err := LoadProfiles(fixture.configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles(after blank organization delete) error = %v", err)
+	}
+	wantCurrent := ProfileSelector(Profile{CorpID: other.CorpID, UserID: other.UserID})
+	if cfg.CurrentProfile != wantCurrent {
+		t.Fatalf("current profile after blank organization delete = %q, want %q", cfg.CurrentProfile, wantCurrent)
+	}
+	if len(cfg.Profiles) != 1 || cfg.Profiles[0].CorpID != other.CorpID || cfg.Profiles[0].UserID != other.UserID {
+		t.Fatalf("profiles after blank organization delete = %#v, want only fallback account", cfg.Profiles)
+	}
+	assertIdentityTokenAccessForTest(t, other.CorpID, other.UserID, other.AccessToken)
+	assertOrganizationTokenAccessForTest(t, other.CorpID, other.AccessToken, other.UserID)
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain(after blank organization delete) error = %v", err)
+	}
+	if global.AccessToken != other.AccessToken || global.UserID != other.UserID {
+		t.Fatalf("global token after blank organization delete = %#v, want fallback account", global)
+	}
+	loadedCurrent, err := LoadTokenData(fixture.configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData(after blank organization delete) error = %v", err)
+	}
+	if loadedCurrent.AccessToken != other.AccessToken || loadedCurrent.UserID != other.UserID {
+		t.Fatalf("current token after blank organization delete = %#v, want fallback account", loadedCurrent)
+	}
+}
+
+func TestCrossPlatformCoverageKnownThirdIdentityDoesNotConsumeLegacyBlankProfile(t *testing.T) {
+	fixture := seedLegacyBlankAndExactIdentitySlots(t)
+	gamma := testToken("at_identity_gamma", fixture.corpID, fixture.blank.CorpName)
+	gamma.UserID = "identity_gamma"
+	gamma.UserName = "Account Gamma"
+	if err := SaveTokenData(fixture.configDir, gamma); err != nil {
+		t.Fatalf("SaveTokenData(third exact identity) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(fixture.configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles(after third identity) error = %v", err)
+	}
+	if got := unresolvedProfileNameForTest(t, cfg, fixture.corpID); got != fixture.blankName {
+		t.Fatalf("third identity consumed or renamed blank profile: got %q, want %q", got, fixture.blankName)
+	}
+	if got := len(profilesForCorpID(cfg, fixture.corpID)); got != 4 {
+		t.Fatalf("same-organization profiles after third identity = %d, want 4: %#v", got, cfg.Profiles)
+	}
+	assertOrganizationTokenAccessForTest(t, fixture.corpID, fixture.blank.AccessToken, "")
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.alpha.UserID, fixture.alpha.AccessToken)
+	assertIdentityTokenAccessForTest(t, fixture.corpID, fixture.beta.UserID, fixture.beta.AccessToken)
+	assertIdentityTokenAccessForTest(t, fixture.corpID, gamma.UserID, gamma.AccessToken)
+}
+
+func TestCrossPlatformCoverageLegacyBlankProfileRejectsOrganizationTokenOwnedByKnownIdentity(t *testing.T) {
+	cleanupKeychain(t)
+	corpID := "corp_mismatched_blank"
+	organizationToken := testToken("at_known_identity", corpID, "Mismatched Organization")
+	organizationToken.UserID = "identity_known"
+	organizationToken.UserName = "Known Account"
+	if err := SaveTokenDataKeychainForCorpID(corpID, organizationToken); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+	}
+
+	blank := Profile{Name: "legacy-unresolved", CorpID: corpID, CorpName: organizationToken.CorpName}
+	loaded, err := tokenLoadProfileIdentity(blank)
+	if err == nil {
+		t.Fatalf("tokenLoadProfileIdentity(blank) = %#v, nil; want ownership rejection", loaded)
+	}
+	for _, want := range []string{corpID, organizationToken.UserID, blank.Name, "cannot use"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("tokenLoadProfileIdentity(blank) error = %q, want %q", err, want)
+		}
 	}
 }
 

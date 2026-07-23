@@ -210,7 +210,14 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		if profile == nil {
 			return executor.Result{}, apperrors.NewValidation(fmt.Sprintf("profile %q not found", rawProfile))
 		}
-		authpkg.SetRuntimeProfile(authpkg.ProfileSelector(*profile))
+		resolvedSelector := authpkg.ProfileSelector(*profile)
+		if strings.TrimSpace(profile.UserID) == "" {
+			// Preserve a unique local-name selector for an unresolved account.
+			// Reducing it to corpId can select a different exact account through
+			// the organization's current-account pointer.
+			resolvedSelector = rawProfile
+		}
+		authpkg.SetRuntimeProfile(resolvedSelector)
 		defer authpkg.SetRuntimeProfile(rawProfile)
 	}
 
@@ -351,6 +358,9 @@ func (r *runtimeRunner) runMultiProfile(ctx context.Context, invocation executor
 
 	for _, selection := range selections {
 		resolvedSelector := authpkg.ProfileSelector(selection.Profile)
+		if strings.TrimSpace(selection.Profile.UserID) == "" {
+			resolvedSelector = selection.Selector
+		}
 		authpkg.SetRuntimeProfile(resolvedSelector)
 		result, err := r.runSingle(ctx, cloneInvocation(invocation), false)
 

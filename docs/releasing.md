@@ -15,6 +15,8 @@
 
 `plan` 是纯只读操作，不创建 tag、预留版本号或生成包。CHANGELOG 合入期间若另一个发布先占用了该版本，`publish` 会重新分配并因 CHANGELOG 章节不匹配而拒绝，需要重新 plan。`publish` 会先再次确认 dispatch SHA 仍是当前 `main`、Code Admission 和平台治理均通过，再由唯一的 write job 使用 GitHub API 原子创建 annotated tag；同一次 run 随即进入既有的跨平台构建、GitHub/npm、可选 OSS/Gitee 发布和 Homebrew PR DAG。内置 `GITHUB_TOKEN` 创建的 tag 不依赖第二条 workflow 被再次触发。
 
+为缩短封板前后的关键路径，`publish` 的只读版本规划会与平台治理检查并行，seal 仍严格等待二者成功；plan 在 candidate annotated tag 上验证过的 contract 和 stable/beta baseline 会绑定进 seal，并由 seal 后的 tag authority 检查复用。Code Admission 状态与 immutable-releases 治理仍会在 seal 后再次读取，避免 preflight 与发布之间的状态变化被忽略。随后三类只读门禁（release automation、命令兼容性、multi-profile E2E）与 GoReleaser 构建并行；Node/archive 等仅供后处理使用的工具也延后到构建完成后安装。并行和已验证结果复用只改变调度，不降低发布门禁：任何一条验证失败都会阻止 GitHub Release、npm、镜像和 Homebrew 发布，delivery proof 也要求三条验证 job 全部成功。
+
 OSS 镜像默认不参与发布 DAG，适用于尚未创建 Bucket 的仓库。云端封板会把当时的仓库变量 `ENABLE_OSS_MIRROR=true` 记录为不可变 tag 元数据 `OSS-Mirror: enabled`，否则记录为 `deferred`；后续发布和撤回只读取该 sealed policy，不读取变量的当前值。`enabled` 继续对缺失凭据、无效 Bucket、上传、pointer 和撤回失败保持 fail-closed；`deferred` 明确跳过不存在的渠道。为避免补发后撤回遗漏，deferred 版本暂不接受 `repair_oss_version`，启用 OSS 只影响后续新 tag，直到补齐可审计的不可变 repair 证明。
 
 ## 自动版本规则

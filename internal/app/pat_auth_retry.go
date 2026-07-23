@@ -61,7 +61,7 @@ var (
 	patPollDeviceFlowWithInterval = pollPatDeviceFlowWithInterval
 	patSaveAppConfig              = authpkg.SaveAppConfig
 	patExchangeCodeForToken       = authpkg.ExchangeCodeForToken
-	patSaveTokenData              = authpkg.SaveTokenData
+	patSaveTokenData              = authpkg.SaveLoginTokenData
 	patSleep                      = time.Sleep
 	patPollHTTPDo                 = (*http.Client).Do
 	patPollNewRequest             = http.NewRequestWithContext
