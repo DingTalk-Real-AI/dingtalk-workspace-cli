@@ -56,8 +56,27 @@ base notes into an invalid final CHANGELOG.
 
 All nine admission contexts are still emitted and must succeed. Expensive
 implementation helpers are skipped; the named contexts record that their code
-surface is unaffected. After merge, the protected `main` push executes the
-full admission suite.
+surface is unaffected.
+
+The protected `main` push keeps that fast path only when all of these
+fail-closed conditions hold:
+
+- the event is a non-forced update of the existing `refs/heads/main`;
+- the event `after` SHA is the exact workflow SHA, and both event SHAs are
+  complete, non-zero commit IDs;
+- GitHub's comparison reports the previous main tip as the unique linear merge
+  base, with no commits behind it;
+- the complete resulting tree diff is exactly one in-place modification of
+  `CHANGELOG.md`;
+- the previous main tip already has successful GitHub Actions checks for all
+  nine Code Admission contexts.
+
+`Policy` then independently checks out the pushed revision and runs the same
+`check-changelog-pr.sh --fast-path` contract from the event's `before` SHA to
+its `after` SHA. If identity, ancestry, file scope, tree mode, CHANGELOG
+content, or predecessor admission cannot be proved, classification falls back
+to the complete main admission suite. A source change can therefore never
+inherit the CHANGELOG-only result.
 
 Any PR that touches `CHANGELOG.md` but also changes another file runs the same
 content contract in `Policy` with `--content-only`. That mode permits the

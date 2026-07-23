@@ -747,6 +747,34 @@ func TestReleaseWorkflowUsesDedicatedGovernanceIdentity(t *testing.T) {
 			t.Errorf("%s immutable governance path must not fall back to GITHUB_TOKEN", name)
 		}
 	}
+
+	tagChecks := releaseWorkflowSection(
+		t,
+		sections["tag"],
+		"      - name: Require successful Code Admission contexts on the sealed commit\n",
+		"\n      - name: Require delivered previous stable baseline\n",
+	)
+	tagGovernanceToken := releaseWorkflowSection(
+		t,
+		sections["tag"],
+		"      - name: Require release governance token\n",
+		"\n      - name: Require immutable releases governance\n",
+	)
+	tagImmutableGovernance := releaseWorkflowSection(
+		t,
+		sections["tag"],
+		"      - name: Require immutable releases governance\n",
+		"\n      - name: Verify Homebrew PR automation permission\n",
+	)
+	for name, section := range map[string]string{
+		"sealed Code Admission recheck":       tagChecks,
+		"sealed governance token check":       tagGovernanceToken,
+		"sealed immutable governance recheck": tagImmutableGovernance,
+	} {
+		if strings.Contains(section, "\n        if:") {
+			t.Errorf("%s must run for push, recovery, and cloud create modes", name)
+		}
+	}
 	if strings.Contains(workflow, "CI"+" Gate") {
 		t.Error("release workflow must not retain the retired aggregate gate name")
 	}
@@ -902,6 +930,13 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 	if strings.Contains(plan, "contents: write") {
 		t.Error("cloud release planning must remain read-only")
 	}
+	if !strings.Contains(plan, "needs: [dispatch-contract]") {
+		t.Error("cloud release planning must start after dispatch validation without serializing behind governance")
+	}
+	if strings.Contains(plan, "needs: [dispatch-contract, governance-preflight]") ||
+		strings.Contains(plan, "needs.governance-preflight.result") {
+		t.Error("read-only cloud planning must run in parallel with governance preflight")
+	}
 	if strings.Contains(plan, "refs/tags/v refs/tags/withdrawn/v") {
 		t.Error("cloud release planning must use wildcard ref patterns that match the seal API prefixes")
 	}
@@ -935,6 +970,80 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 	} {
 		if strings.Contains(seal, forbidden) {
 			t.Errorf("write-capable cloud seal must not contain %q", forbidden)
+		}
+	}
+}
+
+func TestReleaseWorkflowParallelizesSealedValidationWithoutWeakeningPublication(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	releaseContract := releaseWorkflowSection(t, workflow, "  release-contract:\n", "\n  release:\n")
+	build := releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n")
+	validation := releaseWorkflowSection(t, workflow, "  release-validation:\n", "\n  release-plan:\n")
+	publish := releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n")
+	plan := releaseWorkflowSection(t, workflow, "  release-plan:\n", "\n  seal-release:\n")
+
+	for _, required := range []string{
+		"id: candidate",
+		"previous_stable: ${{ steps.candidate.outputs.previous_stable }}",
+		"previous_stable_commit: ${{ steps.candidate.outputs.previous_stable_commit }}",
+		"from_beta_commit: ${{ steps.candidate.outputs.from_beta_commit }}",
+		`printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"`,
+	} {
+		if !strings.Contains(plan, required) {
+			t.Errorf("cloud release plan does not export sealed contract evidence %q", required)
+		}
+	}
+
+	for _, required := range []string{
+		"channel: ${{ steps.metadata.outputs.channel }}",
+		"previous_stable: ${{ steps.metadata.outputs.previous_stable }}",
+		"name: Resolve validated release metadata",
+		`if test "$DISPATCH_MODE" = create_release`,
+		`test -n "$previous_stable_commit"`,
+		`test -n "$from_beta_commit"`,
+		`unsupported validated release channel`,
+		`if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}`,
+	} {
+		if !strings.Contains(releaseContract, required) {
+			t.Errorf("release contract cloud fast path is missing %q", required)
+		}
+	}
+
+	for _, required := range []string{
+		"name: Validate sealed release (${{ matrix.check }})",
+		"needs: [release-contract]",
+		"fail-fast: false",
+		"- automation",
+		"- compatibility",
+		"- e2e",
+		"verify-github-tag-authority.sh",
+		"go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'",
+		"check-command-compatibility.sh",
+		"test-multi-profile-e2e.sh",
+	} {
+		if !strings.Contains(validation, required) {
+			t.Errorf("parallel release validation is missing %q", required)
+		}
+	}
+
+	if strings.Contains(build, "test-multi-profile-e2e.sh") {
+		t.Error("multi-profile E2E must not serialize GoReleaser")
+	}
+	goreleaser := strings.Index(build, "name: Build release artifacts without publishing")
+	setupNode := strings.Index(build, "name: Setup Node.js")
+	archiveTools := strings.Index(build, "name: Install archive tooling")
+	if goreleaser == -1 || setupNode == -1 || archiveTools == -1 ||
+		goreleaser > setupNode || goreleaser > archiveTools {
+		t.Error("post-processing-only Node and archive tooling must be installed after GoReleaser")
+	}
+
+	for _, required := range []string{
+		"needs: [release-contract, release-validation, release, verify-darwin-signatures]",
+		"needs.release-validation.result == 'success'",
+	} {
+		if !strings.Contains(publish, required) {
+			t.Errorf("immutable publication is not blocked by parallel validation %q", required)
 		}
 	}
 }
@@ -1456,7 +1565,7 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 			name:      "GitHub publication",
 			start:     "  publish-release:\n",
 			end:       "\n  publish-channels:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}`,
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release-validation.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}`,
 		},
 		{
 			name:      "channel publication",
@@ -1494,6 +1603,7 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		"- authorize-recovery",
 		"- governance-preflight",
 		"- release-contract",
+		"- release-validation",
 		"- release",
 		"- verify-darwin-signatures",
 		"- publish-release",
@@ -1504,10 +1614,12 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		"- release-plan",
 		"- seal-release",
 		`REPAIR_CHANNEL_RESULT: ${{ needs.repair-channel.result }}`,
+		`RELEASE_VALIDATION_RESULT: ${{ needs.release-validation.result }}`,
 		`RELEASE_PLAN_RESULT: ${{ needs.release-plan.result }}`,
 		`SEAL_RELEASE_RESULT: ${{ needs.seal-release.result }}`,
 		"require_publication",
 		`require_result release-contract "$RELEASE_CONTRACT_RESULT" success`,
+		`require_result release-validation "$RELEASE_VALIDATION_RESULT" success`,
 		`require_result release "$RELEASE_RESULT" success`,
 		`require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success`,
 		`require_result publish-release "$PUBLISH_RELEASE_RESULT" success`,

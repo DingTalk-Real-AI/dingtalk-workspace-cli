@@ -441,11 +441,11 @@ jobs:
       oss_mirror: ${{ steps.target.outputs.oss_mirror }}
       is_recovery: ${{ steps.target.outputs.is_recovery }}
       failed_run_id: ${{ steps.target.outputs.failed_run_id }}
-      channel: ${{ steps.contract.outputs.channel }}
-      previous_stable: ${{ steps.contract.outputs.previous_stable }}
-      previous_stable_commit: ${{ steps.contract.outputs.previous_stable_commit }}
-      from_beta: ${{ steps.contract.outputs.from_beta }}
-      from_beta_commit: ${{ steps.contract.outputs.from_beta_commit }}
+      channel: ${{ steps.metadata.outputs.channel }}
+      previous_stable: ${{ steps.metadata.outputs.previous_stable }}
+      previous_stable_commit: ${{ steps.metadata.outputs.previous_stable_commit }}
+      from_beta: ${{ steps.metadata.outputs.from_beta }}
+      from_beta_commit: ${{ steps.metadata.outputs.from_beta_commit }}
     steps:
       - name: Resolve and verify exact release target
         id: target
@@ -667,7 +667,13 @@ jobs:
             core.setOutput("is_recovery", isRecovery ? "true" : "false");
             core.setOutput("failed_run_id", failedRunId);
 
+      # create_release already ran this exact source contract and its delivered
+      # baselines in release-plan. The seal binds that plan's commit and complete
+      # tag-ref fingerprint; the target step above then verifies the resulting
+      # annotated tag object and cloud metadata. Tag pushes and recoveries have
+      # no same-run candidate proof, so they retain the full independent path.
       - name: Check out repository
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.target.outputs.release_commit }}
@@ -675,6 +681,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check out trusted release tooling
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -682,6 +689,7 @@ jobs:
           persist-credentials: false
 
       - name: Fetch release branch and official tags
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         run: |
           git fetch --force origin \
             '+refs/heads/main:refs/remotes/origin/main'
@@ -691,6 +699,7 @@ jobs:
             '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 
       - name: Validate release contract
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         id: contract
         env:
           RELEASE_VERSION: ${{ steps.target.outputs.release_version }}
@@ -708,6 +717,7 @@ jobs:
             --metadata-output "$GITHUB_OUTPUT"
 
       - name: Verify remote annotated tag authority
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ steps.target.outputs.release_version }}
@@ -770,6 +780,7 @@ jobs:
             }
 
       - name: Require delivered previous stable baseline
+        if: ${{ github.event_name == 'push' || needs.dispatch-contract.outputs.mode == 'recover_release' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
@@ -808,7 +819,7 @@ jobs:
             }
 
       - name: Verify Homebrew PR automation permission
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && (github.event_name == 'push' || needs.dispatch-contract.outputs.mode == 'recover_release') }}
         env:
           HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
           RELEASE_GOVERNANCE_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
@@ -825,7 +836,7 @@ jobs:
             "$GITHUB_REPOSITORY" --canary
 
       - name: Require successful beta delivery before stable promotion
-        if: ${{ steps.contract.outputs.channel == 'stable' }}
+        if: ${{ steps.contract.outputs.channel == 'stable' && (github.event_name == 'push' || needs.dispatch-contract.outputs.mode == 'recover_release') }}
         uses: actions/github-script@v7
         env:
           FROM_BETA: ${{ steps.contract.outputs.from_beta }}
@@ -868,7 +879,7 @@ jobs:
             }
 
       - name: Verify beta Release workflow delivery
-        if: ${{ steps.contract.outputs.channel == 'stable' }}
+        if: ${{ steps.contract.outputs.channel == 'stable' && (github.event_name == 'push' || needs.dispatch-contract.outputs.mode == 'recover_release') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FROM_BETA: ${{ steps.contract.outputs.from_beta }}
@@ -877,28 +888,59 @@ jobs:
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-workflow-delivery.sh" \
             "$FROM_BETA" "$FROM_BETA_COMMIT"
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Test release automation
-        run: go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'
-
-      - name: Verify module files are tidy
-        run: |
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
-
-      - name: Verify released command tree
+      - name: Resolve validated release metadata
+        id: metadata
         env:
-          PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
+          DISPATCH_MODE: ${{ needs.dispatch-contract.outputs.mode }}
+          PLAN_CHANNEL: ${{ needs.release-plan.outputs.channel }}
+          PLAN_PREVIOUS_STABLE: ${{ needs.release-plan.outputs.previous_stable }}
+          PLAN_PREVIOUS_STABLE_COMMIT: ${{ needs.release-plan.outputs.previous_stable_commit }}
+          PLAN_FROM_BETA: ${{ needs.release-plan.outputs.from_beta }}
+          PLAN_FROM_BETA_COMMIT: ${{ needs.release-plan.outputs.from_beta_commit }}
+          CONTRACT_CHANNEL: ${{ steps.contract.outputs.channel }}
+          CONTRACT_PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
+          CONTRACT_PREVIOUS_STABLE_COMMIT: ${{ steps.contract.outputs.previous_stable_commit }}
+          CONTRACT_FROM_BETA: ${{ steps.contract.outputs.from_beta }}
+          CONTRACT_FROM_BETA_COMMIT: ${{ steps.contract.outputs.from_beta_commit }}
         run: |
           set -eu
-          test -n "$PREVIOUS_STABLE"
-          ./scripts/policy/check-command-compatibility.sh \
-            --base-ref HEAD \
-            --stable-ref "$PREVIOUS_STABLE"
+          if test "$DISPATCH_MODE" = create_release; then
+            channel="$PLAN_CHANNEL"
+            previous_stable="$PLAN_PREVIOUS_STABLE"
+            previous_stable_commit="$PLAN_PREVIOUS_STABLE_COMMIT"
+            from_beta="$PLAN_FROM_BETA"
+            from_beta_commit="$PLAN_FROM_BETA_COMMIT"
+          else
+            channel="$CONTRACT_CHANNEL"
+            previous_stable="$CONTRACT_PREVIOUS_STABLE"
+            previous_stable_commit="$CONTRACT_PREVIOUS_STABLE_COMMIT"
+            from_beta="$CONTRACT_FROM_BETA"
+            from_beta_commit="$CONTRACT_FROM_BETA_COMMIT"
+          fi
+          test -n "$channel"
+          test -n "$previous_stable"
+          test -n "$previous_stable_commit"
+          case "$channel" in
+            prerelease)
+              test -z "$from_beta"
+              test -z "$from_beta_commit"
+              ;;
+            stable)
+              test -n "$from_beta"
+              test -n "$from_beta_commit"
+              ;;
+            *)
+              echo "unsupported validated release channel: $channel" >&2
+              exit 2
+              ;;
+          esac
+          {
+            printf 'channel=%s\n' "$channel"
+            printf 'previous_stable=%s\n' "$previous_stable"
+            printf 'previous_stable_commit=%s\n' "$previous_stable_commit"
+            printf 'from_beta=%s\n' "$from_beta"
+            printf 'from_beta_commit=%s\n' "$from_beta_commit"
+          } >> "$GITHUB_OUTPUT"
 
   release:
     name: Build signed release artifacts
@@ -957,18 +999,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
-
-      - name: Multi-profile E2E
-        run: bash scripts/dev/test-multi-profile-e2e.sh
 
       - name: Install rcodesign (sign darwin binaries from Linux)
         run: |
@@ -1032,6 +1062,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ needs.release-contract.outputs.release_version }}
           GORELEASER_PREVIOUS_TAG: ${{ needs.release-contract.outputs.previous_stable }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install archive tooling
+        run: |
+          if command -v zip >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1; then
+            exit 0
+          fi
+          sudo apt-get update
+          sudo apt-get install -y zip unzip
 
       - name: Post-release packaging
         run: ./scripts/release/post-goreleaser.sh
@@ -1097,8 +1141,8 @@ jobs:
 
   publish-release:
     name: Publish immutable GitHub Release
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
-    needs: [release-contract, release, verify-darwin-signatures]
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release-validation.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
+    needs: [release-contract, release-validation, release, verify-darwin-signatures]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -2008,6 +2052,7 @@ jobs:
       - authorize-recovery
       - governance-preflight
       - release-contract
+      - release-validation
       - release
       - verify-darwin-signatures
       - publish-release
@@ -2030,6 +2075,7 @@ jobs:
           AUTHORIZE_RECOVERY_RESULT: ${{ needs.authorize-recovery.result }}
           GOVERNANCE_PREFLIGHT_RESULT: ${{ needs.governance-preflight.result }}
           RELEASE_CONTRACT_RESULT: ${{ needs.release-contract.result }}
+          RELEASE_VALIDATION_RESULT: ${{ needs.release-validation.result }}
           RELEASE_RESULT: ${{ needs.release.result }}
           DARWIN_SIGNATURE_RESULT: ${{ needs.verify-darwin-signatures.result }}
           PUBLISH_RELEASE_RESULT: ${{ needs.publish-release.result }}
@@ -2052,6 +2098,7 @@ jobs:
           }
           require_publication() {
             require_result release-contract "$RELEASE_CONTRACT_RESULT" success
+            require_result release-validation "$RELEASE_VALIDATION_RESULT" success
             require_result release "$RELEASE_RESULT" success
             require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success
             require_result publish-release "$PUBLISH_RELEASE_RESULT" success
@@ -2093,6 +2140,7 @@ jobs:
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2115,6 +2163,7 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" success
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2130,6 +2179,7 @@ jobs:
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2144,6 +2194,7 @@ jobs:
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2158,6 +2209,7 @@ jobs:
               require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2422,10 +2474,90 @@ jobs:
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
           DWS_REQUIRE_OSS: "1"
 
+  # These checks remain publication blockers, but they do not need to serialize
+  # artifact compilation. Each matrix leg gets an isolated runner workspace so the
+  # module-tidy check and E2E build cache cannot interfere with one another.
+  release-validation:
+    name: Validate sealed release (${{ matrix.check }})
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' }}
+    needs: [release-contract]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - automation
+          - compatibility
+          - e2e
+    steps:
+      - name: Check out sealed release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
+
+      - name: Fetch and verify sealed release tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+          RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+          RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
+        run: |
+          set -eu
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run isolated release validation
+        env:
+          VALIDATION_CHECK: ${{ matrix.check }}
+          PREVIOUS_STABLE: ${{ needs.release-contract.outputs.previous_stable }}
+        run: |
+          set -eu
+          case "$VALIDATION_CHECK" in
+            automation)
+              go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'
+              go mod tidy
+              git diff --exit-code -- go.mod go.sum
+              ;;
+            compatibility)
+              test -n "$PREVIOUS_STABLE"
+              ./scripts/policy/check-command-compatibility.sh \
+                --base-ref HEAD \
+                --stable-ref "$PREVIOUS_STABLE"
+              ;;
+            e2e)
+              bash scripts/dev/test-multi-profile-e2e.sh
+              ;;
+            *)
+              echo "unsupported release validation check: $VALIDATION_CHECK" >&2
+              exit 2
+              ;;
+          esac
+
   release-plan:
     name: Plan next cloud release
-    needs: [dispatch-contract, governance-preflight]
-    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'plan_release' || (needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success')) }}
+    needs: [dispatch-contract]
+    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'plan_release' || needs.dispatch-contract.outputs.mode == 'create_release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -2439,6 +2571,9 @@ jobs:
       base: ${{ steps.allocate.outputs.base }}
       refs_fingerprint: ${{ steps.allocate.outputs.refs_fingerprint }}
       oss_mirror: ${{ steps.allocate.outputs.oss_mirror }}
+      previous_stable: ${{ steps.candidate.outputs.previous_stable }}
+      previous_stable_commit: ${{ steps.candidate.outputs.previous_stable_commit }}
+      from_beta_commit: ${{ steps.candidate.outputs.from_beta_commit }}
     steps:
       - name: Validate official default-branch release request
         env:
@@ -2540,6 +2675,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Validate the candidate release contract before sealing
+        id: candidate
         if: ${{ needs.dispatch-contract.outputs.mode == 'create_release' }}
         env:
           RELEASE_VERSION: ${{ steps.allocate.outputs.release_version }}
@@ -2569,6 +2705,15 @@ jobs:
             set -- "$@" --from-beta "$FROM_BETA"
           fi
           ./scripts/release/release-contract.sh "$@"
+          for key in previous_stable previous_stable_commit from_beta_commit; do
+            count="$(grep -c "^$key=" "$RUNNER_TEMP/release-contract-output")"
+            test "$count" -eq 1 || {
+              echo "release contract returned $count values for $key" >&2
+              exit 1
+            }
+            value="$(sed -n "s/^$key=//p" "$RUNNER_TEMP/release-contract-output")"
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
+          done
 
       - name: Require delivered previous stable baseline before sealing
         if: ${{ needs.dispatch-contract.outputs.mode == 'create_release' }}
