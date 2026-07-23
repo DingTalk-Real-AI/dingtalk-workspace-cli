@@ -38,6 +38,8 @@ var registryOpenDeleteKey = func(path string, access uint32) (registry.Key, erro
 	return registry.OpenKey(registry.CURRENT_USER, path, access)
 }
 
+var registryOpenReadKey = registry.OpenKey
+
 // ---------------------------------------------------------------------------
 // Windows backend: DPAPI + HKCU registry
 // ---------------------------------------------------------------------------
@@ -184,7 +186,7 @@ func platformRemove(service, account string) error {
 
 func registryGet(service, account string) (string, bool, error) {
 	keyPath := registryPathForService(service)
-	k, err := registry.OpenKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE)
+	k, err := registryOpenReadKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotExist) {
 			return "", false, nil

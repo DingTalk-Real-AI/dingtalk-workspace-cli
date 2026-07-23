@@ -24,12 +24,14 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
+var registryReadValueNames = registry.Key.ReadValueNames
+
 // Windows stores token entries in the DPAPI-protected user registry. Enumerate
 // every auth-token account so orphaned slots that are not present in
 // profiles.json are still validated before a login can overwrite credentials.
 func platformValidateAuthTokenEntries(service string) error {
 	keyPath := registryPathForService(service)
-	k, err := registry.OpenKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE)
+	k, err := registryOpenReadKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotExist) {
 			return nil
@@ -38,7 +40,7 @@ func platformValidateAuthTokenEntries(service string) error {
 	}
 	defer k.Close()
 
-	names, err := k.ReadValueNames(-1)
+	names, err := registryReadValueNames(k, -1)
 	if err != nil {
 		return fmt.Errorf("registry list values for auth token validation failed: %w", err)
 	}

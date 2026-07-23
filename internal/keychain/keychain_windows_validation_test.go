@@ -17,9 +17,11 @@ package keychain
 
 import (
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -132,4 +134,61 @@ func TestCrossPlatformCoverageWindowsAuthTokenInventoryValidatesOrphanSlots(t *t
 	if err != nil || got != "legacy token" {
 		t.Fatalf("round trip = %q, %v; want legacy token", got, err)
 	}
+}
+
+func TestCrossPlatformCoverageWindowsRegistryReadFailuresFailClosed(t *testing.T) {
+	t.Run("open failure", func(t *testing.T) {
+		originalOpen := registryOpenReadKey
+		failure := windows.ERROR_ACCESS_DENIED
+		registryOpenReadKey = func(registry.Key, string, uint32) (registry.Key, error) {
+			return 0, failure
+		}
+		t.Cleanup(func() { registryOpenReadKey = originalOpen })
+
+		if _, err := Get("unreadable-service", AccountToken); !errors.Is(err, failure) {
+			t.Fatalf("Get() error = %v, want %v", err, failure)
+		}
+		if err := ValidateAuthTokenEntries("unreadable-service"); !errors.Is(err, failure) {
+			t.Fatalf("ValidateAuthTokenEntries() error = %v, want %v", err, failure)
+		}
+	})
+
+	t.Run("inventory enumeration failure", func(t *testing.T) {
+		service := "test-service-" + t.Name()
+		account := AccountToken + ":enumeration-failure"
+		writeRawRegistryString(t, service, account, "fixture")
+		t.Cleanup(func() { _ = Remove(service, account) })
+
+		originalReadNames := registryReadValueNames
+		failure := windows.ERROR_ACCESS_DENIED
+		registryReadValueNames = func(registry.Key, int) ([]string, error) {
+			return nil, failure
+		}
+		t.Cleanup(func() { registryReadValueNames = originalReadNames })
+
+		if err := ValidateAuthTokenEntries(service); !errors.Is(err, failure) {
+			t.Fatalf("ValidateAuthTokenEntries() error = %v, want %v", err, failure)
+		}
+	})
+
+	t.Run("inventory value disappears", func(t *testing.T) {
+		service := "test-service-" + t.Name()
+		account := AccountToken + ":disappearing"
+		unrelated := "app-secret:keeps-key-present"
+		writeRawRegistryString(t, service, unrelated, "fixture")
+		t.Cleanup(func() { _ = Remove(service, unrelated) })
+
+		originalReadNames := registryReadValueNames
+		registryReadValueNames = func(registry.Key, int) ([]string, error) {
+			// Model the real race after enumeration: the account name was
+			// observed, but GetStringValue no longer finds its value.
+			return []string{valueNameForAccount(account)}, nil
+		}
+		t.Cleanup(func() { registryReadValueNames = originalReadNames })
+
+		err := ValidateAuthTokenEntries(service)
+		if err == nil || !strings.Contains(err.Error(), "value disappeared during validation") {
+			t.Fatalf("ValidateAuthTokenEntries() error = %v, want disappearance error", err)
+		}
+	})
 }
