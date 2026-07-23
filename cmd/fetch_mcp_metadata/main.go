@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
@@ -179,12 +180,13 @@ func main() {
 	fmt.Fprintf(os.Stderr, "fetch_mcp_metadata: wrote %d tools to %s\n", len(allTools), *output)
 }
 
-// loadRegistryInterfaceRefs reads schema_command_registry.json and builds a
-// canonical_path → {product_id, rpc_name} mapping for interface_ref injection.
+// loadRegistryInterfaceRefs loads the reviewed split CommandRegistry through
+// the cli package's reassembly API and builds a canonical_path →
+// {product_id, rpc_name} mapping for interface_ref injection.
 func loadRegistryInterfaceRefs() map[string]map[string]string {
-	data, err := os.ReadFile("internal/cli/schema_command_registry.json")
+	data, err := cli.EmbeddedCommandRegistryMergedJSON()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fetch_mcp_metadata: warning: cannot read registry: %v\n", err)
+		fmt.Fprintf(os.Stderr, "fetch_mcp_metadata: warning: cannot load registry: %v\n", err)
 		return map[string]map[string]string{}
 	}
 	var reg struct {
