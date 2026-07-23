@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      checks: read
       contents: read
       pull-requests: read
     outputs:
@@ -26,7 +27,7 @@ jobs:
       changelog_changed: ${{ steps.classify.outputs.changelog_changed }}
       platform_sensitive: ${{ steps.classify.outputs.platform_sensitive }}
     steps:
-      - name: Classify pull request scope
+      - name: Classify revision scope
         id: classify
         uses: actions/github-script@v7
         with:
@@ -35,6 +36,7 @@ jobs:
             let changelogChanged = false;
             let platformSensitive = context.eventName === 'push';
             let files = [];
+            let fastPathTrust = 'not evaluated';
 
             if (context.eventName === 'pull_request') {
               const expectedHead = context.payload.pull_request.head.sha;
@@ -102,6 +104,115 @@ jobs:
                   isPlatformSensitive(filename) ||
                   isPlatformSensitive(previous_filename)
               );
+              fastPathTrust = changelogOnly
+                ? 'exact pull-request revision and synthetic merge policy'
+                : 'full admission required';
+            } else if (context.eventName === 'push') {
+              const expectedBefore = context.payload.before;
+              const expectedAfter = context.payload.after;
+              const fullCommit = /^[0-9a-f]{40}$/;
+              const zeroCommit = '0'.repeat(40);
+
+              if (
+                context.ref !== 'refs/heads/main' ||
+                context.payload.ref !== 'refs/heads/main' ||
+                context.payload.created !== false ||
+                context.payload.deleted !== false ||
+                context.payload.forced !== false ||
+                !fullCommit.test(expectedBefore || '') ||
+                !fullCommit.test(expectedAfter || '') ||
+                expectedBefore === zeroCommit ||
+                expectedAfter === zeroCommit ||
+                expectedAfter !== context.sha
+              ) {
+                fastPathTrust =
+                  'push identity is not a non-forced update of the existing main branch';
+              } else {
+                const { data: comparison } =
+                  await github.rest.repos.compareCommitsWithBasehead({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    basehead: `${expectedBefore}...${expectedAfter}`,
+                    per_page: 100,
+                  });
+                files = Array.isArray(comparison.files) ? comparison.files : [];
+                const linearFromValidatedTip =
+                  comparison.status === 'ahead' &&
+                  comparison.merge_base_commit?.sha === expectedBefore &&
+                  comparison.behind_by === 0 &&
+                  comparison.ahead_by > 0 &&
+                  comparison.total_commits === comparison.ahead_by;
+                const exactChangelogDiff =
+                  files.length === 1 &&
+                  files[0].filename === 'CHANGELOG.md' &&
+                  files[0].status === 'modified' &&
+                  !files[0].previous_filename;
+
+                if (linearFromValidatedTip && exactChangelogDiff) {
+                  const requiredContexts = [
+                    'Lint',
+                    'Test',
+                    'Coverage',
+                    'Policy',
+                    'Edition',
+                    'Interface Integrity',
+                    'AI Behavior',
+                    'CLI Smoke',
+                    'Mock MCP',
+                  ];
+                  const runs = await github.paginate(
+                    github.rest.checks.listForRef,
+                    {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      ref: expectedBefore,
+                      filter: 'latest',
+                      per_page: 100,
+                    }
+                  );
+                  const latestByName = new Map();
+                  for (const run of runs) {
+                    if (
+                      run.head_sha !== expectedBefore ||
+                      run.app?.slug !== 'github-actions' ||
+                      !requiredContexts.includes(run.name)
+                    ) {
+                      continue;
+                    }
+                    const current = latestByName.get(run.name);
+                    if (!current || run.id > current.id) {
+                      latestByName.set(run.name, run);
+                    }
+                  }
+                  const missing = requiredContexts.filter(
+                    (name) => !latestByName.has(name)
+                  );
+                  const nonSuccess = requiredContexts.flatMap((name) => {
+                    const run = latestByName.get(name);
+                    if (!run || run.conclusion === 'success') {
+                      return [];
+                    }
+                    return [
+                      `${name}=${run.conclusion || run.status || 'unknown'}`,
+                    ];
+                  });
+
+                  if (missing.length === 0 && nonSuccess.length === 0) {
+                    changelogOnly = true;
+                    changelogChanged = true;
+                    fastPathTrust =
+                      `exact CHANGELOG-only successor of validated ${expectedBefore}`;
+                  } else {
+                    fastPathTrust =
+                      'predecessor Code Admission is not fully successful; ' +
+                      `missing=${missing.join(',') || 'none'}; ` +
+                      `non-success=${nonSuccess.join(',') || 'none'}`;
+                  }
+                } else {
+                  fastPathTrust =
+                    'push is not an exact linear CHANGELOG-only successor';
+                }
+              }
             }
 
             core.setOutput('changelog_only', String(changelogOnly));
@@ -114,6 +225,7 @@ jobs:
               .addRaw(`- CHANGELOG touched: \`${changelogChanged}\`\n`)
               .addRaw(`- Native-platform risk paths touched: \`${platformSensitive}\`\n`)
               .addRaw(`- Changed files: \`${files.length}\`\n`)
+              .addRaw(`- Fast-path trust: ${fastPathTrust}\n`)
               .write();
 
       - name: Record CHANGELOG-only fast path
@@ -798,10 +910,24 @@ jobs:
           ./scripts/policy/check-changelog-pr.sh \
             "$mode" "$PR_BASE_SHA" HEAD
 
+      - name: Validate trusted main CHANGELOG-only push
+        if: github.event_name == 'push' && needs.lint.outputs.changelog_only == 'true'
+        env:
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_AFTER_SHA: ${{ github.event.after }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$PUSH_AFTER_SHA" || {
+            echo "checked-out push revision does not match event after SHA" >&2
+            exit 1
+          }
+          ./scripts/policy/check-changelog-pr.sh \
+            --fast-path "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+
       - name: Record CHANGELOG-only fast path
         if: needs.lint.outputs.changelog_only == 'true'
         run: |
-          echo "Only the base-equivalent CHANGELOG validator ran; full Policy resumes on main." \
+          echo "Only the trusted base-equivalent CHANGELOG validator ran; executable sources are unchanged." \
             >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
