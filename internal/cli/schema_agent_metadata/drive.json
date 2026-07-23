@@ -6322,31 +6322,32 @@
       ]
     },
     "drive upload": {
-      "agent_summary": "上传本地文件到钉盘或文档空间",
+      "agent_summary": "上传本地文件到钉盘或文档空间，或按节点 ID 确认覆盖已有文件",
       "agent_summary_source": "dws-agent-selection/drive",
       "availability": "available",
       "avoid_when": [
         "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
         "要把文件作为文档正文附件插入改用 dws doc media insert",
-        "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令"
+        "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
+        "用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录"
       ],
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
         "dws drive upload --file ./report.pdf --format json",
-        "dws drive upload --file ./slides.pptx --folder \u003cdentryUuid\u003e --format json"
+        "dws drive upload --file ./README.md --node \u003cdentryUuid\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "上传本地文件到钉盘或文档空间",
+          "value": "上传本地文件到钉盘或文档空间，或按节点 ID 确认覆盖已有文件",
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
-              "value": "上传本地文件到钉盘或文档空间",
+              "value": "上传本地文件到钉盘或文档空间，或按节点 ID 确认覆盖已有文件",
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -6359,14 +6360,14 @@
           "source": "internal/cli/schema_hints/metadata/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
             }
           ]
         },
@@ -6374,7 +6375,8 @@
           "value": [
             "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
             "要把文件作为文档正文附件插入改用 dws doc media insert",
-            "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令"
+            "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
+            "用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录"
           ],
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
@@ -6385,7 +6387,8 @@
               "value": [
                 "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
                 "要把文件作为文档正文附件插入改用 dws doc media insert",
-                "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令"
+                "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
+                "用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录"
               ],
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
@@ -6395,16 +6398,24 @@
           ]
         },
         "confirmation": {
-          "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -6413,14 +6424,14 @@
           "source": "internal/cli/schema_hints/metadata/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
             {
               "value": "write",
               "source": "internal/cli/schema_hints/metadata/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
             },
             {
               "value": "write",
@@ -6433,7 +6444,7 @@
         "examples": {
           "value": [
             "dws drive upload --file ./report.pdf --format json",
-            "dws drive upload --file ./slides.pptx --folder \u003cdentryUuid\u003e --format json"
+            "dws drive upload --file ./README.md --node \u003cdentryUuid\u003e --format json"
           ],
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
@@ -6443,7 +6454,7 @@
             {
               "value": [
                 "dws drive upload --file ./report.pdf --format json",
-                "dws drive upload --file ./slides.pptx --folder \u003cdentryUuid\u003e --format json"
+                "dws drive upload --file ./README.md --node \u003cdentryUuid\u003e --format json"
               ],
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
@@ -6454,15 +6465,23 @@
         },
         "idempotency": {
           "value": "unknown",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/drive.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/drive.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
+            },
             {
               "value": "unknown",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -6471,14 +6490,14 @@
           "source": "internal/cli/schema_hints/metadata/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
             {
               "value": "composite",
               "source": "internal/cli/schema_hints/metadata/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
             }
           ]
         },
@@ -6487,14 +6506,14 @@
           "source": "internal/cli/schema_hints/metadata/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
             {
               "value": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
               "source": "internal/cli/schema_hints/metadata/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
             }
           ]
         },
@@ -6519,14 +6538,14 @@
           "source": "internal/cli/schema_hints/metadata/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
             },
             {
               "value": true,
@@ -6542,14 +6561,14 @@
           "source": "internal/cli/schema_hints/metadata/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/drive marks this tool as reviewed",
+          "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode.",
           "candidates": [
             {
               "value": "medium",
               "source": "internal/cli/schema_hints/metadata/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/drive marks this tool as reviewed"
+              "review_reason": "The reviewed helper creates a new file by default, while --node switches to a confirmed destructive overwrite; Schema uses the safer command-level confirmation contract for that conditional mode."
             },
             {
               "value": "medium",
@@ -6562,7 +6581,8 @@
         "use_when": {
           "value": [
             "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
-            "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert"
+            "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+            "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
           ],
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
@@ -6572,7 +6592,8 @@
             {
               "value": [
                 "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
-                "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert"
+                "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+                "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
               ],
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
@@ -6601,7 +6622,8 @@
       ],
       "use_when": [
         "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
-        "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert"
+        "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+        "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
       ]
     },
     "drive upload-info": {

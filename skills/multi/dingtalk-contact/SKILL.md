@@ -1,6 +1,6 @@
 ---
 name: dingtalk-contact
-description: 钉钉通讯录查询与组织管理（用户、部门、角色、花名册、离职员工、创建企业、企业账号、邀请员工）。Use when 用户说 查部门/我的信息/按 userId 查/离职员工/创建企业/企业账号/邀请员工。Distinct from dingtalk-aisearch(模糊搜人首选：找同事/查上下级/谁负责)。命令前缀：dws contact。
+description: 钉钉通讯录查询与组织管理（用户、部门、角色、花名册、离职员工、企业与企业账号）。Use when 用户说 查部门/我的信息/按 userId 查/修改员工或自己的资料/创建或更新部门/创建或更新企业账号/邀请员工。Distinct from dingtalk-aisearch(模糊搜人首选：找同事/查上下级/谁负责)。命令前缀：dws contact。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -60,6 +60,11 @@ metadata:
 | "创建企业/新建企业/初始化企业" | `dws contact org create --org-name "<企业名>" --creator-username "<创建者名称>"` |
 | "创建企业账号/专属账号/企业登录账号" | `dws contact account create --org-user-name "<姓名>" --login-id "<登录号>"` |
 | "邀请员工/添加员工/新员工入职" | `dws contact user invite --org-user-name "<姓名>" --org-user-mobile "<手机号>"` |
+| "修改员工姓名/部门/直属主管" | `dws contact user update --user-id <userId> ...` |
+| "修改自己的昵称/头像" | `dws contact user update-self --nick "<昵称>"` / `--avatar-file-id <fileId>` |
+| "创建部门" | `dws contact dept create --name "<部门名>" --create-dept-group=true\|false` |
+| "修改部门名称/上级部门" | `dws contact dept update --dept <deptId> --name "<新名称>" [--parent <deptId>]` |
+| "更新企业账号资料" | `dws contact account update --user-id <userId> ...` |
 
 ## 评测高频硬约束
 
@@ -68,7 +73,10 @@ metadata:
 - 精确找人、按工号、按手机号：先用 `dws aisearch person --keyword "<完整输入>" --dimension name/jobNumber/phone --format json` 或对应 `contact user search/search-mobile`；拿到 `userId` 后必须 `dws contact user get --ids <userId> --format json` 补部门/职位/邮箱。
 - 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --keyword "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
-- "创建企业账号"必须优先匹配长模式 `account create`，不要误路由为 `org create`；三条组织管理命令都是写操作，执行前确认当前企业与目标信息。
+- "创建企业账号"必须优先匹配长模式 `account create`，不要误路由为 `org create`。
+- `user update` 至少修改姓名、部门、直属主管之一；`user update-self` 至少修改昵称、头像之一；`account update` 至少传一个修改项。
+- `dept create` 必须显式选择是否创建部门群；`dept update` 必须同时提供部门 ID 与新名称。
+- `org create`、`account create/update`、`user invite/update/update-self`、`dept create/update` 都是写操作；执行前确认当前企业、目标对象和字段，获得明确同意后才加 `--yes`。
 
 ## 跨产品协作
 

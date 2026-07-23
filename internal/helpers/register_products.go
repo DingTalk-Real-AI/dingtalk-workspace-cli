@@ -36,6 +36,7 @@ func init() {
 		{"drive", newDriveCommand},
 		{"live", newLiveCommand},
 		{"mail", newMailCommand},
+		{"markdown", newMarkdownCommand},
 		{"minutes", newMinutesCommand},
 		{"oa", newOaCommand},
 		{"report", newReportCommand},

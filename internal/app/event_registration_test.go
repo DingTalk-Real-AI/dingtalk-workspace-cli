@@ -13,13 +13,17 @@ import (
 func TestEventCommandRemainsVisibleAsBuiltInPublicGroup(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	event := newEventCommand()
+	markdown := &cobra.Command{Use: "markdown"}
 	unregistered := &cobra.Command{Use: "unregistered", Run: func(*cobra.Command, []string) {}}
-	root.AddCommand(event, unregistered)
+	root.AddCommand(event, markdown, unregistered)
 
 	hideNonDirectRuntimeCommands(root)
 
 	if event.Hidden {
 		t.Fatal("built-in event command was hidden by the direct-runtime visibility filter")
+	}
+	if markdown.Hidden {
+		t.Fatal("locally routed markdown command was hidden by the direct-runtime visibility filter")
 	}
 	if !unregistered.Hidden {
 		t.Fatal("control command outside the built-in/direct-runtime sets remained visible")

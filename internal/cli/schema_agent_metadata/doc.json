@@ -1109,10 +1109,10 @@
       ],
       "confirmation": "not_required",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws doc comment create --node \u003cDOC_ID\u003e --content \"这里需要修改\" --format json",
-        "dws doc comment create --node \u003cDOC_ID\u003e --content \"请review\" --mention uid1,uid2 --format json"
+        "dws doc comment create --node \u003cDOC_ID\u003e --content \"请review\" --mention uid1,uid2 --mentioned-open-conversation-id \u003copenConversationId\u003e --format json"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -1136,14 +1136,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
             },
             {
               "value": "available",
@@ -1177,36 +1177,52 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
           "value": "write",
-          "source": "command-verb",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
+            },
             {
               "value": "write",
               "source": "command-verb",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "examples": {
           "value": [
             "dws doc comment create --node \u003cDOC_ID\u003e --content \"这里需要修改\" --format json",
-            "dws doc comment create --node \u003cDOC_ID\u003e --content \"请review\" --mention uid1,uid2 --format json"
+            "dws doc comment create --node \u003cDOC_ID\u003e --content \"请review\" --mention uid1,uid2 --mentioned-open-conversation-id \u003copenConversationId\u003e --format json"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -1216,7 +1232,7 @@
             {
               "value": [
                 "dws doc comment create --node \u003cDOC_ID\u003e --content \"这里需要修改\" --format json",
-                "dws doc comment create --node \u003cDOC_ID\u003e --content \"请review\" --mention uid1,uid2 --format json"
+                "dws doc comment create --node \u003cDOC_ID\u003e --content \"请review\" --mention uid1,uid2 --mentioned-open-conversation-id \u003copenConversationId\u003e --format json"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -1226,32 +1242,40 @@
           ]
         },
         "idempotency": {
-          "value": "unknown",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
+            },
             {
               "value": "unknown",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
             },
             {
               "value": "mcp",
@@ -1261,20 +1285,38 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "doc-comment.create_comment",
+        "interface_reason": {
+          "value": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/create_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
             {
-              "value": "doc-comment.create_comment",
+              "value": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/create_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
-            },
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "doc.create_comment",
               "source": "internal/cli/schema_hints/imported/wukong.json",
@@ -1294,14 +1336,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
             },
             {
               "value": true,
@@ -1314,21 +1356,29 @@
         },
         "risk": {
           "value": "medium",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
           "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions."
+            },
             {
               "value": "medium",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "use_when": {
           "value": [
-            "在文档上创建不绑定具体划词位置的全文评论，可 --mention 时"
+            "在文档上创建不绑定具体划词位置的全文评论，可 @用户或通过 --mentioned-open-conversation-id @群"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -1337,7 +1387,7 @@
           "candidates": [
             {
               "value": [
-                "在文档上创建不绑定具体划词位置的全文评论，可 --mention 时"
+                "在文档上创建不绑定具体划词位置的全文评论，可 @用户或通过 --mentioned-open-conversation-id @群"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -1347,12 +1397,9 @@
           ]
         }
       },
-      "idempotency": "unknown",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "doc-comment",
-        "rpc_name": "create_comment"
-      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/create_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -1372,7 +1419,7 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#doc.create_comment"
       ],
       "use_when": [
-        "在文档上创建不绑定具体划词位置的全文评论，可 --mention 时"
+        "在文档上创建不绑定具体划词位置的全文评论，可 @用户或通过 --mentioned-open-conversation-id @群"
       ]
     },
     "doc comment create-inline": {
@@ -2215,9 +2262,9 @@
       ],
       "confirmation": "not_required",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
-        "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"同意\" --format json",
+        "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"同意\" --mentioned-open-conversation-id \u003copenConversationId\u003e --format json",
         "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"比心\" --emoji --format json"
       ],
       "field_provenance": {
@@ -2242,14 +2289,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
             },
             {
               "value": "available",
@@ -2281,35 +2328,51 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
           "value": "write",
-          "source": "command-verb",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
+            },
             {
               "value": "write",
               "source": "command-verb",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "examples": {
           "value": [
-            "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"同意\" --format json",
+            "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"同意\" --mentioned-open-conversation-id \u003copenConversationId\u003e --format json",
             "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"比心\" --emoji --format json"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
@@ -2319,7 +2382,7 @@
           "candidates": [
             {
               "value": [
-                "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"同意\" --format json",
+                "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"同意\" --mentioned-open-conversation-id \u003copenConversationId\u003e --format json",
                 "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"比心\" --emoji --format json"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
@@ -2330,32 +2393,40 @@
           ]
         },
         "idempotency": {
-          "value": "unknown",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
+            },
             {
               "value": "unknown",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
             },
             {
               "value": "mcp",
@@ -2365,20 +2436,38 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "doc-comment.reply_comment",
+        "interface_reason": {
+          "value": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/reply_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
             {
-              "value": "doc-comment.reply_comment",
+              "value": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/reply_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
-            },
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "doc.reply_comment",
               "source": "internal/cli/schema_hints/imported/wukong.json",
@@ -2398,14 +2487,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
             },
             {
               "value": true,
@@ -2418,21 +2507,29 @@
         },
         "risk": {
           "value": "medium",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
           "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support."
+            },
             {
               "value": "medium",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "use_when": {
           "value": [
-            "回复已有评论（文字或 --emoji 表情）；commentKey 来自 list/create"
+            "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -2441,7 +2538,7 @@
           "candidates": [
             {
               "value": [
-                "回复已有评论（文字或 --emoji 表情）；commentKey 来自 list/create"
+                "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -2451,12 +2548,9 @@
           ]
         }
       },
-      "idempotency": "unknown",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "doc-comment",
-        "rpc_name": "reply_comment"
-      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/reply_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -2476,11 +2570,11 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#doc.reply_comment"
       ],
       "use_when": [
-        "回复已有评论（文字或 --emoji 表情）；commentKey 来自 list/create"
+        "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
       ]
     },
     "doc comment update": {
-      "agent_summary": "更新指定文档评论的文字内容和可选 @提及用户。",
+      "agent_summary": "更新指定文档评论的文字内容和可选 @用户/@群。",
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
@@ -2488,20 +2582,21 @@
       ],
       "confirmation": "not_required",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
-        "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json"
+        "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json",
+        "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"请群内确认\" --mentioned-open-conversation-id \u003copenConversationId\u003e"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "更新指定文档评论的文字内容和可选 @提及用户。",
+          "value": "更新指定文档评论的文字内容和可选 @用户/@群。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
-              "value": "更新指定文档评论的文字内容和可选 @提及用户。",
+              "value": "更新指定文档评论的文字内容和可选 @用户/@群。",
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -2514,14 +2609,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array.",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array."
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
             }
           ]
         },
@@ -2550,14 +2645,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array.",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array."
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
             },
             {
               "value": "not_required",
@@ -2569,21 +2664,30 @@
         },
         "effect": {
           "value": "write",
-          "source": "command-verb",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
+            },
             {
               "value": "write",
               "source": "command-verb",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "examples": {
           "value": [
-            "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json"
+            "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json",
+            "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"请群内确认\" --mentioned-open-conversation-id \u003copenConversationId\u003e"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -2592,7 +2696,8 @@
           "candidates": [
             {
               "value": [
-                "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json"
+                "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json",
+                "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"请群内确认\" --mentioned-open-conversation-id \u003copenConversationId\u003e"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -2603,15 +2708,23 @@
         },
         "idempotency": {
           "value": "unknown",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
+            },
             {
               "value": "unknown",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -2620,14 +2733,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array.",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
             {
               "value": "composite",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array."
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
             }
           ]
         },
@@ -2636,14 +2749,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array.",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
             {
               "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array."
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
             }
           ]
         },
@@ -2668,14 +2781,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array.",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array."
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
             },
             {
               "value": true,
@@ -2688,21 +2801,29 @@
         },
         "risk": {
           "value": "medium",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
           "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds."
+            },
             {
               "value": "medium",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "use_when": {
           "value": [
-            "修改已有评论正文；可选更新 --mention"
+            "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -2711,7 +2832,7 @@
           "candidates": [
             {
               "value": [
-                "修改已有评论正文；可选更新 --mention"
+                "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -2737,7 +2858,7 @@
         "structured-hint:internal/cli/schema_hints/products/doc.json"
       ],
       "use_when": [
-        "修改已有评论正文；可选更新 --mention"
+        "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
       ]
     },
     "doc copy": {
@@ -7253,7 +7374,7 @@
       ]
     },
     "doc read": {
-      "agent_summary": "读取文档内容（Markdown）",
+      "agent_summary": "读取完整文档内容，或按 outline/range/section/tags 获取 JSONML fragment",
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
@@ -7263,20 +7384,21 @@
       ],
       "confirmation": "not_required",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
-        "dws doc read --node \u003cDOC_ID\u003e --format json"
+        "dws doc read --node \u003cDOC_ID\u003e --format json",
+        "dws doc read --node \u003cDOC_ID\u003e --content-format jsonml --scope outline --max-depth 3"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "读取文档内容（Markdown）",
+          "value": "读取完整文档内容，或按 outline/range/section/tags 获取 JSONML fragment",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
-              "value": "读取文档内容（Markdown）",
+              "value": "读取完整文档内容，或按 outline/range/section/tags 获取 JSONML fragment",
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -7289,14 +7411,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
             },
             {
               "value": "available",
@@ -7332,35 +7454,52 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
           "value": "read",
-          "source": "command-verb",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
+            },
             {
               "value": "read",
               "source": "command-verb",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "examples": {
           "value": [
-            "dws doc read --node \u003cDOC_ID\u003e --format json"
+            "dws doc read --node \u003cDOC_ID\u003e --format json",
+            "dws doc read --node \u003cDOC_ID\u003e --content-format jsonml --scope outline --max-depth 3"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -7369,7 +7508,8 @@
           "candidates": [
             {
               "value": [
-                "dws doc read --node \u003cDOC_ID\u003e --format json"
+                "dws doc read --node \u003cDOC_ID\u003e --format json",
+                "dws doc read --node \u003cDOC_ID\u003e --content-format jsonml --scope outline --max-depth 3"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -7380,31 +7520,39 @@
         },
         "idempotency": {
           "value": "idempotent",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
+            },
             {
               "value": "idempotent",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
             },
             {
               "value": "mcp",
@@ -7414,17 +7562,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "doc.get_document_content",
-          "source": "internal/cli/schema_hints/imported/wukong.json",
-          "precedence": "imported",
+        "interface_reason": {
+          "value": "Reviewed evolving remote adapter: the executable CLI calls doc/get_document_content with optional JSONML scope parameters that are newer than the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
+            {
+              "value": "Reviewed evolving remote adapter: the executable CLI calls doc/get_document_content with optional JSONML scope parameters that are newer than the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "doc.get_document_content",
               "source": "internal/cli/schema_hints/imported/wukong.json",
               "precedence": "imported",
-              "selected": true
+              "selected": false
             },
             {
               "value": "doc.get_document_content",
@@ -7439,14 +7613,14 @@
           "source": "internal/cli/schema_hints/metadata/doc.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/doc.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed"
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
             },
             {
               "value": true,
@@ -7459,22 +7633,31 @@
         },
         "risk": {
           "value": "low",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
           "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output."
+            },
             {
               "value": "low",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "use_when": {
           "value": [
             "用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
-            "用户直接粘贴文档 URL 且无其他指令时（默认读内容）"
+            "用户直接粘贴文档 URL 且无其他指令时（默认读内容）",
+            "只需标题大纲、指定块区间/单块或特定 JSONML tags 时使用 --content-format jsonml 与 --scope"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -7484,7 +7667,8 @@
             {
               "value": [
                 "用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
-                "用户直接粘贴文档 URL 且无其他指令时（默认读内容）"
+                "用户直接粘贴文档 URL 且无其他指令时（默认读内容）",
+                "只需标题大纲、指定块区间/单块或特定 JSONML tags 时使用 --content-format jsonml 与 --scope"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -7495,11 +7679,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "doc",
-        "rpc_name": "get_document_content"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed evolving remote adapter: the executable CLI calls doc/get_document_content with optional JSONML scope parameters that are newer than the pinned MCP metadata snapshot.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
@@ -7521,7 +7702,8 @@
       ],
       "use_when": [
         "用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
-        "用户直接粘贴文档 URL 且无其他指令时（默认读内容）"
+        "用户直接粘贴文档 URL 且无其他指令时（默认读内容）",
+        "只需标题大纲、指定块区间/单块或特定 JSONML tags 时使用 --content-format jsonml 与 --scope"
       ]
     },
     "doc rename": {

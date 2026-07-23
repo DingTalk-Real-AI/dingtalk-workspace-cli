@@ -19,13 +19,24 @@
       "reviewed": true
     },
     "doc.create_comment": {
-      "interface_ref": {
-        "product_id": "doc-comment",
-        "rpc_name": "create_comment"
-      },
-      "interface_mode": "mcp",
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
       "availability": "available",
-      "reviewed": true
+      "interface_reason": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/create_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "mentioned-open-conversation-id": {
+          "property": "mentionedOpenConversationIds",
+          "required": false,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed handler normalizes repeated or comma-separated group conversation IDs into a stable de-duplicated array while preserving existing user mentions.",
+      "cli_path": "doc comment create",
+      "runtime_gate": "none"
     },
     "doc.create_document": {
       "interface_mode": "mcp",
@@ -91,9 +102,47 @@
       "reviewed": true
     },
     "doc.get_document_content": {
-      "interface_mode": "mcp",
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
       "availability": "available",
-      "reviewed": true
+      "interface_reason": "Reviewed evolving remote adapter: the executable CLI calls doc/get_document_content with optional JSONML scope parameters that are newer than the pinned MCP metadata snapshot.",
+      "reviewed": true,
+    "parameters": {
+      "content-format": {
+        "property": "format",
+        "required": false,
+        "required_when": "--scope or --tags is set"
+      },
+      "scope": {
+        "property": "scope",
+        "required": false
+      },
+      "tags": {
+        "property": "tags",
+        "required": false,
+        "required_when": "--scope=tags"
+        },
+        "max-depth": {
+          "property": "maxDepth",
+          "required": false,
+          "interface_type": "integer"
+        },
+      "start-block-id": {
+        "property": "startBlockId",
+        "required": false,
+        "required_when": "--scope=range or --scope=section"
+        },
+        "end-block-id": {
+          "property": "endBlockId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed handler preserves full Markdown/JSONML reads and adds validated outline, range, section, and tag-scoped JSONML fragment reads with optional file output.",
+      "cli_path": "doc read",
+      "runtime_gate": "none"
     },
     "doc.get_document_info": {
       "interface_mode": "mcp",
@@ -173,13 +222,24 @@
       "reviewed": true
     },
     "doc.reply_comment": {
-      "interface_ref": {
-        "product_id": "doc-comment",
-        "rpc_name": "reply_comment"
-      },
-      "interface_mode": "mcp",
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
       "availability": "available",
-      "reviewed": true
+      "interface_reason": "Reviewed evolving remote adapter: the executable CLI calls doc-comment/reply_comment with optional group mentions that are newer than the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "mentioned-open-conversation-id": {
+          "property": "mentionedOpenConversationIds",
+          "required": false,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed handler normalizes group conversation IDs into a stable de-duplicated array and rejects group mentions for emoji replies, which the remote operation does not support.",
+      "cli_path": "doc comment reply",
+      "runtime_gate": "none"
     },
     "doc.search_documents": {
       "interface_mode": "mcp",
@@ -220,6 +280,10 @@
       "review_reason": "migrated to reviewed metadata block"
     },
     "doc.update_comment": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
@@ -227,9 +291,14 @@
       "parameters": {
         "mention": {
           "interface_type": "array"
+        },
+        "mentioned-open-conversation-id": {
+          "property": "mentionedOpenConversationIds",
+          "required": false,
+          "interface_type": "array"
         }
       },
-      "review_reason": "Preserve the reviewed CLI-to-interface conversion: the comma-separated --mention string is normalized to the mentionedUserIds array.",
+      "review_reason": "Preserve the reviewed user-mention conversion and normalize repeated or comma-separated group conversation IDs into mentionedOpenConversationIds.",
       "cli_path": "doc comment update",
       "runtime_gate": "none",
       "confirmation": "not_required"

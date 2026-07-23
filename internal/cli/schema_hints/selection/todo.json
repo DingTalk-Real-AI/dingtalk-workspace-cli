@@ -242,9 +242,9 @@
       ]
     },
     "todo.get_user_todos_in_current_org": {
-      "agent_summary": "查询当前组织个人待办列表",
+      "agent_summary": "查询当前组织待办，或通过 --query-all 跨组织查询全部待办",
       "use_when": [
-        "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+        "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时；跨组织范围时显式使用 --query-all"
       ],
       "avoid_when": [
         "已知 taskId 需要完整单条详情时改用 dws todo task get"
@@ -425,11 +425,111 @@
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#todo.update_todo_task",
         "live-dws-schema:todo.update_todo_task"
       ]
+    },
+    "todo.create_todo_tag": {
+      "agent_summary": "为当前用户创建一个新的待办标签",
+      "use_when": [
+        "用户明确要求创建可复用的待办标签，且已给出非空标签名称"
+      ],
+      "avoid_when": [
+        "给已有待办打上现有标签应使用 todo tag add；重命名已有标签应使用 todo tag update"
+      ],
+      "examples": [
+        "dws todo tag create --name \"项目标签\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.create_todo_tag",
+        "cobra-help:dws todo tag create",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:todo.create_todo_tag#FAILED"
+      ]
+    },
+    "todo.delete_todo_tag": {
+      "agent_summary": "不可逆地删除当前用户的一个或多个待办标签",
+      "use_when": [
+        "用户明确要求删除已有标签 code，且已确认标签编码及不可逆影响"
+      ],
+      "avoid_when": [
+        "只需从某个待办移除标签或重命名标签时不要删除标签定义；未确认 code 时先用 todo tag list"
+      ],
+      "examples": [
+        "dws todo tag delete --tag-codes code1,code2"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.delete_todo_tag",
+        "cobra-help:dws todo tag delete",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:todo.delete_todo_tag#FAILED"
+      ]
+    },
+    "todo.list_todo_tags": {
+      "agent_summary": "列出当前用户可用的待办标签及其 code",
+      "use_when": [
+        "需要查看待办标签目录或先取得标签 code 供打标、更新、删除使用"
+      ],
+      "avoid_when": [
+        "查询待办任务列表应使用 todo task list；该命令只返回标签定义"
+      ],
+      "examples": [
+        "dws todo tag list"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.list_todo_tags",
+        "cobra-help:dws todo tag list",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:todo.list_todo_tags#FAILED"
+      ]
+    },
+    "todo.tag_todo": {
+      "agent_summary": "把一个或多个现有标签添加到指定待办",
+      "use_when": [
+        "已有 taskId 和标签 code，需要给该待办打标"
+      ],
+      "avoid_when": [
+        "尚无标签 code 时先用 todo tag list 或 todo tag create；修改标签定义应使用 todo tag update"
+      ],
+      "examples": [
+        "dws todo tag add --task-id <taskId> --tag-codes code1,code2"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.tag_todo",
+        "cobra-help:dws todo tag add",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:todo.tag_todo#FAILED"
+      ]
+    },
+    "todo.update_todo_tag": {
+      "agent_summary": "批量更新已有待办标签的名称等定义",
+      "use_when": [
+        "已有标签 code，需要按 JSON 数组更新一个或多个标签定义"
+      ],
+      "avoid_when": [
+        "给待办打标签应使用 todo tag add；创建没有 code 的新标签应使用 todo tag create"
+      ],
+      "examples": [
+        "dws todo tag update --user-tags '[{\"code\":\"code1\",\"name\":\"新名称\"}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.update_todo_tag",
+        "cobra-help:dws todo tag update",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:todo.update_todo_tag#FAILED"
+      ]
     }
   },
   "products": {
     "todo": {
-      "agent_summary": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+      "agent_summary": "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
       "use_when": [
         "查询、创建或更新个人待办及其协作信息时"
       ],

@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/markdown",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "markdown.create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed cross-product adapter: this local workflow resolves content, validates a native .md file, and uploads through either Drive or Doc space; no single MCP interface represents the command.",
+      "reviewed": true,
+      "parameters": {
+        "name": {
+          "property": "fileName",
+          "required": false,
+          "required_when": "--content is used"
+        },
+        "content": {
+          "property": "content",
+          "required": false
+        },
+        "file": {
+          "property": "filePath",
+          "required": false
+        },
+        "folder": {
+          "property": "folderId",
+          "required": false
+        },
+        "workspace": {
+          "property": "workspaceId",
+          "required": false
+        },
+        "space-id": {
+          "property": "spaceId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed workflow requires exactly one content source, requires an .md name for literal content, keeps workspace and Drive space mutually exclusive, and routes the upload without a confirmation gate.",
+      "cli_path": "markdown create",
+      "runtime_gate": "none"
+    },
+    "markdown.fetch": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed cross-product adapter: this local workflow resolves the file domain, downloads through Drive or Doc space, and optionally writes a sanitized local output path; no single MCP interface represents the command.",
+      "reviewed": true,
+      "parameters": {
+        "node": {
+          "property": "nodeId",
+          "required": true
+        },
+        "id": {
+          "property": "nodeId",
+          "required": false
+        },
+        "space-id": {
+          "property": "spaceId",
+          "required": false
+        },
+        "workspace": {
+          "property": "workspaceId",
+          "required": false
+        },
+        "output": {
+          "property": "output",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed workflow requires one node locator, keeps explicit Drive and Doc routes mutually exclusive, treats remote content as untrusted data, and protects local output paths.",
+      "cli_path": "markdown fetch",
+      "runtime_gate": "none"
+    },
+    "markdown.overwrite": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed cross-product adapter: this local workflow resolves and previews existing content, then replaces a Drive or Doc-space native .md file; no single MCP interface represents the command.",
+      "reviewed": true,
+      "parameters": {
+        "node": {
+          "property": "nodeId",
+          "required": true
+        },
+        "content": {
+          "property": "content",
+          "required": false
+        },
+        "file": {
+          "property": "filePath",
+          "required": false
+        },
+        "name": {
+          "property": "fileName",
+          "required": false
+        },
+        "space-id": {
+          "property": "spaceId",
+          "required": false
+        },
+        "workspace": {
+          "property": "workspaceId",
+          "required": false
+        },
+        "dry-run": {
+          "property": "dryRun",
+          "required": false,
+          "interface_type": "boolean"
+        }
+      },
+      "review_reason": "The reviewed workflow requires a target and exactly one content source, supports a command-owned diff preview, and confirms before replacing the remote file.",
+      "cli_path": "markdown overwrite",
+      "runtime_gate": "confirm_dangerous"
+    },
+    "markdown.patch": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed cross-product adapter: this local workflow downloads a Drive or Doc-space native .md file, applies literal or RE2 replacement, and reuploads it; no single MCP interface represents the command.",
+      "reviewed": true,
+      "parameters": {
+        "node": {
+          "property": "nodeId",
+          "required": true
+        },
+        "pattern": {
+          "property": "pattern",
+          "required": true
+        },
+        "content": {
+          "property": "replacement",
+          "required": true
+        },
+        "regex": {
+          "property": "regex",
+          "required": false,
+          "interface_type": "boolean"
+        },
+        "space-id": {
+          "property": "spaceId",
+          "required": false
+        },
+        "workspace": {
+          "property": "workspaceId",
+          "required": false
+        },
+        "dry-run": {
+          "property": "dryRun",
+          "required": false,
+          "interface_type": "boolean"
+        }
+      },
+      "review_reason": "The reviewed workflow requires a target, pattern, and replacement; it blocks zero-hit and empty-result writes, supports a command-owned diff preview, and confirms before reupload.",
+      "cli_path": "markdown patch",
+      "runtime_gate": "confirm_dangerous"
+    }
+  }
+}

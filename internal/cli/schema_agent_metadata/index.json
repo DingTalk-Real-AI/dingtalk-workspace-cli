@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "source_hash": "sha256:0977e2b3d4af77d348318fd0cd7ce36d325ba9ca4e7c9ed0d6daeb1be0a0c4ec",
-  "surface_hash": "sha256:e85148774f65d34b01d50ebdc702b785afdb8ea78663b6f2eeecc35bc3cb3fd5",
+  "source_hash": "sha256:bf25b0bdec18986a2d0f221740c4b603d96c3d30c828455f62b96a34dc8bb8e5",
+  "surface_hash": "sha256:2c84c53f5844050980fb5e1459c92e3afbd701357e125608f4c41a43abc9bdd5",
   "coverage": {
-    "surface_products": 23,
-    "products_with_metadata": 23,
-    "surface_tools": 573,
-    "tools_with_metadata": 573,
-    "tools_with_agent_summary": 573,
-    "tools_with_use_when": 573,
-    "tools_with_avoid_when": 573,
-    "tools_with_examples": 573,
-    "tools_with_interface_mode": 573,
-    "unmatched_skill_tools": 119,
+    "surface_products": 24,
+    "products_with_metadata": 24,
+    "surface_tools": 592,
+    "tools_with_metadata": 592,
+    "tools_with_agent_summary": 592,
+    "tools_with_use_when": 592,
+    "tools_with_avoid_when": 592,
+    "tools_with_examples": 592,
+    "tools_with_interface_mode": 592,
+    "unmatched_skill_tools": 118,
     "unreviewed_skill_tools": 7
   },
   "products": {
@@ -444,20 +444,20 @@
       ]
     },
     "contact": {
-      "agent_summary": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
+      "agent_summary": "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
       "agent_summary_source": "dws-agent-selection/contact",
       "avoid_when": [
         "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息；写操作前确认当前企业和目标信息"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
+          "value": "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
           "source": "internal/cli/schema_hints/selection/contact.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
+              "value": "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
               "source": "internal/cli/schema_hints/selection/contact.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -1089,6 +1089,74 @@
         "查收、搜索、阅读、回复、发送或整理邮件"
       ]
     },
+    "markdown": {
+      "agent_summary": "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+      "agent_summary_source": "dws-agent-selection/markdown",
+      "avoid_when": [
+        "在线文档正文操作使用 doc；普通二进制文件上传下载使用 drive"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+          "source": "internal/cli/schema_hints/selection/markdown.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+              "source": "internal/cli/schema_hints/selection/markdown.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "在线文档正文操作使用 doc；普通二进制文件上传下载使用 drive"
+          ],
+          "source": "internal/cli/schema_hints/selection/markdown.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "在线文档正文操作使用 doc；普通二进制文件上传下载使用 drive"
+              ],
+              "source": "internal/cli/schema_hints/selection/markdown.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时"
+          ],
+          "source": "internal/cli/schema_hints/selection/markdown.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时"
+              ],
+              "source": "internal/cli/schema_hints/selection/markdown.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        }
+      },
+      "source_refs": [
+        "CommandRegistry:product=markdown",
+        "Wukong-parity:3306c3307",
+        "internal/cli/schema_hints/selection/markdown.json",
+        "skills/mono/SKILL.md"
+      ],
+      "use_when": [
+        "目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时"
+      ]
+    },
     "mcp": {
       "agent_summary": "解析和管理当前身份可用的 MCP 服务连接信息",
       "agent_summary_source": "dws-agent-selection/mcp",
@@ -1518,20 +1586,20 @@
       ]
     },
     "todo": {
-      "agent_summary": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+      "agent_summary": "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
       "agent_summary_source": "dws-agent-selection/todo",
       "avoid_when": [
         "不要用于 OA 审批流转、工作日志提交或日历日程管理"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+          "value": "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
           "source": "internal/cli/schema_hints/selection/todo.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+              "value": "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
               "source": "internal/cli/schema_hints/selection/todo.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -1673,6 +1741,7 @@
     "event",
     "live",
     "mail",
+    "markdown",
     "mcp",
     "minutes",
     "oa",

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -76,6 +77,39 @@ func contactAnyFlagChanged(cmd *cobra.Command, names ...string) bool {
 	return false
 }
 
+func contactGetBoolWithAliases(cmd *cobra.Command, names ...string) (bool, bool) {
+	for _, name := range names {
+		if flag := cmd.Flag(name); flag != nil && flag.Changed {
+			value, err := cmd.Flags().GetBool(name)
+			return value, err == nil
+		}
+	}
+	return false, false
+}
+
+func contactOptionalString(cmd *cobra.Command, primary string, aliases ...string) (string, bool) {
+	names := append([]string{primary}, aliases...)
+	if !contactAnyFlagChanged(cmd, names...) {
+		return "", false
+	}
+	return strings.TrimSpace(flagOrFallback(cmd, primary, aliases...)), true
+}
+
+func contactOptionalDepartments(cmd *cobra.Command) ([]map[string]any, bool, error) {
+	if !cmd.Flags().Changed("depts") {
+		return nil, false, nil
+	}
+	raw := strings.TrimSpace(mustGetFlag(cmd, "depts"))
+	if raw == "" {
+		return nil, false, nil
+	}
+	var departments []map[string]any
+	if err := json.Unmarshal([]byte(raw), &departments); err != nil {
+		return nil, false, fmt.Errorf("--depts JSON 解析失败: %w\n  hint: 正确格式: [{\"deptId\":1}]", err)
+	}
+	return departments, true, nil
+}
+
 // contactParseInt64WithAliases 先在主 flag 与全部别名中找出用户实际传入的值（空则报 missing），
 // 再走根部门占位符警告 + int64 解析，避免用户传别名时 RunE 读不到。
 // 报错文案中使用用户实际输入的 flag 名（比如用户传 --ids me，错误里显示 --ids 而不是主 flag --id），
@@ -97,21 +131,272 @@ func contactParseInt64WithAliases(cmd *cobra.Command, primary string, aliases ..
 	return v, nil
 }
 
+func newContactDeptCreateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建部门",
+		Long: `在当前企业下创建部门。--create-dept-group 必须显式传 true 或 false。
+不传 --parent 时使用企业根部门。该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact dept create --name "新产品部" --create-dept-group=true
+  dws contact dept create --name "研发一组" --parent 12345 --create-dept-group=false`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "name", "dept-name", "deptName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "dept-name", "deptName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "dept-name", "deptName"))
+			}
+			createGroup, supplied := contactGetBoolWithAliases(cmd, "create-dept-group", "createDeptGroup")
+			if !supplied {
+				return fmt.Errorf("--create-dept-group 是必填参数，请显式指定 true 或 false")
+			}
+			toolArgs := map[string]any{
+				"deptName":        name,
+				"createDeptGroup": createGroup,
+			}
+			if contactAnyFlagChanged(cmd, "parent", "super-dept-id", "super-dept", "superDeptId") {
+				parentID, err := contactParseInt64WithAliases(cmd, "parent", "super-dept-id", "super-dept", "superDeptId")
+				if err != nil {
+					return err
+				}
+				toolArgs["superDeptId"] = parentID
+			}
+			if !confirmDangerousAction(cmd, "create department", name) {
+				return nil
+			}
+			return callMCPTool("department_create", toolArgs)
+		},
+	}
+	cmd.Flags().String("name", "", "部门名称 (必填)")
+	cmd.Flags().String("dept-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("dept-name")
+	cmd.Flags().String("parent", "", "父部门 ID（可选，不传默认根部门）")
+	cmd.Flags().String("super-dept-id", "", "--parent 的别名")
+	cmd.Flags().String("super-dept", "", "--parent 的别名")
+	_ = cmd.Flags().MarkHidden("super-dept-id")
+	_ = cmd.Flags().MarkHidden("super-dept")
+	cmd.Flags().Bool("create-dept-group", false, "是否创建部门群 (必填，需显式传 true 或 false)")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "name", "create-dept-group")
+	return cmd
+}
+
+func newContactDeptUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "更新部门信息",
+		Long:    "更新部门名称，并可选择调整父部门。该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。",
+		Example: `  dws contact dept update --dept 12345 --name "新部门名"
+  dws contact dept update --dept 12345 --name "新名称" --parent 67890`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			deptID, err := contactParseInt64WithAliases(cmd, "dept", "id", "ids", "dept-id", "dept-ids", "deptId", "deptIds")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "name", "dept-name", "deptName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "dept-name", "deptName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "dept-name", "deptName"))
+			}
+			toolArgs := map[string]any{"deptId": deptID, "deptName": name}
+			if contactAnyFlagChanged(cmd, "parent", "super-dept-id", "super-dept", "superDeptId") {
+				parentID, err := contactParseInt64WithAliases(cmd, "parent", "super-dept-id", "super-dept", "superDeptId")
+				if err != nil {
+					return err
+				}
+				toolArgs["superDeptId"] = parentID
+			}
+			if !confirmDangerousAction(cmd, "update department", strconv.FormatInt(deptID, 10)) {
+				return nil
+			}
+			return callMCPTool("department_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("dept", "", "部门 ID (必填)")
+	cmd.Flags().String("name", "", "新部门名称 (必填)")
+	cmd.Flags().String("dept-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("dept-name")
+	cmd.Flags().String("parent", "", "新父部门 ID（可选）")
+	cmd.Flags().String("super-dept-id", "", "--parent 的别名")
+	cmd.Flags().String("super-dept", "", "--parent 的别名")
+	_ = cmd.Flags().MarkHidden("super-dept-id")
+	_ = cmd.Flags().MarkHidden("super-dept")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "dept", "name")
+	return cmd
+}
+
+func newContactUserUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "修改员工信息",
+		Long:    "修改员工的企业内姓名、所属部门或直属主管。至少提供一个修改项，执行前需要确认。",
+		Example: `  dws contact user update --user-id user001 --org-user-name "张三三"
+  dws contact user update --user-id user001 --depts '[{"deptId":1}]'`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "user-id", "id", "userid", "userId"); err != nil {
+				return err
+			}
+			userID := strings.TrimSpace(flagOrFallback(cmd, "user-id", "id", "userid", "userId"))
+			if userID == "" {
+				return fmt.Errorf("--user-id 不能为空")
+			}
+			toolArgs := map[string]any{"userId": userID}
+			changed := false
+			if value, supplied := contactOptionalString(cmd, "org-user-name", "orgUserName"); supplied && value != "" {
+				toolArgs["orgUserName"] = value
+				changed = true
+			}
+			departments, supplied, err := contactOptionalDepartments(cmd)
+			if err != nil {
+				return err
+			}
+			if supplied {
+				toolArgs["depts"] = departments
+				changed = true
+			}
+			if value, supplied := contactOptionalString(cmd, "master-user-id", "masterUserId"); supplied && value != "" {
+				toolArgs["masterUserId"] = value
+				changed = true
+			}
+			if !changed {
+				return fmt.Errorf("至少需要一个修改项：--org-user-name、--depts 或 --master-user-id")
+			}
+			if !confirmDangerousAction(cmd, "update employee", userID) {
+				return nil
+			}
+			return callMCPTool("employee_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("user-id", "", "要修改的员工 userId (必填)")
+	cmd.Flags().String("id", "", "--user-id 的别名")
+	cmd.Flags().String("userid", "", "--user-id 的别名")
+	_ = cmd.Flags().MarkHidden("id")
+	_ = cmd.Flags().MarkHidden("userid")
+	cmd.Flags().String("org-user-name", "", "员工在企业内的名称（可选）")
+	cmd.Flags().String("depts", "", "员工所属部门列表 JSON 数组（可选），格式: [{\"deptId\":1}]")
+	cmd.Flags().String("master-user-id", "", "直属主管 userId（可选）")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "user-id")
+	cli.AnnotateRuntimeConstraints(cmd, cli.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"org-user-name", "depts", "master-user-id"}},
+	})
+	return cmd
+}
+
+func newContactUserUpdateSelfCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update-self",
+		Aliases: []string{"update-me", "update-self-profile", "edit-self", "modify-self"},
+		Short:   "更新当前用户自己的 profile 信息",
+		Long:    "更新当前用户的昵称或头像。头像需先上传到钉盘取得 fileId；执行前需要确认。",
+		Example: `  dws contact user update-self --nick "新昵称"
+  dws contact user update-self --avatar-file-id "file-id"`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			toolArgs := map[string]any{}
+			if value, supplied := contactOptionalString(cmd, "nick"); supplied && value != "" {
+				toolArgs["nick"] = value
+			}
+			if value, supplied := contactOptionalString(cmd, "avatar-file-id", "avatarFileId"); supplied && value != "" {
+				toolArgs["avatarFileId"] = value
+			}
+			if len(toolArgs) == 0 {
+				return fmt.Errorf("至少需要一个修改项：--nick 或 --avatar-file-id")
+			}
+			if !confirmDangerousAction(cmd, "update current user profile", "current-user") {
+				return nil
+			}
+			return callMCPTool("self_user_profile_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("nick", "", "新昵称（可选）")
+	cmd.Flags().String("avatar-file-id", "", "新头像在钉盘的 fileId（可选）")
+	cli.AnnotateRuntimeConstraints(cmd, cli.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"nick", "avatar-file-id"}},
+	})
+	return cmd
+}
+
+func newContactAccountUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "更新企业账号用户信息",
+		Long:    "更新企业账号的员工姓名、部门、直属主管、昵称或头像。至少提供一个修改项，执行前需要确认。",
+		Example: `  dws contact account update --user-id user001 --org-user-name "张三"
+  dws contact account update --user-id user001 --nick "新昵称" --avatar-file-id "file-id"`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "user-id", "id", "userid", "userId"); err != nil {
+				return err
+			}
+			userID := strings.TrimSpace(flagOrFallback(cmd, "user-id", "id", "userid", "userId"))
+			if userID == "" {
+				return fmt.Errorf("--user-id 不能为空")
+			}
+			toolArgs := map[string]any{"userId": userID}
+			if value, supplied := contactOptionalString(cmd, "org-user-name", "orgUserName"); supplied && value != "" {
+				toolArgs["orgUserName"] = value
+			}
+			departments, supplied, err := contactOptionalDepartments(cmd)
+			if err != nil {
+				return err
+			}
+			if supplied {
+				toolArgs["depts"] = departments
+			}
+			if value, supplied := contactOptionalString(cmd, "master-user-id", "masterUserId"); supplied && value != "" {
+				toolArgs["masterUserId"] = value
+			}
+			if value, supplied := contactOptionalString(cmd, "nick"); supplied && value != "" {
+				toolArgs["nick"] = value
+			}
+			if value, supplied := contactOptionalString(cmd, "avatar-file-id", "avatarFileId"); supplied && value != "" {
+				toolArgs["avatarFileId"] = value
+			}
+			if len(toolArgs) == 1 {
+				return fmt.Errorf("至少需要一个修改项：--org-user-name、--depts、--master-user-id、--nick 或 --avatar-file-id")
+			}
+			if !confirmDangerousAction(cmd, "update enterprise account", userID) {
+				return nil
+			}
+			return callMCPTool("exclusive_account_user_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("user-id", "", "被修改企业账号的 userId (必填)")
+	cmd.Flags().String("id", "", "--user-id 的别名")
+	cmd.Flags().String("userid", "", "--user-id 的别名")
+	_ = cmd.Flags().MarkHidden("id")
+	_ = cmd.Flags().MarkHidden("userid")
+	cmd.Flags().String("org-user-name", "", "企业账号在企业内的员工姓名（可选）")
+	cmd.Flags().String("depts", "", "部门列表 JSON 数组（可选），格式: [{\"deptId\":1}]")
+	cmd.Flags().String("master-user-id", "", "直属主管 userId（可选）")
+	cmd.Flags().String("nick", "", "企业账号自身昵称（可选）")
+	cmd.Flags().String("avatar-file-id", "", "企业账号头像在钉盘的 fileId（可选）")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "user-id")
+	cli.AnnotateRuntimeConstraints(cmd, cli.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"org-user-name", "depts", "master-user-id", "nick", "avatar-file-id"}},
+	})
+	return cmd
+}
+
 func newContactCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "contact",
-		Short: "通讯录 / 用户 / 部门 / 人员关系",
+		Short: "通讯录 / 用户 / 部门 / 角色 / 人员关系",
 		Long: `查询钉钉通讯录：用户搜索、手机号查找、部门搜索、子部门 / 成员列表、人员关系；用户花名册档案信息（学历、家庭、银行卡、合同等）与离职员工信息。
 
 通讯录功能：
   - contact user get-self/search/search-mobile/get: 通讯录用户查询
-  - contact user invite: 邀请员工加入企业
-  - contact dept search/get-info/list-children/list-members: 部门查询
+  - contact user invite/update/update-self: 邀请与更新员工
+  - contact dept search/get-info/list-children/list-members/create/update: 部门查询与管理
   - contact relation list-my-followings: 特别关注人查询
 
 企业管理功能：
   - contact org create: 创建企业
-  - contact account create: 创建企业专属账号
+  - contact account create/update: 创建与更新企业专属账号
 
 基础人事功能（HR 花名册）：
   - contact user profile fields/get: 员工花名册档案查询（学历、家庭、银行卡等）
@@ -122,13 +407,15 @@ func newContactCommand() *cobra.Command {
 	userCmd := &cobra.Command{
 		Use:   "user",
 		Short: "人员管理",
-		Long: `人员管理：通讯录用户查询、邀请员工加入企业、用户档案（花名册）查询、离职员工查询。
+		Long: `人员管理：通讯录用户查询、修改员工信息、邀请员工加入企业、用户档案（花名册）查询、离职员工查询。
 
 【何时用哪个命令】
-  - 查询用户的部门、主管、管理员权限       → contact user get
-  - 邀请员工加入企业                     → contact user invite
+  - 查询用户的部门、主管、管理员权限         → contact user get
+  - 修改员工信息（姓名 / 部门 / 直属主管）   → contact user update
+  - 更新当前用户自己的 profile（昵称 / 头像） → contact user update-self
+  - 邀请员工加入企业                         → contact user invite
   - 查询用户的学历、家庭、银行卡、合同等档案 → contact user profile get
-  - 查询离职员工列表                       → contact user dismission search`,
+  - 查询离职员工列表                         → contact user dismission search`,
 		RunE: groupRunE,
 	}
 
@@ -601,6 +888,8 @@ contact user profile fields 获取可用字段列表。
 	contactUserInviteCmd.Flags().String("org-user-name", "", "员工在企业内的名称 (必填)")
 	contactUserInviteCmd.Flags().String("org-user-mobile", "", "员工手机号 (必填)")
 	contactUserInviteCmd.Flags().String("depts", "", "员工所属部门列表 JSON 数组（可选），格式: [{\"deptId\":1}]")
+	contactUserUpdateCmd := newContactUserUpdateCommand()
+	contactUserUpdateSelfCmd := newContactUserUpdateSelfCommand()
 
 	// ── flags 注册 ───────────────────────────────────────────────
 	contactUserSearchCmd.Flags().String("query", "", "搜索关键词 (必填)")
@@ -619,6 +908,8 @@ contact user profile fields 获取可用字段列表。
 	userCmd.AddCommand(
 		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetCmd,
 		contactUserInviteCmd,     // 邀请员工加入企业
+		contactUserUpdateCmd,     // 修改员工信息
+		contactUserUpdateSelfCmd, // 更新当前用户自己的 profile 信息
 		contactUserProfileCmd,    // 花名册档案
 		contactUserDismissionCmd, // 离职员工
 	)
@@ -640,17 +931,27 @@ contact user profile fields 获取可用字段列表。
 		cmd     *cobra.Command
 		aliases []string
 	}
+	contactDeptCreateCmd := newContactDeptCreateCommand()
+	contactDeptUpdateCmd := newContactDeptUpdateCommand()
 	for _, s := range []deptIDAliasSpec{
 		{contactDeptGetInfoCmd, []string{"id", "dept-id", "ids", "dept-ids"}},
 		{contactDeptListChildrenCmd, []string{"id", "ids", "dept-id", "dept-ids"}},
 		{contactDeptListMembersCmd, []string{"ids", "id", "dept-id", "dept-ids"}},
+		{contactDeptUpdateCmd, []string{"id", "ids", "dept-id", "dept-ids"}},
 	} {
 		for _, name := range s.aliases {
 			s.cmd.Flags().String(name, "", "部门 ID 别名（等价于当前命令的主 flag）")
 			_ = s.cmd.Flags().MarkHidden(name)
 		}
 	}
-	contactDeptCmd.AddCommand(contactDeptSearchCmd, contactDeptGetInfoCmd, contactDeptListChildrenCmd, contactDeptListMembersCmd)
+	contactDeptCmd.AddCommand(
+		contactDeptSearchCmd,
+		contactDeptGetInfoCmd,
+		contactDeptListChildrenCmd,
+		contactDeptListMembersCmd,
+		contactDeptCreateCmd,
+		contactDeptUpdateCmd,
+	)
 
 	// ── org 企业管理 ──────────────────────────────────────────────────
 
@@ -697,7 +998,7 @@ contact user profile fields 获取可用字段列表。
 	contactAccountCmd := &cobra.Command{
 		Use:   "account",
 		Short: "企业账号管理",
-		Long:  "企业账号管理：创建企业专属账号。",
+		Long:  "企业账号管理：创建或更新企业专属账号。",
 		RunE:  groupRunE,
 	}
 
@@ -754,7 +1055,8 @@ contact user profile fields 获取可用字段列表。
 	contactAccountCreateCmd.Flags().String("email", "", "邮箱（可选）")
 	contactAccountCreateCmd.Flags().String("dept-ids", "", "要加入的部门 ID 列表，逗号分隔（可选）")
 	contactAccountCreateCmd.Flags().Bool("send-pwd-via-sms", false, "是否通过手机短信/邮件发送登录邀请（可选）")
-	contactAccountCmd.AddCommand(contactAccountCreateCmd)
+	contactAccountUpdateCmd := newContactAccountUpdateCommand()
+	contactAccountCmd.AddCommand(contactAccountCreateCmd, contactAccountUpdateCmd)
 
 	relationCmd.AddCommand(contactRelationListMyFollowingsCmd)
 	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, relationCmd, contactOrgCmd, contactAccountCmd)

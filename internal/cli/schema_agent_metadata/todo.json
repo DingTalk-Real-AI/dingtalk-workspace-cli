@@ -793,6 +793,1426 @@
         "已知 taskId，需要分页查看该待办评论时"
       ]
     },
+    "todo tag add": {
+      "agent_summary": "把一个或多个现有标签添加到指定待办",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "尚无标签 code 时先用 todo tag list 或 todo tag create；修改标签定义应使用 todo tag update"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo tag add --task-id \u003ctaskId\u003e --tag-codes code1,code2"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "把一个或多个现有标签添加到指定待办",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。",
+          "candidates": [
+            {
+              "value": "把一个或多个现有标签添加到指定待办",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚无标签 code 时先用 todo tag list 或 todo tag create；修改标签定义应使用 todo tag update"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "尚无标签 code 时先用 todo tag list 或 todo tag create；修改标签定义应使用 todo tag update"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo tag add --task-id \u003ctaskId\u003e --tag-codes code1,code2"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo tag add --task-id \u003ctaskId\u003e --tag-codes code1,code2"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI builds TodoTagRequest and calls todo/tag_todo, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI builds TodoTagRequest and calls todo/tag_todo, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已有 taskId 和标签 code，需要给该待办打标"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "已有 taskId 和标签 code，需要给该待办打标"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、TodoTagRequest 映射和 Wukong 对齐实现审阅给待办打标的选择边界与示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI builds TodoTagRequest and calls todo/tag_todo, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.tag_todo",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws todo tag add",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "live-dws-schema:todo.tag_todo#FAILED",
+        "skills/mono/references/products/todo.md"
+      ],
+      "use_when": [
+        "已有 taskId 和标签 code，需要给该待办打标"
+      ]
+    },
+    "todo tag create": {
+      "agent_summary": "为当前用户创建一个新的待办标签",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "给已有待办打上现有标签应使用 todo tag add；重命名已有标签应使用 todo tag update"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo tag create --name \"项目标签\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "为当前用户创建一个新的待办标签",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。",
+          "candidates": [
+            {
+              "value": "为当前用户创建一个新的待办标签",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "给已有待办打上现有标签应使用 todo tag add；重命名已有标签应使用 todo tag update"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "给已有待办打上现有标签应使用 todo tag add；重命名已有标签应使用 todo tag update"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo tag create --name \"项目标签\""
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo tag create --name \"项目标签\""
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI wraps one trimmed name in UserTagAddRequest and calls todo/create_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI wraps one trimmed name in UserTagAddRequest and calls todo/create_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求创建可复用的待办标签，且已给出非空标签名称"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求创建可复用的待办标签，且已给出非空标签名称"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、请求封装和 Wukong 对齐实现审阅创建待办标签的选择边界与示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI wraps one trimmed name in UserTagAddRequest and calls todo/create_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.create_todo_tag",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws todo tag create",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "live-dws-schema:todo.create_todo_tag#FAILED",
+        "skills/mono/references/products/todo.md"
+      ],
+      "use_when": [
+        "用户明确要求创建可复用的待办标签，且已给出非空标签名称"
+      ]
+    },
+    "todo tag delete": {
+      "agent_summary": "不可逆地删除当前用户的一个或多个待办标签",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "只需从某个待办移除标签或重命名标签时不要删除标签定义；未确认 code 时先用 todo tag list"
+      ],
+      "confirmation": "user_required",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo tag delete --tag-codes code1,code2"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "不可逆地删除当前用户的一个或多个待办标签",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": "不可逆地删除当前用户的一个或多个待办标签",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只需从某个待办移除标签或重命名标签时不要删除标签定义；未确认 code 时先用 todo tag list"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "只需从某个待办移除标签或重命名标签时不要删除标签定义；未确认 code 时先用 todo tag list"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "destructive",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": "destructive",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo tag delete --tag-codes code1,code2"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo tag delete --tag-codes code1,code2"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI parses tag codes into UserTagDeleteRequest and calls todo/delete_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI parses tag codes into UserTagDeleteRequest and calls todo/delete_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "high",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+          "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求删除已有标签 code，且已确认标签编码及不可逆影响"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求删除已有标签 code，且已确认标签编码及不可逆影响"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、删除确认门禁和 Wukong 对齐实现审阅待办标签删除的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI parses tag codes into UserTagDeleteRequest and calls todo/delete_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "high",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.delete_todo_tag",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws todo tag delete",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "live-dws-schema:todo.delete_todo_tag#FAILED",
+        "skills/mono/references/products/todo.md"
+      ],
+      "use_when": [
+        "用户明确要求删除已有标签 code，且已确认标签编码及不可逆影响"
+      ]
+    },
+    "todo tag list": {
+      "agent_summary": "列出当前用户可用的待办标签及其 code",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "查询待办任务列表应使用 todo task list；该命令只返回标签定义"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo tag list"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "列出当前用户可用的待办标签及其 code",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。",
+          "candidates": [
+            {
+              "value": "列出当前用户可用的待办标签及其 code",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "查询待办任务列表应使用 todo task list；该命令只返回标签定义"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。",
+          "candidates": [
+            {
+              "value": [
+                "查询待办任务列表应使用 todo task list；该命令只返回标签定义"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo tag list"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo tag list"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI calls todo/list_todo_tags, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI calls todo/list_todo_tags, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看待办标签目录或先取得标签 code 供打标、更新、删除使用"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看待办标签目录或先取得标签 code 供打标、更新、删除使用"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf和 Wukong 对齐实现审阅标签目录查询的选择边界与无参数示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI calls todo/list_todo_tags, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.list_todo_tags",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws todo tag list",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "live-dws-schema:todo.list_todo_tags#FAILED",
+        "skills/mono/references/products/todo.md"
+      ],
+      "use_when": [
+        "需要查看待办标签目录或先取得标签 code 供打标、更新、删除使用"
+      ]
+    },
+    "todo tag update": {
+      "agent_summary": "批量更新已有待办标签的名称等定义",
+      "agent_summary_source": "dws-agent-selection/todo",
+      "availability": "available",
+      "avoid_when": [
+        "给待办打标签应使用 todo tag add；创建没有 code 的新标签应使用 todo tag create"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws todo tag update --user-tags '[{\"code\":\"code1\",\"name\":\"新名称\"}]'"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "批量更新已有待办标签的名称等定义",
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。",
+          "candidates": [
+            {
+              "value": "批量更新已有待办标签的名称等定义",
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "给待办打标签应使用 todo tag add；创建没有 code 的新标签应使用 todo tag create"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "给待办打标签应使用 todo tag add；创建没有 code 的新标签应使用 todo tag create"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws todo tag update --user-tags '[{\"code\":\"code1\",\"name\":\"新名称\"}]'"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws todo tag update --user-tags '[{\"code\":\"code1\",\"name\":\"新名称\"}]'"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI decodes user tag JSON into UserTagAddRequest and calls todo/update_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI decodes user tag JSON into UserTagAddRequest and calls todo/update_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已有标签 code，需要按 JSON 数组更新一个或多个标签定义"
+          ],
+          "source": "internal/cli/schema_hints/selection/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "已有标签 code，需要按 JSON 数组更新一个或多个标签定义"
+              ],
+              "source": "internal/cli/schema_hints/selection/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、JSON 数组校验和 Wukong 对齐实现审阅待办标签更新的选择边界与示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI decodes user tag JSON into UserTagAddRequest and calls todo/update_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=todo.update_todo_tag",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws todo tag update",
+        "internal/cli/schema_hints/metadata/todo.json",
+        "internal/cli/schema_hints/selection/todo.json",
+        "live-dws-schema:todo.update_todo_tag#FAILED",
+        "skills/mono/references/products/todo.md"
+      ],
+      "use_when": [
+        "已有标签 code，需要按 JSON 数组更新一个或多个标签定义"
+      ]
+    },
     "todo task add-attachment": {
       "agent_summary": "上传待办附件",
       "agent_summary_source": "dws-agent-selection/todo",
@@ -3186,7 +4606,7 @@
       ]
     },
     "todo task list": {
-      "agent_summary": "查询当前组织个人待办列表",
+      "agent_summary": "查询当前组织待办，或通过 --query-all 跨组织查询全部待办",
       "agent_summary_source": "dws-agent-selection/todo",
       "availability": "available",
       "avoid_when": [
@@ -3194,21 +4614,21 @@
       ],
       "confirmation": "not_required",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws todo task list --page 1 --size 20 --status false",
         "dws todo task list --page 1 --size 20 --status false --format json"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询当前组织个人待办列表",
+          "value": "查询当前组织待办，或通过 --query-all 跨组织查询全部待办",
           "source": "internal/cli/schema_hints/selection/todo.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
           "candidates": [
             {
-              "value": "查询当前组织个人待办列表",
+              "value": "查询当前组织待办，或通过 --query-all 跨组织查询全部待办",
               "source": "internal/cli/schema_hints/selection/todo.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -3221,14 +4641,14 @@
           "source": "internal/cli/schema_hints/metadata/todo.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/todo.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
             },
             {
               "value": "available",
@@ -3260,29 +4680,45 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
           "value": "read",
-          "source": "command-verb",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
+            },
             {
               "value": "read",
               "source": "command-verb",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -3310,31 +4746,39 @@
         },
         "idempotency": {
           "value": "idempotent",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
+            },
             {
               "value": "idempotent",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/metadata/todo.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/metadata/todo.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
             },
             {
               "value": "mcp",
@@ -3344,17 +4788,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "todo.get_user_todos_in_current_org",
-          "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org.interface_ref",
-          "precedence": "mcp_fallback",
+        "interface_reason": {
+          "value": "Reviewed conditional adapter: the same executable leaf calls todo/get_user_todos_in_current_org by default and todo/get_user_todos when --query-all is set.",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
+            {
+              "value": "Reviewed conditional adapter: the same executable leaf calls todo/get_user_todos_in_current_org by default and todo/get_user_todos when --query-all is set.",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "todo.get_user_todos_in_current_org",
               "source": "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org.interface_ref",
               "precedence": "mcp_fallback",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -3363,14 +4833,14 @@
           "source": "internal/cli/schema_hints/metadata/todo.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "dws-tool-metadata/todo marks this tool as reviewed",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/todo.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "dws-tool-metadata/todo marks this tool as reviewed"
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
             },
             {
               "value": true,
@@ -3383,21 +4853,29 @@
         },
         "risk": {
           "value": "low",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/metadata/todo.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
           "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/todo.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true."
+            },
             {
               "value": "low",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "use_when": {
           "value": [
-            "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+            "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时；跨组织范围时显式使用 --query-all"
           ],
           "source": "internal/cli/schema_hints/selection/todo.json",
           "precedence": "reviewed_explicit",
@@ -3406,7 +4884,7 @@
           "candidates": [
             {
               "value": [
-                "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+                "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时；跨组织范围时显式使用 --query-all"
               ],
               "source": "internal/cli/schema_hints/selection/todo.json",
               "precedence": "reviewed_explicit",
@@ -3417,11 +4895,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "todo",
-        "rpc_name": "get_user_todos_in_current_org"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed conditional adapter: the same executable leaf calls todo/get_user_todos_in_current_org by default and todo/get_user_todos when --query-all is set.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
@@ -3436,7 +4911,7 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#todo.get_user_todos_in_current_org"
       ],
       "use_when": [
-        "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时"
+        "需要按完成状态、优先级、角色或截止日期范围查询当前用户待办列表时；跨组织范围时显式使用 --query-all"
       ]
     },
     "todo task list-attachment": {

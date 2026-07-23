@@ -531,6 +531,290 @@
         "需要我自己创建的机器人及其 robot-code"
       ]
     },
+    "chat category batch-info": {
+      "agent_summary": "按分组 ID 批量获取自定义会话分组详情",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "不知道 categoryId 时先用 chat category list；按会话反查所属分组应使用 chat category list-by-conv"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat category batch-info --category-ids 123,456"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按分组 ID 批量获取自定义会话分组详情",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。",
+          "candidates": [
+            {
+              "value": "按分组 ID 批量获取自定义会话分组详情",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "不知道 categoryId 时先用 chat category list；按会话反查所属分组应使用 chat category list-by-conv"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "不知道 categoryId 时先用 chat category list；按会话反查所属分组应使用 chat category list-by-conv"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat category batch-info --category-ids 123,456"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat category batch-info --category-ids 123,456"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI parses category IDs and calls im/get_conv_categories_info, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI parses category IDs and calls im/get_conv_categories_info, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已经有一个或多个会话分组 categoryId，需要批量读取分组信息"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "已经有一个或多个会话分组 categoryId，需要批量读取分组信息"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI parses category IDs and calls im/get_conv_categories_info, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.get_conv_categories_info",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws chat category batch-info",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "live-dws-schema:chat.get_conv_categories_info#FAILED",
+        "skills/mono/references/products/chat.md"
+      ],
+      "use_when": [
+        "已经有一个或多个会话分组 categoryId，需要批量读取分组信息"
+      ]
+    },
     "chat category create-smart": {
       "agent_summary": "按名称、成员或关键词创建智能会话分组",
       "agent_summary_source": "dws-agent-selection/chat",
@@ -1038,6 +1322,290 @@
       ],
       "use_when": [
         "需要取得分组 ID 或浏览分组配置时"
+      ]
+    },
+    "chat category list-by-conv": {
+      "agent_summary": "查询指定会话所属的自定义会话分组",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "列出全部自定义分组应使用 chat category list；按 categoryId 查详情应使用 chat category batch-info"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat category list-by-conv --group \u003copenConversationId\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询指定会话所属的自定义会话分组",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。",
+          "candidates": [
+            {
+              "value": "查询指定会话所属的自定义会话分组",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "列出全部自定义分组应使用 chat category list；按 categoryId 查详情应使用 chat category batch-info"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "列出全部自定义分组应使用 chat category list；按 categoryId 查详情应使用 chat category batch-info"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat category list-by-conv --group \u003copenConversationId\u003e"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat category list-by-conv --group \u003copenConversationId\u003e"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps a conversation locator to im/list_conv_categories_by_conv, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps a conversation locator to im/list_conv_categories_by_conv, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已有会话 openConversationId，需要反查该会话被放入了哪些自定义分组"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。",
+          "candidates": [
+            {
+              "value": [
+                "已有会话 openConversationId，需要反查该会话被放入了哪些自定义分组"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps a conversation locator to im/list_conv_categories_by_conv, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.list_conv_categories_by_conv",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws chat category list-by-conv",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "live-dws-schema:chat.list_conv_categories_by_conv#FAILED",
+        "skills/mono/references/products/chat.md"
+      ],
+      "use_when": [
+        "已有会话 openConversationId，需要反查该会话被放入了哪些自定义分组"
       ]
     },
     "chat category list-conversations": {
@@ -5731,6 +6299,294 @@
         "已有上传后的头像 mediaId 并要修改群头像时"
       ]
     },
+    "chat group update-nick": {
+      "agent_summary": "设置或清除当前用户在指定群内的昵称",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "修改群名称应使用 chat group rename；修改其他成员信息不应使用本命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group update-nick --group \u003copenConversationId\u003e --nick \"项目昵称\"",
+        "dws chat group update-nick --group \u003copenConversationId\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "设置或清除当前用户在指定群内的昵称",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。",
+          "candidates": [
+            {
+              "value": "设置或清除当前用户在指定群内的昵称",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "修改群名称应使用 chat group rename；修改其他成员信息不应使用本命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。",
+          "candidates": [
+            {
+              "value": [
+                "修改群名称应使用 chat group rename；修改其他成员信息不应使用本命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat group update-nick --group \u003copenConversationId\u003e --nick \"项目昵称\"",
+            "dws chat group update-nick --group \u003copenConversationId\u003e"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat group update-nick --group \u003copenConversationId\u003e --nick \"项目昵称\"",
+                "dws chat group update-nick --group \u003copenConversationId\u003e"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps nickname update or clear semantics to im/update_group_nick, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps nickname update or clear semantics to im/update_group_nick, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户要求修改自己的群昵称，或明确要求清除群昵称"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。",
+          "candidates": [
+            {
+              "value": [
+                "用户要求修改自己的群昵称，或明确要求清除群昵称"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps nickname update or clear semantics to im/update_group_nick, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.update_group_nick",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws chat group update-nick",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "live-dws-schema:chat.update_group_nick#FAILED",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md"
+      ],
+      "use_when": [
+        "用户要求修改自己的群昵称，或明确要求清除群昵称"
+      ]
+    },
     "chat group update-settings": {
       "agent_summary": "更新指定群聊的一项设置开关",
       "agent_summary_source": "dws-agent-selection/chat",
@@ -5979,6 +6835,266 @@
       ],
       "use_when": [
         "需要调整 searchable、入群验证或群权限等设置时"
+      ]
+    },
+    "chat group upgrade-to-external": {
+      "agent_summary": "不可逆地把已有普通群升级为外部群",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "新建外部群应使用 chat group create --type EXTERNAL；未确认群主身份和不可逆影响时不要执行"
+      ],
+      "confirmation": "user_required",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group upgrade-to-external --group \u003copenConversationId\u003e"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "不可逆地把已有普通群升级为外部群",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": "不可逆地把已有普通群升级为外部群",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "新建外部群应使用 chat group create --type EXTERNAL；未确认群主身份和不可逆影响时不要执行"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "新建外部群应使用 chat group create --type EXTERNAL；未确认群主身份和不可逆影响时不要执行"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            }
+          ]
+        },
+        "effect": {
+          "value": "destructive",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": "destructive",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat group upgrade-to-external --group \u003copenConversationId\u003e"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat group upgrade-to-external --group \u003copenConversationId\u003e"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI validates an optional string map and calls im/upgrade_group_to_external, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI validates an optional string map and calls im/upgrade_group_to_external, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "high",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+          "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "群主明确要求保留现有会话并升级为可跨组织协作的外部群，且已确认不可逆影响"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "群主明确要求保留现有会话并升级为可跨组织协作的外部群，且已确认不可逆影响"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI validates an optional string map and calls im/upgrade_group_to_external, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "high",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.upgrade_group_to_external",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws chat group upgrade-to-external",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "live-dws-schema:chat.upgrade_group_to_external#FAILED",
+        "skills/mono/references/products/chat.md"
+      ],
+      "use_when": [
+        "群主明确要求保留现有会话并升级为可跨组织协作的外部群，且已确认不可逆影响"
       ]
     },
     "chat group-mute": {
@@ -10050,6 +11166,266 @@
       ],
       "use_when": [
         "已知消息、会话和资源 ID，需要保存媒体文件时"
+      ]
+    },
+    "chat message edit": {
+      "agent_summary": "编辑当前用户已发送消息的 Markdown 内容",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "发送新消息应使用 chat message send；撤回消息应使用 chat message recall"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat message edit --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --text \"更新后的内容\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "编辑当前用户已发送消息的 Markdown 内容",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。",
+          "candidates": [
+            {
+              "value": "编辑当前用户已发送消息的 Markdown 内容",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "发送新消息应使用 chat message send；撤回消息应使用 chat message recall"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。",
+          "candidates": [
+            {
+              "value": [
+                "发送新消息应使用 chat message send；撤回消息应使用 chat message recall"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat message edit --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --text \"更新后的内容\""
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat message edit --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --text \"更新后的内容\""
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI builds or accepts message content and calls im/edit_message, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI builds or accepts message content and calls im/edit_message, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已有会话 openConversationId 和消息 openMessageId，需要更正已发送消息的标题、正文或 @ 信息"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。",
+          "candidates": [
+            {
+              "value": [
+                "已有会话 openConversationId 和消息 openMessageId，需要更正已发送消息的标题、正文或 @ 信息"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI builds or accepts message content and calls im/edit_message, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.edit_message",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws chat message edit",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "live-dws-schema:chat.edit_message#FAILED",
+        "skills/mono/references/products/chat.md"
+      ],
+      "use_when": [
+        "已有会话 openConversationId 和消息 openMessageId，需要更正已发送消息的标题、正文或 @ 信息"
       ]
     },
     "chat message forward": {
