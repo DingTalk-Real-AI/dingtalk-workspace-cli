@@ -55,12 +55,12 @@ var CreatedTodos = shortcut.Shortcut{
 		`dws todo +created-todos`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		// Step 1 — list my todos as creator. pageNum/pageSize are strings and
-		// roleTypes=["creator"] mirrors helpers.buildListTodoTaskArgs, where
-		// "creator" is an accepted role-type enum value.
-		data, err := rt.CallMCPData("todo", "get_user_todos_in_current_org", map[string]any{
-			"pageNum":   "1",
-			"pageSize":  "50",
+		// Step 1 — list my todos as creator via the shared pager. This keeps
+		// pageSize at todoPageSize(=20): the backend silently returns an empty
+		// page for pageSize>20, so the previous hard-coded pageSize=50 made this
+		// command always return empty even when the creator had todos. The pager
+		// also merges every page instead of only the first.
+		cards, err := shortcutListAllTodoCards(rt, map[string]any{
 			"roleTypes": []string{"creator"},
 		})
 		if err != nil {
@@ -69,7 +69,6 @@ var CreatedTodos = shortcut.Shortcut{
 
 		// Step 2 — project each card to {subject, taskId, dueTime}, parsing
 		// fields defensively (helpers reused from todo_done.go / overdue.go).
-		cards := shortcutTodoCards(data)
 		created := make([]map[string]any, 0, len(cards))
 		for _, m := range cards {
 			subject, _ := m["subject"].(string)

@@ -94,12 +94,15 @@ func spaceListProject(data map[string]any) []map[string]any {
 // wikiSpaceRawList locates the space array across candidate container keys,
 // tolerating a nested {result|data:{list|items|spaces}} wrapper.
 func wikiSpaceRawList(data map[string]any) []any {
-	for _, k := range []string{"result", "data", "list", "items", "spaces", "workspaces"} {
+	// list_wikiSpaces / search_wikiSpaces nest the space list under
+	// result.wikiSpaces (or a top-level wikiSpaces once unwrapped); "wikiSpaces"
+	// MUST be probed or +space-list / +space-search silently return empty.
+	for _, k := range []string{"result", "data", "list", "items", "wikiSpaces", "spaces", "workspaces"} {
 		if arr, ok := data[k].([]any); ok {
 			return arr
 		}
 		if inner, ok := data[k].(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "spaces", "workspaces", "result", "data"} {
+			for _, ik := range []string{"list", "items", "wikiSpaces", "spaces", "workspaces", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
 					return arr
 				}

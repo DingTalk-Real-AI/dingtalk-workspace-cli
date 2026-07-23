@@ -214,18 +214,54 @@ func listRolesResolveList(data map[string]any) []any {
 			continue
 		}
 		if arr, ok := v.([]any); ok {
-			return arr
+			return listRolesFlattenGroups(arr)
 		}
 		// container may itself wrap the list one level deeper
 		if inner, ok := v.(map[string]any); ok {
 			for _, ik := range []string{"list", "items", "labels", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
-					return arr
+					return listRolesFlattenGroups(arr)
 				}
 			}
 		}
 	}
 	return []any{}
+}
+
+// listRolesFlattenGroups flattens the grouped get_org_labels response into a
+// flat list of label objects. get_org_labels returns result[] as label GROUPS
+// ({groupName, labels[]}), nesting the actual roles one level under each group's
+// labels[]. A naive top-level scan would hand back the group wrappers — which
+// carry no labelId/name — so every row would silently project to empty. When
+// the array is already a flat label list (no per-group labels[]), it is returned
+// unchanged so the projection tolerates both response shapes.
+func listRolesFlattenGroups(arr []any) []any {
+	flattened := make([]any, 0, len(arr))
+	sawGroup := false
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			flattened = append(flattened, item)
+			continue
+		}
+		var nested []any
+		for _, gk := range []string{"labels", "subLabels"} {
+			if inner, ok := m[gk].([]any); ok {
+				nested = inner
+				break
+			}
+		}
+		if nested != nil {
+			sawGroup = true
+			flattened = append(flattened, nested...)
+			continue
+		}
+		flattened = append(flattened, item)
+	}
+	if sawGroup {
+		return flattened
+	}
+	return arr
 }
 
 // listRolesFirst returns the first present candidate key's value.
@@ -291,6 +327,12 @@ func memberListProject(data map[string]any) []map[string]any {
 		if !ok {
 			continue
 		}
+		// get_dept_members_by_deptId wraps each member under userInfo
+		// (deptUserList item = {"userInfo": {userId, name, ...}}); unwrap it or
+		// every row projects empty and +list-dept-members silently returns none.
+		if ui, ok := m["userInfo"].(map[string]any); ok {
+			m = ui
+		}
 		row := map[string]any{}
 		if v := memberListFirst(m, "userId", "user_id", "userid", "id"); v != nil {
 			row["userId"] = v
@@ -306,9 +348,14 @@ func memberListProject(data map[string]any) []map[string]any {
 }
 
 // memberListFindList returns the first slice found under the common list
-// container keys, or nil when none is present.
+// container keys, or nil when none is present. get_dept_members_by_deptId nests
+// its members under deptUserList, so that key must be probed too.
 func memberListFindList(m map[string]any) []any {
-	for _, k := range []string{"result", "data", "list", "items", "members", "userList"} {
+	// get_dept_members_by_deptId nests under deptUserList and
+	// get_label_members_by_labelId under labelUserList; both must be probed (and
+	// each item unwrapped from userInfo above) or +list-dept-members /
+	// +list-role-members silently return empty despite having members.
+	for _, k := range []string{"result", "data", "list", "items", "members", "userList", "deptUserList", "labelUserList"} {
 		if arr, ok := m[k].([]any); ok {
 			return arr
 		}

@@ -495,8 +495,16 @@ var Recent = shortcut.Shortcut{
 // document list, dropping transport noise (logId) while keeping the pagination
 // cursor.
 func recentListProject(data map[string]any) map[string]any {
+	// get_recent_list nests its payload under result.recentItems; earlier this
+	// read data["recentItems"] at the top level only, so the whole list silently
+	// projected to empty. Resolve the payload container (top-level or one level
+	// under result/data) before reading recentItems / pagination fields.
+	payload := data
+	if inner, ok := recentListPayload(data); ok {
+		payload = inner
+	}
 	items := []map[string]any{}
-	raw, _ := data["recentItems"].([]any)
+	raw, _ := payload["recentItems"].([]any)
 	for _, it := range raw {
 		m, ok := it.(map[string]any)
 		if !ok {
@@ -512,13 +520,29 @@ func recentListProject(data map[string]any) map[string]any {
 		})
 	}
 	out := map[string]any{"count": len(items), "items": items}
-	if nc, ok := data["nextCursor"]; ok && nc != nil {
+	if nc, ok := payload["nextCursor"]; ok && nc != nil {
 		out["nextCursor"] = nc
 	}
-	if hm, ok := data["hasMore"]; ok {
+	if hm, ok := payload["hasMore"]; ok {
 		out["hasMore"] = hm
 	}
 	return out
+}
+
+// recentListPayload returns the map that actually holds recentItems, tolerating
+// a {result|data:{recentItems:[...]}} envelope as well as a bare top-level shape.
+func recentListPayload(data map[string]any) (map[string]any, bool) {
+	if _, ok := data["recentItems"]; ok {
+		return data, true
+	}
+	for _, k := range []string{"result", "data"} {
+		if inner, ok := data[k].(map[string]any); ok {
+			if _, ok := inner["recentItems"]; ok {
+				return inner, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func init() {
