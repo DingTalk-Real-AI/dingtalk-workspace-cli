@@ -750,9 +750,19 @@ func TestCrossPlatformCoverageOAuthAndDeviceKeepFreshUnknownIdentityIsolatedFrom
 	for _, flow := range []string{"oauth", "device"} {
 		t.Run(flow, func(t *testing.T) {
 			configDir := t.TempDir()
+			keychainDir := t.TempDir()
 			t.Setenv("DWS_CONFIG_DIR", configDir)
 			t.Setenv(keychain.DisableKeychainEnv, "1")
-			t.Setenv(keychain.StorageDirEnv, t.TempDir())
+			t.Setenv(keychain.StorageDirEnv, keychainDir)
+			// StorageDirEnv isolates file-backed keychains, while Windows uses
+			// DPAPI-protected HKCU values. Give every flow its own namespace so
+			// OAuth/device fixtures cannot leak into each other or later tests.
+			t.Setenv(keychain.TestNamespaceEnv, keychainDir)
+			t.Cleanup(func() {
+				if err := keychain.RemoveAuthTokenEntries(keychain.Service); err != nil {
+					t.Errorf("clean auth keychain fixture: %v", err)
+				}
+			})
 			authpkg.SetRuntimeProfile("")
 
 			const (
