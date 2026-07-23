@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -875,6 +876,93 @@ func TestResolvePATPollInterval(t *testing.T) {
 				t.Fatalf("resolvePATPollInterval(%d) = %s, want %s", tt.seconds, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolvePATPollTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  json.RawMessage
+		want time.Duration
+	}{
+		{name: "missing uses compatibility default", want: patPollTimeout},
+		{name: "server remaining lifetime", raw: json.RawMessage(`75`), want: 75 * time.Second},
+		{name: "zero uses compatibility default", raw: json.RawMessage(`0`), want: patPollTimeout},
+		{name: "negative uses compatibility default", raw: json.RawMessage(`-1`), want: patPollTimeout},
+		{name: "null uses compatibility default", raw: json.RawMessage(`null`), want: patPollTimeout},
+		{name: "string uses compatibility default", raw: json.RawMessage(`"75"`), want: patPollTimeout},
+		{name: "fraction uses compatibility default", raw: json.RawMessage(`1.5`), want: patPollTimeout},
+		{name: "invalid uses compatibility default", raw: json.RawMessage(`invalid`), want: patPollTimeout},
+		{name: "duration overflow uses compatibility default", raw: json.RawMessage(`9223372037`), want: patPollTimeout},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolvePATPollTimeout(tt.raw); got != tt.want {
+				t.Fatalf("resolvePATPollTimeout(%s) = %s, want %s", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHandlePatAuthCheck_UsesServerExpiryForPollDeadlineAndDisplay(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	originalPoll := patPollDeviceFlowWithInterval
+	t.Cleanup(func() {
+		patPollDeviceFlowWithInterval = originalPoll
+	})
+
+	var gotFlowID string
+	var gotInterval time.Duration
+	var gotRemaining time.Duration
+	patPollDeviceFlowWithInterval = func(
+		ctx context.Context,
+		flowID string,
+		_ string,
+		_ io.Writer,
+		interval time.Duration,
+	) (string, string, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("poll context should have a deadline")
+		}
+		gotFlowID = flowID
+		gotInterval = interval
+		gotRemaining = time.Until(deadline)
+		return authpkg.StatusExpired, "", nil
+	}
+
+	mock := &mockRunner{
+		runFunc: func(context.Context, executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called after the flow deadline expires")
+			return executor.Result{}, nil
+		},
+	}
+	raw := `{"code":"PAT_BATCH_AUTH_PENDING","data":{"flowId":"flow-expiring","pollIntervalSeconds":30,"expiresInSeconds":1}}`
+
+	var output bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), &runtimeRunner{fallback: mock}, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, &apperrors.PATError{RawJSON: raw}, configDir, &output)
+
+	if err == nil || !strings.Contains(err.Error(), "授权超时") {
+		t.Fatalf("handlePatAuthCheck error = %v, want authorization timeout", err)
+	}
+	if gotFlowID != "flow-expiring" {
+		t.Fatalf("poll flow ID = %q, want flow-expiring", gotFlowID)
+	}
+	if gotInterval != 30*time.Second {
+		t.Fatalf("poll interval = %s, want 30s", gotInterval)
+	}
+	if gotRemaining <= 0 || gotRemaining > time.Second {
+		t.Fatalf("poll context remaining lifetime = %s, want (0s, 1s]", gotRemaining)
+	}
+	if got := output.String(); !strings.Contains(got, "超时时间: 1s") {
+		t.Fatalf("output should display the effective server timeout, got %q", got)
 	}
 }
 
