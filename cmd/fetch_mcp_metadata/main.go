@@ -101,18 +101,7 @@ func main() {
 			if !hasRef {
 				continue // skip MCP tools not in the CLI registry
 			}
-			if _, exists := allTools[canonicalKey]; exists {
-				continue
-			}
-			entry := map[string]any{
-				"title":         tool.Title,
-				"description":   tool.Description,
-				"interface_ref": ref,
-			}
-			if tool.InputSchema != nil {
-				entry["parameters"] = extractParams(tool.InputSchema)
-			}
-			allTools[canonicalKey] = entry
+			mergeLiveMCPTool(allTools, canonicalKey, tool, ref)
 		}
 	}
 
@@ -178,6 +167,29 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "fetch_mcp_metadata: wrote %d tools to %s\n", len(allTools), *output)
+}
+
+// mergeLiveMCPTool replaces stale live-derived fields while retaining an
+// existing reviewed interface_ref. Some CLI canonicals intentionally route to
+// a differently named product/RPC, so the previous cross-server mapping must
+// survive even though title, description, and parameters are refreshed.
+func mergeLiveMCPTool(allTools map[string]map[string]any, canonicalKey string, tool transport.ToolDescriptor, fallbackRef map[string]string) {
+	interfaceRef := any(fallbackRef)
+	if previous := allTools[canonicalKey]; previous != nil {
+		if reviewedRef, ok := previous["interface_ref"]; ok && reviewedRef != nil {
+			interfaceRef = reviewedRef
+		}
+	}
+
+	entry := map[string]any{
+		"title":         tool.Title,
+		"description":   tool.Description,
+		"interface_ref": interfaceRef,
+	}
+	if tool.InputSchema != nil {
+		entry["parameters"] = extractParams(tool.InputSchema)
+	}
+	allTools[canonicalKey] = entry
 }
 
 // loadRegistryInterfaceRefs loads the reviewed split CommandRegistry through
