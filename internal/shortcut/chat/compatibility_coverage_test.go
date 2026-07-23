@@ -16,6 +16,7 @@ package chat
 import (
 	"context"
 	"io"
+	"reflect"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -128,4 +129,49 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCrossPlatformCoverageChatIDHelpers(t *testing.T) {
+	t.Run("recognize open DingTalk IDs", func(t *testing.T) {
+		tests := []struct {
+			value string
+			want  bool
+		}{
+			{value: "DingTalk-open-id", want: true},
+			{value: " dingtalk-open-id ", want: true},
+			{value: "user-id", want: false},
+			{value: "   ", want: false},
+		}
+		for _, tc := range tests {
+			if got := isOpenID(tc.value); got != tc.want {
+				t.Errorf("isOpenID(%q) = %v, want %v", tc.value, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("split mixed IDs", func(t *testing.T) {
+		userIDs, openIDs := splitIDs([]string{" user-1 ", "", "D-open-1", "d-open-2", "user-2"})
+		if want := []string{"user-1", "user-2"}; !reflect.DeepEqual(userIDs, want) {
+			t.Fatalf("user IDs = %#v, want %#v", userIDs, want)
+		}
+		if want := []string{"D-open-1", "d-open-2"}; !reflect.DeepEqual(openIDs, want) {
+			t.Fatalf("open IDs = %#v, want %#v", openIDs, want)
+		}
+	})
+
+	t.Run("parse numeric IDs", func(t *testing.T) {
+		got, err := toInt64Slice([]string{" 1 ", "", "-2"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []int64{1, -2}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("numeric IDs = %#v, want %#v", got, want)
+		}
+		if _, err := toInt64Slice([]string{"not-a-number"}); err == nil {
+			t.Fatal("invalid integer unexpectedly succeeded")
+		}
+		if _, err := toInt64Slice([]string{"", "  "}); err == nil {
+			t.Fatal("empty integer list unexpectedly succeeded")
+		}
+	})
 }

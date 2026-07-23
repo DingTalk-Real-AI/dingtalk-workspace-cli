@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:2b21f87e564139596d34db2f70443d81b41e16d9212eb60ec6e5a6b4b8d41ec7",
+  "source_hash": "sha256:0977e2b3d4af77d348318fd0cd7ce36d325ba9ca4e7c9ed0d6daeb1be0a0c4ec",
   "surface_hash": "sha256:e85148774f65d34b01d50ebdc702b785afdb8ea78663b6f2eeecc35bc3cb3fd5",
   "coverage": {
     "surface_products": 23,
@@ -12,7 +12,7 @@
     "tools_with_avoid_when": 573,
     "tools_with_examples": 573,
     "tools_with_interface_mode": 573,
-    "unmatched_skill_tools": 120,
+    "unmatched_skill_tools": 119,
     "unreviewed_skill_tools": 7
   },
   "products": {

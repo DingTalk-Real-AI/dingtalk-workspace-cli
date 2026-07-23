@@ -96,6 +96,6 @@ metadata:
 ## 跨产品协作
 
 - 收件人是人名 → 先用 `dingtalk-contact` 或 `dingtalk-aisearch` 拿 `openDingTalkId` / `userId`
-- 要发图片/文件 → 先 `dt_media_upload` 上传 → `python scripts/extract_media_id.py "<URL>"` 提取 mediaId → 再用 `--media-id`
+- 要发本地图片/文件 → 直接用 `dws chat message send --msg-type file --file-path <本地路径>`；图片会作为可下载的文件附件发送，不会内联渲染。只有上游已提供有效 mediaId 时才用 `--msg-type image --media-id`，DWS CLI 不能把本地文件转换成 mediaId
 - 紧急升级（应用内/短信/电话）→ 切到 `dingtalk-ding`
 - 发邮件 → 切到 `dingtalk-mail`
