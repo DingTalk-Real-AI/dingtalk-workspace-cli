@@ -6,6 +6,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.55-beta.1] - 2026-07-23
+
+This beta validates MCP Market URL resolution, the supported Wukong local-file
+send path after retiring the legacy credential-based media upload command from
+discovery, and reliable message-read rendering for rich content, forwarded
+records, encrypted messages, and media-download ID aliases.
+
 ### Added
 
 - **MCP URL resolution** — adds `dws mcp url get <mcpId>` for resolving a DingTalk MCP Market ID to the current user and organization scoped Streamable HTTP URL, while keeping the helper-only `mcp-meta` endpoint out of the public product command surface.
