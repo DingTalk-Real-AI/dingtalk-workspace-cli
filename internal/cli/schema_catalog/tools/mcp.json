@@ -1,0 +1,337 @@
+{
+  "product": "mcp",
+  "tools": {
+    "mcp.url_get": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "cobra-help:dws mcp url get --help",
+        "internal/app/mcp_url_command.go",
+        "internal/cli/schema_command_registry.json#mcp.url_get",
+        "internal/cli/schema_hints/metadata/mcp.json",
+        "internal/cli/schema_hints/selection/mcp.json",
+        "pkg/edition/default.go#openSupplementServers"
+      ],
+      "agent_summary": "按 MCP 市场 mcpId 获取当前用户和组织可用的 Streamable HTTP 地址",
+      "agent_summary_source": "dws-agent-selection/mcp",
+      "availability": "available",
+      "avoid_when": [
+        "只是查询 DWS 已公开命令或参数时使用 dws schema",
+        "用户要求把返回的凭据 URL 发送到群聊、文档、邮件、日志或代码仓库时不要执行或传播"
+      ],
+      "canonical_path": "mcp.url_get",
+      "cli_name": "get",
+      "cli_path": "mcp url get",
+      "confirmation": "not_required",
+      "description": "输入 MCP 市场 mcpId，返回以当前用户和组织身份访问该 MCP 的 Streamable HTTP 服务地址。\n\n安全提示：返回的 mcpURL 和 mcpJSON 可能包含身份凭据，仅限个人使用，请勿分享到群聊、文档、邮件、代码仓库或日志。",
+      "display": "管理 MCP 服务连接信息",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws mcp url get 10043 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "value": "按 MCP 市场 mcpId 获取当前用户和组织可用的 Streamable HTTP 地址"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+          "source": "internal/cli/schema_hints/selection/mcp.json",
+          "value": "按 MCP 市场 mcpId 获取当前用户和组织可用的 Streamable HTTP 地址"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "value": [
+                "只是查询 DWS 已公开命令或参数时使用 dws schema",
+                "用户要求把返回的凭据 URL 发送到群聊、文档、邮件、日志或代码仓库时不要执行或传播"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+          "source": "internal/cli/schema_hints/selection/mcp.json",
+          "value": [
+            "只是查询 DWS 已公开命令或参数时使用 dws schema",
+            "用户要求把返回的凭据 URL 发送到群聊、文档、邮件、日志或代码仓库时不要执行或传播"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "mcp url get",
+              "value": "mcp.url_get"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "mcp url get",
+          "value": "mcp.url_get"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "输入 MCP 市场 mcpId，返回以当前用户和组织身份访问该 MCP 的 Streamable HTTP 服务地址。\n\n安全提示：返回的 mcpURL 和 mcpJSON 可能包含身份凭据，仅限个人使用，请勿分享到群聊、文档、邮件、代码仓库或日志。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "输入 MCP 市场 mcpId，返回以当前用户和组织身份访问该 MCP 的 Streamable HTTP 服务地址。\n\n安全提示：返回的 mcpURL 和 mcpJSON 可能包含身份凭据，仅限个人使用，请勿分享到群聊、文档、邮件、代码仓库或日志。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": "read"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "value": [
+                "dws mcp url get 10043 --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+          "source": "internal/cli/schema_hints/selection/mcp.json",
+          "value": [
+            "dws mcp url get 10043 --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": "Reviewed unpinned remote adapter: the public CLI wrapper calls the helper-only mcp-meta/get_mcp_server_url endpoint, which is intentionally absent from the public product catalog and pinned MCP metadata."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": "Reviewed unpinned remote adapter: the public CLI wrapper calls the helper-only mcp-meta/get_mcp_server_url endpoint, which is intentionally absent from the public product catalog and pinned MCP metadata."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/mcp.json",
+              "value": "medium"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Expose the reviewed MCP URL resolver through the public CLI and Agent Schema while preserving the helper endpoint as a non-product supplemental server. The returned URL contains user- and organization-scoped credentials and must be treated as sensitive output.",
+          "source": "internal/cli/schema_hints/metadata/mcp.json",
+          "value": "medium"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "按 mcpId 获取 MCP 的 Streamable HTTP 服务地址"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "按 mcpId 获取 MCP 的 Streamable HTTP 服务地址"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/mcp.json",
+              "value": [
+                "已知钉钉 MCP 市场 mcpId，需要获得当前身份可用的 Streamable HTTP 连接地址"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "正式公开 MCP URL 解析命令的 Agent 选型文案，并明确凭据 URL 只能返回给当前用户、不得二次传播。",
+          "source": "internal/cli/schema_hints/selection/mcp.json",
+          "value": [
+            "已知钉钉 MCP 市场 mcpId，需要获得当前身份可用的 Streamable HTTP 连接地址"
+          ]
+        }
+      },
+      "group": "url",
+      "has_parameters": false,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the public CLI wrapper calls the helper-only mcp-meta/get_mcp_server_url endpoint, which is intentionally absent from the public product catalog and pinned MCP metadata.",
+      "is_alias": false,
+      "name": "url_get",
+      "parameter_count": 0,
+      "parameters": {},
+      "path": "mcp.url_get",
+      "positionals": [
+        {
+          "description": "钉钉 MCP 市场中的 mcpId",
+          "index": 0,
+          "name": "mcp_id",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "primary_cli_path": "mcp url get",
+      "product_id": "mcp",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "reviewed_command_registry",
+      "title": "按 mcpId 获取 MCP 的 Streamable HTTP 服务地址",
+      "use_when": [
+        "已知钉钉 MCP 市场 mcpId，需要获得当前身份可用的 Streamable HTTP 连接地址"
+      ]
+    }
+  }
+}

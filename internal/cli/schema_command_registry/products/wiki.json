@@ -1,0 +1,65 @@
+{
+  "id": "wiki",
+  "tools": [
+    {
+      "canonical_path": "wiki.add_member",
+      "cli_path": "wiki member add"
+    },
+    {
+      "canonical_path": "wiki.list_member",
+      "cli_path": "wiki member list"
+    },
+    {
+      "canonical_path": "wiki.remove_member",
+      "cli_path": "wiki member remove"
+    },
+    {
+      "canonical_path": "wiki.update_member",
+      "cli_path": "wiki member update"
+    },
+    {
+      "canonical_path": "wiki.node_copy",
+      "cli_path": "wiki node copy"
+    },
+    {
+      "canonical_path": "wiki.create_file",
+      "cli_path": "wiki node create"
+    },
+    {
+      "canonical_path": "wiki.delete_document",
+      "cli_path": "wiki node delete"
+    },
+    {
+      "canonical_path": "wiki.list_nodes",
+      "cli_path": "wiki node list"
+    },
+    {
+      "canonical_path": "wiki.node_move",
+      "cli_path": "wiki node move"
+    },
+    {
+      "canonical_path": "wiki.node_search",
+      "cli_path": "wiki node search"
+    },
+    {
+      "canonical_path": "wiki.create_wikiSpace",
+      "cli_path": "wiki space create"
+    },
+    {
+      "canonical_path": "wiki.delete_wikiSpace",
+      "cli_path": "wiki space delete"
+    },
+    {
+      "canonical_path": "wiki.get_wikiSpace",
+      "cli_path": "wiki space get"
+    },
+    {
+      "canonical_path": "wiki.list_wikiSpaces",
+      "cli_path": "wiki space list"
+    },
+    {
+      "canonical_path": "wiki.search_wikiSpaces",
+      "cli_path": "wiki space search"
+    }
+  ]
+}

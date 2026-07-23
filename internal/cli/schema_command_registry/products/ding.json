@@ -1,0 +1,13 @@
+{
+  "id": "ding",
+  "tools": [
+    {
+      "canonical_path": "ding.recall_ding_message",
+      "cli_path": "ding message recall"
+    },
+    {
+      "canonical_path": "ding.send_ding_message",
+      "cli_path": "ding message send"
+    }
+  ]
+}

@@ -1,0 +1,297 @@
+{
+  "id": "chat",
+  "tools": [
+    {
+      "canonical_path": "chat.search_bots",
+      "cli_path": "chat bot find"
+    },
+    {
+      "canonical_path": "chat.search_my_robots",
+      "cli_path": "chat bot search"
+    },
+    {
+      "canonical_path": "chat.create_smart_conv_category",
+      "cli_path": "chat category create-smart"
+    },
+    {
+      "canonical_path": "chat.list_user_define_conv_categories",
+      "cli_path": "chat category list"
+    },
+    {
+      "canonical_path": "chat.list_conversations_by_category",
+      "cli_path": "chat category list-conversations"
+    },
+    {
+      "canonical_path": "chat.get_conversation_info",
+      "cli_path": "chat conversation-info"
+    },
+    {
+      "canonical_path": "chat.list_group_bots",
+      "cli_path": "chat group bots"
+    },
+    {
+      "canonical_path": "chat.create_group_conversation",
+      "cli_path": "chat group create"
+    },
+    {
+      "canonical_path": "chat.dismiss_group",
+      "cli_path": "chat group dismiss"
+    },
+    {
+      "canonical_path": "chat.get_conv_info_by_group_id",
+      "cli_path": "chat group get-by-group-id"
+    },
+    {
+      "canonical_path": "chat.get_group_invite_url",
+      "cli_path": "chat group invite-url"
+    },
+    {
+      "canonical_path": "chat.list_owned_or_admin_groups",
+      "cli_path": "chat group list-my-groups"
+    },
+    {
+      "canonical_path": "chat.add_group_member",
+      "cli_path": "chat group members add"
+    },
+    {
+      "canonical_path": "chat.add_robot_to_group",
+      "cli_path": "chat group members add-bot"
+    },
+    {
+      "canonical_path": "chat.remove_group_member",
+      "cli_path": "chat group members remove"
+    },
+    {
+      "canonical_path": "chat.remove_robot_in_group",
+      "cli_path": "chat group members remove-bot"
+    },
+    {
+      "canonical_path": "chat.quit_group",
+      "cli_path": "chat group quit"
+    },
+    {
+      "canonical_path": "chat.update_group_name",
+      "cli_path": "chat group rename"
+    },
+    {
+      "canonical_path": "chat.update_conv_member_roles",
+      "cli_path": "chat group set-admin"
+    },
+    {
+      "canonical_path": "chat.update_show_history_msg_option",
+      "cli_path": "chat group set-history"
+    },
+    {
+      "canonical_path": "chat.transfer_group_owner",
+      "cli_path": "chat group transfer-owner"
+    },
+    {
+      "canonical_path": "chat.update_group_icon",
+      "cli_path": "chat group update-icon"
+    },
+    {
+      "canonical_path": "chat.update_group_settings",
+      "cli_path": "chat group update-settings"
+    },
+    {
+      "canonical_path": "chat.set_group_mute",
+      "cli_path": "chat group-mute"
+    },
+    {
+      "canonical_path": "chat.set_group_member_mute_list",
+      "cli_path": "chat group-mute-member"
+    },
+    {
+      "canonical_path": "chat.add_custom_group_role",
+      "cli_path": "chat group-role add"
+    },
+    {
+      "canonical_path": "chat.list_custom_group_roles",
+      "cli_path": "chat group-role list"
+    },
+    {
+      "canonical_path": "chat.query_custom_user_roles",
+      "cli_path": "chat group-role query-user"
+    },
+    {
+      "canonical_path": "chat.remove_custom_group_role",
+      "cli_path": "chat group-role remove"
+    },
+    {
+      "canonical_path": "chat.remove_custom_user_roles",
+      "cli_path": "chat group-role remove-user"
+    },
+    {
+      "canonical_path": "chat.set_custom_user_roles",
+      "cli_path": "chat group-role set-user"
+    },
+    {
+      "canonical_path": "chat.update_custom_group_role",
+      "cli_path": "chat group-role update"
+    },
+    {
+      "canonical_path": "chat.list_top_conversations",
+      "cli_path": "chat list-top-conversations"
+    },
+    {
+      "canonical_path": "chat.add_emoji_reaction",
+      "cli_path": "chat message add-emoji"
+    },
+    {
+      "canonical_path": "chat.add_message_favorite",
+      "cli_path": "chat message add-favorite"
+    },
+    {
+      "canonical_path": "chat.add_text_emotion",
+      "cli_path": "chat message add-text-emotion"
+    },
+    {
+      "canonical_path": "chat.combine_forward_messages",
+      "cli_path": "chat message combine-forward"
+    },
+    {
+      "canonical_path": "chat.create_text_emotion",
+      "cli_path": "chat message create-text-emotion"
+    },
+    {
+      "canonical_path": "chat.download_media",
+      "cli_path": "chat message download-media"
+    },
+    {
+      "canonical_path": "chat.forward_message",
+      "cli_path": "chat message forward"
+    },
+    {
+      "canonical_path": "chat.forward_topic",
+      "cli_path": "chat message forward-topic"
+    },
+    {
+      "canonical_path": "chat.list_conversation_message_v2",
+      "cli_path": "chat message list"
+    },
+    {
+      "canonical_path": "chat.search_messages_by_time_range",
+      "cli_path": "chat message list-all"
+    },
+    {
+      "canonical_path": "chat.list_messages_by_ids",
+      "cli_path": "chat message list-by-ids"
+    },
+    {
+      "canonical_path": "chat.search_messages_by_sender",
+      "cli_path": "chat message list-by-sender"
+    },
+    {
+      "canonical_path": "chat.list_individual_chat_message",
+      "cli_path": "chat message list-direct"
+    },
+    {
+      "canonical_path": "chat.list_message_favorites",
+      "cli_path": "chat message list-favorites"
+    },
+    {
+      "canonical_path": "chat.list_special_focus_messages",
+      "cli_path": "chat message list-focused"
+    },
+    {
+      "canonical_path": "chat.search_at_me_message",
+      "cli_path": "chat message list-mentions"
+    },
+    {
+      "canonical_path": "chat.list_pin_messages",
+      "cli_path": "chat message list-pin-msg"
+    },
+    {
+      "canonical_path": "chat.list_topic_replies",
+      "cli_path": "chat message list-topic-replies"
+    },
+    {
+      "canonical_path": "chat.unread_message_conversation_list",
+      "cli_path": "chat message list-unread-conversations"
+    },
+    {
+      "canonical_path": "chat.query_message_send_status",
+      "cli_path": "chat message query-send-status"
+    },
+    {
+      "canonical_path": "chat.query_msg_read_status",
+      "cli_path": "chat message read-status"
+    },
+    {
+      "canonical_path": "chat.recall_message",
+      "cli_path": "chat message recall"
+    },
+    {
+      "canonical_path": "chat.recall_robot_message",
+      "cli_path": "chat message recall-by-bot"
+    },
+    {
+      "canonical_path": "chat.remove_emoji_reaction",
+      "cli_path": "chat message remove-emoji"
+    },
+    {
+      "canonical_path": "chat.remove_message_favorite",
+      "cli_path": "chat message remove-favorite"
+    },
+    {
+      "canonical_path": "chat.remove_text_emotion",
+      "cli_path": "chat message remove-text-emotion"
+    },
+    {
+      "canonical_path": "chat.reply_personal_message",
+      "cli_path": "chat message reply"
+    },
+    {
+      "canonical_path": "chat.search_messages_by_keyword",
+      "cli_path": "chat message search"
+    },
+    {
+      "canonical_path": "chat.search_messages",
+      "cli_path": "chat message search-advanced"
+    },
+    {
+      "canonical_path": "chat.send_personal_message",
+      "cli_path": "chat message send"
+    },
+    {
+      "canonical_path": "chat.send_robot_message",
+      "cli_path": "chat message send-by-bot"
+    },
+    {
+      "canonical_path": "chat.send_message_by_custom_robot",
+      "cli_path": "chat message send-by-webhook"
+    },
+    {
+      "canonical_path": "chat.create_and_send_card",
+      "cli_path": "chat message send-card"
+    },
+    {
+      "canonical_path": "chat.set_pin_message",
+      "cli_path": "chat message set-pin-msg"
+    },
+    {
+      "canonical_path": "chat.unset_pin_message",
+      "cli_path": "chat message unset-pin-msg"
+    },
+    {
+      "canonical_path": "chat.update_streaming_card",
+      "cli_path": "chat message update-card"
+    },
+    {
+      "canonical_path": "chat.update_notification_off",
+      "cli_path": "chat mute"
+    },
+    {
+      "canonical_path": "chat.search_groups",
+      "cli_path": "chat search"
+    },
+    {
+      "canonical_path": "chat.search_common_groups",
+      "cli_path": "chat search-common"
+    },
+    {
+      "canonical_path": "chat.set_top_conversation",
+      "cli_path": "chat set-top"
+    }
+  ]
+}

@@ -42,7 +42,7 @@ func TestMainGeneratesMetadataToTemporaryDirectory(t *testing.T) {
 
 func TestLoadEffectiveCommandRegistryProjectionReconcilesAliases(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
-	registry, err := loadEffectiveCommandRegistryProjection(root, "internal/cli/schema_command_registry.json", true)
+	registry, err := loadEffectiveCommandRegistryProjection(root, "internal/cli/schema_command_registry", true)
 	if err != nil {
 		t.Fatalf("loadEffectiveCommandRegistryProjection() error = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestLoadEffectiveCommandRegistryProjectionReconcilesAliases(t *testing.T) {
 }
 
 func TestLoadEffectiveCommandRegistryProjectionRejectsCompatibilityDrift(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "schema_command_registry.json")
+	path := filepath.Join(t.TempDir(), "schema_command_registry")
 	if err := os.WriteFile(path, []byte(`{"$schema":"./schema_command_registry.schema.json","version":1,"products":[{"id":"sample","tools":[{"canonical_path":"sample.run","cli_path":"sample run"}]}]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}

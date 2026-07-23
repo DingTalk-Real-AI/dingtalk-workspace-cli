@@ -7,6 +7,13 @@ cd "$ROOT"
 . "$ROOT/scripts/policy/policy-runtime.sh"
 policy_prepare_runtime "$ROOT"
 
+# The release Catalog is committed as a per-product split; reassemble it into
+# the single-document shape (version + surface_hash + source_hash + catalog +
+# tools) that the jq queries below consume.
+catalog="$(mktemp)"
+trap 'rm -f "$catalog"' EXIT HUP INT TERM
+scripts/policy/with-catalog.sh >"$catalog"
+
 if [ -e internal/cli/schema_native_contracts.go ] ||
 	[ -e internal/cli/schema_native_contracts_generated.go ] ||
 	policy_search_go 'ApplyNativeRuntimeSchemaContracts|nativeRuntimeSchemaContracts|runtimeSchemaIdentityCandidate' internal/cli; then
@@ -17,9 +24,9 @@ fi
 # The Go delivery gates compare final content against the reviewed
 # CommandRegistry. This shell check intentionally treats Catalog as output and
 # does not decode the registry into a competing identity model.
-registry_count="$(jq -r '.tools | length' internal/cli/schema_catalog.json)"
+registry_count="$(jq -r '.tools | length' "$catalog")"
 catalog_count="$registry_count"
-catalog_product_count="$(jq -r '.catalog.count' internal/cli/schema_catalog.json)"
+catalog_product_count="$(jq -r '.catalog.count' "$catalog")"
 mcp_snapshot_registry_count="$(jq -r '.coverage.surface_tools' internal/cli/schema_mcp_metadata.json)"
 agent_registry_count="$(jq -r '.coverage.surface_tools' internal/cli/schema_agent_metadata/index.json)"
 agent_product_count="$(jq -r '.coverage.products_with_metadata' internal/cli/schema_agent_metadata/index.json)"
@@ -101,7 +108,7 @@ if ! jq -e '
 	exit 1
 fi
 
-catalog_registry_hash="$(jq -r '.surface_hash' internal/cli/schema_catalog.json)"
+catalog_registry_hash="$(jq -r '.surface_hash' "$catalog")"
 agent_registry_hash="$(jq -r '.surface_hash' internal/cli/schema_agent_metadata/index.json)"
 if [ "$catalog_registry_hash" != "$agent_registry_hash" ]; then
 	printf 'schema CommandRegistry hashes disagree: catalog=%s agent=%s\n' \
@@ -138,7 +145,7 @@ if ! jq -e --arg registry_count "$registry_count" '
 	 else false end) and
 	(((.agent_source_refs // []) | map(test("schema_hints/selection/")) | any))
   )
-' internal/cli/schema_catalog.json >/dev/null; then
+' "$catalog" >/dev/null; then
 	printf '%s\n' 'schema tools must have complete Agent summary/effect/safety metadata' >&2
 	exit 1
 fi
@@ -148,7 +155,7 @@ if ! jq -e 'all(.tools[];
   elif .interface_mode == "mcp" then .interface_ref != null
   else .interface_ref == null
   end
-)' internal/cli/schema_catalog.json >/dev/null; then
+)' "$catalog" >/dev/null; then
 	printf '%s
 ' 'schema interface disposition is inconsistent with interface_ref presence' >&2
 	exit 1
@@ -174,7 +181,7 @@ if ! jq -e '
     "rpc_name": "send_personal_message"
   } and
   (.tools | has("chat.upload_conversation_file") | not)
-' internal/cli/schema_catalog.json >/dev/null; then
+' "$catalog" >/dev/null; then
 	printf '%s\n' 'chat send/reply schema identities are inconsistent' >&2
 	exit 1
 fi
@@ -188,7 +195,7 @@ if ! jq -e '
     all((.constraints.require_one_of // [])[]; length > 1 and all(.[]; IN($names[]))) and
     all((.constraints.require_together // [])[]; length > 1 and all(.[]; IN($names[])))
   )
-' internal/cli/schema_catalog.json >/dev/null; then
+' "$catalog" >/dev/null; then
 	printf '%s\n' 'schema command constraints are incomplete or reference unknown parameters' >&2
 	exit 1
 fi
@@ -226,7 +233,7 @@ if ! jq -e --slurpfile bindings internal/cli/schema_parameter_bindings.json '
     . as $binding |
     $catalog.tools[$binding.tool].parameters[$binding.flag].property == $binding.property
   )
-' internal/cli/schema_catalog.json >/dev/null; then
+' "$catalog" >/dev/null; then
 	printf 'schema parameter bindings are incomplete or differ from generated catalog: count=%s\n' "$binding_count" >&2
 	exit 1
 fi
@@ -236,13 +243,13 @@ if ! jq -e '
     has("endpoint") or has("auth_headers") or has("authorization") or
     has("access_token") or has("client_secret")
   )] | length == 0
-' internal/cli/schema_catalog.json >/dev/null; then
+' "$catalog" >/dev/null; then
 	printf '%s\n' 'schema catalog contains runtime endpoint or credential fields' >&2
 	exit 1
 fi
 
 if policy_search_paths 'mcp-gw\.dingtalk\.com|mcp\.dingtalk\.com/server|Authorization[^[:alnum:]]*:|Bearer [A-Za-z0-9]|access[_-]?token|client[_-]?secret' \
-	internal/cli/schema_catalog.json \
+	"$catalog" \
 	internal/cli/schema_mcp_metadata.json \
 	internal/cli/schema_mcp_service_review.json \
 	internal/cli/schema_agent_metadata \

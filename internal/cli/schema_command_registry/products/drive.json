@@ -1,0 +1,105 @@
+{
+  "id": "drive",
+  "tools": [
+    {
+      "canonical_path": "drive.commit_upload",
+      "cli_path": "drive commit"
+    },
+    {
+      "canonical_path": "drive.copy_document",
+      "cli_path": "drive copy"
+    },
+    {
+      "canonical_path": "drive.delete_document",
+      "cli_path": "drive delete"
+    },
+    {
+      "canonical_path": "drive.download_file",
+      "cli_path": "drive download"
+    },
+    {
+      "canonical_path": "drive.get_file_info",
+      "cli_path": "drive info"
+    },
+    {
+      "canonical_path": "drive.list_files",
+      "cli_path": "drive list"
+    },
+    {
+      "canonical_path": "drive.list_spaces",
+      "cli_path": "drive list-spaces"
+    },
+    {
+      "canonical_path": "drive.create_folder",
+      "cli_path": "drive mkdir"
+    },
+    {
+      "canonical_path": "drive.move_document",
+      "cli_path": "drive move"
+    },
+    {
+      "canonical_path": "drive.add_permission",
+      "cli_path": "drive permission add"
+    },
+    {
+      "canonical_path": "drive.list_permission",
+      "cli_path": "drive permission list"
+    },
+    {
+      "canonical_path": "drive.permission_remove",
+      "cli_path": "drive permission remove"
+    },
+    {
+      "canonical_path": "drive.permission_update",
+      "cli_path": "drive permission update"
+    },
+    {
+      "canonical_path": "drive.publish_get",
+      "cli_path": "drive publish get"
+    },
+    {
+      "canonical_path": "drive.publish_set",
+      "cli_path": "drive publish set"
+    },
+    {
+      "canonical_path": "drive.publish_unset",
+      "cli_path": "drive publish unset"
+    },
+    {
+      "canonical_path": "drive.recent",
+      "cli_path": "drive recent"
+    },
+    {
+      "canonical_path": "drive.recycle_list",
+      "cli_path": "drive recycle list"
+    },
+    {
+      "canonical_path": "drive.recycle_restore",
+      "cli_path": "drive recycle restore"
+    },
+    {
+      "canonical_path": "drive.rename_document",
+      "cli_path": "drive rename"
+    },
+    {
+      "canonical_path": "drive.search_files",
+      "cli_path": "drive search"
+    },
+    {
+      "canonical_path": "drive.create_shortcut",
+      "cli_path": "drive shortcut"
+    },
+    {
+      "canonical_path": "drive.get_node_stats",
+      "cli_path": "drive stats"
+    },
+    {
+      "canonical_path": "drive.upload",
+      "cli_path": "drive upload"
+    },
+    {
+      "canonical_path": "drive.get_upload_info",
+      "cli_path": "drive upload-info"
+    }
+  ]
+}

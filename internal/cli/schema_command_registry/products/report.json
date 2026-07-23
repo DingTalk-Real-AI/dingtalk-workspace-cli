@@ -1,0 +1,52 @@
+{
+  "id": "report",
+  "tools": [
+    {
+      "canonical_path": "report.get_report_entry_details",
+      "cli_path": "report entry get",
+      "aliases": [
+        "report detail"
+      ]
+    },
+    {
+      "canonical_path": "report.get_report_statistics_by_id",
+      "cli_path": "report entry stats",
+      "aliases": [
+        "report stats"
+      ]
+    },
+    {
+      "canonical_path": "report.create_report",
+      "cli_path": "report entry submit",
+      "aliases": [
+        "report create"
+      ]
+    },
+    {
+      "canonical_path": "report.get_received_report_list",
+      "cli_path": "report inbox list",
+      "aliases": [
+        "report list"
+      ]
+    },
+    {
+      "canonical_path": "report.get_send_report_list",
+      "cli_path": "report outbox list",
+      "aliases": [
+        "report created",
+        "report sent"
+      ]
+    },
+    {
+      "canonical_path": "report.get_template_details_by_name",
+      "cli_path": "report template get",
+      "aliases": [
+        "report template detail"
+      ]
+    },
+    {
+      "canonical_path": "report.get_available_report_templates",
+      "cli_path": "report template list"
+    }
+  ]
+}

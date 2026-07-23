@@ -1,0 +1,157 @@
+{
+  "id": "attendance",
+  "tools": [
+    {
+      "canonical_path": "attendance.adjustment_get",
+      "cli_path": "attendance adjustment get"
+    },
+    {
+      "canonical_path": "attendance.adjustment_search",
+      "cli_path": "attendance adjustment search"
+    },
+    {
+      "canonical_path": "attendance.approve_list",
+      "cli_path": "attendance approve list"
+    },
+    {
+      "canonical_path": "attendance.approve_templates",
+      "cli_path": "attendance approve templates"
+    },
+    {
+      "canonical_path": "attendance.boss_check",
+      "cli_path": "attendance boss-check"
+    },
+    {
+      "canonical_path": "attendance.check_record",
+      "cli_path": "attendance check record"
+    },
+    {
+      "canonical_path": "attendance.check_result",
+      "cli_path": "attendance check result"
+    },
+    {
+      "canonical_path": "attendance.checkin_records",
+      "cli_path": "attendance checkin records"
+    },
+    {
+      "canonical_path": "attendance.class_create",
+      "cli_path": "attendance class create"
+    },
+    {
+      "canonical_path": "attendance.class_get",
+      "cli_path": "attendance class get"
+    },
+    {
+      "canonical_path": "attendance.class_search",
+      "cli_path": "attendance class search"
+    },
+    {
+      "canonical_path": "attendance.class_update",
+      "cli_path": "attendance class update"
+    },
+    {
+      "canonical_path": "attendance.globalsetting_get",
+      "cli_path": "attendance globalsetting get"
+    },
+    {
+      "canonical_path": "attendance.globalsetting_save",
+      "cli_path": "attendance globalsetting save"
+    },
+    {
+      "canonical_path": "attendance.group_create",
+      "cli_path": "attendance group create"
+    },
+    {
+      "canonical_path": "attendance.group_filtered_get",
+      "cli_path": "attendance group filtered-get"
+    },
+    {
+      "canonical_path": "attendance.group_get",
+      "cli_path": "attendance group get"
+    },
+    {
+      "canonical_path": "attendance.group_search",
+      "cli_path": "attendance group search"
+    },
+    {
+      "canonical_path": "attendance.group_update",
+      "cli_path": "attendance group update"
+    },
+    {
+      "canonical_path": "attendance.group_update_members",
+      "cli_path": "attendance group update-members"
+    },
+    {
+      "canonical_path": "attendance.overtime_get",
+      "cli_path": "attendance overtime get"
+    },
+    {
+      "canonical_path": "attendance.overtime_search",
+      "cli_path": "attendance overtime search"
+    },
+    {
+      "canonical_path": "attendance.get_user_attendance_record",
+      "cli_path": "attendance record get"
+    },
+    {
+      "canonical_path": "attendance.report_columns",
+      "cli_path": "attendance report columns"
+    },
+    {
+      "canonical_path": "attendance.report_query_data",
+      "cli_path": "attendance report query-data"
+    },
+    {
+      "canonical_path": "attendance.report_query_leave",
+      "cli_path": "attendance report query-leave"
+    },
+    {
+      "canonical_path": "attendance.query_attendance_group_or_rules",
+      "cli_path": "attendance rules"
+    },
+    {
+      "canonical_path": "attendance.schedule_get",
+      "cli_path": "attendance schedule get"
+    },
+    {
+      "canonical_path": "attendance.schedule_import",
+      "cli_path": "attendance schedule import"
+    },
+    {
+      "canonical_path": "attendance.selfsetting_get",
+      "cli_path": "attendance selfsetting get"
+    },
+    {
+      "canonical_path": "attendance.selfsetting_save",
+      "cli_path": "attendance selfsetting save"
+    },
+    {
+      "canonical_path": "attendance.batch_get_employee_shifts",
+      "cli_path": "attendance shift list"
+    },
+    {
+      "canonical_path": "attendance.get_attendance_summary",
+      "cli_path": "attendance summary"
+    },
+    {
+      "canonical_path": "attendance.vacation_balance",
+      "cli_path": "attendance vacation balance"
+    },
+    {
+      "canonical_path": "attendance.vacation_records",
+      "cli_path": "attendance vacation records"
+    },
+    {
+      "canonical_path": "attendance.vacation_save_balance",
+      "cli_path": "attendance vacation save-balance"
+    },
+    {
+      "canonical_path": "attendance.vacation_types",
+      "cli_path": "attendance vacation types"
+    },
+    {
+      "canonical_path": "attendance.vacation_update_type",
+      "cli_path": "attendance vacation update-type"
+    }
+  ]
+}

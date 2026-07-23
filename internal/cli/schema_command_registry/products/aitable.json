@@ -1,0 +1,472 @@
+{
+  "id": "aitable",
+  "tools": [
+    {
+      "canonical_path": "aitable.advperm_disable",
+      "cli_path": "aitable advperm disable"
+    },
+    {
+      "canonical_path": "aitable.advperm_enable",
+      "cli_path": "aitable advperm enable"
+    },
+    {
+      "canonical_path": "aitable.advperm_role_create",
+      "cli_path": "aitable advperm role-create"
+    },
+    {
+      "canonical_path": "aitable.advperm_role_delete",
+      "cli_path": "aitable advperm role-delete"
+    },
+    {
+      "canonical_path": "aitable.advperm_role_get",
+      "cli_path": "aitable advperm role-get"
+    },
+    {
+      "canonical_path": "aitable.advperm_role_list",
+      "cli_path": "aitable advperm role-list"
+    },
+    {
+      "canonical_path": "aitable.advperm_role_update",
+      "cli_path": "aitable advperm role-update"
+    },
+    {
+      "canonical_path": "aitable.attachment_upload",
+      "cli_path": "aitable attachment upload"
+    },
+    {
+      "canonical_path": "aitable.base_copy",
+      "cli_path": "aitable base copy"
+    },
+    {
+      "canonical_path": "aitable.base_create",
+      "cli_path": "aitable base create"
+    },
+    {
+      "canonical_path": "aitable.base_delete",
+      "cli_path": "aitable base delete"
+    },
+    {
+      "canonical_path": "aitable.base_get",
+      "cli_path": "aitable base get"
+    },
+    {
+      "canonical_path": "aitable.base_get_primary_doc_id",
+      "cli_path": "aitable base get-primary-doc-id"
+    },
+    {
+      "canonical_path": "aitable.base_list",
+      "cli_path": "aitable base list"
+    },
+    {
+      "canonical_path": "aitable.base_search",
+      "cli_path": "aitable base search"
+    },
+    {
+      "canonical_path": "aitable.base_update",
+      "cli_path": "aitable base update"
+    },
+    {
+      "canonical_path": "aitable.chart_create",
+      "cli_path": "aitable chart create"
+    },
+    {
+      "canonical_path": "aitable.chart_delete",
+      "cli_path": "aitable chart delete"
+    },
+    {
+      "canonical_path": "aitable.chart_get",
+      "cli_path": "aitable chart get"
+    },
+    {
+      "canonical_path": "aitable.chart_share_get",
+      "cli_path": "aitable chart share get"
+    },
+    {
+      "canonical_path": "aitable.chart_share_update",
+      "cli_path": "aitable chart share update"
+    },
+    {
+      "canonical_path": "aitable.chart_update",
+      "cli_path": "aitable chart update"
+    },
+    {
+      "canonical_path": "aitable.chart_widgets_example",
+      "cli_path": "aitable chart widgets-example"
+    },
+    {
+      "canonical_path": "aitable.create",
+      "cli_path": "aitable create"
+    },
+    {
+      "canonical_path": "aitable.dashboard_arrange",
+      "cli_path": "aitable dashboard arrange"
+    },
+    {
+      "canonical_path": "aitable.dashboard_config_example",
+      "cli_path": "aitable dashboard config-example"
+    },
+    {
+      "canonical_path": "aitable.dashboard_create",
+      "cli_path": "aitable dashboard create"
+    },
+    {
+      "canonical_path": "aitable.dashboard_delete",
+      "cli_path": "aitable dashboard delete"
+    },
+    {
+      "canonical_path": "aitable.dashboard_get",
+      "cli_path": "aitable dashboard get"
+    },
+    {
+      "canonical_path": "aitable.dashboard_share_get",
+      "cli_path": "aitable dashboard share get"
+    },
+    {
+      "canonical_path": "aitable.dashboard_share_update",
+      "cli_path": "aitable dashboard share update"
+    },
+    {
+      "canonical_path": "aitable.dashboard_update",
+      "cli_path": "aitable dashboard update"
+    },
+    {
+      "canonical_path": "aitable.export_data",
+      "cli_path": "aitable export data"
+    },
+    {
+      "canonical_path": "aitable.field_create",
+      "cli_path": "aitable field create"
+    },
+    {
+      "canonical_path": "aitable.field_delete",
+      "cli_path": "aitable field delete"
+    },
+    {
+      "canonical_path": "aitable.field_get",
+      "cli_path": "aitable field get"
+    },
+    {
+      "canonical_path": "aitable.field_list",
+      "cli_path": "aitable field list"
+    },
+    {
+      "canonical_path": "aitable.field_search_options",
+      "cli_path": "aitable field search-options"
+    },
+    {
+      "canonical_path": "aitable.field_update",
+      "cli_path": "aitable field update"
+    },
+    {
+      "canonical_path": "aitable.form_create",
+      "cli_path": "aitable form create"
+    },
+    {
+      "canonical_path": "aitable.form_delete",
+      "cli_path": "aitable form delete"
+    },
+    {
+      "canonical_path": "aitable.form_field_hide",
+      "cli_path": "aitable form field hide"
+    },
+    {
+      "canonical_path": "aitable.form_field_list",
+      "cli_path": "aitable form field list"
+    },
+    {
+      "canonical_path": "aitable.form_field_update",
+      "cli_path": "aitable form field update"
+    },
+    {
+      "canonical_path": "aitable.form_get",
+      "cli_path": "aitable form get"
+    },
+    {
+      "canonical_path": "aitable.form_list",
+      "cli_path": "aitable form list"
+    },
+    {
+      "canonical_path": "aitable.form_questions_create",
+      "cli_path": "aitable form questions create"
+    },
+    {
+      "canonical_path": "aitable.form_questions_delete",
+      "cli_path": "aitable form questions delete"
+    },
+    {
+      "canonical_path": "aitable.form_share_get",
+      "cli_path": "aitable form share get"
+    },
+    {
+      "canonical_path": "aitable.form_share_update",
+      "cli_path": "aitable form share update"
+    },
+    {
+      "canonical_path": "aitable.form_update",
+      "cli_path": "aitable form update"
+    },
+    {
+      "canonical_path": "aitable.import_data",
+      "cli_path": "aitable import data"
+    },
+    {
+      "canonical_path": "aitable.import_upload",
+      "cli_path": "aitable import upload"
+    },
+    {
+      "canonical_path": "aitable.info",
+      "cli_path": "aitable info"
+    },
+    {
+      "canonical_path": "aitable.list",
+      "cli_path": "aitable list"
+    },
+    {
+      "canonical_path": "aitable.record_batch_update",
+      "cli_path": "aitable record batch-update"
+    },
+    {
+      "canonical_path": "aitable.record_create",
+      "cli_path": "aitable record create"
+    },
+    {
+      "canonical_path": "aitable.record_delete",
+      "cli_path": "aitable record delete"
+    },
+    {
+      "canonical_path": "aitable.record_get",
+      "cli_path": "aitable record get"
+    },
+    {
+      "canonical_path": "aitable.record_history_list",
+      "cli_path": "aitable record history-list"
+    },
+    {
+      "canonical_path": "aitable.record_primary_doc_create",
+      "cli_path": "aitable record primary-doc-create"
+    },
+    {
+      "canonical_path": "aitable.record_primary_doc_get",
+      "cli_path": "aitable record primary-doc-get"
+    },
+    {
+      "canonical_path": "aitable.query_records",
+      "cli_path": "aitable record query",
+      "aliases": [
+        "aitable record list"
+      ]
+    },
+    {
+      "canonical_path": "aitable.record_query_empty",
+      "cli_path": "aitable record query-empty"
+    },
+    {
+      "canonical_path": "aitable.record_share_url",
+      "cli_path": "aitable record share-url"
+    },
+    {
+      "canonical_path": "aitable.record_update",
+      "cli_path": "aitable record update"
+    },
+    {
+      "canonical_path": "aitable.record_upsert",
+      "cli_path": "aitable record upsert"
+    },
+    {
+      "canonical_path": "aitable.search",
+      "cli_path": "aitable search"
+    },
+    {
+      "canonical_path": "aitable.section_create",
+      "cli_path": "aitable section create"
+    },
+    {
+      "canonical_path": "aitable.section_delete",
+      "cli_path": "aitable section delete"
+    },
+    {
+      "canonical_path": "aitable.section_list_empty",
+      "cli_path": "aitable section list-empty"
+    },
+    {
+      "canonical_path": "aitable.section_list_nodes",
+      "cli_path": "aitable section list-nodes"
+    },
+    {
+      "canonical_path": "aitable.section_move_node",
+      "cli_path": "aitable section move-node"
+    },
+    {
+      "canonical_path": "aitable.section_rename",
+      "cli_path": "aitable section rename"
+    },
+    {
+      "canonical_path": "aitable.section_reorder",
+      "cli_path": "aitable section reorder"
+    },
+    {
+      "canonical_path": "aitable.table_create",
+      "cli_path": "aitable table create"
+    },
+    {
+      "canonical_path": "aitable.table_delete",
+      "cli_path": "aitable table delete"
+    },
+    {
+      "canonical_path": "aitable.table_get",
+      "cli_path": "aitable table get"
+    },
+    {
+      "canonical_path": "aitable.table_list",
+      "cli_path": "aitable table list"
+    },
+    {
+      "canonical_path": "aitable.table_update",
+      "cli_path": "aitable table update"
+    },
+    {
+      "canonical_path": "aitable.template_search",
+      "cli_path": "aitable template search"
+    },
+    {
+      "canonical_path": "aitable.view_create",
+      "cli_path": "aitable view create"
+    },
+    {
+      "canonical_path": "aitable.view_delete",
+      "cli_path": "aitable view delete"
+    },
+    {
+      "canonical_path": "aitable.view_duplicate",
+      "cli_path": "aitable view duplicate"
+    },
+    {
+      "canonical_path": "aitable.view_get_aggregate",
+      "cli_path": "aitable view get aggregate"
+    },
+    {
+      "canonical_path": "aitable.view_get_card",
+      "cli_path": "aitable view get card"
+    },
+    {
+      "canonical_path": "aitable.view_get_field_widths",
+      "cli_path": "aitable view get field-widths"
+    },
+    {
+      "canonical_path": "aitable.view_get_fill_color_rule",
+      "cli_path": "aitable view get fill-color-rule"
+    },
+    {
+      "canonical_path": "aitable.view_get_filter",
+      "cli_path": "aitable view get filter"
+    },
+    {
+      "canonical_path": "aitable.view_get_frozen_cols",
+      "cli_path": "aitable view get frozen-cols"
+    },
+    {
+      "canonical_path": "aitable.view_get_group",
+      "cli_path": "aitable view get group"
+    },
+    {
+      "canonical_path": "aitable.view_get_lock",
+      "cli_path": "aitable view get lock"
+    },
+    {
+      "canonical_path": "aitable.view_get_row_height",
+      "cli_path": "aitable view get row-height"
+    },
+    {
+      "canonical_path": "aitable.view_get_sort",
+      "cli_path": "aitable view get sort"
+    },
+    {
+      "canonical_path": "aitable.view_get_timebar",
+      "cli_path": "aitable view get timebar"
+    },
+    {
+      "canonical_path": "aitable.view_get_visible_fields",
+      "cli_path": "aitable view get visible-fields"
+    },
+    {
+      "canonical_path": "aitable.view_list",
+      "cli_path": "aitable view list"
+    },
+    {
+      "canonical_path": "aitable.view_lock",
+      "cli_path": "aitable view lock"
+    },
+    {
+      "canonical_path": "aitable.view_update_aggregate",
+      "cli_path": "aitable view update aggregate"
+    },
+    {
+      "canonical_path": "aitable.view_update_card",
+      "cli_path": "aitable view update card"
+    },
+    {
+      "canonical_path": "aitable.view_update_field_widths",
+      "cli_path": "aitable view update field-widths"
+    },
+    {
+      "canonical_path": "aitable.view_update_fill_color_rule",
+      "cli_path": "aitable view update fill-color-rule"
+    },
+    {
+      "canonical_path": "aitable.view_update_filter",
+      "cli_path": "aitable view update filter"
+    },
+    {
+      "canonical_path": "aitable.view_update_frozen_cols",
+      "cli_path": "aitable view update frozen-cols"
+    },
+    {
+      "canonical_path": "aitable.view_update_group",
+      "cli_path": "aitable view update group"
+    },
+    {
+      "canonical_path": "aitable.view_update_name",
+      "cli_path": "aitable view update name"
+    },
+    {
+      "canonical_path": "aitable.view_update_row_height",
+      "cli_path": "aitable view update row-height"
+    },
+    {
+      "canonical_path": "aitable.view_update_sort",
+      "cli_path": "aitable view update sort"
+    },
+    {
+      "canonical_path": "aitable.view_update_timebar",
+      "cli_path": "aitable view update timebar"
+    },
+    {
+      "canonical_path": "aitable.view_update_visible_fields",
+      "cli_path": "aitable view update visible-fields"
+    },
+    {
+      "canonical_path": "aitable.workflow_create",
+      "cli_path": "aitable workflow create"
+    },
+    {
+      "canonical_path": "aitable.workflow_disable",
+      "cli_path": "aitable workflow disable"
+    },
+    {
+      "canonical_path": "aitable.workflow_enable",
+      "cli_path": "aitable workflow enable"
+    },
+    {
+      "canonical_path": "aitable.workflow_get",
+      "cli_path": "aitable workflow get"
+    },
+    {
+      "canonical_path": "aitable.workflow_list",
+      "cli_path": "aitable workflow list"
+    },
+    {
+      "canonical_path": "aitable.workflow_update",
+      "cli_path": "aitable workflow update"
+    }
+  ]
+}

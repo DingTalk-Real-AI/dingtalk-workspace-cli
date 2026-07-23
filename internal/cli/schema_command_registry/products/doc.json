@@ -1,0 +1,157 @@
+{
+  "id": "doc",
+  "tools": [
+    {
+      "canonical_path": "doc.delete_document_block",
+      "cli_path": "doc block delete"
+    },
+    {
+      "canonical_path": "doc.insert_document_block",
+      "cli_path": "doc block insert"
+    },
+    {
+      "canonical_path": "doc.list_document_blocks",
+      "cli_path": "doc block list"
+    },
+    {
+      "canonical_path": "doc.update_document_block",
+      "cli_path": "doc block update"
+    },
+    {
+      "canonical_path": "doc.create_comment",
+      "cli_path": "doc comment create"
+    },
+    {
+      "canonical_path": "doc.create_inline_comment",
+      "cli_path": "doc comment create-inline"
+    },
+    {
+      "canonical_path": "doc.delete_comment",
+      "cli_path": "doc comment delete"
+    },
+    {
+      "canonical_path": "doc.list_comments",
+      "cli_path": "doc comment list"
+    },
+    {
+      "canonical_path": "doc.reply_comment",
+      "cli_path": "doc comment reply"
+    },
+    {
+      "canonical_path": "doc.update_comment",
+      "cli_path": "doc comment update"
+    },
+    {
+      "canonical_path": "doc.copy_document",
+      "cli_path": "doc copy"
+    },
+    {
+      "canonical_path": "doc.create_document",
+      "cli_path": "doc create"
+    },
+    {
+      "canonical_path": "doc.delete_document",
+      "cli_path": "doc delete"
+    },
+    {
+      "canonical_path": "doc.download_file",
+      "cli_path": "doc download"
+    },
+    {
+      "canonical_path": "doc.query_export_job",
+      "cli_path": "doc export get"
+    },
+    {
+      "canonical_path": "doc.create_file",
+      "cli_path": "doc file create"
+    },
+    {
+      "canonical_path": "doc.create_folder",
+      "cli_path": "doc folder create"
+    },
+    {
+      "canonical_path": "doc.import_get",
+      "cli_path": "doc import get"
+    },
+    {
+      "canonical_path": "doc.get_document_info",
+      "cli_path": "doc info"
+    },
+    {
+      "canonical_path": "doc.list_nodes",
+      "cli_path": "doc list"
+    },
+    {
+      "canonical_path": "doc.download_doc_attachment",
+      "cli_path": "doc media download"
+    },
+    {
+      "canonical_path": "doc.media_insert",
+      "cli_path": "doc media insert"
+    },
+    {
+      "canonical_path": "doc.move_document",
+      "cli_path": "doc move"
+    },
+    {
+      "canonical_path": "doc.add_permission",
+      "cli_path": "doc permission add"
+    },
+    {
+      "canonical_path": "doc.list_permission",
+      "cli_path": "doc permission list"
+    },
+    {
+      "canonical_path": "doc.remove_permission",
+      "cli_path": "doc permission remove"
+    },
+    {
+      "canonical_path": "doc.update_permission",
+      "cli_path": "doc permission update"
+    },
+    {
+      "canonical_path": "doc.get_document_content",
+      "cli_path": "doc read"
+    },
+    {
+      "canonical_path": "doc.rename_document",
+      "cli_path": "doc rename"
+    },
+    {
+      "canonical_path": "doc.search_documents",
+      "cli_path": "doc search"
+    },
+    {
+      "canonical_path": "doc.template_apply",
+      "cli_path": "doc template apply"
+    },
+    {
+      "canonical_path": "doc.template_list",
+      "cli_path": "doc template list"
+    },
+    {
+      "canonical_path": "doc.template_search",
+      "cli_path": "doc template search"
+    },
+    {
+      "canonical_path": "doc.update_document",
+      "cli_path": "doc update"
+    },
+    {
+      "canonical_path": "doc.upload",
+      "cli_path": "doc upload"
+    },
+    {
+      "canonical_path": "doc.version_list",
+      "cli_path": "doc version list"
+    },
+    {
+      "canonical_path": "doc.version_revert",
+      "cli_path": "doc version revert"
+    },
+    {
+      "canonical_path": "doc.version_save",
+      "cli_path": "doc version save"
+    }
+  ]
+}

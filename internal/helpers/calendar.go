@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -62,6 +63,12 @@ func installUnknownVerbFallback(group *cobra.Command) {
 	// Cobra intercepts --help before RunE, so without this the fallback
 	// would never fire when --help is present.
 	origHelp := group.HelpFunc()
+	// captureBaseHelpFunc stores the unwrapped cobra default help renderer,
+	// captured once at install time (before configureRootHelp wraps root's
+	// HelpFunc). This avoids infinite recursion when calendar commands are
+	// tested in isolation (calendar IS the Root in test trees, so
+	// cmd.Root().HelpFunc() would return calendar's own wrapper → loop).
+	captureBaseHelpFunc := origHelp
 	group.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if cmd == group {
 			// HelpFunc receives os.Args[1:] (full arg slice without binary).
@@ -73,8 +80,14 @@ func installUnknownVerbFallback(group *cobra.Command) {
 				printUnknownSubcmdError(cmd, bad)
 				return
 			}
+			origHelp(cmd, args)
+			return
 		}
-		origHelp(cmd, args)
+		// For non-group commands, call the base (unwrapped) help renderer,
+		// then apply safety annotation. We do NOT call cmd.Root().HelpFunc()
+		// because in test trees calendar IS the root — that would recurse.
+		captureBaseHelpFunc(cmd, args)
+		cli.RenderSafetyAnnotation(cmd)
 	})
 
 	prev := group.RunE

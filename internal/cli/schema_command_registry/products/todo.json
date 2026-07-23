@@ -1,0 +1,77 @@
+{
+  "id": "todo",
+  "tools": [
+    {
+      "canonical_path": "todo.add_todo_comment",
+      "cli_path": "todo comment add"
+    },
+    {
+      "canonical_path": "todo.delete_todo_comment",
+      "cli_path": "todo comment delete"
+    },
+    {
+      "canonical_path": "todo.list_todo_comment",
+      "cli_path": "todo comment list"
+    },
+    {
+      "canonical_path": "todo.add_todo_attachment",
+      "cli_path": "todo task add-attachment"
+    },
+    {
+      "canonical_path": "todo.list_todo_attachment",
+      "cli_path": "todo task list-attachment"
+    },
+    {
+      "canonical_path": "todo.add_task_executors",
+      "cli_path": "todo task add-executor"
+    },
+    {
+      "canonical_path": "todo.add_task_participants",
+      "cli_path": "todo task add-participant"
+    },
+    {
+      "canonical_path": "todo.add_todo_reminder",
+      "cli_path": "todo task add-reminder"
+    },
+    {
+      "canonical_path": "todo.create_personal_todo",
+      "cli_path": "todo task create"
+    },
+    {
+      "canonical_path": "todo.create_personal_sub_todo",
+      "cli_path": "todo task create-sub"
+    },
+    {
+      "canonical_path": "todo.delete_todo",
+      "cli_path": "todo task delete"
+    },
+    {
+      "canonical_path": "todo.update_todo_done_status",
+      "cli_path": "todo task done"
+    },
+    {
+      "canonical_path": "todo.get_todo_detail",
+      "cli_path": "todo task get"
+    },
+    {
+      "canonical_path": "todo.get_user_todos_in_current_org",
+      "cli_path": "todo task list"
+    },
+    {
+      "canonical_path": "todo.remove_task_executors",
+      "cli_path": "todo task remove-executor"
+    },
+    {
+      "canonical_path": "todo.remove_task_participants",
+      "cli_path": "todo task remove-participant"
+    },
+    {
+      "canonical_path": "todo.reset_todo_reminder",
+      "cli_path": "todo task reset-reminder"
+    },
+    {
+      "canonical_path": "todo.update_todo_task",
+      "cli_path": "todo task update"
+    }
+  ]
+}

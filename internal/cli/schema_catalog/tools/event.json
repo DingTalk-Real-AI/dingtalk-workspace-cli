@@ -1,0 +1,5474 @@
+{
+  "product": "event",
+  "tools": {
+    "event.consume": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "cobra-help:dws event consume",
+        "cobra-help:dws event consume --help",
+        "internal/cli/schema_command_registry.json#event.consume",
+        "internal/cli/schema_hints/metadata/event.json",
+        "internal/cli/schema_hints/selection/event.json",
+        "live-dws-schema:event.consume#FAILED",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md"
+      ],
+      "agent_summary": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
+      "agent_summary_source": "dws-agent-selection/event",
+      "availability": "available",
+      "avoid_when": [
+        "只查历史聊天记录时用 chat 查询命令",
+        "只看事件目录/字段时用 event list / event schema"
+      ],
+      "canonical_path": "event.consume",
+      "cli_name": "consume",
+      "cli_path": "event consume",
+      "confirmation": "not_required",
+      "constraints": {
+        "require_one_of": [
+          [
+            "event_key",
+            "subscribe-id"
+          ]
+        ]
+      },
+      "description": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         单行紧凑 JSON；不传 --flatten 时沿用原 compact processor\n\n数据结构：\n  ndjson/json/pretty 默认保持 transport envelope（type/event_type/data/headers）\n  --flatten          结构化格式输出稳定的顶层业务字段，适合 Agent / 脚本直接消费\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。",
+      "display": "事件订阅 (DingTalk Stream 长连接)",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+        "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "只查历史聊天记录时用 chat 查询命令",
+                "只看事件目录/字段时用 event list / event schema"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "只查历史聊天记录时用 chat 查询命令",
+            "只看事件目录/字段时用 event list / event schema"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "event consume",
+              "value": "event.consume"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "event consume",
+          "value": "event.consume"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         单行紧凑 JSON；不传 --flatten 时沿用原 compact processor\n\n数据结构：\n  ndjson/json/pretty 默认保持 transport envelope（type/event_type/data/headers）\n  --flatten          结构化格式输出稳定的顶层业务字段，适合 Agent / 脚本直接消费\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。\n\n输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对\n事件流无意义会 fallback 到 ndjson）：\n  ndjson  (默认)  一行一对象，适合 jq / 管道处理\n  json            每事件多行美化 JSON（必须配 --max-events 或 --duration）\n  pretty          同 json，未来加颜色\n  raw             仅 SDK 原始 payload，无外层封装\n  compact         单行紧凑 JSON；不传 --flatten 时沿用原 compact processor\n\n数据结构：\n  ndjson/json/pretty 默认保持 transport envelope（type/event_type/data/headers）\n  --flatten          结构化格式输出稳定的顶层业务字段，适合 Agent / 脚本直接消费\n\n默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加\n--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用\nSIGTERM、关 stdin，或先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加\n--yes，绝不要 kill -9。\n--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费\n通常不需要设置。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+                "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
+            "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "non_idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "non_idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "medium"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "medium"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "订阅事件流并输出到 stdout"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "订阅事件流并输出到 stdout"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
+                "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
+                "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
+            "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
+            "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
+      "is_alias": false,
+      "name": "consume",
+      "parameter_count": 28,
+      "parameters": {
+        "compact": {
+          "description": "提示 bus 客户端期望 compact 渲染（语义透传，bus 仍按原 payload 投递）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "提示 bus 客户端期望 compact 渲染（语义透传，bus 仍按原 payload 投递）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "提示 bus 客户端期望 compact 渲染（语义透传，bus 仍按原 payload 投递）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "compact"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "compact"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "compact",
+          "required": false,
+          "type": "boolean"
+        },
+        "debug-raw-events": {
+          "description": "个人事件联调：绕过本地 event type/subscribe_id 过滤，输出当前 personal stream bus 收到的所有事件",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件联调：绕过本地 event type/subscribe_id 过滤，输出当前 personal stream bus 收到的所有事件"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件联调：绕过本地 event type/subscribe_id 过滤，输出当前 personal stream bus 收到的所有事件"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "debugRawEvents"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "debugRawEvents"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "debugRawEvents",
+          "required": false,
+          "type": "boolean"
+        },
+        "dry-run": {
+          "description": "仅打印解析后的配置，不连接 bus / 云端",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "仅打印解析后的配置，不连接 bus / 云端"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "仅打印解析后的配置，不连接 bus / 云端"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "dryRun"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "dryRun"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "dryRun",
+          "required": false,
+          "type": "boolean"
+        },
+        "duration": {
+          "description": "运行时长上限 (Go duration 如 30s/5m)；事件流专用，不复用全局 --timeout",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "运行时长上限 (Go duration 如 30s/5m)；事件流专用，不复用全局 --timeout"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "运行时长上限 (Go duration 如 30s/5m)；事件流专用，不复用全局 --timeout"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "duration"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "duration"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "duration",
+          "required": false,
+          "type": "string"
+        },
+        "ephemeral": {
+          "description": "强制退出时取消个人订阅。默认已按归属清理：本次新建的订阅退出即取消，用 --subscribe-id 复用的订阅保留。优雅停可用 SIGTERM、关闭 stdin，或从外部先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加 --yes（会一并退订）；请勿 kill -9（会跳过退订、泄漏服务端订阅）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "强制退出时取消个人订阅。默认已按归属清理：本次新建的订阅退出即取消，用 --subscribe-id 复用的订阅保留。优雅停可用 SIGTERM、关闭 stdin，或从外部先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加 --yes（会一并退订）；请勿 kill -9（会跳过退订、泄漏服务端订阅）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "强制退出时取消个人订阅。默认已按归属清理：本次新建的订阅退出即取消，用 --subscribe-id 复用的订阅保留。优雅停可用 SIGTERM、关闭 stdin，或从外部先用 dws event stop \u003csubscribe_id\u003e --dry-run 预览、确认后加 --yes（会一并退订）；请勿 kill -9（会跳过退订、泄漏服务端订阅）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "ephemeral"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "ephemeral"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "ephemeral",
+          "required": false,
+          "type": "boolean"
+        },
+        "event-types": {
+          "description": "逗号分隔事件类型；省略时按 event_key 过滤",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "逗号分隔事件类型；省略时按 event_key 过滤"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "逗号分隔事件类型；省略时按 event_key 过滤"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "eventTypes"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "eventTypes"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "array"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "array"
+            }
+          },
+          "property": "eventTypes",
+          "required": false,
+          "type": "array"
+        },
+        "filter": {
+          "description": "客户端正则过滤事件类型 (下推到 bus 减少 IPC 投递量)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "客户端正则过滤事件类型 (下推到 bus 减少 IPC 投递量)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "客户端正则过滤事件类型 (下推到 bus 减少 IPC 投递量)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "filter"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "filter"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "filter",
+          "required": false,
+          "type": "string"
+        },
+        "filter-json": {
+          "description": "个人事件 Filter DSL JSON",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件 Filter DSL JSON"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件 Filter DSL JSON"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "filterJson"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "filterJson"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "filterJson",
+          "required": false,
+          "type": "string"
+        },
+        "flatten": {
+          "description": "将个人事件 transport envelope 投影为稳定的顶层业务字段",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "将个人事件 transport envelope 投影为稳定的顶层业务字段"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "将个人事件 transport envelope 投影为稳定的顶层业务字段"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "flatten"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "flatten"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "flatten",
+          "required": false,
+          "type": "boolean"
+        },
+        "force": {
+          "description": "仅 --foreground 模式生效：跳过单实例锁 (慎用：会让云事件被随机切分)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "仅 --foreground 模式生效：跳过单实例锁 (慎用：会让云事件被随机切分)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "仅 --foreground 模式生效：跳过单实例锁 (慎用：会让云事件被随机切分)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "force"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "force"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "force",
+          "required": false,
+          "type": "boolean"
+        },
+        "foreground": {
+          "description": "当前进程直接跑 bus 服务、不 fork、不打印事件（给 systemd/k8s 托管用）；读事件不要用它",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "当前进程直接跑 bus 服务、不 fork、不打印事件（给 systemd/k8s 托管用）；读事件不要用它"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "当前进程直接跑 bus 服务、不 fork、不打印事件（给 systemd/k8s 托管用）；读事件不要用它"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "foreground"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "foreground"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "foreground",
+          "required": false,
+          "type": "boolean"
+        },
+        "format": {
+          "default": "ndjson",
+          "description": "输出格式 (ndjson/json/pretty/raw/compact)；事件流默认 ndjson",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "输出格式 (ndjson/json/pretty/raw/compact)；事件流默认 ndjson"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "输出格式 (ndjson/json/pretty/raw/compact)；事件流默认 ndjson"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "format"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "format"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "format",
+          "required": false,
+          "type": "string"
+        },
+        "group": {
+          "description": "group 规则：openConversationId",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "group 规则：openConversationId"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "group 规则：openConversationId"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "group"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "group"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "group",
+          "required": false,
+          "type": "string"
+        },
+        "max-events": {
+          "description": "收到 N 条后退出 (0 = 不限)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "收到 N 条后退出 (0 = 不限)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "收到 N 条后退出 (0 = 不限)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "maxEvents"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "maxEvents"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "integer"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "integer"
+            }
+          },
+          "property": "maxEvents",
+          "required": false,
+          "type": "integer"
+        },
+        "name": {
+          "description": "个人事件订阅名称",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件订阅名称"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件订阅名称"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "name"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "name"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "name",
+          "required": false,
+          "type": "string"
+        },
+        "open-dingtalk-id": {
+          "description": "单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "openDingtalkId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "openDingtalkId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "openDingtalkId",
+          "required": false,
+          "type": "string"
+        },
+        "output-dir": {
+          "description": "每事件写一个文件到该目录 ({type}_{id}_{ts}.json)；与 stdout 互斥",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "每事件写一个文件到该目录 ({type}_{id}_{ts}.json)；与 stdout 互斥"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "每事件写一个文件到该目录 ({type}_{id}_{ts}.json)；与 stdout 互斥"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "outputDir"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "outputDir"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "outputDir",
+          "required": false,
+          "type": "string"
+        },
+        "personal-event-base-url": {
+          "description": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "personalEventBaseUrl"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "personalEventBaseUrl"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "personalEventBaseUrl",
+          "required": false,
+          "type": "string"
+        },
+        "query": {
+          "description": "按消息文本关键词过滤，逗号分隔",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "按消息文本关键词过滤，逗号分隔"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "按消息文本关键词过滤，逗号分隔"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "query"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "query"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "query",
+          "required": false,
+          "type": "string"
+        },
+        "quiet": {
+          "description": "抑制 stderr 状态信息",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "抑制 stderr 状态信息"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "抑制 stderr 状态信息"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "quiet"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "quiet"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "quiet",
+          "required": false,
+          "type": "boolean"
+        },
+        "route": {
+          "description": "按 regex 路由事件到目录：'\u003cregex\u003e=dir:\u003cpath\u003e'，可重复；未命中走 stdout/--output-dir",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "按 regex 路由事件到目录：'\u003cregex\u003e=dir:\u003cpath\u003e'，可重复；未命中走 stdout/--output-dir"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "按 regex 路由事件到目录：'\u003cregex\u003e=dir:\u003cpath\u003e'，可重复；未命中走 stdout/--output-dir"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "route"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "route"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "array"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "array"
+            }
+          },
+          "property": "route",
+          "required": false,
+          "type": "array"
+        },
+        "rule": {
+          "description": "个人事件规则类型；默认根据 event_key 推断",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件规则类型；默认根据 event_key 推断"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件规则类型；默认根据 event_key 推断"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "rule"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "rule"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "rule",
+          "required": false,
+          "type": "string"
+        },
+        "stream-source-id": {
+          "description": "个人 Stream sourceId；开源版默认 open，可由 edition 覆盖",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人 Stream sourceId；开源版默认 open，可由 edition 覆盖"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人 Stream sourceId；开源版默认 open，可由 edition 覆盖"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "streamSourceId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "streamSourceId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "streamSourceId",
+          "required": false,
+          "type": "string"
+        },
+        "stream-ticket-mode": {
+          "description": "个人 Stream 建联模式；默认 normal",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人 Stream 建联模式；默认 normal"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人 Stream 建联模式；默认 normal"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "streamTicketMode"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "streamTicketMode"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "streamTicketMode",
+          "required": false,
+          "type": "string"
+        },
+        "stream-ticket-url": {
+          "description": "个人 Stream 取票 URL；默认由 MCP base URL 派生",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人 Stream 取票 URL；默认由 MCP base URL 派生"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人 Stream 取票 URL；默认由 MCP base URL 派生"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "streamTicketUrl"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "streamTicketUrl"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "streamTicketUrl",
+          "required": false,
+          "type": "string"
+        },
+        "subscribe-id": {
+          "description": "个人事件订阅 ID；传入后复用已有订阅",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件订阅 ID；传入后复用已有订阅"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件订阅 ID；传入后复用已有订阅"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "subscribeId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "subscribeId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "subscribeId",
+          "required": false,
+          "type": "string"
+        },
+        "ttl": {
+          "description": "个人订阅 TTL (Go duration，如 24h；0 表示不过期)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人订阅 TTL (Go duration，如 24h；0 表示不过期)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人订阅 TTL (Go duration，如 24h；0 表示不过期)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "ttl"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "ttl"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "ttl",
+          "required": false,
+          "type": "string"
+        },
+        "user": {
+          "description": "单聊对端或指定发送人的 userId（与 --open-dingtalk-id 二选一）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "单聊对端或指定发送人的 userId（与 --open-dingtalk-id 二选一）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "单聊对端或指定发送人的 userId（与 --open-dingtalk-id 二选一）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "user"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "user"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "user",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "event.consume",
+      "positionals": [
+        {
+          "description": "要消费的个人事件码；省略时仅适用于显式配置其它事件来源的兼容模式",
+          "index": 0,
+          "name": "event_key",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "primary_cli_path": "event consume",
+      "product_id": "event",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "reviewed_command_registry",
+      "title": "订阅事件流并输出到 stdout",
+      "use_when": [
+        "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
+        "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
+        "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
+      ]
+    },
+    "event.list": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "cobra-help:dws event list --help",
+        "internal/cli/schema_command_registry.json#event.list",
+        "internal/cli/schema_hints/metadata/event.json",
+        "internal/cli/schema_hints/selection/event.json",
+        "live-dws-schema:event.list#FAILED",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md"
+      ],
+      "agent_summary": "列出支持的个人事件目录与状态说明",
+      "agent_summary_source": "dws-agent-selection/event",
+      "availability": "available",
+      "avoid_when": [
+        "已知 event_key 要看 payload 字段时用 event schema",
+        "要开始监听时用 event consume"
+      ],
+      "canonical_path": "event.list",
+      "cli_name": "list",
+      "cli_path": "event list",
+      "confirmation": "not_required",
+      "description": "列出当前支持的个人事件目录。",
+      "display": "事件订阅 (DingTalk Stream 长连接)",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws event list --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": "列出支持的个人事件目录与状态说明"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": "列出支持的个人事件目录与状态说明"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "已知 event_key 要看 payload 字段时用 event schema",
+                "要开始监听时用 event consume"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "已知 event_key 要看 payload 字段时用 event schema",
+            "要开始监听时用 event consume"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "event list",
+              "value": "event.list"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "event list",
+          "value": "event.list"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "列出当前支持的个人事件目录。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "列出当前支持的个人事件目录。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "read"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "dws event list --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "dws event list --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "local"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "local"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "列出个人事件目录"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "列出个人事件目录"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "尚不知道可用 event_key，需要先盘点个人事件目录"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "尚不知道可用 event_key，需要先盘点个人事件目录"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "interface_reason": "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",
+      "is_alias": false,
+      "name": "list",
+      "parameter_count": 4,
+      "parameters": {
+        "category": {
+          "description": "个人事件目录分类",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件目录分类"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件目录分类"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "category"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "category"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "category",
+          "required": false,
+          "type": "string"
+        },
+        "enabled-only": {
+          "description": "个人事件目录只显示 enabled",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件目录只显示 enabled"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件目录只显示 enabled"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "enabledOnly"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "enabledOnly"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "enabledOnly",
+          "required": false,
+          "type": "boolean"
+        },
+        "format": {
+          "default": "table",
+          "description": "输出格式: table|json",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "输出格式: table|json"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "输出格式: table|json"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "format"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "format"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "format",
+          "required": false,
+          "type": "string"
+        },
+        "include-pending": {
+          "description": "个人事件目录包含 pending 项",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件目录包含 pending 项"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件目录包含 pending 项"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "includePending"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "includePending"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "includePending",
+          "required": false,
+          "type": "boolean"
+        }
+      },
+      "path": "event.list",
+      "primary_cli_path": "event list",
+      "product_id": "event",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "列出个人事件目录",
+      "use_when": [
+        "尚不知道可用 event_key，需要先盘点个人事件目录"
+      ]
+    },
+    "event.schema": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "cobra-help:dws event schema --help",
+        "internal/cli/schema_command_registry.json#event.schema",
+        "internal/cli/schema_hints/metadata/event.json",
+        "internal/cli/schema_hints/selection/event.json",
+        "live-dws-schema:event.schema#FAILED",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md"
+      ],
+      "agent_summary": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
+      "agent_summary_source": "dws-agent-selection/event",
+      "availability": "available",
+      "avoid_when": [
+        "查询 CLI 命令参数契约时用顶层 dws schema",
+        "要实际收事件时用 event consume"
+      ],
+      "canonical_path": "event.schema",
+      "cli_name": "schema",
+      "cli_path": "event schema",
+      "confirmation": "not_required",
+      "description": "显示事件 schema",
+      "display": "事件订阅 (DingTalk Stream 长连接)",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws event schema user_im_message_receive_at --flatten --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "查询 CLI 命令参数契约时用顶层 dws schema",
+                "要实际收事件时用 event consume"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "查询 CLI 命令参数契约时用顶层 dws schema",
+            "要实际收事件时用 event consume"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "event schema",
+              "value": "event.schema"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "event schema",
+          "value": "event.schema"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "显示事件 schema"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "显示事件 schema"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "read"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "dws event schema user_im_message_receive_at --flatten --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "dws event schema user_im_message_receive_at --flatten --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "local"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "local"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "显示事件 schema"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "显示事件 schema"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "已知任一公开个人消息 event_key，消费前需要理解扁平输出字段"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "已知任一公开个人消息 event_key，消费前需要理解扁平输出字段"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "local",
+      "interface_reason": "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
+      "is_alias": false,
+      "name": "schema",
+      "parameter_count": 2,
+      "parameters": {
+        "flatten": {
+          "description": "显示 --flatten 消费模式对应的顶层业务字段 schema",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "显示 --flatten 消费模式对应的顶层业务字段 schema"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "显示 --flatten 消费模式对应的顶层业务字段 schema"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "flatten"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "flatten"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "flatten",
+          "required": false,
+          "type": "boolean"
+        },
+        "format": {
+          "default": "json",
+          "description": "输出格式: json",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "输出格式: json"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "输出格式: json"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "format"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "format"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "format",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "event.schema",
+      "positionals": [
+        {
+          "description": "要查询 payload 字段定义的个人事件码",
+          "index": 0,
+          "name": "event_key",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "primary_cli_path": "event schema",
+      "product_id": "event",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "显示事件 schema",
+      "use_when": [
+        "已知任一公开个人消息 event_key，消费前需要理解扁平输出字段"
+      ]
+    },
+    "event.status": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "cobra-help:dws event status --help",
+        "internal/cli/schema_command_registry.json#event.status",
+        "internal/cli/schema_hints/metadata/event.json",
+        "internal/cli/schema_hints/selection/event.json",
+        "live-dws-schema:event.status#FAILED",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md"
+      ],
+      "agent_summary": "查看个人事件订阅、本地 bus 与消费进程状态",
+      "agent_summary_source": "dws-agent-selection/event",
+      "availability": "available",
+      "avoid_when": [
+        "取消订阅用 event stop；列事件目录用 event list"
+      ],
+      "canonical_path": "event.status",
+      "cli_name": "status",
+      "cli_path": "event status",
+      "confirmation": "not_required",
+      "description": "显示当前用户个人事件订阅、personal bus 状态和本地 consume 进程。",
+      "display": "事件订阅 (DingTalk Stream 长连接)",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws event status --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": "查看个人事件订阅、本地 bus 与消费进程状态"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": "查看个人事件订阅、本地 bus 与消费进程状态"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "取消订阅用 event stop；列事件目录用 event list"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "取消订阅用 event stop；列事件目录用 event list"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "event status",
+              "value": "event.status"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "event status",
+          "value": "event.status"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "not_required"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "显示当前用户个人事件订阅、personal bus 状态和本地 consume 进程。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "显示当前用户个人事件订阅、personal bus 状态和本地 consume 进程。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "read"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "dws event status --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "dws event status --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "idempotent"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "low"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/event marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "显示个人事件订阅和本地消费状态"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "显示个人事件订阅和本地消费状态"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "需要确认订阅是否活跃、bus/consume 是否仍在运行"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "需要确认订阅是否活跃、bus/consume 是否仍在运行"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result.",
+      "is_alias": false,
+      "name": "status",
+      "parameter_count": 6,
+      "parameters": {
+        "event": {
+          "description": "个人事件 event_key 过滤",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件 event_key 过滤"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件 event_key 过滤"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "event"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "event"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "event",
+          "required": false,
+          "type": "string"
+        },
+        "format": {
+          "default": "text",
+          "description": "输出格式: text|json",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "输出格式: text|json"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "输出格式: text|json"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "format"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "format"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "format",
+          "required": false,
+          "type": "string"
+        },
+        "personal-event-base-url": {
+          "description": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "personalEventBaseUrl"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "personalEventBaseUrl"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "personalEventBaseUrl",
+          "required": false,
+          "type": "string"
+        },
+        "status": {
+          "default": "active",
+          "description": "个人订阅状态过滤: active|paused|error|deleted|all",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人订阅状态过滤: active|paused|error|deleted|all"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人订阅状态过滤: active|paused|error|deleted|all"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "status"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "status"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "status",
+          "required": false,
+          "type": "string"
+        },
+        "stream-source-id": {
+          "description": "个人事件 sourceId；开源版默认 open，可由 edition 覆盖",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件 sourceId；开源版默认 open，可由 edition 覆盖"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件 sourceId；开源版默认 open，可由 edition 覆盖"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "streamSourceId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "streamSourceId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "streamSourceId",
+          "required": false,
+          "type": "string"
+        },
+        "subscribe-id": {
+          "description": "个人订阅 ID 过滤",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人订阅 ID 过滤"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人订阅 ID 过滤"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "subscribeId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "subscribeId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "subscribeId",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "event.status",
+      "primary_cli_path": "event status",
+      "product_id": "event",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "显示个人事件订阅和本地消费状态",
+      "use_when": [
+        "需要确认订阅是否活跃、bus/consume 是否仍在运行"
+      ]
+    },
+    "event.stop": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "cobra-help:dws event stop --help",
+        "internal/cli/schema_command_registry.json#event.stop",
+        "internal/cli/schema_hints/metadata/event.json",
+        "internal/cli/schema_hints/selection/event.json",
+        "live-dws-schema:event.stop#FAILED",
+        "note:examples-omit-yes-use-dry-run-first",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md"
+      ],
+      "agent_summary": "取消个人事件订阅并停止对应本地消费",
+      "agent_summary_source": "dws-agent-selection/event",
+      "availability": "available",
+      "avoid_when": [
+        "只需检查状态时用 event status",
+        "目标订阅不明确或用户未确认时不要停止"
+      ],
+      "canonical_path": "event.stop",
+      "cli_name": "stop",
+      "cli_path": "event stop",
+      "confirmation": "user_required",
+      "constraints": {
+        "mutually_exclusive": [
+          [
+            "all",
+            "subscribe_id"
+          ]
+        ],
+        "require_one_of": [
+          [
+            "all",
+            "subscribe_id"
+          ]
+        ]
+      },
+      "description": "取消个人事件订阅并停止本地消费，清理对应本地消费状态，并尝试停止对应前台 consume。\n\n传 subscribe_id 时取消该个人订阅；传 --all 时取消当前身份下本地记录的全部个人订阅。\n取消后如果没有剩余本地个人订阅，会停止 personal bus。",
+      "display": "事件订阅 (DingTalk Stream 长连接)",
+      "dry_run": {
+        "preview_kind": "request"
+      },
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws event stop SUBSCRIBE_ID --dry-run"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": "取消个人事件订阅并停止对应本地消费"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": "取消个人事件订阅并停止对应本地消费"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "只需检查状态时用 event status",
+                "目标订阅不明确或用户未确认时不要停止"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "只需检查状态时用 event status",
+            "目标订阅不明确或用户未确认时不要停止"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "event stop",
+              "value": "event.stop"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "event stop",
+          "value": "event.stop"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "user_required"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "user_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "取消个人事件订阅并停止本地消费，清理对应本地消费状态，并尝试停止对应前台 consume。\n\n传 subscribe_id 时取消该个人订阅；传 --all 时取消当前身份下本地记录的全部个人订阅。\n取消后如果没有剩余本地个人订阅，会停止 personal bus。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "取消个人事件订阅并停止本地消费，清理对应本地消费状态，并尝试停止对应前台 consume。\n\n传 subscribe_id 时取消该个人订阅；传 --all 时取消当前身份下本地记录的全部个人订阅。\n取消后如果没有剩余本地个人订阅，会停止 personal bus。"
+        },
+        "dry_run": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "reviewed positive dry-run capability",
+              "selected": true,
+              "source": "reviewed_dry_run_registry",
+              "source_ref": "internal/cli/schema_dry_run_capabilities.go",
+              "value": {
+                "preview_kind": "request"
+              }
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "exact_canonical_lookup",
+          "review_reason": "reviewed positive dry-run capability",
+          "source": "reviewed_dry_run_registry",
+          "source_ref": "internal/cli/schema_dry_run_capabilities.go",
+          "value": {
+            "preview_kind": "request"
+          }
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "destructive"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "command-verb",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "destructive"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "dws event stop SUBSCRIBE_ID --dry-run"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "dws event stop SUBSCRIBE_ID --dry-run"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "unknown"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "unknown"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "unknown"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/event.json",
+              "value": "high"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "medium"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Runtime already requires --yes (or --dry-run preview) before cancelling subscriptions / stopping the bus; align Schema safety and runtime_gate with that gate.",
+          "source": "internal/cli/schema_hints/metadata/event.json",
+          "value": "high"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "取消个人事件订阅并停止本地消费"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "取消个人事件订阅并停止本地消费"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/event.json",
+              "value": [
+                "用户明确要求取消已知 subscribe_id（或清理全部）并停止消费"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/event.json",
+          "value": [
+            "用户明确要求取消已知 subscribe_id（或清理全部）并停止消费"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow.",
+      "is_alias": false,
+      "name": "stop",
+      "parameter_count": 3,
+      "parameters": {
+        "all": {
+          "description": "取消当前身份下本地记录的所有个人订阅",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "取消当前身份下本地记录的所有个人订阅"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "取消当前身份下本地记录的所有个人订阅"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "all"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "all"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "command_constraint",
+                  "selected": true,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "command_constraint",
+              "resolution": "highest_precedence",
+              "source": "require_one_of_constraint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "boolean"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "boolean"
+            }
+          },
+          "property": "all",
+          "required": false,
+          "type": "boolean"
+        },
+        "personal-event-base-url": {
+          "description": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件控制面 base URL；默认由 MCP base URL 派生为 /dws"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "personalEventBaseUrl"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "personalEventBaseUrl"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "personalEventBaseUrl",
+          "required": false,
+          "type": "string"
+        },
+        "stream-source-id": {
+          "description": "个人事件 sourceId；开源版默认 open，可由 edition 覆盖",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "个人事件 sourceId；开源版默认 open，可由 edition 覆盖"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "个人事件 sourceId；开源版默认 open，可由 edition 覆盖"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "streamSourceId"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "streamSourceId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "streamSourceId",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "event.stop",
+      "positionals": [
+        {
+          "description": "要取消的个人事件订阅 ID；与 --all 二选一",
+          "index": 0,
+          "name": "subscribe_id",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "primary_cli_path": "event stop",
+      "product_id": "event",
+      "reviewed": true,
+      "risk": "high",
+      "source": "reviewed_command_registry",
+      "title": "取消个人事件订阅并停止本地消费",
+      "use_when": [
+        "用户明确要求取消已知 subscribe_id（或清理全部）并停止消费"
+      ]
+    }
+  }
+}

@@ -7,7 +7,8 @@ unrelated work, and use `gofmt` for every modified Go file.
 
 - Build: `go build ./cmd`
 - Full test suite: `DWS_PACKAGE_VERSION=0.0.0-test go test ./...`
-- Generate Schema assets: `go generate ./internal/cli`
+- Generate Schema assets: `go generate ./internal/cli` (entry point: `internal/cli/gen.go`)
+- Refresh pinned MCP metadata: `make fetch-mcp-metadata` (requires `dws auth login`)
 - Check generated drift: `./scripts/policy/check-generated-drift.sh`
 - Check the Schema contract: `./scripts/policy/check-schema-catalog.sh`
 
@@ -56,8 +57,16 @@ The Schema data flow is one way:
 
 6. One-way publication
    SchemaRegistry
-   └─ internal/cli/schema_catalog.json
+   └─ internal/cli/schema_catalog/
+      (catalog.json + tools/<product>.json; split per product so
+       concurrent feature PRs only rewrite their own shard)
       └─ dws schema list/product/group/leaf/--all
+
+7. Runtime consumption (unified API)
+   ResolveMeta(cliPath) → CommandMeta{Identity, Safety, Selection}
+   └─ internal/cli/command_meta.go
+   └─ all consumers (help, schema, agent, skill-gen) call this one function
+   └─ backed by embedded catalog (sync.Once lazy map, O(1) lookup)
 ```
 
 Parameter overlays from metadata are merged into `EffectiveCommandRegistry`
@@ -73,10 +82,36 @@ Build-time gates and the snapshot serializer consume that source-resolved typed
 registry/index. Runtime projections and delivery gates consume the typed
 registry/index returned by the production snapshot loader. Neither path may
 reopen annotations, merge source records, or use a previous Catalog or other
-generated JSON as a source. `schema_catalog.json` is output-only in the
+generated JSON as a source. `schema_catalog/` (catalog.json + per-product
+tools/<product>.json shards) is output-only in the
 generation graph. The production loader decoding the embedded published
 snapshot is a delivery boundary, not source resolution; it must never create or
 repair a Cobra command, flag, registry entry, or later Catalog generation.
+
+### Generation vs consumption separation
+
+The Schema system has two physically separated processes:
+
+**Generation** (build-time, slow, reviewed, one-way):
+- Entry point: `internal/cli/gen.go` (all `//go:generate` pragmas isolated here,
+  not in business code).
+- Tools: `internal/generator/cmd_schema_agent_metadata` + `cmd_schema_catalog`
+  (standalone Go mains).
+- Inputs: 6 authored sources (registry + hints metadata + hints selection +
+  MCP metadata + parameter bindings + cobra tree).
+- Output: `schema_catalog/` (per-product shards) + `schema_agent_metadata/`.
+- Refresh MCP metadata: `make fetch-mcp-metadata` (iterates 26 MCP server
+  endpoints, merges with previous data for cross-server interface_ref).
+- Gates: `make generate-schema` (byte guards on inputs), `check-generated-drift.sh`,
+  `check-command-surface.sh` (catalog structure).
+
+**Consumption** (runtime, fast, read-only, unified API):
+- Entry point: `ResolveMeta(cliPath) → CommandMeta{Identity, Safety, Selection}`
+  in `internal/cli/command_meta.go`.
+- Backed by embedded catalog (`embeddedSchemaCatalog()`, sync.Once, O(1) map).
+- Consumers: `--help` (Safety annotation via `RenderSafetyAnnotation`),
+  `dws schema`, agent selection, future skill generation.
+- `SafetyForCLIPath` delegates to `ResolveMeta` (backward compatible).
 
 This split is architecturally isomorphic to Lark's typed metadata registry,
 navigation catalog, and schema renderer. DWS intentionally preserves its
@@ -117,7 +152,8 @@ When adding or changing an Agent-visible command, review all relevant inputs:
   must never materialize, infer, or override registry identity.
 - Flag-to-interface property mappings and required/default semantics.
 - Generated files under `internal/cli/schema_agent_metadata/` and
-  `internal/cli/schema_catalog.json` after running generation.
+  `internal/cli/schema_catalog/` (catalog.json + tools/<product>.json) after
+  running generation.
 
 Run the reverse-completeness tests whenever the Cobra tree changes. A command
 that works through `dws <path>` but cannot be found through the matching
@@ -177,7 +213,7 @@ For every curated tool:
 2. Edit `selection/<product>.json` for selection prose (`reviewed: true`,
    `review_reason`, `source_refs`).
 3. Run `make generate-schema`. Do not hand-edit generated
-   `schema_agent_metadata/` or `schema_catalog.json`.
+   `schema_agent_metadata/` or `schema_catalog/`.
 
 ### Pull live MCP descriptions (personal token)
 
