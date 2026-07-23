@@ -38,6 +38,8 @@ var registryOpenDeleteKey = func(path string, access uint32) (registry.Key, erro
 	return registry.OpenKey(registry.CURRENT_USER, path, access)
 }
 
+var registryOpenReadKey = registry.OpenKey
+
 // ---------------------------------------------------------------------------
 // Windows backend: DPAPI + HKCU registry
 // ---------------------------------------------------------------------------
@@ -159,7 +161,10 @@ func freeDataBlob(b *windows.DataBlob) {
 }
 
 func platformGet(service, account string) (string, error) {
-	v, ok := registryGet(service, account)
+	v, ok, err := registryGet(service, account)
+	if err != nil {
+		return "", err
+	}
 	if !ok {
 		return "", nil // Not found is not an error
 	}
@@ -179,28 +184,40 @@ func platformRemove(service, account string) error {
 	return registryRemove(service, account)
 }
 
-func registryGet(service, account string) (string, bool) {
+func registryGet(service, account string) (string, bool, error) {
 	keyPath := registryPathForService(service)
-	k, err := registry.OpenKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE)
+	k, err := registryOpenReadKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE)
 	if err != nil {
-		return "", false
+		if errors.Is(err, registry.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("registry open for read failed: %w", err)
 	}
 	defer k.Close()
+	return registryGetFromKey(k, service, account)
+}
 
+func registryGetFromKey(k registry.Key, service, account string) (string, bool, error) {
 	b64, _, err := k.GetStringValue(valueNameForAccount(account))
-	if err != nil || b64 == "" {
-		return "", false
+	if err != nil {
+		if errors.Is(err, registry.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("registry read account %q failed: %w", account, err)
+	}
+	if b64 == "" {
+		return "", false, fmt.Errorf("registry account %q contains empty DPAPI ciphertext", account)
 	}
 	blob, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
-		return "", false
+		return "", false, fmt.Errorf("decode registry account %q DPAPI ciphertext: %w", account, err)
 	}
 	entropy := dpapiEntropy(service, account)
 	plain, err := dpapiUnprotect(blob, entropy)
 	if err != nil {
-		return "", false
+		return "", false, fmt.Errorf("dpapi unprotect registry account %q failed: %w", account, err)
 	}
-	return string(plain), true
+	return string(plain), true, nil
 }
 
 func registrySet(service, account string, protected []byte) error {
