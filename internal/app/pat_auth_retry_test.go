@@ -893,6 +893,9 @@ func TestResolvePATPollTimeout(t *testing.T) {
 		{name: "string uses compatibility default", raw: json.RawMessage(`"75"`), want: patPollTimeout},
 		{name: "fraction uses compatibility default", raw: json.RawMessage(`1.5`), want: patPollTimeout},
 		{name: "invalid uses compatibility default", raw: json.RawMessage(`invalid`), want: patPollTimeout},
+		{name: "server DCF maximum accepted", raw: json.RawMessage(`2592000`), want: 30 * 24 * time.Hour},
+		{name: "server DCF maximum plus one uses compatibility default", raw: json.RawMessage(`2592001`), want: patPollTimeout},
+		{name: "math MaxInt32 seconds uses compatibility default", raw: json.RawMessage(`2147483647`), want: patPollTimeout},
 		{name: "duration overflow uses compatibility default", raw: json.RawMessage(`9223372037`), want: patPollTimeout},
 	}
 

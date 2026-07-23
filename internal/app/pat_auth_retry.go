@@ -375,6 +375,10 @@ const (
 	// patPollTimeout is the compatibility fallback when the PAT service does not
 	// provide a valid remaining lifetime for the device flow.
 	patPollTimeout = 10 * time.Minute
+	// patMaxDeviceCodeFlowExpirySeconds is the server DCF protocol/storage
+	// supported upper bound for a relative expiry. It validates server input;
+	// it is not a second business TTL or an independently configurable lifetime.
+	patMaxDeviceCodeFlowExpirySeconds int64 = 30 * 24 * 60 * 60
 )
 
 // patRetryingKey is a context key to prevent recursive PAT auth checks.
@@ -899,6 +903,9 @@ func resolvePATPollTimeout(expiresInSeconds json.RawMessage) time.Duration {
 		return patPollTimeout
 	}
 	if seconds > math.MaxInt64/int64(time.Second) {
+		return patPollTimeout
+	}
+	if seconds > patMaxDeviceCodeFlowExpirySeconds {
 		return patPollTimeout
 	}
 	return time.Duration(seconds) * time.Second
