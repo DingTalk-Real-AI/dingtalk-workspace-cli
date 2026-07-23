@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉盘文件存储。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/创建文件夹。Distinct from dingtalk-doc(钉钉文档内容编辑)、dingtalk-wiki(知识库空间)。命令前缀：dws drive。
+description: 钉盘与知识库文件存储。Use when 用户说 钉盘/上传、覆盖或下载文件/文件夹/查文件/创建文件夹。Distinct from dingtalk-doc(在线文档内容编辑)、dingtalk-markdown(原生.md内容编辑)、dingtalk-wiki(知识库空间)。命令前缀：dws drive。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -53,6 +53,7 @@ metadata:
 | "创建文件快捷方式" | `dws drive shortcut --node <fileId> [--folder <targetFolderId>] [--workspace <workspaceId>]` |
 | "下载文件" | `dws drive download --node <fileId> --output <path>` |
 | "上传本地文件" | `dws drive upload --file ./report.pdf [--folder <fileId>]` |
+| "覆盖钉盘或知识库里的已有文件" | `dws drive upload --file ./updated.pdf --node <fileId> --dry-run`，确认后加 `--yes` |
 | "建文件夹" | `dws drive mkdir --name "<名称>" [--folder <fileId>]` |
 | "复制 / 移动 / 重命名" | `dws drive copy` / `move` / `rename --node <fileId> --name "<主名>"` |
 | "删除文件 / 移到回收站（需确认）" | `dws drive delete --node <fileId> --yes` |
@@ -67,10 +68,13 @@ metadata:
 - `rename` 的 `--name` **只传主名，不带扩展名**；服务端会按原扩展名自动补后缀，带了扩展名会变成双扩展名（如 `报告.txt` → `报告.txt.txt`）。
 - `drive download` 需要 `--output` 指定本地保存路径或目录；不要省略必填输出位置。
 - 删除、覆盖、移动、公开（publish set/unset）等破坏性操作必须先确认；上传、创建文件夹、下载后要读回或列目录验证。
+- `drive upload --node <fileId>` 覆盖已有文件，`--node` 与新建文件使用的 `--folder` 互斥；先 `--dry-run`，获得明确确认后再加 `--yes`。
+- 覆盖钉盘文件时 `--node` 是 fileId；带 `--workspace` 覆盖知识库文件时传目标 nodeId。
 - `shortcut` 会创建新节点，执行后必须用 `drive list` 回读目标位置；`stats` 是只读操作。
 - 所有 `dws drive` 命令加 `--format json`。
 
 ## 跨产品协作
 
 - 文件内容编辑（钉钉文档）→ 切到 `dingtalk-doc`
+- 原生 `.md` 文件读取、创建、全量覆盖、局部替换 → 切到 `dingtalk-markdown`
 - 知识库空间 → 切到 `dingtalk-wiki`

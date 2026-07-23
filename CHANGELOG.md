@@ -6,9 +6,19 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **Chat editing and group management** — adds `chat message edit`, conversation-category lookups through `chat category list-by-conv` and `chat category batch-info`, and the confirmed, irreversible `chat group upgrade-to-external` flow.
+- **Contact maintenance commands** — adds `contact user update`, `contact user update-self`, `contact dept create`, `contact dept update`, and `contact account update`, all with guarded write behavior.
+- **Markdown file workflows** — adds the `markdown` product with `fetch`, `create`, `overwrite`, and `patch` commands for Drive-native `.md` files, including explicit routing, dry-run previews, and confirmation for destructive writes.
+- **Todo labels** — adds `todo tag add`, `delete`, `update`, `list`, and `create`.
+
 ### Changed
 
 - **Faster guarded releases** — trusts an independently revalidated, exact `CHANGELOG.md`-only successor of an already admitted `main` commit, runs cloud planning alongside governance, and executes sealed-release automation, compatibility, and multi-profile validation in parallel with artifact compilation. Normal cloud publication no longer requires an unshareable local packaging preflight.
+- **Scoped document reads and group mentions** — `doc read --content-format jsonml` can return `outline`, `range`, `section`, or custom-tag fragments with depth and block-boundary controls; document comment create, reply, and update can mention groups through `--mentioned-open-conversation-id`.
+- **Drive overwrite uploads** — `drive upload --node <fileId>` can replace an existing Drive or document-space file, is mutually exclusive with `--folder`, supports dry-run, and requires confirmation before writing.
+- **Chat nickname clearing and cross-organization todos** — omitting `--nick` from `chat group update-nick` now clears the current user's group nickname, while `todo task list --query-all` queries todos across organizations.
 
 ### Fixed
 

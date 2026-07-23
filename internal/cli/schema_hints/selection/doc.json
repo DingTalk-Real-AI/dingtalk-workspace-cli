@@ -59,7 +59,7 @@
     "doc.create_comment": {
       "agent_summary": "创建文档评论",
       "use_when": [
-        "在文档上创建不绑定具体划词位置的全文评论，可 --mention 时"
+        "在文档上创建不绑定具体划词位置的全文评论，可 @用户或通过 --mentioned-open-conversation-id @群"
       ],
       "avoid_when": [
         "针对某段选中文本的划词评论改用 create-inline（需 blockId+start/end）",
@@ -67,7 +67,7 @@
       ],
       "examples": [
         "dws doc comment create --node <DOC_ID> --content \"这里需要修改\" --format json",
-        "dws doc comment create --node <DOC_ID> --content \"请review\" --mention uid1,uid2 --format json"
+        "dws doc comment create --node <DOC_ID> --content \"请review\" --mention uid1,uid2 --mentioned-open-conversation-id <openConversationId> --format json"
       ],
       "reviewed": true,
       "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
@@ -293,10 +293,11 @@
       ]
     },
     "doc.get_document_content": {
-      "agent_summary": "读取文档内容（Markdown）",
+      "agent_summary": "读取完整文档内容，或按 outline/range/section/tags 获取 JSONML fragment",
       "use_when": [
         "用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
-        "用户直接粘贴文档 URL 且无其他指令时（默认读内容）"
+        "用户直接粘贴文档 URL 且无其他指令时（默认读内容）",
+        "只需标题大纲、指定块区间/单块或特定 JSONML tags 时使用 --content-format jsonml 与 --scope"
       ],
       "avoid_when": [
         "非 adoc（表格/多维表/普通文件）不要用本命令；先 doc info 再路由",
@@ -304,7 +305,8 @@
         "Markdown 为有损投影：保形复制模板请用 doc copy，不要 read→create"
       ],
       "examples": [
-        "dws doc read --node <DOC_ID> --format json"
+        "dws doc read --node <DOC_ID> --format json",
+        "dws doc read --node <DOC_ID> --content-format jsonml --scope outline --max-depth 3"
       ],
       "reviewed": true,
       "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
@@ -602,13 +604,13 @@
     "doc.reply_comment": {
       "agent_summary": "回复文档评论",
       "use_when": [
-        "回复已有评论（文字或 --emoji 表情）；commentKey 来自 list/create"
+        "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
       ],
       "avoid_when": [
         "新建评论用 create/create-inline；删评论用 delete"
       ],
       "examples": [
-        "dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"同意\" --format json",
+        "dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"同意\" --mentioned-open-conversation-id <openConversationId> --format json",
         "dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"比心\" --emoji --format json"
       ],
       "reviewed": true,
@@ -713,15 +715,16 @@
       ]
     },
     "doc.update_comment": {
-      "agent_summary": "更新指定文档评论的文字内容和可选 @提及用户。",
+      "agent_summary": "更新指定文档评论的文字内容和可选 @用户/@群。",
       "use_when": [
-        "修改已有评论正文；可选更新 --mention"
+        "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
       ],
       "avoid_when": [
         "删除评论用 delete；回复用 reply"
       ],
       "examples": [
-        "dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"已按最新数据修正\" --format json"
+        "dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"已按最新数据修正\" --format json",
+        "dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content \"请群内确认\" --mentioned-open-conversation-id <openConversationId>"
       ],
       "reviewed": true,
       "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",

@@ -316,7 +316,6 @@
         "chat group notice list",
         "chat group share-invite",
         "chat group update-alias",
-        "chat group update-nick",
         "chat hide",
         "chat list-all-conversations",
         "chat mark-read",

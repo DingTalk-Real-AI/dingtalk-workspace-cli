@@ -1044,6 +1044,26 @@
         {
           "canonical_path": "chat.set_top_conversation",
           "cli_path": "chat set-top"
+        },
+        {
+          "canonical_path": "chat.edit_message",
+          "cli_path": "chat message edit"
+        },
+        {
+          "canonical_path": "chat.get_conv_categories_info",
+          "cli_path": "chat category batch-info"
+        },
+        {
+          "canonical_path": "chat.list_conv_categories_by_conv",
+          "cli_path": "chat category list-by-conv"
+        },
+        {
+          "canonical_path": "chat.update_group_nick",
+          "cli_path": "chat group update-nick"
+        },
+        {
+          "canonical_path": "chat.upgrade_group_to_external",
+          "cli_path": "chat group upgrade-to-external"
         }
       ]
     },
@@ -1109,6 +1129,26 @@
         {
           "canonical_path": "contact.search_user_by_mobile",
           "cli_path": "contact user search-mobile"
+        },
+        {
+          "canonical_path": "contact.department_create",
+          "cli_path": "contact dept create"
+        },
+        {
+          "canonical_path": "contact.department_update",
+          "cli_path": "contact dept update"
+        },
+        {
+          "canonical_path": "contact.employee_update",
+          "cli_path": "contact user update"
+        },
+        {
+          "canonical_path": "contact.exclusive_account_user_update",
+          "cli_path": "contact account update"
+        },
+        {
+          "canonical_path": "contact.self_user_profile_update",
+          "cli_path": "contact user update-self"
         }
       ]
     },
@@ -1697,6 +1737,27 @@
         {
           "canonical_path": "mail.search_mail_users",
           "cli_path": "mail user search"
+        }
+      ]
+    },
+    {
+      "id": "markdown",
+      "tools": [
+        {
+          "canonical_path": "markdown.create",
+          "cli_path": "markdown create"
+        },
+        {
+          "canonical_path": "markdown.fetch",
+          "cli_path": "markdown fetch"
+        },
+        {
+          "canonical_path": "markdown.overwrite",
+          "cli_path": "markdown overwrite"
+        },
+        {
+          "canonical_path": "markdown.patch",
+          "cli_path": "markdown patch"
         }
       ]
     },
@@ -2369,6 +2430,26 @@
         {
           "canonical_path": "todo.update_todo_task",
           "cli_path": "todo task update"
+        },
+        {
+          "canonical_path": "todo.create_todo_tag",
+          "cli_path": "todo tag create"
+        },
+        {
+          "canonical_path": "todo.delete_todo_tag",
+          "cli_path": "todo tag delete"
+        },
+        {
+          "canonical_path": "todo.list_todo_tags",
+          "cli_path": "todo tag list"
+        },
+        {
+          "canonical_path": "todo.tag_todo",
+          "cli_path": "todo tag add"
+        },
+        {
+          "canonical_path": "todo.update_todo_tag",
+          "cli_path": "todo tag update"
         }
       ]
     },

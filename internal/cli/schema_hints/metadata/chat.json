@@ -649,6 +649,157 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "chat.edit_message": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI builds or accepts message content and calls im/edit_message, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "conversation-id": {
+          "property": "openConversationId",
+          "required": true
+        },
+        "group": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "chat": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "msg-id": {
+          "property": "openMessageId",
+          "required": true
+        },
+        "text": {
+          "property": "text",
+          "required": false
+        },
+        "title": {
+          "property": "title",
+          "required": false
+        },
+        "content": {
+          "property": "content",
+          "required": false
+        },
+        "at-all": {
+          "property": "atAll",
+          "required": false,
+          "interface_type": "boolean"
+        },
+        "at-open-dingtalk-ids": {
+          "property": "atOpenDingTalkIds",
+          "required": false,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed handler requires one conversation locator, a message ID, and exactly one of text or raw content; it optionally derives a title and maps mention controls before invoking edit_message.",
+      "cli_path": "chat message edit",
+      "runtime_gate": "none"
+    },
+    "chat.get_conv_categories_info": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI parses category IDs and calls im/get_conv_categories_info, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "category-ids": {
+          "property": "categoryIds",
+          "required": true,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed handler requires a comma-separated category-ID list, parses it to integers, and invokes get_conv_categories_info without a mutation or confirmation gate.",
+      "cli_path": "chat category batch-info",
+      "runtime_gate": "none"
+    },
+    "chat.list_conv_categories_by_conv": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps a conversation locator to im/list_conv_categories_by_conv, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "group": {
+          "property": "openConversationId",
+          "required": true
+        },
+        "conversation-id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed handler accepts one of three conversation locator aliases and invokes list_conv_categories_by_conv without a mutation or confirmation gate.",
+      "cli_path": "chat category list-by-conv",
+      "runtime_gate": "none"
+    },
+    "chat.update_group_nick": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps nickname update or clear semantics to im/update_group_nick, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "group": {
+          "property": "openConversationId",
+          "required": true
+        },
+        "nick": {
+          "property": "nick",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed handler requires the target conversation while intentionally allowing omitted --nick to send an empty nickname and clear the current user's group nickname.",
+      "cli_path": "chat group update-nick",
+      "runtime_gate": "none"
+    },
+    "chat.upgrade_group_to_external": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI validates an optional string map and calls im/upgrade_group_to_external, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "group": {
+          "property": "openConversationId",
+          "required": true
+        },
+        "extension": {
+          "property": "extension",
+          "required": false,
+          "interface_type": "object"
+        }
+      },
+      "review_reason": "The reviewed handler validates the target group and optional string-valued extension object, permits caller-authoritative dry-run, and requires explicit --yes before the irreversible upgrade.",
+      "cli_path": "chat group upgrade-to-external",
+      "runtime_gate": "confirm_dangerous"
     }
   }
 }

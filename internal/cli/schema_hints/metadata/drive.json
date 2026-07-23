@@ -213,10 +213,21 @@
     "drive.upload": {
       "effect": "write",
       "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
-      "reviewed": true
+      "reviewed": true,
+      "parameters": {
+        "node": {
+          "property": "nodeId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed helper preserves the stable command-level Schema contract for ordinary uploads; --node switches to overwrite mode and the runtime still requires explicit confirmation unless --yes is supplied.",
+      "cli_path": "drive upload",
+      "runtime_gate": "none"
     }
   }
 }
