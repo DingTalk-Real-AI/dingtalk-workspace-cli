@@ -34,6 +34,7 @@ func init() {
 		{"ding", newDingCommand},
 		{"doc", newDocCommand},
 		{"drive", newDriveCommand},
+		{"hrbrain", newHrbrainCommand},
 		{"live", newLiveCommand},
 		{"mail", newMailCommand},
 		{"markdown", newMarkdownCommand},

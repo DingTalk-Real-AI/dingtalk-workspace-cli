@@ -1603,6 +1603,55 @@
       ]
     },
     {
+      "id": "hrbrain",
+      "tools": [
+        {
+          "canonical_path": "hrbrain.list_talent_pools",
+          "cli_path": "hrbrain talent-pool list"
+        },
+        {
+          "canonical_path": "hrbrain.get_talent_pool_detail",
+          "cli_path": "hrbrain talent-pool detail"
+        },
+        {
+          "canonical_path": "hrbrain.list_pool_employees",
+          "cli_path": "hrbrain talent-pool employees"
+        },
+        {
+          "canonical_path": "hrbrain.get_profile_metadata",
+          "cli_path": "hrbrain profile metadata"
+        },
+        {
+          "canonical_path": "hrbrain.query_profile_data",
+          "cli_path": "hrbrain profile query"
+        },
+        {
+          "canonical_path": "hrbrain.get_profile_label",
+          "cli_path": "hrbrain profile labels"
+        },
+        {
+          "canonical_path": "hrbrain.get_employee_career",
+          "cli_path": "hrbrain profile career"
+        },
+        {
+          "canonical_path": "hrbrain.get_employee_performance",
+          "cli_path": "hrbrain profile performance"
+        },
+        {
+          "canonical_path": "hrbrain.search_employees",
+          "cli_path": "hrbrain search employees"
+        },
+        {
+          "canonical_path": "hrbrain.search_employees_structured",
+          "cli_path": "hrbrain search employees-structured"
+        },
+        {
+          "canonical_path": "hrbrain.get_search_fields",
+          "cli_path": "hrbrain search fields"
+        }
+      ]
+    },
+    {
       "id": "live",
       "tools": [
         {

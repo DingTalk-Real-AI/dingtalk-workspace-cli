@@ -22,9 +22,11 @@ type scriptedToolCaller struct {
 	index  int
 	format string
 	dry    bool
+	calls  int
 }
 
 func (c *scriptedToolCaller) CallTool(context.Context, string, string, map[string]any) (*edition.ToolResult, error) {
+	c.calls++
 	if len(c.steps) == 0 {
 		return &edition.ToolResult{}, nil
 	}
