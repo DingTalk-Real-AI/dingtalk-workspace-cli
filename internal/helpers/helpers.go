@@ -232,20 +232,28 @@ func MustGetStringFlag(cmd *cobra.Command, name string) string {
 	return val
 }
 
-// callMCPToolInternalOpts 是所有 MCP 工具调用的核心实现。
+// callMCPToolInternalOpts 是所有 MCP 工具调用的入口，等价于 post=nil 的
+// callMCPToolInternalOptsPost（成功响应文本原样输出，不做后处理）。
+func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]any, unescapeHTML bool) error {
+	return callMCPToolInternalOptsPost(explicitServerID, toolName, args, unescapeHTML, nil)
+}
+
+// callMCPToolInternalOptsPost 是所有 MCP 工具调用的核心实现。
 //
 // 参数说明：
 //   - explicitServerID: 显式指定的 MCP Server ID，为空时自动路由
 //   - toolName:         MCP 工具名称（如 "create_upload_session"）
 //   - args:             工具调用参数，会被序列化为 JSON 传给 MCP Server
 //   - unescapeHTML:     是否禁用 JSON 输出的 HTML 转义（仅影响最终输出格式）
+//   - post:             成功响应文本的后处理函数（如 chat 翻页边界去重），nil 表示原样输出
 //
 // 执行流程：
 //  1. DryRun 模式：仅打印工具名和参数，不实际调用
 //  2. 调用 MCP Server 获取结果
 //  3. 错误分类：网关错误 → 未登录 → PAT 错误 → 业务错误
-//  4. 根据 --format 标志选择输出格式（json / table / raw）
-func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]any, unescapeHTML bool) error {
+//  4. 对成功响应文本应用 post（若非 nil）
+//  5. 根据 --format 标志选择输出格式（json / table / raw）
+func callMCPToolInternalOptsPost(explicitServerID, toolName string, args map[string]any, unescapeHTML bool, post func(string) string) error {
 	ctx := context.Background()
 
 	// DryRun 模式：仅预览工具名和参数，不实际调用 MCP Server
@@ -315,16 +323,22 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 				}
 			}
 
+			// 对成功响应文本应用后处理（如 chat 翻页边界去重）。post 为 nil 时无操作。
+			text := c.Text
+			if post != nil {
+				text = post(text)
+			}
+
 			// JSON 格式输出：解析后使用选定的 printJSON 函数输出
 			if flagFormat == "json" {
 				var parsed any
-				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
+				if err := json.Unmarshal([]byte(text), &parsed); err == nil {
 					return printJSON(parsed)
 				}
 			}
 			// 特殊处理：开放平台文档搜索结果的表格格式输出
 			if toolName == "search_open_platform_docs" && flagFormat == "table" {
-				if formatted := formatDevdocSearchTable(c.Text); formatted {
+				if formatted := formatDevdocSearchTable(text); formatted {
 					return nil
 				}
 			}
@@ -334,11 +348,11 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 			// PrintJSONUnescaped 输出，保证 & 不被二次转义。
 			if unescapeHTML {
 				var parsed any
-				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
+				if err := json.Unmarshal([]byte(text), &parsed); err == nil {
 					return printJSON(parsed)
 				}
 			}
-			deps.Out.PrintRaw(c.Text)
+			deps.Out.PrintRaw(text)
 			return nil
 		}
 	}
