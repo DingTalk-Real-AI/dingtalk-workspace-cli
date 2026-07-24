@@ -1,0 +1,258 @@
+name: Reviewer routing
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# pull_request_target deliberately runs only this workflow from the protected
+# base branch. Never check out or execute pull-request code here.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: reviewer-router-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  route:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Route review and enable auto-merge
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const eventHeadSha = context.payload.pull_request.head.sha;
+            const reviewerPool = [
+              'sczheng189',
+              'shangguanxuan633-lab',
+              'audanye-sudo',
+              'wxianfeng',
+            ];
+
+            async function getReadyEventPull(phase) {
+              const {data: currentPull} = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              });
+              if (
+                currentPull.head.sha !== eventHeadSha ||
+                currentPull.state !== 'open' ||
+                currentPull.draft ||
+                currentPull.base.ref !== 'main'
+              ) {
+                core.info(
+                  `PR #${pullNumber} state or revision no longer matches this ready-main event during ${phase}; routing stopped.`,
+                );
+                return null;
+              }
+              return currentPull;
+            }
+            const pullRequest = await getReadyEventPull('initial read');
+            if (!pullRequest) {
+              return;
+            }
+            const author = pullRequest.user.login.toLowerCase();
+            const headSha = pullRequest.head.sha;
+            const latestPusher =
+              context.payload.action === 'synchronize'
+                ? context.payload.sender?.login?.toLowerCase()
+                : author;
+
+            async function routeReview() {
+              const eligible = reviewerPool.filter(
+                reviewer =>
+                  reviewer.toLowerCase() !== author &&
+                  reviewer.toLowerCase() !== latestPusher,
+              );
+              if (eligible.length === 0) {
+                core.warning(`No eligible reviewer remains for PR #${pullNumber}.`);
+                return;
+              }
+
+              const alreadyRequested =
+                (pullRequest.requested_reviewers || []).length > 0 ||
+                (pullRequest.requested_teams || []).length > 0;
+              if (alreadyRequested) {
+                core.info(`PR #${pullNumber} already has a requested reviewer; leaving it unchanged.`);
+                return;
+              }
+
+              let reviews;
+              try {
+                reviews = await github.paginate(github.rest.pulls.listReviews, {
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                  per_page: 100,
+                });
+              } catch (error) {
+                core.warning(
+                  `Could not inspect existing reviews for PR #${pullNumber}; skipping reviewer routing to avoid a duplicate request (${error.status || 'unknown status'}).`,
+                );
+                return;
+              }
+
+              const latestDecisionByLogin = new Map();
+              for (const review of reviews) {
+                const login = review.user?.login?.toLowerCase();
+                if (
+                  !login ||
+                  !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(
+                    review.state,
+                  )
+                ) {
+                  continue;
+                }
+                const previous = latestDecisionByLogin.get(login);
+                if (!previous || review.id > previous.id) {
+                  latestDecisionByLogin.set(login, review);
+                }
+              }
+              const currentHeadDecision = [...latestDecisionByLogin.values()].find(
+                review =>
+                  review.commit_id === headSha &&
+                  eligible.some(
+                    reviewer =>
+                      reviewer.toLowerCase() ===
+                      review.user.login.toLowerCase(),
+                  ) &&
+                  ['APPROVED', 'CHANGES_REQUESTED'].includes(review.state),
+              );
+              if (currentHeadDecision) {
+                core.info(
+                  `PR #${pullNumber} already has a ${currentHeadDecision.state} review on its current head; leaving review ownership unchanged.`,
+                );
+                return;
+              }
+
+              const loads = new Map(eligible.map(reviewer => [reviewer, 0]));
+              try {
+                const openPullRequests = await github.paginate(github.rest.pulls.list, {
+                  owner,
+                  repo,
+                  state: 'open',
+                  per_page: 100,
+                });
+                for (const openPullRequest of openPullRequests) {
+                  for (const reviewer of openPullRequest.requested_reviewers || []) {
+                    const candidate = eligible.find(
+                      login => login.toLowerCase() === reviewer.login.toLowerCase(),
+                    );
+                    if (candidate) {
+                      loads.set(candidate, loads.get(candidate) + 1);
+                    }
+                  }
+                }
+              } catch (error) {
+                core.warning(
+                  `Could not read current reviewer load; using deterministic rotation (${error.status || 'unknown status'}).`,
+                );
+              }
+
+              const offset = pullNumber % eligible.length;
+              const rotated = eligible.slice(offset).concat(eligible.slice(0, offset));
+              const tieOrder = new Map(rotated.map((reviewer, index) => [reviewer, index]));
+              const staleChangeRequester = [...latestDecisionByLogin.values()]
+                .filter(review => review.state === 'CHANGES_REQUESTED')
+                .sort((left, right) => right.id - left.id)
+                .map(review =>
+                  eligible.find(
+                    reviewer =>
+                      reviewer.toLowerCase() === review.user.login.toLowerCase(),
+                  ),
+                )
+                .find(Boolean);
+              const ranked = [...eligible].sort(
+                (left, right) =>
+                  Number(right === staleChangeRequester) -
+                    Number(left === staleChangeRequester) ||
+                  loads.get(left) - loads.get(right) ||
+                  tieOrder.get(left) - tieOrder.get(right),
+              );
+
+              for (const reviewer of ranked) {
+                try {
+                  const currentPull = await getReadyEventPull('review request');
+                  if (!currentPull) {
+                    return;
+                  }
+                  if (
+                    (currentPull.requested_reviewers || []).length > 0 ||
+                    (currentPull.requested_teams || []).length > 0
+                  ) {
+                    core.info(
+                      `PR #${pullNumber} received a reviewer while routing; leaving it unchanged.`,
+                    );
+                    return;
+                  }
+                  await github.rest.pulls.requestReviewers({
+                    owner,
+                    repo,
+                    pull_number: pullNumber,
+                    reviewers: [reviewer],
+                  });
+                  core.info(
+                    `Requested @${reviewer} for PR #${pullNumber} (open request load: ${loads.get(reviewer)}).`,
+                  );
+                  return;
+                } catch (error) {
+                  core.warning(
+                    `Could not request @${reviewer} for PR #${pullNumber}; trying the next candidate (${error.status || 'unknown status'}).`,
+                  );
+                }
+              }
+
+              core.warning(`No reviewer request could be created for PR #${pullNumber}.`);
+            }
+
+            async function enableAutoMerge() {
+              try {
+                const currentPull = await getReadyEventPull('auto-merge enable');
+                if (!currentPull) {
+                  return;
+                }
+                if (currentPull.auto_merge) {
+                  core.info(`Auto-merge is already enabled for PR #${pullNumber}.`);
+                  return;
+                }
+                await github.graphql(
+                  `mutation EnableAutoMerge($pullRequestId: ID!) {
+                    enablePullRequestAutoMerge(
+                      input: {
+                        pullRequestId: $pullRequestId
+                        mergeMethod: MERGE
+                      }
+                    ) {
+                      pullRequest {
+                        autoMergeRequest {
+                          enabledAt
+                        }
+                      }
+                    }
+                  }`,
+                  {pullRequestId: currentPull.node_id},
+                );
+                core.info(`Enabled native auto-merge for PR #${pullNumber}.`);
+              } catch (error) {
+                core.warning(
+                  `Could not enable auto-merge for PR #${pullNumber}; checks and review can continue normally (${error.message}).`,
+                );
+              }
+            }
+
+            try {
+              await routeReview();
+            } catch (error) {
+              core.warning(
+                `Reviewer routing hit an unexpected error for PR #${pullNumber}; review can still proceed manually (${error.message}).`,
+              );
+            }
+            await enableAutoMerge();

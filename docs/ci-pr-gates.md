@@ -4,9 +4,9 @@ The pull-request admission layer has exactly nine required external contexts:
 
 | Required context | Contract |
 |---|---|
-| `Lint` | Stable PR revision classification, formatting, `go vet`, and Actionlint |
-| `Test` | Race/unit/release-script tests plus fast cross-platform compilation |
-| `Coverage` | Overall non-regression and 100% changed-code coverage |
+| `Lint` | Stable PR revision/risk classification plus applicable formatting, `go vet`, and Actionlint |
+| `Test` | Tier-selected race/unit/release-script tests plus representative cross-platform compilation |
+| `Coverage` | Scope-matched overall non-regression and 100% changed-code coverage |
 | `Policy` | Repository policy and the fail-closed CHANGELOG contract |
 | `Edition` | Edition contract tests |
 | `Interface Integrity` | CLI, Schema, Skill, and stable-release compatibility |
@@ -84,13 +84,28 @@ second file but still rejects invalid dates or versions, missing bullets,
 placeholder `TODO`/`TBD`, unmanaged-section changes, and unsafe tree modes.
 Adding a second file therefore cannot bypass CHANGELOG validation.
 
-## Platform and downstream boundaries
+## Risk tiers and downstream boundaries
 
-Ordinary PRs run the primary Linux assurance plus fast Darwin/Windows compile
-checks. Full native macOS/Windows tests and platform coverage run on a PR only
-when its diff touches auth, keychain, OS-specific Go files, installers,
-packaging, Formulae, or release automation. Protected `main` pushes run the
-complete native matrix.
+`Lint` resolves the complete base/head diff before any helper is skipped.
+Unknown or truncated input fails closed into the high-risk tier.
+
+| Tier | Selection | Admission work |
+|---|---|---|
+| Documentation-only | Only prose/documentation assets; no executable, generated, workflow, packaging, or interface surface | Documentation and repository-asset validation; expensive code helpers skip while every required context still succeeds |
+| Standard | Ordinary code change with a stable package graph | Race tests for changed Go packages and their reverse dependencies; candidate and merge-base coverage over the same impacted scope and `coverpkg`; representative Darwin/Windows compilation |
+| High-risk / protected `main` | Workflow/policy, package add/remove/rename, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or an unprovable infrastructure classification | Complete race suite and full native macOS/Windows tests, plus every affected domain gate |
+
+Domain helpers (`Edition`, `Interface Integrity`, `CLI Smoke`, and `Mock MCP`,
+for example) execute their substantive suites when the diff can affect that
+contract or when the high-risk tier is selected. Otherwise their stable named
+contexts still report a successful, explicit unaffected result. Release-script
+tests follow the same impact rule. This preserves the ruleset contract without
+charging every developer for unrelated work.
+
+Platform-sensitive changes additionally run native changed-code coverage.
+Protected `main` always runs native tests; generic portable changes are held to
+the Linux changed-code gate rather than being forced to manufacture
+platform-only coverage.
 
 Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
 `Main Integration — 主干集成` workflow and runs only after a push to `main` (or
@@ -116,9 +131,28 @@ flowchart TB
   MAIN --> RELEASE["Release delivery"]
 ```
 
+## Review ownership and auto-merge
+
+A base-owned `pull_request_target` workflow routes newly opened, updated,
+reopened, or newly ready PRs targeting `main` to one eligible peer reviewer. It
+does not check out or execute PR code, excludes both the author and the known
+latest pusher, and balances the open requested-review load across the reviewed
+maintainer pool. A current-head approval or change request is preserved; after
+a new push, stale activity does not suppress a fresh request, and an
+outstanding change requester is preferred for continuity.
+
+The branch ruleset keeps one human approval and all nine strict required
+contexts, and requires someone other than the latest pusher to approve after
+the most recent head update. Repository auto-merge is enabled for ready PRs,
+so a PR merges after that approval and the current revision's nine checks are
+green. If `main` advances, strict checks rerun before merge. The reviewer
+router is orchestration, not a quality context, and must not be added to the
+ruleset.
+
 ## Running focused gates locally
 
-Run the contracts relevant to the change:
+Run the contracts relevant to the change. Ordinary contributors are not
+expected to repeat every CI job locally:
 
 ```sh
 make build
@@ -139,15 +173,18 @@ base_ref=$(git merge-base HEAD origin/main)
 ./scripts/policy/check-changelog-pr.sh --fast-path "$base_ref" HEAD
 ```
 
-`make coverage-gate` is an enforcement step, not a profile generator. CI
-generates the candidate, supporting, merge-base, and (when risk-selected)
-native profiles before the aggregate `Coverage` context evaluates them. The
+`make coverage-gate` is an enforcement step, not a profile generator. For a
+standard PR, CI derives changed packages and their reverse-dependency test
+closure, then generates candidate and merge-base profiles with the same test
+scope and `coverpkg`. High-risk and protected-main runs use the complete
+profiles. Supporting and (when platform-selected) native profiles are
+generated before the aggregate `Coverage` context evaluates them. The
 aggregate and native gates require 100% coverage for changed executable Go
-statements. Overall coverage remains an unrounded, zero-tolerance merge-base
-non-regression check. Candidate and baseline profiles are evaluated by the
-same block-deduplicating checker; supporting policy and shortcut profiles
-contribute to changed-code coverage only. The checked-in badge is presentation
-only and is never read as a gate input.
+statements. Overall coverage remains an unrounded, zero-tolerance,
+scope-matched merge-base non-regression check. Candidate and baseline profiles
+are evaluated by the same block-deduplicating checker; supporting policy and
+shortcut profiles contribute to changed-code coverage only. The checked-in
+badge is presentation only and is never read as a gate input.
 
 Compatibility checks derive authoritative Interface snapshots from the PR
 merge-base and the latest reachable stable release. The candidate cannot bless
@@ -175,3 +212,7 @@ Do not require helper jobs, `Multi-profile E2E`, or an aggregate admission
 alias. Update ruleset contexts only after the new names have appeared on the
 protected branch, so a rename cannot silently remove enforcement or leave an
 unproducible required context.
+
+The branch ruleset also requires one approval after the latest push. Enable
+repository auto-merge and automatic head-branch deletion; keep the base-owned
+reviewer router outside the required-context list.

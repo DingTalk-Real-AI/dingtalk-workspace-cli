@@ -52,7 +52,13 @@ run.
 
 ```mermaid
 flowchart TB
-  PR["Pull request"] --> CA["CI"]
+  PR["Pull request"] --> CLASSIFY["Fail-closed risk classification"]
+  CLASSIFY --> DOCS["Documentation-only<br/>asset/content validation"]
+  CLASSIFY --> STANDARD["Standard<br/>affected + reverse-dependent race<br/>scope-matched HEAD/base coverage"]
+  CLASSIFY --> HIGH["High-risk / main<br/>full race + native tests"]
+  DOCS --> CA["CI"]
+  STANDARD --> CA
+  HIGH --> CA
   subgraph CA_CHECKS["Nine required contexts"]
     L["Lint"]
     T["Test"]
@@ -72,9 +78,16 @@ flowchart TB
   PLATFORM --> RELEASE
 ```
 
-Complete Multi-profile E2E and the ordinary full native-platform matrix are
-downstream of PR admission. PRs still run primary-environment assurance and
-fast cross-platform compilation; auth, keychain, OS-specific, installer, and
-release changes additionally select native platform tests before merge. See
-[`docs/ci-pr-gates.md`](ci-pr-gates.md) for the exact context and ruleset
-contract.
+All nine named contexts are produced for every tier. Domain-specific helpers
+run when their owned surface is affected; otherwise the corresponding context
+records an explicit unaffected success. Standard code changes still receive
+representative Darwin/Windows compilation. High-risk PRs and protected `main`
+run the complete race and native test suites, while platform-sensitive diffs
+also receive native changed-code coverage.
+
+Review orchestration is also base-owned: it requests one eligible peer without
+executing PR code, re-routes an updated head when needed, and auto-merge
+completes only after the latest push has peer approval plus the current
+revision's nine strict contexts. Complete Multi-profile E2E remains downstream
+of PR admission. See [`docs/ci-pr-gates.md`](ci-pr-gates.md) for the exact
+classification, context, reviewer, and ruleset contract.

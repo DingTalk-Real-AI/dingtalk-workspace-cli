@@ -25,6 +25,12 @@ jobs:
     outputs:
       changelog_only: ${{ steps.classify.outputs.changelog_only }}
       changelog_changed: ${{ steps.classify.outputs.changelog_changed }}
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      full_suite: ${{ steps.classify.outputs.full_suite }}
+      release_sensitive: ${{ steps.classify.outputs.release_sensitive }}
+      interface_sensitive: ${{ steps.classify.outputs.interface_sensitive }}
+      mcp_sensitive: ${{ steps.classify.outputs.mcp_sensitive }}
+      edition_sensitive: ${{ steps.classify.outputs.edition_sensitive }}
       platform_sensitive: ${{ steps.classify.outputs.platform_sensitive }}
     steps:
       - name: Classify revision scope
@@ -34,9 +40,175 @@ jobs:
           script: |
             let changelogOnly = false;
             let changelogChanged = false;
+            let docsOnly = false;
+            let fullSuite = context.eventName === 'push';
+            let releaseSensitive = context.eventName === 'push';
+            let interfaceSensitive = context.eventName === 'push';
+            let mcpSensitive = context.eventName === 'push';
+            let editionSensitive = context.eventName === 'push';
             let platformSensitive = context.eventName === 'push';
             let files = [];
             let fastPathTrust = 'not evaluated';
+
+            const isDocsOnly = (filename) =>
+              typeof filename === 'string' &&
+              (
+                filename === 'CHANGELOG.md' ||
+                filename === 'README.md' ||
+                filename === 'README_zh.md' ||
+                filename === 'CONTRIBUTING.md' ||
+                filename === 'SECURITY.md' ||
+                filename === 'CODE_OF_CONDUCT.md' ||
+                filename === 'LICENSE' ||
+                filename === 'NOTICE' ||
+                filename === '.github/PULL_REQUEST_TEMPLATE.md' ||
+                filename.startsWith('.github/ISSUE_TEMPLATE/') ||
+                filename.startsWith('docs/')
+              );
+            const isReleaseSensitive = (filename) =>
+              typeof filename === 'string' &&
+              (
+                filename.startsWith('scripts/release/') ||
+                filename.startsWith('scripts/install') ||
+                filename.startsWith('Formula/') ||
+                filename.startsWith('build/') ||
+                filename === '.goreleaser.yaml' ||
+                filename === '.github/workflows/release.yml' ||
+                filename === '.github/workflows/withdraw-release.yml'
+              );
+            const isPlatformSensitive = (filename) =>
+              typeof filename === 'string' &&
+              (
+                filename.startsWith('internal/auth/') ||
+                filename.startsWith('internal/keychain/') ||
+                /_(darwin|windows|linux|unix)(?:_[a-z0-9]+)*\.go$/.test(filename) ||
+                filename === '.github/workflows/ci.yml' ||
+                filename ===
+                  'scripts/policy/run-platform-coverage-gate.sh'
+              );
+            const isNativeGoChange = ({ filename, previous_filename, patch }) => {
+              const paths = [filename, previous_filename].filter(
+                (value) => typeof value === 'string' && value !== ''
+              );
+              if (paths.some(isPlatformSensitive)) {
+                return true;
+              }
+              if (!paths.some((value) => value.endsWith('.go'))) {
+                return false;
+              }
+              if (typeof patch !== 'string') {
+                return true;
+              }
+              return (
+                /\/\/go:build[^\n]*(darwin|windows|linux|unix)/.test(patch) ||
+                /runtime\.GO(OS|ARCH)/.test(patch)
+              );
+            };
+            const isInterfaceSensitive = (filename) =>
+              typeof filename === 'string' &&
+              (
+                filename.startsWith('cmd/') ||
+                filename.startsWith('internal/app/') ||
+                filename.startsWith('internal/cli/') ||
+                filename.startsWith('internal/cobracmd/') ||
+                filename.startsWith('internal/helpers/') ||
+                filename.startsWith('internal/i18n/') ||
+                filename.startsWith('internal/interfacesnapshot/') ||
+                filename.startsWith('internal/ir/') ||
+                filename.startsWith('internal/shortcut/') ||
+                filename.startsWith('pkg/cmdutil/') ||
+                filename === 'skills_embed.go' ||
+                filename === 'test/fixtures/cli-interface-baseline.txt' ||
+                filename.startsWith('skills/')
+              );
+            const isMCPSensitive = (filename) =>
+              typeof filename === 'string' &&
+              (
+                filename.startsWith('internal/mcp') ||
+                filename.startsWith('internal/transport/') ||
+                filename.startsWith('internal/helpers/') ||
+                filename.startsWith('internal/app/') ||
+                filename.startsWith('test/mock_mcp/')
+              );
+            const isEditionSensitive = (filename) =>
+              typeof filename === 'string' &&
+              (
+                filename.startsWith('pkg/edition') ||
+                filename.startsWith('internal/edition') ||
+                filename === 'go.mod' ||
+                filename === 'go.sum'
+              );
+            const isHighRisk = (filename) =>
+              typeof filename === 'string' &&
+              (
+                isPlatformSensitive(filename) ||
+                isReleaseSensitive(filename) ||
+                filename.startsWith('.github/workflows/') ||
+                filename === '.github/actionlint.yaml' ||
+                filename.startsWith('scripts/') ||
+                filename.startsWith('verify/') ||
+                filename.startsWith('internal/generator/') ||
+                filename.startsWith('internal/cli/schema') ||
+                filename.startsWith('internal/interfacesnapshot/') ||
+                filename.startsWith('internal/app/upgrade') ||
+                filename.startsWith('internal/transport/') ||
+                filename.startsWith('internal/recovery/') ||
+                filename.startsWith('internal/syncdata/') ||
+                filename.includes('/testdata/') ||
+                filename.startsWith('testdata/') ||
+                filename.startsWith('test/fixtures/') ||
+                filename === 'Makefile' ||
+                filename === 'go.mod' ||
+                filename === 'go.sum'
+              );
+            const classifyFiles = (complete) => {
+              const paths = files.flatMap(({ filename, previous_filename }) =>
+                [filename, previous_filename].filter(
+                  (value) => typeof value === 'string' && value !== ''
+                )
+              );
+              const structuralChange = files.some(
+                ({ status, previous_filename }) =>
+                  status === 'removed' || Boolean(previous_filename)
+              );
+              const goPackageShapeChange = files.some(
+                ({ filename, previous_filename, status }) =>
+                  ['added', 'removed'].includes(status) &&
+                  [filename, previous_filename].some(
+                    (value) =>
+                      typeof value === 'string' && value.endsWith('.go')
+                  )
+              );
+              docsOnly =
+                complete &&
+                files.length > 0 &&
+                paths.length > 0 &&
+                paths.every(isDocsOnly);
+              releaseSensitive =
+                !complete || paths.some(isReleaseSensitive);
+              platformSensitive =
+                !complete || files.some(isNativeGoChange);
+              interfaceSensitive =
+                !complete ||
+                paths.some(isInterfaceSensitive) ||
+                paths.some(isEditionSensitive);
+              mcpSensitive =
+                !complete || paths.some(isMCPSensitive);
+              editionSensitive =
+                !complete || paths.some(isEditionSensitive);
+              fullSuite =
+                !complete ||
+                (
+                  !docsOnly &&
+                  (
+                    context.eventName === 'push' ||
+                    structuralChange ||
+                    goPackageShapeChange ||
+                    files.some(isNativeGoChange) ||
+                    paths.some(isHighRisk)
+                  )
+                );
+            };
 
             if (context.eventName === 'pull_request') {
               const expectedHead = context.payload.pull_request.head.sha;
@@ -85,28 +257,14 @@ jobs:
                   filename === 'CHANGELOG.md' ||
                   previous_filename === 'CHANGELOG.md'
               );
-
-              const isPlatformSensitive = (filename) =>
-                typeof filename === 'string' &&
-                (
-                  filename.startsWith('internal/auth/') ||
-                  filename.startsWith('internal/keychain/') ||
-                  /_(darwin|windows|linux|unix)\.go$/.test(filename) ||
-                  filename.startsWith('scripts/release/') ||
-                  filename.startsWith('scripts/install') ||
-                  filename.startsWith('Formula/') ||
-                  filename.startsWith('build/npm/') ||
-                  filename === '.goreleaser.yaml' ||
-                  filename === '.github/workflows/release.yml'
-                );
-              platformSensitive = files.some(
-                ({ filename, previous_filename }) =>
-                  isPlatformSensitive(filename) ||
-                  isPlatformSensitive(previous_filename)
-              );
+              classifyFiles(true);
               fastPathTrust = changelogOnly
                 ? 'exact pull-request revision and synthetic merge policy'
-                : 'full admission required';
+                : docsOnly
+                  ? 'documentation-only focused admission'
+                  : fullSuite
+                    ? 'high-risk full admission'
+                    : 'changed-package focused admission';
             } else if (context.eventName === 'push') {
               const expectedBefore = context.payload.before;
               const expectedAfter = context.payload.after;
@@ -136,6 +294,7 @@ jobs:
                     per_page: 100,
                   });
                 files = Array.isArray(comparison.files) ? comparison.files : [];
+                classifyFiles(files.length < 300);
                 const linearFromValidatedTip =
                   comparison.status === 'ahead' &&
                   comparison.merge_base_commit?.sha === expectedBefore &&
@@ -217,12 +376,24 @@ jobs:
 
             core.setOutput('changelog_only', String(changelogOnly));
             core.setOutput('changelog_changed', String(changelogChanged));
+            core.setOutput('docs_only', String(docsOnly));
+            core.setOutput('full_suite', String(fullSuite));
+            core.setOutput('release_sensitive', String(releaseSensitive));
+            core.setOutput('interface_sensitive', String(interfaceSensitive));
+            core.setOutput('mcp_sensitive', String(mcpSensitive));
+            core.setOutput('edition_sensitive', String(editionSensitive));
             core.setOutput('platform_sensitive', String(platformSensitive));
             await core.summary
               .addHeading('Code Admission scope')
               .addRaw(`- Event: \`${context.eventName}\`\n`)
               .addRaw(`- Exact modified CHANGELOG only: \`${changelogOnly}\`\n`)
               .addRaw(`- CHANGELOG touched: \`${changelogChanged}\`\n`)
+              .addRaw(`- Documentation-only: \`${docsOnly}\`\n`)
+              .addRaw(`- Full suite: \`${fullSuite}\`\n`)
+              .addRaw(`- Release-sensitive: \`${releaseSensitive}\`\n`)
+              .addRaw(`- Interface-sensitive: \`${interfaceSensitive}\`\n`)
+              .addRaw(`- MCP-sensitive: \`${mcpSensitive}\`\n`)
+              .addRaw(`- Edition-sensitive: \`${editionSensitive}\`\n`)
               .addRaw(`- Native-platform risk paths touched: \`${platformSensitive}\`\n`)
               .addRaw(`- Changed files: \`${files.length}\`\n`)
               .addRaw(`- Fast-path trust: ${fastPathTrust}\n`)
@@ -232,36 +403,92 @@ jobs:
         if: steps.classify.outputs.changelog_only == 'true'
         run: echo "Lint is satisfied by the trusted CHANGELOG-only Policy path." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Record documentation-only fast path
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only == 'true'
+        run: echo "Lint is satisfied by the non-executable documentation scope." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
-        if: steps.classify.outputs.changelog_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Go
-        if: steps.classify.outputs.changelog_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Verify Test Package Plan
-        if: steps.classify.outputs.changelog_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: make test-plan
 
       - name: Format Check
-        if: steps.classify.outputs.changelog_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: make format-check
 
       - name: Go Vet
-        if: steps.classify.outputs.changelog_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: go vet ./...
 
       - name: Check GitHub Actions workflows
-        if: steps.classify.outputs.changelog_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+  test-focused:
+    name: Test (changed packages)
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify authoritative synthetic merge
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD^1)" = "$PR_BASE_SHA" || {
+            echo "focused test merge first parent does not match event base" >&2
+            exit 1
+          }
+          test "$(git rev-parse HEAD^2)" = "$PR_HEAD_SHA" || {
+            echo "focused test merge second parent does not match event head" >&2
+            exit 1
+          }
+          echo "TEST_BASE_REF=$PR_BASE_SHA" >> "$GITHUB_ENV"
+          echo "TEST_HEAD_REF=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test changed packages and reverse dependencies
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: |
+          set -euo pipefail
+          package_output="$(
+            ./scripts/ci/changed-test-packages.sh \
+              list "$TEST_BASE_REF" "$TEST_HEAD_REF"
+          )"
+          if [ -z "$package_output" ]; then
+            echo "No buildable Go package is affected by this revision." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          mapfile -t packages <<< "$package_output"
+          go test -v -race -count=1 -timeout=8m "${packages[@]}"
 
   test-race:
     name: "Test (race: ${{ matrix.shard }})"
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -299,9 +526,9 @@ jobs:
           go test -v -race -count=1 -timeout=10m "${packages[@]}"
 
   test-release-scripts:
-    name: Test (release scripts)
+    name: Test (workflow and release contracts)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.release_sensitive == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -331,7 +558,7 @@ jobs:
   test-cross-platform:
     name: Test (cross-platform compile)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -363,6 +590,7 @@ jobs:
     name: Test
     needs:
       - lint
+      - test-focused
       - test-race
       - test-release-scripts
       - test-cross-platform
@@ -376,7 +604,10 @@ jobs:
       - name: Verify test shards
         env:
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
-          PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
+          DOCS_ONLY: ${{ needs.lint.outputs.docs_only }}
+          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
+          RELEASE_SENSITIVE: ${{ needs.lint.outputs.release_sensitive }}
+          FOCUSED_RESULT: ${{ needs.test-focused.result }}
           RACE_RESULT: ${{ needs.test-race.result }}
           RELEASE_SCRIPTS_RESULT: ${{ needs.test-release-scripts.result }}
           CROSS_PLATFORM_RESULT: ${{ needs.test-cross-platform.result }}
@@ -384,8 +615,9 @@ jobs:
           WINDOWS_RESULT: ${{ needs.test-windows.result }}
         run: |
           failed=0
-          if [ "$CHANGELOG_ONLY" = true ]; then
+          if [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
             for shard in \
+              "changed packages:$FOCUSED_RESULT" \
               "race shards:$RACE_RESULT" \
               "release scripts:$RELEASE_SCRIPTS_RESULT" \
               "cross-platform compile:$CROSS_PLATFORM_RESULT" \
@@ -403,21 +635,34 @@ jobs:
             exit
           fi
 
+          focused_expected=success
+          race_expected=skipped
+          if [ "$FULL_SUITE" = true ]; then
+            focused_expected=skipped
+            race_expected=success
+          fi
+          release_expected=skipped
+          if [ "$FULL_SUITE" = true ] || [ "$RELEASE_SENSITIVE" = true ]; then
+            release_expected=success
+          fi
           for shard in \
-            "race shards:$RACE_RESULT" \
-            "release scripts:$RELEASE_SCRIPTS_RESULT" \
-            "cross-platform compile:$CROSS_PLATFORM_RESULT"
+            "changed packages:$FOCUSED_RESULT:$focused_expected" \
+            "race shards:$RACE_RESULT:$race_expected" \
+            "release scripts:$RELEASE_SCRIPTS_RESULT:$release_expected" \
+            "cross-platform compile:$CROSS_PLATFORM_RESULT:success"
           do
             name="${shard%%:*}"
-            result="${shard#*:}"
-            printf '%s: %s\n' "$name" "$result"
-            if [ "$result" != "success" ]; then
+            remainder="${shard#*:}"
+            result="${remainder%%:*}"
+            expected="${remainder#*:}"
+            printf '%s: %s (expected %s)\n' "$name" "$result" "$expected"
+            if [ "$result" != "$expected" ]; then
               failed=1
             fi
           done
 
           native_expected=skipped
-          if [ "$PLATFORM_SENSITIVE" = true ]; then
+          if [ "$FULL_SUITE" = true ]; then
             native_expected=success
           fi
           for native in \
@@ -436,7 +681,7 @@ jobs:
   test-darwin:
     name: Test (macOS auth/keychain)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
@@ -454,7 +699,7 @@ jobs:
   test-windows:
     name: Test (Windows)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -568,13 +813,14 @@ jobs:
   coverage-current:
     name: Coverage (current)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
@@ -583,15 +829,69 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
+        if: needs.lint.outputs.full_suite == 'true'
         run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Resolve authoritative coverage base
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          base_ref="$PUSH_BEFORE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
+          fi
+          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            base_ref="$(git rev-parse HEAD^)"
+          fi
+          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+          echo "COVERAGE_HEAD_REF=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Build
         run: make build
 
       - name: Run current unit tests with coverage
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
         run: |
-          go test -count=1 -p 1 -coverprofile=coverage.txt -covermode=atomic ./ ./cmd/... ./internal/... ./skills/...
-          go tool cover -func=coverage.txt
+          set -euo pipefail
+          if [ "$FULL_SUITE" = true ]; then
+            go test -count=1 -p 1 \
+              -coverprofile=coverage.txt \
+              -covermode=atomic \
+              ./ ./cmd/... ./internal/... ./skills/...
+          else
+            changed_output="$(
+              ./scripts/ci/changed-test-packages.sh \
+                changed "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+            )"
+            impacted_output="$(
+              ./scripts/ci/changed-test-packages.sh \
+                list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+            )"
+            if [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
+              printf 'mode: atomic\n' > coverage.txt
+              echo "No buildable Go package needs scoped coverage." \
+                >> "$GITHUB_STEP_SUMMARY"
+            else
+              mapfile -t changed_packages <<< "$changed_output"
+              mapfile -t impacted_packages <<< "$impacted_output"
+              coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
+              go test -count=1 -p 1 \
+                -coverpkg="$coverpkg" \
+                -coverprofile=coverage.txt \
+                -covermode=atomic \
+                "${impacted_packages[@]}"
+            fi
+          fi
+          if [ "$(wc -l < coverage.txt)" -gt 1 ]; then
+            go tool cover -func=coverage.txt
+          fi
 
       - name: Upload current coverage profile
         uses: actions/upload-artifact@v4
@@ -603,7 +903,7 @@ jobs:
   coverage-supporting:
     name: Coverage (supporting)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -642,7 +942,7 @@ jobs:
   coverage-baseline:
     name: Coverage (baseline)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -658,6 +958,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
+        if: needs.lint.outputs.full_suite == 'true'
         run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Resolve authoritative coverage base
@@ -678,8 +979,24 @@ jobs:
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
       - name: Run baseline unit tests with coverage
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
         run: |
-          set -eu
+          set -euo pipefail
+          changed_output=
+          impacted_output=
+          if [ "$FULL_SUITE" != true ]; then
+            changed_output="$(
+              ./scripts/ci/changed-test-packages.sh \
+                changed "$COVERAGE_BASE_REF" HEAD
+            )"
+            impacted_output="$(
+              ./scripts/ci/changed-test-packages.sh \
+                list "$COVERAGE_BASE_REF" HEAD
+            )"
+          fi
           base_worktree="$(mktemp -d "${RUNNER_TEMP}/dws-coverage-base.XXXXXX")"
           rmdir "$base_worktree"
           cleanup() {
@@ -689,11 +1006,25 @@ jobs:
           git worktree add --detach "$base_worktree" "$COVERAGE_BASE_REF"
           (
             cd "$base_worktree"
-            go test -count=1 \
-              -p 1 \
-              -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
-              -covermode=atomic \
-              ./ ./cmd/... ./internal/... ./skills/...
+            if [ "$FULL_SUITE" = true ]; then
+              go test -count=1 \
+                -p 1 \
+                -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
+                -covermode=atomic \
+                ./ ./cmd/... ./internal/... ./skills/...
+            elif [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
+              printf 'mode: atomic\n' > "$GITHUB_WORKSPACE/coverage-base.txt"
+            else
+              mapfile -t changed_packages <<< "$changed_output"
+              mapfile -t impacted_packages <<< "$impacted_output"
+              coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
+              go test -count=1 \
+                -p 1 \
+                -coverpkg="$coverpkg" \
+                -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
+                -covermode=atomic \
+                "${impacted_packages[@]}"
+            fi
           )
 
       - name: Upload baseline coverage profile
@@ -719,6 +1050,8 @@ jobs:
       - name: Verify coverage profile jobs
         env:
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
+          DOCS_ONLY: ${{ needs.lint.outputs.docs_only }}
+          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           CURRENT_RESULT: ${{ needs.coverage-current.result }}
           SUPPORTING_RESULT: ${{ needs.coverage-supporting.result }}
@@ -727,22 +1060,32 @@ jobs:
           WINDOWS_RESULT: ${{ needs.coverage-windows.result }}
         run: |
           failed=0
-          expected=success
+          current_expected=success
+          supporting_expected=skipped
+          baseline_expected=success
           native_expected=skipped
-          if [ "$CHANGELOG_ONLY" = true ]; then
-            expected=skipped
-          elif [ "$PLATFORM_SENSITIVE" = true ]; then
+          if [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
+            current_expected=skipped
+            baseline_expected=skipped
+          elif [ "$FULL_SUITE" = true ]; then
+            supporting_expected=success
+          fi
+          if [ "$CHANGELOG_ONLY" != true ] &&
+             [ "$DOCS_ONLY" != true ] &&
+             [ "$PLATFORM_SENSITIVE" = true ]; then
             native_expected=success
           fi
 
           for profile in \
-            "current:$CURRENT_RESULT" \
-            "supporting:$SUPPORTING_RESULT" \
-            "baseline:$BASELINE_RESULT"
+            "current:$CURRENT_RESULT:$current_expected" \
+            "supporting:$SUPPORTING_RESULT:$supporting_expected" \
+            "baseline:$BASELINE_RESULT:$baseline_expected"
           do
             name="${profile%%:*}"
-            result="${profile#*:}"
-            printf '%s: %s\n' "$name" "$result"
+            remainder="${profile#*:}"
+            result="${remainder%%:*}"
+            expected="${remainder#*:}"
+            printf '%s: %s (expected %s)\n' "$name" "$result" "$expected"
             if [ "$result" != "$expected" ]; then
               failed=1
             fi
@@ -754,10 +1097,8 @@ jobs:
           do
             name="${native%%:*}"
             result="${native#*:}"
-            printf '%s: %s\n' "$name" "$result"
-            if [ "$CHANGELOG_ONLY" = true ]; then
-              native_expected=skipped
-            fi
+            printf '%s: %s (expected %s)\n' \
+              "$name" "$result" "$native_expected"
             if [ "$result" != "$native_expected" ]; then
               failed=1
             fi
@@ -765,20 +1106,20 @@ jobs:
           test "$failed" -eq 0
 
       - name: Check out repository
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Resolve authoritative coverage base
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -796,40 +1137,52 @@ jobs:
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
       - name: Download current coverage profile
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-current-profile
           path: .
 
       - name: Download supporting coverage profiles
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-supporting-profiles
           path: .
 
       - name: Download baseline coverage profile
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-baseline-profile
           path: .
 
       - name: Enforce coverage gate
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         env:
           COVERAGE_TARGET: "100"
           COVERAGE_ENFORCE_OVERALL: "false"
           COVERAGE_OVERALL_TOLERANCE: "0"
-        run: COVERAGE_ADDITIONAL_DIFF_PROFILE=coverage-shortcut.txt make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
+        run: |
+          additional_profile=
+          if [ -f coverage-shortcut.txt ]; then
+            additional_profile=coverage-shortcut.txt
+          fi
+          COVERAGE_ADDITIONAL_DIFF_PROFILE="$additional_profile" \
+            make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
 
       - name: Generate coverage report
-        if: needs.lint.outputs.changelog_only != 'true'
-        run: go tool cover -html=coverage.txt -o coverage.html
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        run: |
+          if [ "$(wc -l < coverage.txt)" -gt 1 ]; then
+            go tool cover -html=coverage.txt -o coverage.html
+          else
+            echo "No buildable Go package needed a coverage HTML report." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload coverage artifact
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -839,6 +1192,7 @@ jobs:
             coverage-policy.txt
             coverage-shortcut.txt
             coverage.html
+          if-no-files-found: error
 
   policy:
     name: Policy
@@ -852,7 +1206,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -930,12 +1284,29 @@ jobs:
           echo "Only the trusted base-equivalent CHANGELOG validator ran; executable sources are unchanged." \
             >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Validate scoped policy
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && (needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true')) }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          base_ref="$PUSH_BEFORE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_ref="$PR_BASE_SHA"
+          fi
+          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          git diff --check "$base_ref" HEAD
+          ./scripts/policy/check-open-source-assets.sh
+          echo "Policy used the scoped content/source admission path." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make build
 
       - name: Policy
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make policy
 
   interface-integrity:
@@ -945,24 +1316,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Build
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make build
 
       - name: Resolve authoritative compatibility merge-base
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -987,7 +1358,7 @@ jobs:
           echo "COMPATIBILITY_STABLE_REF=$stable_ref" >> "$GITHUB_ENV"
 
       - name: Check historical commands and help compatibility
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: |
           make authoritative-interface-integrity \
             BASE_REF="$COMPATIBILITY_BASE_REF"
@@ -997,16 +1368,16 @@ jobs:
           fi
 
       - name: Check complete Schema compatibility
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make schema-compatibility BASE_REF="$COMPATIBILITY_BASE_REF"
 
       - name: Check skill command references
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make skill-command-integrity
 
-      - name: Record CHANGELOG-only fast path
-        if: needs.lint.outputs.changelog_only == 'true'
-        run: echo "Interface Integrity is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"
+      - name: Record scoped fast path
+        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true') }}
+        run: echo "Interface Integrity is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
 
   cli-smoke:
     name: CLI Smoke
@@ -1015,26 +1386,26 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         uses: actions/checkout@v4
 
       - name: Set up Go
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Build
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make build
 
       - name: Check public top-level commands
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make cli-smoke
 
-      - name: Record CHANGELOG-only fast path
-        if: needs.lint.outputs.changelog_only == 'true'
-        run: echo "CLI Smoke is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"
+      - name: Record scoped fast path
+        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true') }}
+        run: echo "CLI Smoke is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
 
   mock-mcp-smoke:
     name: Mock MCP
@@ -1043,22 +1414,22 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.mcp_sensitive == 'true') }}
         uses: actions/checkout@v4
 
       - name: Set up Go
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.mcp_sensitive == 'true') }}
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Check HTTP and stdio MCP transport
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.mcp_sensitive == 'true') }}
         run: make mock-mcp-smoke
 
-      - name: Record CHANGELOG-only fast path
-        if: needs.lint.outputs.changelog_only == 'true'
-        run: echo "Mock MCP is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"
+      - name: Record scoped fast path
+        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.mcp_sensitive != 'true') }}
+        run: echo "Mock MCP is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
 
   edition-tests:
     name: Edition
@@ -1067,19 +1438,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.edition_sensitive == 'true') }}
         uses: actions/checkout@v4
 
       - name: Set up Go
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.edition_sensitive == 'true') }}
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Run edition contract tests
-        if: needs.lint.outputs.changelog_only != 'true'
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.edition_sensitive == 'true') }}
         run: go test -v -count=1 ./pkg/editiontest/...
 
-      - name: Record CHANGELOG-only fast path
-        if: needs.lint.outputs.changelog_only == 'true'
-        run: echo "Edition is unaffected by an exact CHANGELOG-only diff." >> "$GITHUB_STEP_SUMMARY"
+      - name: Record scoped fast path
+        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.edition_sensitive != 'true') }}
+        run: echo "Edition is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
