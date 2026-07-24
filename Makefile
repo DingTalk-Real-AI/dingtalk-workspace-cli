@@ -8,7 +8,7 @@ POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test test-plan lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -17,6 +17,7 @@ help:
 	@printf "  make build         - Build the dws CLI binary\n"
 	@printf "  make test          - Run the Go test suite\n"
 	@printf "  make test-plan     - Verify every default Go package belongs to one CI test shard\n"
+	@printf "  make test-auth-legacy-compat - Run stable legacy authentication compatibility regressions\n"
 	@printf "  make lint          - Run formatting checks, go vet, and staticcheck\n"
 	@printf "  make format-check  - Check all repository Go source files with gofmt\n"
 	@printf "  make fmt           - Format all repository Go source files\n"
@@ -54,6 +55,10 @@ test:
 test-plan:
 	@./scripts/ci/test-packages.sh verify
 
+test-auth-legacy-compat:
+	@mkdir -p "$(POLICY_GOTMPDIR)"
+	@GO="$(GO)" $(POLICY_ENV) ./scripts/policy/check-auth-legacy-compat.sh
+
 lint:
 	@./scripts/dev/lint.sh
 
@@ -76,7 +81,7 @@ fmt:
 	$(GO_SOURCE_LIST) > "$$go_files"; \
 	xargs -0 sh -c 'if [ "$$#" -gt 0 ]; then exec gofmt -w -- "$$@"; fi' sh < "$$go_files"
 
-policy:
+policy: test-auth-legacy-compat
 	@mkdir -p "$(POLICY_GOTMPDIR)"
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
 	@$(POLICY_ENV) ./scripts/policy/check-schema-command-registry.sh

@@ -1,0 +1,3030 @@
+{
+  "product_id": "hrbrain",
+  "tools": {
+    "hrbrain profile career": {
+      "agent_summary": "查询员工在公司内的职业历程",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "要查看绩效记录时改用 dws hrbrain profile performance"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain profile career --work-no WORK_NO"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询员工在公司内的职业历程",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "查询员工在公司内的职业历程",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要查看绩效记录时改用 dws hrbrain profile performance"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "要查看绩效记录时改用 dws hrbrain profile performance"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain profile career --work-no WORK_NO"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain profile career --work-no WORK_NO"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_career, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_career, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看某员工在公司内的岗位/职级变动历史时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看某员工在公司内的岗位/职级变动历史时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_career, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_employee_career",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain profile career",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "需要查看某员工在公司内的岗位/职级变动历史时"
+      ]
+    },
+    "hrbrain profile labels": {
+      "agent_summary": "根据员工工号列表获取员工标签",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "要查看职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain profile labels --staff-ids WORK_NO1,WORK_NO2"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "根据员工工号列表获取员工标签",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "根据员工工号列表获取员工标签",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要查看职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "要查看职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain profile labels --staff-ids WORK_NO1,WORK_NO2"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain profile labels --staff-ids WORK_NO1,WORK_NO2"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_label, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_label, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要按一个或多个工号批量查看员工标签时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要按一个或多个工号批量查看员工标签时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_label, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_profile_label",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain profile labels",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "需要按一个或多个工号批量查看员工标签时"
+      ]
+    },
+    "hrbrain profile metadata": {
+      "agent_summary": "查询员工档案元数据结构，用于构造档案数据查询参数",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "已知模块与字段编码，直接查询档案数据时改用 dws hrbrain profile query"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain profile metadata --work-no WORK_NO"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询员工档案元数据结构，用于构造档案数据查询参数",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "查询员工档案元数据结构，用于构造档案数据查询参数",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "已知模块与字段编码，直接查询档案数据时改用 dws hrbrain profile query"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "已知模块与字段编码，直接查询档案数据时改用 dws hrbrain profile query"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain profile metadata --work-no WORK_NO"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain profile metadata --work-no WORK_NO"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_metadata, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_metadata, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要先了解某员工档案有哪些模块/字段，以构造 hrbrain profile query 的 --data-queries 参数时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要先了解某员工档案有哪些模块/字段，以构造 hrbrain profile query 的 --data-queries 参数时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_metadata, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_profile_metadata",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain profile metadata",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "需要先了解某员工档案有哪些模块/字段，以构造 hrbrain profile query 的 --data-queries 参数时"
+      ]
+    },
+    "hrbrain profile performance": {
+      "agent_summary": "查询员工绩效记录",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "要查看职业历程时改用 dws hrbrain profile career"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain profile performance --work-no WORK_NO"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询员工绩效记录",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "查询员工绩效记录",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要查看职业历程时改用 dws hrbrain profile career"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "要查看职业历程时改用 dws hrbrain profile career"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain profile performance --work-no WORK_NO"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain profile performance --work-no WORK_NO"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_performance, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_performance, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查看某员工的历史绩效评级/记录时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要查看某员工的历史绩效评级/记录时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_performance, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_employee_performance",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain profile performance",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "需要查看某员工的历史绩效评级/记录时"
+      ]
+    },
+    "hrbrain profile query": {
+      "agent_summary": "按模块批量查询员工档案数据",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "尚不清楚可查询的模块/字段时先用 dws hrbrain profile metadata",
+        "只需要职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain profile query --work-no WORK_NO --data-queries '[{\"modelCode\":\"basic\",\"fields\":[\"name\",\"dept\"]}]'"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按模块批量查询员工档案数据",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "按模块批量查询员工档案数据",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚不清楚可查询的模块/字段时先用 dws hrbrain profile metadata",
+            "只需要职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "尚不清楚可查询的模块/字段时先用 dws hrbrain profile metadata",
+                "只需要职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain profile query --work-no WORK_NO --data-queries '[{\"modelCode\":\"basic\",\"fields\":[\"name\",\"dept\"]}]'"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain profile query --work-no WORK_NO --data-queries '[{\"modelCode\":\"basic\",\"fields\":[\"name\",\"dept\"]}]'"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool query_profile_data, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool query_profile_data, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知模块与字段编码（通常先用 hrbrain profile metadata 获取），需要批量查询员工档案数据时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "已知模块与字段编码（通常先用 hrbrain profile metadata 获取），需要批量查询员工档案数据时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool query_profile_data, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.query_profile_data",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain profile query",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "已知模块与字段编码（通常先用 hrbrain profile metadata 获取），需要批量查询员工档案数据时"
+      ]
+    },
+    "hrbrain search employees": {
+      "agent_summary": "按关键词、部门、职务、职级、人才池等条件搜索员工",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "需要复杂组合条件（表达式）搜索时改用 dws hrbrain search employees-structured",
+        "已限定某个人才池要看全部人员时改用 dws hrbrain talent-pool employees"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain search employees --keyword \"张三\" --page 1 --page-size 20",
+        "dws hrbrain search employees --dept-name \"技术部\" --job-level P7"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "按关键词、部门、职务、职级、人才池等条件搜索员工",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "按关键词、部门、职务、职级、人才池等条件搜索员工",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要复杂组合条件（表达式）搜索时改用 dws hrbrain search employees-structured",
+            "已限定某个人才池要看全部人员时改用 dws hrbrain talent-pool employees"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要复杂组合条件（表达式）搜索时改用 dws hrbrain search employees-structured",
+                "已限定某个人才池要看全部人员时改用 dws hrbrain talent-pool employees"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain search employees --keyword \"张三\" --page 1 --page-size 20",
+            "dws hrbrain search employees --dept-name \"技术部\" --job-level P7"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain search employees --keyword \"张三\" --page 1 --page-size 20",
+                "dws hrbrain search employees --dept-name \"技术部\" --job-level P7"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要按姓名/工号/部门/职务/职级等基础条件模糊找人时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要按姓名/工号/部门/职务/职级等基础条件模糊找人时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.search_employees",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain search employees",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "需要按姓名/工号/部门/职务/职级等基础条件模糊找人时"
+      ]
+    },
+    "hrbrain search employees-structured": {
+      "agent_summary": "使用高级条件表达式（originJson）搜索员工",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "只是简单关键词/部门/职级搜索时改用 dws hrbrain search employees",
+        "尚未获取可用字段与操作符时先用 dws hrbrain search fields"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain search employees-structured --origin-json '{\"rules\":[{\"field\":\"name\",\"operator\":\"contains\",\"value\":\"张\"}],\"combinator\":\"and\"}' --fields '[{\"label\":\"姓名\",\"value\":\"name\"}]'"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "使用高级条件表达式（originJson）搜索员工",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "使用高级条件表达式（originJson）搜索员工",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只是简单关键词/部门/职级搜索时改用 dws hrbrain search employees",
+            "尚未获取可用字段与操作符时先用 dws hrbrain search fields"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "只是简单关键词/部门/职级搜索时改用 dws hrbrain search employees",
+                "尚未获取可用字段与操作符时先用 dws hrbrain search fields"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain search employees-structured --origin-json '{\"rules\":[{\"field\":\"name\",\"operator\":\"contains\",\"value\":\"张\"}],\"combinator\":\"and\"}' --fields '[{\"label\":\"姓名\",\"value\":\"name\"}]'"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain search employees-structured --origin-json '{\"rules\":[{\"field\":\"name\",\"operator\":\"contains\",\"value\":\"张\"}],\"combinator\":\"and\"}' --fields '[{\"label\":\"姓名\",\"value\":\"name\"}]'"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees_structured, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees_structured, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要使用组合过滤条件表达式搜索员工，且已通过 dws hrbrain search fields 获取有权限的字段/操作符时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要使用组合过滤条件表达式搜索员工，且已通过 dws hrbrain search fields 获取有权限的字段/操作符时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees_structured, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.search_employees_structured",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain search employees-structured",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "需要使用组合过滤条件表达式搜索员工，且已通过 dws hrbrain search fields 获取有权限的字段/操作符时"
+      ]
+    },
+    "hrbrain search fields": {
+      "agent_summary": "获取当前操作人有权限使用的高级搜索字段与操作符列表",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "只是简单关键词搜索时改用 dws hrbrain search employees"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain search fields"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取当前操作人有权限使用的高级搜索字段与操作符列表",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "获取当前操作人有权限使用的高级搜索字段与操作符列表",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "只是简单关键词搜索时改用 dws hrbrain search employees"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "只是简单关键词搜索时改用 dws hrbrain search employees"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain search fields"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain search fields"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_search_fields, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_search_fields, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/hrbrain marks this tool as reviewed"
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "在调用 dws hrbrain search employees-structured 之前，需要确认可用字段与操作符时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "在调用 dws hrbrain search employees-structured 之前，需要确认可用字段与操作符时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_search_fields, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_search_fields",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain search fields",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "在调用 dws hrbrain search employees-structured 之前，需要确认可用字段与操作符时"
+      ]
+    },
+    "hrbrain talent-pool detail": {
+      "agent_summary": "根据人才池编码获取人才池详细信息",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain talent-pool detail --pool-code POOL_CODE"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "根据人才池编码获取人才池详细信息",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "根据人才池编码获取人才池详细信息",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain talent-pool detail --pool-code POOL_CODE"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain talent-pool detail --pool-code POOL_CODE"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_talent_pool_detail, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_talent_pool_detail, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 poolCode，需要查看某个人才池的详细信息时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "已知 poolCode，需要查看某个人才池的详细信息时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_talent_pool_detail, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_talent_pool_detail",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain talent-pool detail",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "已知 poolCode，需要查看某个人才池的详细信息时"
+      ]
+    },
+    "hrbrain talent-pool employees": {
+      "agent_summary": "查询指定人才池内的人员列表",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找",
+        "不限定人才池的人员搜索请改用 dws hrbrain search employees"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain talent-pool employees --pool-code POOL_CODE --page 1 --page-size 20"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询指定人才池内的人员列表",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "查询指定人才池内的人员列表",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找",
+            "不限定人才池的人员搜索请改用 dws hrbrain search employees"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找",
+                "不限定人才池的人员搜索请改用 dws hrbrain search employees"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain talent-pool employees --pool-code POOL_CODE --page 1 --page-size 20"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain talent-pool employees --pool-code POOL_CODE --page 1 --page-size 20"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_pool_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_pool_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "已知 poolCode，需要查看该人才池内的人员名单时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "已知 poolCode，需要查看该人才池内的人员名单时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_pool_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.list_pool_employees",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain talent-pool employees",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "已知 poolCode，需要查看该人才池内的人员名单时"
+      ]
+    },
+    "hrbrain talent-pool list": {
+      "agent_summary": "查询人才池列表，支持按名称关键词、类型、创建人、标签筛选",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "availability": "available",
+      "avoid_when": [
+        "已知 poolCode 只需要单个人才池详情时改用 dws hrbrain talent-pool detail",
+        "要查看人才池内人员名单时改用 dws hrbrain talent-pool employees"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws hrbrain talent-pool list --page 1 --page-size 20",
+        "dws hrbrain talent-pool list --keyword \"储备干部\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询人才池列表，支持按名称关键词、类型、创建人、标签筛选",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": "查询人才池列表，支持按名称关键词、类型、创建人、标签筛选",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "已知 poolCode 只需要单个人才池详情时改用 dws hrbrain talent-pool detail",
+            "要查看人才池内人员名单时改用 dws hrbrain talent-pool employees"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "已知 poolCode 只需要单个人才池详情时改用 dws hrbrain talent-pool detail",
+                "要查看人才池内人员名单时改用 dws hrbrain talent-pool employees"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws hrbrain talent-pool list --page 1 --page-size 20",
+            "dws hrbrain talent-pool list --keyword \"储备干部\""
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "dws hrbrain talent-pool list --page 1 --page-size 20",
+                "dws hrbrain talent-pool list --keyword \"储备干部\""
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_talent_pools, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_talent_pools, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go."
+            },
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要列出组织中的人才池，或按名称/类型/创建人/标签筛选人才池时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+          "candidates": [
+            {
+              "value": [
+                "需要列出组织中的人才池，或按名称/类型/创建人/标签筛选人才池时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_talent_pools, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.list_talent_pools",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "cobra-help:dws hrbrain talent-pool list",
+        "internal/cli/schema_hints/metadata/hrbrain.json",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/references/products/hrbrain.md"
+      ],
+      "use_when": [
+        "需要列出组织中的人才池，或按名称/类型/创建人/标签筛选人才池时"
+      ]
+    }
+  }
+}

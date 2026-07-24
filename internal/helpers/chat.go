@@ -1433,19 +1433,25 @@ func newChatCommand() *cobra.Command {
 纯文本 / Markdown 消息（默认）：
   无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。
 
-富媒体消息（通过 --msg-type 指定类型）：
-  image — 发送图片：--msg-type image --media-id（通过 dt_media_upload 上传获得）
-  file/audio/video — 发送文件、音频、视频：传本地 --file-path，CLI 会上传后按 file 消息发送`,
+本地图片 / 文件消息：
+  统一使用 --msg-type file --file-path <本地路径>。CLI 会完成上传并按 file 消息发送；
+  .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。
+
+旧版内联图片消息：
+  仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。
+  当前 CLI 不提供本地文件到 mediaId 的上传能力。`,
 		Example: `  dws chat message send --group <openconversation_id> "hello"
   dws chat message send --user <userId> "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> "请查收"
   dws chat message send --group <openconversation_id> --title "周报提醒" "请大家本周五前提交周报"
-  # 发送图片
-  dws chat message send --group <openconversation_id> --msg-type image --media-id <mediaId>
-  # 发送本地文件/音频/视频（audio/video 是 file 的语义别名）
+  # 发送本地图片或文件（图片会作为可下载的 file 附件发送）
+  dws chat message send --group <openconversation_id> --msg-type file --file-path ./screenshot.png
   dws chat message send --group <openconversation_id> --msg-type file --file-path ./report.pdf
+  # 发送本地音频/视频（audio/video 是 file 的语义别名）
   dws chat message send --group <openconversation_id> --msg-type audio --file-path ./recording.mp3
   dws chat message send --group <openconversation_id> --msg-type video --file-path ./demo.mp4
+  # 旧版内联图片：仅当上游已经持有有效 mediaId 时使用
+  dws chat message send --group <openconversation_id> --msg-type image --media-id <mediaId>
 # 查询群 ID: dws chat search --query "群名"
 # 查询用户 ID: dws contact user search --query "姓名"`,
 		Args: cobra.MaximumNArgs(1),
@@ -2231,6 +2237,66 @@ func newChatCommand() *cobra.Command {
 		},
 	}
 
+	chatMessageEditCmd := &cobra.Command{
+		Use:   "edit",
+		Short: "编辑消息",
+		Long: `编辑指定消息的内容。需要指定会话 ID 和消息 ID。
+
+推荐使用 --text 和可选 --title，CLI 会按 Markdown 消息规则生成 content：{"title":"标题","text":"正文"}。
+也可以直接使用 --content 传入完整 Markdown content JSON。--text 和 --content 二选一。`,
+		Example: `  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --title "标题" --text "更新后的内容"
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --text "<@all> 请查看" --at-all
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --text "<@openDingTalkId1> 请查看" --at-open-dingtalk-ids <openDingTalkId1>
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'
+  # 查询会话 ID: dws chat search --query "群名"
+  # 消息 ID 可通过 dws chat message list 获取`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+				return err
+			}
+			if err := validateRequiredFlags(cmd, "msg-id"); err != nil {
+				return err
+			}
+			content, _ := cmd.Flags().GetString("content")
+			text, _ := cmd.Flags().GetString("text")
+			if content == "" && text == "" {
+				return fmt.Errorf("flag --text or --content is required")
+			}
+			if content != "" && text != "" {
+				return fmt.Errorf("--text and --content are mutually exclusive")
+			}
+
+			atAll, _ := cmd.Flags().GetBool("at-all")
+			atOpenIDs := parseCSVValues(mustGetFlag(cmd, "at-open-dingtalk-ids"))
+			if text != "" {
+				title := mustGetFlag(cmd, "title")
+				if title == "" {
+					title = sanitizeTitleFromText(text)
+				}
+				if atAll && !strings.Contains(text, "<@all>") {
+					text = "<@all> " + text
+				}
+				text = normalizeAtPlaceholders(text, atOpenIDs, true)
+				contentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
+				content = string(contentJSON)
+			}
+
+			toolArgs := map[string]any{
+				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"content":            content,
+			}
+			if atAll {
+				toolArgs["atAll"] = true
+			}
+			if len(atOpenIDs) > 0 {
+				toolArgs["atOpenDingTalkIds"] = atOpenIDs
+			}
+			return callMCPToolOnServer("im", "edit_message", toolArgs)
+		},
+	}
+
 	chatMessageReadStatusCmd := &cobra.Command{
 		Use:   "read-status",
 		Short: "查询消息的已读/未读状态",
@@ -2400,13 +2466,13 @@ func newChatCommand() *cobra.Command {
 	_ = chatMessageSendCmd.Flags().MarkHidden("markdown")
 	chatMessageSendCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效，可选）,设置时，消息内容中一定要包含对应的占位符<@all>")
 	chatMessageSendCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）,设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>")
-	chatMessageSendCmd.Flags().String("media-id", "", "图片 mediaId（通过 dt_media_upload 上传后用 extract_media_id.py 提取，仅 msgType=image）")
-	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video（audio/video 是 file 别名；纯文本/Markdown 无需指定，直接传内容即可）")
+	chatMessageSendCmd.Flags().String("media-id", "", "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）")
+	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）")
 	chatMessageSendCmd.Flags().Int64("dentry-id", 0, "文件 dentryId（与 --space-id 成对传入时跳过自动上传）")
 	chatMessageSendCmd.Flags().Int64("space-id", 0, "空间 ID（与 --dentry-id 成对传入时跳过自动上传）")
 	chatMessageSendCmd.Flags().String("file-name", "", "文件名")
 	chatMessageSendCmd.Flags().String("file-type", "", "文件类型/扩展名")
-	chatMessageSendCmd.Flags().String("file-path", "", "本地文件路径（msgType=file 时可直接上传发送）")
+	chatMessageSendCmd.Flags().String("file-path", "", "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）")
 	chatMessageSendCmd.Flags().Int64("file-size", 0, "文件大小，单位字节")
 	_ = chatMessageSendCmd.Flags().MarkHidden("dentry-id")
 	_ = chatMessageSendCmd.Flags().MarkHidden("space-id")
@@ -2614,6 +2680,27 @@ func newChatCommand() *cobra.Command {
 	_ = chatMessageRecallCmd.Flags().MarkHidden("chat")
 	chatMessageRecallCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
 	_ = chatMessageRecallCmd.MarkFlagRequired("msg-id")
+
+	// edit flags
+	chatMessageEditCmd.Flags().String("conversation-id", "", "会话 openConversationId (必填)")
+	chatMessageEditCmd.Flags().String("group", "", "--conversation-id 的别名")
+	_ = chatMessageEditCmd.Flags().MarkHidden("group")
+	chatMessageEditCmd.Flags().String("id", "", "--conversation-id 的别名")
+	_ = chatMessageEditCmd.Flags().MarkHidden("id")
+	chatMessageEditCmd.Flags().String("chat", "", "--conversation-id 的别名")
+	_ = chatMessageEditCmd.Flags().MarkHidden("chat")
+	chatMessageEditCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
+	_ = chatMessageEditCmd.MarkFlagRequired("msg-id")
+	chatMessageEditCmd.Flags().String("text", "", "编辑后的 Markdown 正文；与 --content 二选一")
+	chatMessageEditCmd.Flags().String("title", "", "消息标题；配合 --text 使用，未传时从正文自动生成")
+	chatMessageEditCmd.Flags().String("content", "", "完整 Markdown content JSON；与 --text 二选一")
+	chatMessageEditCmd.Flags().Bool("at-all", false, "是否 @所有人；正文未包含 <@all> 时自动补到开头")
+	chatMessageEditCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔")
+	cli.AnnotateRuntimeRequiredFlags(chatMessageEditCmd, "conversation-id")
+	cli.AnnotateRuntimeConstraints(chatMessageEditCmd, cli.RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"text", "content"}},
+		RequireOneOf:      [][]string{{"text", "content"}},
+	})
 
 	// 别名注册: --conversation-id/--id/--chat → --group (chat message 子命令)
 	groupAliasCmds := []*cobra.Command{
@@ -2870,6 +2957,43 @@ func newChatCommand() *cobra.Command {
 			return callMCPToolOnServer("im", "remove_conv_from_categories", map[string]any{
 				"openConversationId": groupID,
 				"categoryIds":        categoryIds,
+			})
+		},
+	}
+
+	chatCategoryListByConvCmd := &cobra.Command{
+		Use:   "list-by-conv",
+		Short: "拉取指定会话所属的用户自定义会话分组",
+		Long:  `拉取指定会话所属的用户自定义会话分组。需指定会话 openConversationId。`,
+		Example: `  dws chat category list-by-conv --group <openConversationId>
+  # 查询群 ID: dws chat search --query "群名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			groupID := flagOrFallback(cmd, "group", "conversation-id", "id")
+			if groupID == "" {
+				return fmt.Errorf("flag --group is required")
+			}
+			return callMCPToolOnServer("im", "list_conv_categories_by_conv", map[string]any{
+				"openConversationId": groupID,
+			})
+		},
+	}
+
+	chatCategoryBatchInfoCmd := &cobra.Command{
+		Use:   "batch-info",
+		Short: "批量拉取用户自定义会话分组信息",
+		Long:  `根据分组 ID 列表批量拉取用户自定义会话分组信息。分组 ID 使用逗号分隔。`,
+		Example: `  dws chat category batch-info --category-ids 123,456
+  # 分组ID 可通过 dws chat category list 获取`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "category-ids"); err != nil {
+				return err
+			}
+			categoryIDs, err := parseCSVInt64(mustGetFlag(cmd, "category-ids"))
+			if err != nil {
+				return fmt.Errorf("--category-ids: %w", err)
+			}
+			return callMCPToolOnServer("im", "get_conv_categories_info", map[string]any{
+				"categoryIds": categoryIDs,
 			})
 		},
 	}
@@ -3255,9 +3379,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageDownloadMediaCmd.Flags().String("output", "", "本地保存路径，文件或目录 (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("output")
 
-	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageUpdateCardCmd, chatMessageDownloadMediaCmd)
+	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageEditCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageUpdateCardCmd, chatMessageDownloadMediaCmd)
 	chatBotCmd.AddCommand(chatBotSearchCmd)
-	chatCategoryCmd.AddCommand(chatCategoryListCmd, chatCategoryConvsCmd, chatCategoryCreateCmd, chatCategoryDeleteCmd, chatCategoryRenameCmd, chatCategoryAddConvCmd, chatCategoryRemoveConvCmd)
+	chatCategoryCmd.AddCommand(chatCategoryListCmd, chatCategoryConvsCmd, chatCategoryCreateCmd, chatCategoryDeleteCmd, chatCategoryRenameCmd, chatCategoryAddConvCmd, chatCategoryRemoveConvCmd, chatCategoryListByConvCmd, chatCategoryBatchInfoCmd)
 	chatGroupCmd.AddCommand(chatGroupInfoByIdCmd)
 
 	// ── group 新增命令（群主转让、邀请链接、免打扰）──────────
@@ -3387,7 +3511,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			iconMediaID := strings.TrimSpace(mustGetFlag(cmd, "icon-media-id"))
 			if iconMediaID == "" {
-				return fmt.Errorf("invalid --icon-media-id: mediaId 不能为空\n  hint: 先通过媒体上传命令（dt_media_upload）上传图片，使用返回的 mediaId")
+				return fmt.Errorf("invalid --icon-media-id: mediaId 不能为空\n  hint: 请使用上游媒体上传能力返回的有效 mediaId；DWS CLI 不提供本地文件到 mediaId 的上传命令")
 			}
 			return callMCPToolOnServer("im", "update_group_icon", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
@@ -3755,6 +3879,18 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	_ = chatCategoryRemoveConvCmd.Flags().MarkHidden("id")
 	chatCategoryRemoveConvCmd.Flags().String("category-ids", "", "目标分组 ID 列表，逗号分隔 (必填)")
 	_ = chatCategoryRemoveConvCmd.MarkFlagRequired("category-ids")
+
+	// category list-by-conv flags
+	chatCategoryListByConvCmd.Flags().String("group", "", "会话 openConversationId (必填)")
+	chatCategoryListByConvCmd.Flags().String("conversation-id", "", "--group 的别名")
+	_ = chatCategoryListByConvCmd.Flags().MarkHidden("conversation-id")
+	chatCategoryListByConvCmd.Flags().String("id", "", "--group 的别名")
+	_ = chatCategoryListByConvCmd.Flags().MarkHidden("id")
+	cli.AnnotateRuntimeRequiredFlags(chatCategoryListByConvCmd, "group")
+
+	// category batch-info flags
+	chatCategoryBatchInfoCmd.Flags().String("category-ids", "", "分组 ID 列表，逗号分隔 (必填)")
+	_ = chatCategoryBatchInfoCmd.MarkFlagRequired("category-ids")
 
 	// ── group-role 子命令（群身份管理）────────────────────────
 
@@ -4663,24 +4799,26 @@ status 可选值:
 
 	chatGroupUpdateNickCmd := &cobra.Command{
 		Use:   "update-nick",
-		Short: "设置用户在群内的群昵称",
-		Long:  `设置当前用户在指定群聊内的个人群昵称。`,
+		Short: "设置或清除用户在群内的群昵称",
+		Long:  `设置当前用户在指定群聊内的个人群昵称。不传 --nick 时清除当前群昵称。`,
 		Example: `  dws chat group update-nick --group <openConversationId> --nick "我的群昵称"
+  dws chat group update-nick --group <openConversationId>
+  # 不传 --nick 表示清除群昵称
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "group", "nick"); err != nil {
+			if err := validateRequiredFlags(cmd, "group"); err != nil {
 				return err
 			}
+			nick, _ := cmd.Flags().GetString("nick")
 			return callMCPToolOnServer("im", "update_group_nick", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
-				"nick":               mustGetFlag(cmd, "nick"),
+				"nick":               nick,
 			})
 		},
 	}
 	chatGroupUpdateNickCmd.Flags().String("group", "", "群聊 openConversationId (必填)")
 	_ = chatGroupUpdateNickCmd.MarkFlagRequired("group")
-	chatGroupUpdateNickCmd.Flags().String("nick", "", "个人群昵称 (必填)")
-	_ = chatGroupUpdateNickCmd.MarkFlagRequired("nick")
+	chatGroupUpdateNickCmd.Flags().String("nick", "", "个人群昵称，不传则清除群昵称")
 
 	// ── group update-alias: 设置群备注 ──────────────────────────
 
@@ -4989,6 +5127,57 @@ status 可选值:
 	chatGroupShareInviteCmd.Flags().Int64("expires-seconds", 0, "链接有效期（秒），0 表示永久有效，不传使用服务端默认值")
 	chatGroupShareInviteCmd.Flags().String("uuid", "", "消息幂等键（可选）")
 
+	chatGroupUpgradeToExternalCmd := &cobra.Command{
+		Use:   "upgrade-to-external",
+		Short: "[危险] 将普通群升级为外部群",
+		Long: `[危险] 将已有普通群升级为外部群。适用于邀请外部联系人、开展跨组织协作，或保留原群会话并转换群类型的场景。
+
+本命令升级已有普通群；新建外部群请使用 chat group create --type EXTERNAL。
+
+该操作不可逆，仅群主可执行。正式执行必须通过 --yes 显式确认，可先使用 --dry-run 预览。`,
+		Example: `  dws chat group upgrade-to-external --group <openConversationId> --yes
+  dws chat group upgrade-to-external --group <openConversationId> --extension '{"source":"dws"}' --yes
+  # 查询群 ID: dws chat search --query "群名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"openConversationId": mustGetFlag(cmd, "group"),
+			}
+			if rawExtension := mustGetFlag(cmd, "extension"); rawExtension != "" {
+				var rawValues map[string]any
+				if err := json.Unmarshal([]byte(rawExtension), &rawValues); err != nil {
+					return fmt.Errorf("--extension must be a JSON object with string values: %w", err)
+				}
+				if rawValues == nil {
+					return fmt.Errorf("--extension must be a JSON object with string values")
+				}
+				extension := make(map[string]string, len(rawValues))
+				for key, value := range rawValues {
+					stringValue, ok := value.(string)
+					if !ok {
+						return fmt.Errorf("--extension value for %q must be a string, got %T", key, value)
+					}
+					extension[key] = stringValue
+				}
+				toolArgs["extension"] = extension
+			}
+			if !deps.Caller.DryRun() && !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"普通群升级为外部群不可逆；获得用户确认后加 --yes 执行，或加 --dry-run 预览",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认目标群聊及升级影响；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认目标群聊和升级影响", "获得用户确认后使用 --yes 执行"),
+				)
+			}
+			return callMCPToolOnServer("im", "upgrade_group_to_external", toolArgs)
+		},
+	}
+	chatGroupUpgradeToExternalCmd.Flags().String("group", "", "待升级普通群的 openConversationId (必填)")
+	_ = chatGroupUpgradeToExternalCmd.MarkFlagRequired("group")
+	chatGroupUpgradeToExternalCmd.Flags().String("extension", "", `预留扩展字段 JSON 对象 (可选)，如 '{"source":"dws"}'`)
+
 	chatCategoryCreateSmartCmd := &cobra.Command{
 		Use:   "create-smart",
 		Short: "创建智能会话分组",
@@ -5084,7 +5273,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	_ = chatTextTranslateCmd.MarkFlagRequired("to")
 	chatTextCmd.AddCommand(chatTextTranslateCmd)
 
-	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd)
+	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd, chatGroupUpgradeToExternalCmd)
 	chatGroupMembersCmd.AddCommand(chatGroupMembersRemoveBotCmd, chatGroupMembersListByIdsCmd)
 	chatBotCmd.AddCommand(chatBotFindCmd)
 	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)

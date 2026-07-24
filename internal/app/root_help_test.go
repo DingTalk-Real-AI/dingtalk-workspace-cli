@@ -15,11 +15,14 @@ package app
 
 import (
 	"bytes"
+	stderrors "errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -75,7 +78,14 @@ func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 		}
 	}
 
-	mediaUpload := mustFindCommand(t, root, "chat", "media", "upload")
+	mediaGroup := mustFindCommand(t, root, "chat", "media")
+	if mediaGroup.Deprecated == "" || mediaGroup.Hidden || !mediaGroup.Runnable() {
+		t.Fatalf("chat media compatibility contract: deprecated=%q hidden=%v runnable=%v", mediaGroup.Deprecated, mediaGroup.Hidden, mediaGroup.Runnable())
+	}
+	mediaUpload := mustFindCommand(t, mediaGroup, "upload")
+	if mediaUpload.Deprecated == "" || mediaUpload.Hidden || !mediaUpload.Runnable() {
+		t.Fatalf("chat media upload compatibility contract: deprecated=%q hidden=%v runnable=%v", mediaUpload.Deprecated, mediaUpload.Hidden, mediaUpload.Runnable())
+	}
 	for _, flag := range []string{"file", "type"} {
 		if mediaUpload.Flags().Lookup(flag) == nil {
 			t.Fatalf("chat media upload missing --%s", flag)
@@ -86,6 +96,113 @@ func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 	mustFindCommand(t, root, "contact", "search")
 	mustFindCommand(t, root, "contact", "user", "list")
 	mustFindCommand(t, root, "conference", "meeting", "reserve")
+}
+
+func TestChatHelpAndSchemaHideRetiredMediaUpload(t *testing.T) {
+	for _, args := range [][]string{
+		{"chat", "--help"},
+		{"chat", "media", "--help"},
+	} {
+		root := NewRootCommand()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetErr(&output)
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("dws %s: %v\n%s", strings.Join(args, " "), err, output.String())
+		}
+		for _, line := range strings.Split(output.String(), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) > 0 && (fields[0] == "media" || fields[0] == "upload") {
+				t.Fatalf("dws %s exposes retired command in Help line %q:\n%s", strings.Join(args, " "), line, output.String())
+			}
+		}
+	}
+
+	root := NewRootCommand()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs([]string{"schema", "--cli-path", "chat media upload", "--format", "json"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("retired chat media upload remains queryable from Schema:\n%s", output.String())
+	}
+	if !strings.Contains(err.Error(), "unknown runtime schema path") {
+		t.Fatalf("retired chat media upload Schema error = %v, want unknown path", err)
+	}
+}
+
+func TestRootChatMediaUploadWithoutAppCredentialsReturnsMigrationValidation(t *testing.T) {
+	for _, key := range []string{"DWS_CLIENT_ID", "DWS_CLIENT_SECRET"} {
+		value, existed := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unset %s: %v", key, err)
+		}
+		t.Cleanup(func() {
+			if existed {
+				_ = os.Setenv(key, value)
+				return
+			}
+			_ = os.Unsetenv(key)
+		})
+		if _, exists := os.LookupEnv(key); exists {
+			t.Fatalf("%s is still set", key)
+		}
+	}
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+
+	filePath := filepath.Join(t.TempDir(), "image.png")
+	if err := os.WriteFile(filePath, []byte("image"), 0o600); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+	commandArgs := []string{
+		"chat", "media", "upload",
+		"--file", filePath,
+		"--type", "image",
+	}
+	previousArgs := os.Args
+	os.Args = append([]string{"dws"}, commandArgs...)
+	t.Cleanup(func() { os.Args = previousArgs })
+
+	root := NewRootCommand()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs(commandArgs)
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("chat media upload succeeded without app credentials:\n%s", output.String())
+	}
+
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) {
+		t.Fatalf("chat media upload error type = %T, want *errors.Error: %v", err, err)
+	}
+	if typed.Category != apperrors.CategoryValidation {
+		t.Fatalf("chat media upload category = %q, want %q", typed.Category, apperrors.CategoryValidation)
+	}
+	if exitCode := apperrors.ExitCode(err); exitCode != 3 {
+		t.Fatalf("chat media upload exit code = %d, want 3", exitCode)
+	}
+
+	got := output.String() + "\n" + err.Error()
+	for _, want := range []string{"已下线", "chat message send --msg-type file --file-path"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("chat media upload migration output missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"DWS_CLIENT_ID",
+		"DWS_CLIENT_SECRET",
+		"缺少应用凭证",
+		"AppSecret",
+		"clientSecret",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("chat media upload returned credential error %q:\n%s", forbidden, got)
+		}
+	}
 }
 
 func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {

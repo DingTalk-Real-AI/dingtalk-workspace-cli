@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "source_hash": "sha256:2b21f87e564139596d34db2f70443d81b41e16d9212eb60ec6e5a6b4b8d41ec7",
-  "surface_hash": "sha256:e85148774f65d34b01d50ebdc702b785afdb8ea78663b6f2eeecc35bc3cb3fd5",
+  "source_hash": "sha256:bda812c0b48f221a70f9c710d56a4dead5916bf425a9b153e7b275d15365f1a0",
+  "surface_hash": "sha256:8eef4235b4391a6a865c180ebd3a65ca3531a84c6985b37811f23fff9daf2e3a",
   "coverage": {
-    "surface_products": 23,
-    "products_with_metadata": 23,
-    "surface_tools": 573,
-    "tools_with_metadata": 573,
-    "tools_with_agent_summary": 573,
-    "tools_with_use_when": 573,
-    "tools_with_avoid_when": 573,
-    "tools_with_examples": 573,
-    "tools_with_interface_mode": 573,
-    "unmatched_skill_tools": 120,
+    "surface_products": 25,
+    "products_with_metadata": 25,
+    "surface_tools": 603,
+    "tools_with_metadata": 603,
+    "tools_with_agent_summary": 603,
+    "tools_with_use_when": 603,
+    "tools_with_avoid_when": 603,
+    "tools_with_examples": 603,
+    "tools_with_interface_mode": 603,
+    "unmatched_skill_tools": 118,
     "unreviewed_skill_tools": 7
   },
   "products": {
@@ -444,20 +444,20 @@
       ]
     },
     "contact": {
-      "agent_summary": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
+      "agent_summary": "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
       "agent_summary_source": "dws-agent-selection/contact",
       "avoid_when": [
         "职责/上级等语义找人优先 aisearch person；不要用 contact 发消息；写操作前确认当前企业和目标信息"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
+          "value": "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
           "source": "internal/cli/schema_hints/selection/contact.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
+              "value": "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
               "source": "internal/cli/schema_hints/selection/contact.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -941,6 +941,78 @@
         "需要实时监听个人消息接收、已读、撤回或表情回应事件，或管理个人事件订阅生命周期"
       ]
     },
+    "hrbrain": {
+      "agent_summary": "钉钉组织大脑：人才池管理、员工档案查询与人才搜索",
+      "agent_summary_source": "dws-agent-selection/hrbrain",
+      "avoid_when": [
+        "要操作通讯录/组织架构基础信息时改用 contact 产品",
+        "要提交/查询战略解码、经营合约、目标等 OKR 能力时改用 agoal（CLI-only，未接入 Agent Schema）"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "钉钉组织大脑：人才池管理、员工档案查询与人才搜索",
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "钉钉组织大脑：人才池管理、员工档案查询与人才搜索",
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "要操作通讯录/组织架构基础信息时改用 contact 产品",
+            "要提交/查询战略解码、经营合约、目标等 OKR 能力时改用 agoal（CLI-only，未接入 Agent Schema）"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "要操作通讯录/组织架构基础信息时改用 contact 产品",
+                "要提交/查询战略解码、经营合约、目标等 OKR 能力时改用 agoal（CLI-only，未接入 Agent Schema）"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要查询人才池、员工档案（元数据/标签/职业历程/绩效）或搜索员工时"
+          ],
+          "source": "internal/cli/schema_hints/selection/hrbrain.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "需要查询人才池、员工档案（元数据/标签/职业历程/绩效）或搜索员工时"
+              ],
+              "source": "internal/cli/schema_hints/selection/hrbrain.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        }
+      },
+      "source_refs": [
+        "CommandRegistry:product=hrbrain",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md",
+        "internal/cli/schema_hints/selection/hrbrain.json",
+        "skills/mono/SKILL.md"
+      ],
+      "use_when": [
+        "需要查询人才池、员工档案（元数据/标签/职业历程/绩效）或搜索员工时"
+      ]
+    },
     "live": {
       "agent_summary": "查询当前用户发起的直播列表",
       "agent_summary_source": "dws-agent-selection/live",
@@ -1087,6 +1159,74 @@
       ],
       "use_when": [
         "查收、搜索、阅读、回复、发送或整理邮件"
+      ]
+    },
+    "markdown": {
+      "agent_summary": "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+      "agent_summary_source": "dws-agent-selection/markdown",
+      "avoid_when": [
+        "在线文档正文操作使用 doc；普通二进制文件上传下载使用 drive"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+          "source": "internal/cli/schema_hints/selection/markdown.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+              "source": "internal/cli/schema_hints/selection/markdown.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "在线文档正文操作使用 doc；普通二进制文件上传下载使用 drive"
+          ],
+          "source": "internal/cli/schema_hints/selection/markdown.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "在线文档正文操作使用 doc；普通二进制文件上传下载使用 drive"
+              ],
+              "source": "internal/cli/schema_hints/selection/markdown.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时"
+          ],
+          "source": "internal/cli/schema_hints/selection/markdown.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时"
+              ],
+              "source": "internal/cli/schema_hints/selection/markdown.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        }
+      },
+      "source_refs": [
+        "CommandRegistry:product=markdown",
+        "Wukong-parity:3306c3307",
+        "internal/cli/schema_hints/selection/markdown.json",
+        "skills/mono/SKILL.md"
+      ],
+      "use_when": [
+        "目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时"
       ]
     },
     "mcp": {
@@ -1518,20 +1658,20 @@
       ]
     },
     "todo": {
-      "agent_summary": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+      "agent_summary": "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
       "agent_summary_source": "dws-agent-selection/todo",
       "avoid_when": [
         "不要用于 OA 审批流转、工作日志提交或日历日程管理"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+          "value": "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
           "source": "internal/cli/schema_hints/selection/todo.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "管理待办任务、子任务、执行人、参与人、评论、附件与提醒",
+              "value": "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
               "source": "internal/cli/schema_hints/selection/todo.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -1671,8 +1811,10 @@
     "doc",
     "drive",
     "event",
+    "hrbrain",
     "live",
     "mail",
+    "markdown",
     "mcp",
     "minutes",
     "oa",

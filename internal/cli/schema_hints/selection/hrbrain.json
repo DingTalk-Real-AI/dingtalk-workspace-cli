@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/hrbrain",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "hrbrain.list_talent_pools": {
+      "agent_summary": "查询人才池列表，支持按名称关键词、类型、创建人、标签筛选",
+      "use_when": [
+        "需要列出组织中的人才池，或按名称/类型/创建人/标签筛选人才池时"
+      ],
+      "avoid_when": [
+        "已知 poolCode 只需要单个人才池详情时改用 dws hrbrain talent-pool detail",
+        "要查看人才池内人员名单时改用 dws hrbrain talent-pool employees"
+      ],
+      "examples": [
+        "dws hrbrain talent-pool list --page 1 --page-size 20",
+        "dws hrbrain talent-pool list --keyword \"储备干部\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.list_talent_pools",
+        "cobra-help:dws hrbrain talent-pool list",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.get_talent_pool_detail": {
+      "agent_summary": "根据人才池编码获取人才池详细信息",
+      "use_when": [
+        "已知 poolCode，需要查看某个人才池的详细信息时"
+      ],
+      "avoid_when": [
+        "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找"
+      ],
+      "examples": [
+        "dws hrbrain talent-pool detail --pool-code POOL_CODE"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_talent_pool_detail",
+        "cobra-help:dws hrbrain talent-pool detail",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.list_pool_employees": {
+      "agent_summary": "查询指定人才池内的人员列表",
+      "use_when": [
+        "已知 poolCode，需要查看该人才池内的人员名单时"
+      ],
+      "avoid_when": [
+        "尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找",
+        "不限定人才池的人员搜索请改用 dws hrbrain search employees"
+      ],
+      "examples": [
+        "dws hrbrain talent-pool employees --pool-code POOL_CODE --page 1 --page-size 20"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.list_pool_employees",
+        "cobra-help:dws hrbrain talent-pool employees",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.get_profile_metadata": {
+      "agent_summary": "查询员工档案元数据结构，用于构造档案数据查询参数",
+      "use_when": [
+        "需要先了解某员工档案有哪些模块/字段，以构造 hrbrain profile query 的 --data-queries 参数时"
+      ],
+      "avoid_when": [
+        "已知模块与字段编码，直接查询档案数据时改用 dws hrbrain profile query"
+      ],
+      "examples": [
+        "dws hrbrain profile metadata --work-no WORK_NO"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_profile_metadata",
+        "cobra-help:dws hrbrain profile metadata",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.query_profile_data": {
+      "agent_summary": "按模块批量查询员工档案数据",
+      "use_when": [
+        "已知模块与字段编码（通常先用 hrbrain profile metadata 获取），需要批量查询员工档案数据时"
+      ],
+      "avoid_when": [
+        "尚不清楚可查询的模块/字段时先用 dws hrbrain profile metadata",
+        "只需要职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+      ],
+      "examples": [
+        "dws hrbrain profile query --work-no WORK_NO --data-queries '[{\"modelCode\":\"basic\",\"fields\":[\"name\",\"dept\"]}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.query_profile_data",
+        "cobra-help:dws hrbrain profile query",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.get_profile_label": {
+      "agent_summary": "根据员工工号列表获取员工标签",
+      "use_when": [
+        "需要按一个或多个工号批量查看员工标签时"
+      ],
+      "avoid_when": [
+        "要查看职业历程或绩效记录时改用 dws hrbrain profile career / profile performance"
+      ],
+      "examples": [
+        "dws hrbrain profile labels --staff-ids WORK_NO1,WORK_NO2"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_profile_label",
+        "cobra-help:dws hrbrain profile labels",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.get_employee_career": {
+      "agent_summary": "查询员工在公司内的职业历程",
+      "use_when": [
+        "需要查看某员工在公司内的岗位/职级变动历史时"
+      ],
+      "avoid_when": [
+        "要查看绩效记录时改用 dws hrbrain profile performance"
+      ],
+      "examples": [
+        "dws hrbrain profile career --work-no WORK_NO"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_employee_career",
+        "cobra-help:dws hrbrain profile career",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.get_employee_performance": {
+      "agent_summary": "查询员工绩效记录",
+      "use_when": [
+        "需要查看某员工的历史绩效评级/记录时"
+      ],
+      "avoid_when": [
+        "要查看职业历程时改用 dws hrbrain profile career"
+      ],
+      "examples": [
+        "dws hrbrain profile performance --work-no WORK_NO"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_employee_performance",
+        "cobra-help:dws hrbrain profile performance",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.search_employees": {
+      "agent_summary": "按关键词、部门、职务、职级、人才池等条件搜索员工",
+      "use_when": [
+        "需要按姓名/工号/部门/职务/职级等基础条件模糊找人时"
+      ],
+      "avoid_when": [
+        "需要复杂组合条件（表达式）搜索时改用 dws hrbrain search employees-structured",
+        "已限定某个人才池要看全部人员时改用 dws hrbrain talent-pool employees"
+      ],
+      "examples": [
+        "dws hrbrain search employees --keyword \"张三\" --page 1 --page-size 20",
+        "dws hrbrain search employees --dept-name \"技术部\" --job-level P7"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.search_employees",
+        "cobra-help:dws hrbrain search employees",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.search_employees_structured": {
+      "agent_summary": "使用高级条件表达式（originJson）搜索员工",
+      "use_when": [
+        "需要使用组合过滤条件表达式搜索员工，且已通过 dws hrbrain search fields 获取有权限的字段/操作符时"
+      ],
+      "avoid_when": [
+        "只是简单关键词/部门/职级搜索时改用 dws hrbrain search employees",
+        "尚未获取可用字段与操作符时先用 dws hrbrain search fields"
+      ],
+      "examples": [
+        "dws hrbrain search employees-structured --origin-json '{\"rules\":[{\"field\":\"name\",\"operator\":\"contains\",\"value\":\"张\"}],\"combinator\":\"and\"}' --fields '[{\"label\":\"姓名\",\"value\":\"name\"}]'"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.search_employees_structured",
+        "cobra-help:dws hrbrain search employees-structured",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    },
+    "hrbrain.get_search_fields": {
+      "agent_summary": "获取当前操作人有权限使用的高级搜索字段与操作符列表",
+      "use_when": [
+        "在调用 dws hrbrain search employees-structured 之前，需要确认可用字段与操作符时"
+      ],
+      "avoid_when": [
+        "只是简单关键词搜索时改用 dws hrbrain search employees"
+      ],
+      "examples": [
+        "dws hrbrain search fields"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 reviewed CommandRegistry、真实 Cobra help 与 mono/multi Skill 选型审阅。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=hrbrain.get_search_fields",
+        "cobra-help:dws hrbrain search fields",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    }
+  },
+  "products": {
+    "hrbrain": {
+      "agent_summary": "钉钉组织大脑：人才池管理、员工档案查询与人才搜索",
+      "use_when": [
+        "需要查询人才池、员工档案（元数据/标签/职业历程/绩效）或搜索员工时"
+      ],
+      "avoid_when": [
+        "要操作通讯录/组织架构基础信息时改用 contact 产品",
+        "要提交/查询战略解码、经营合约、目标等 OKR 能力时改用 agoal（CLI-only，未接入 Agent Schema）"
+      ],
+      "reviewed": true,
+      "review_reason": "依据真实 CommandRegistry 命令分区与对应产品 Skill 审阅产品级选择边界。",
+      "source_refs": [
+        "CommandRegistry:product=hrbrain",
+        "Skill:skills/mono/references/products/hrbrain.md",
+        "Skill:skills/multi/dingtalk-hrbrain/SKILL.md"
+      ]
+    }
+  }
+}

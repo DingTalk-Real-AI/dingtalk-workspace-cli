@@ -1,0 +1,289 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-tool-metadata/hrbrain",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "hrbrain.list_talent_pools": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_talent_pools, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain talent-pool list",
+      "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_talent_pools MCP call arguments observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "keyword": {
+          "property": "keyword",
+          "required": false
+        },
+        "pool-type": {
+          "property": "poolType",
+          "required": false
+        },
+        "creator": {
+          "property": "creator",
+          "required": false
+        },
+        "labels": {
+          "property": "labels",
+          "required": false
+        },
+        "page": {
+          "property": "currentPage",
+          "required": false
+        },
+        "page-size": {
+          "property": "pageSize",
+          "required": false
+        }
+      }
+    },
+    "hrbrain.get_talent_pool_detail": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_talent_pool_detail, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain talent-pool detail",
+      "review_reason": "Reviewed unpinned remote adapter: --pool-code maps 1:1 to the poolCode MCP call argument observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "pool-code": {
+          "property": "poolCode",
+          "required": true
+        }
+      }
+    },
+    "hrbrain.list_pool_employees": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool list_pool_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain talent-pool employees",
+      "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the list_pool_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "pool-code": {
+          "property": "poolCode",
+          "required": true
+        },
+        "page": {
+          "property": "currentPage",
+          "required": false
+        },
+        "page-size": {
+          "property": "pageSize",
+          "required": false
+        }
+      }
+    },
+    "hrbrain.get_profile_metadata": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_metadata, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain profile metadata",
+      "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "work-no": {
+          "property": "workNo",
+          "required": true
+        }
+      }
+    },
+    "hrbrain.query_profile_data": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool query_profile_data, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain profile query",
+      "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the query_profile_data MCP call arguments observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "work-no": {
+          "property": "workNo",
+          "required": true
+        },
+        "data-queries": {
+          "property": "dataQueries",
+          "required": true
+        }
+      }
+    },
+    "hrbrain.get_profile_label": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_profile_label, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain profile labels",
+      "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the get_profile_label MCP call arguments observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "staff-ids": {
+          "property": "staffIds",
+          "required": true
+        },
+        "all-label": {
+          "property": "allLabel",
+          "required": false
+        }
+      }
+    },
+    "hrbrain.get_employee_career": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_career, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain profile career",
+      "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "work-no": {
+          "property": "workNo",
+          "required": true
+        }
+      }
+    },
+    "hrbrain.get_employee_performance": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_employee_performance, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain profile performance",
+      "review_reason": "Reviewed unpinned remote adapter: --work-no maps 1:1 to the workNo MCP call argument observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "work-no": {
+          "property": "workNo",
+          "required": true
+        }
+      }
+    },
+    "hrbrain.search_employees": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain search employees",
+      "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees MCP call arguments observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "keyword": {
+          "property": "keyword",
+          "required": false
+        },
+        "dept-name": {
+          "property": "deptName",
+          "required": false
+        },
+        "position-name": {
+          "property": "positionName",
+          "required": false
+        },
+        "job-level": {
+          "property": "jobLevel",
+          "required": false
+        },
+        "pool-code": {
+          "property": "poolCode",
+          "required": false
+        },
+        "page": {
+          "property": "currentPage",
+          "required": false
+        },
+        "page-size": {
+          "property": "pageSize",
+          "required": false
+        }
+      }
+    },
+    "hrbrain.search_employees_structured": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool search_employees_structured, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true,
+      "cli_path": "hrbrain search employees-structured",
+      "review_reason": "Reviewed unpinned remote adapter: flags map 1:1 to the search_employees_structured MCP call arguments observed in internal/helpers/hrbrain.go.",
+      "parameters": {
+        "origin-json": {
+          "property": "originJson",
+          "required": true
+        },
+        "fields": {
+          "property": "fields",
+          "required": true
+        },
+        "order-by": {
+          "property": "orderByClauses",
+          "required": false
+        },
+        "page": {
+          "property": "currentPage",
+          "required": false
+        },
+        "page-size": {
+          "property": "pageSize",
+          "required": false
+        }
+      }
+    },
+    "hrbrain.get_search_fields": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "runtime_gate": "none",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool get_search_fields, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+      "reviewed": true
+    }
+  }
+}

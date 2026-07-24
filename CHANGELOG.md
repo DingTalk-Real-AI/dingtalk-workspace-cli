@@ -8,7 +8,54 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Added
 
+- **HR Brain (`dws hrbrain`) command surface** — adds 11 commands across three groups: `talent-pool list/detail/employees` for talent pool browsing, `profile metadata/query/labels/career/performance` for employee profile data, and `search employees/employees-structured/fields` for basic and advanced (rule-based) people search. Ships with bundled mono/multi Skill guidance (`dingtalk-hrbrain`, `cli_version: ">=1.0.54"`); `search employees-structured` validates `--origin-json` as a JSON object and `--fields` as a JSON array before dispatch.
+
+### Changed
+
+- **Smoother guarded releases** — publishes verified stable and beta Homebrew Formula updates directly from the release workflow, retries transient tag-ref visibility failures, lets an exact same-run retry reuse its sealed tag, and allows machine-verified rebuild recovery without a separate approval wait.
+
+### Fixed
+
+- **Deterministic Markdown coverage** — replaces timing-dependent temporary-file deletion tests with synchronized file-stat failures so release admission no longer flakes on scheduler timing.
+
+## [1.0.55-beta.2] - 2026-07-23
+
+This beta validates Wukong capability parity across Chat, Contacts, documents,
+Drive, Markdown, and Todos, together with faster guarded releases and legacy
+authentication migration.
+
+### Added
+
+- **Chat editing and group management** — adds `chat message edit`, conversation-category lookups through `chat category list-by-conv` and `chat category batch-info`, and the confirmed, irreversible `chat group upgrade-to-external` flow.
+- **Contact maintenance commands** — adds `contact user update`, `contact user update-self`, `contact dept create`, `contact dept update`, and `contact account update`, all with guarded write behavior.
+- **Markdown file workflows** — adds the `markdown` product with `fetch`, `create`, `overwrite`, and `patch` commands for Drive-native `.md` files, including explicit routing, dry-run previews, and confirmation for destructive writes.
+- **Todo labels** — adds `todo tag add`, `delete`, `update`, `list`, and `create`.
+
+### Changed
+
+- **Faster guarded releases** — trusts an independently revalidated, exact `CHANGELOG.md`-only successor of an already admitted `main` commit, runs cloud planning alongside governance, and executes sealed-release automation, compatibility, and multi-profile validation in parallel with artifact compilation. Normal cloud publication no longer requires an unshareable local packaging preflight.
+- **Scoped document reads and group mentions** — `doc read --content-format jsonml` can return `outline`, `range`, `section`, or custom-tag fragments with depth and block-boundary controls; document comment create, reply, and update can mention groups through `--mentioned-open-conversation-id`.
+- **Drive overwrite uploads** — `drive upload --node <fileId>` can replace an existing Drive or document-space file, is mutually exclusive with `--folder`, supports dry-run, and requires confirmation before writing.
+- **Chat nickname clearing and cross-organization todos** — omitting `--nick` from `chat group update-nick` now clears the current user's group nickname, while `todo task list --query-all` queries todos across organizations.
+
+### Fixed
+
+- **Legacy authentication compatibility** (#756) — migrates pre-v1.0.53 global and organization-scoped login state into the identity-aware token store, including all legacy organizations, while keeping unresolved accounts isolated from exact `corpId:userId` credentials so external or no-directory identities can complete login without borrowing another user's token.
+
+## [1.0.55-beta.1] - 2026-07-23
+
+This beta validates MCP Market URL resolution, the supported Wukong local-file
+send path after retiring the legacy credential-based media upload command from
+discovery, and reliable message-read rendering for rich content, forwarded
+records, encrypted messages, and media-download ID aliases.
+
+### Added
+
 - **MCP URL resolution** — adds `dws mcp url get <mcpId>` for resolving a DingTalk MCP Market ID to the current user and organization scoped Streamable HTTP URL, while keeping the helper-only `mcp-meta` endpoint out of the public product command surface.
+
+### Changed
+
+- **Chat local-file sending** — hides the open-source-only `chat media upload` compatibility command from Help, Schema, and bundled Skills, and removes its legacy AppKey/AppSecret OAPI path. Historical argv still receives an actionable migration error. Send local images and files through `chat message send --msg-type file --file-path`; callers that already hold a mediaId may continue to use `--msg-type image --media-id`.
 
 ### Fixed
 

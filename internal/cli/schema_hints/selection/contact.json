@@ -331,11 +331,111 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#contact.search_user_by_mobile",
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#contact.search_user_by_mobile"
       ]
+    },
+    "contact.department_create": {
+      "agent_summary": "在当前企业的根部门或指定父部门下创建部门",
+      "use_when": [
+        "用户明确要求新建部门，且已确认部门名称、父部门及是否同步创建部门群"
+      ],
+      "avoid_when": [
+        "修改已有部门名称或父级应使用 contact dept update；仅查找部门应使用 contact dept search"
+      ],
+      "examples": [
+        "dws contact dept create --name \"新产品部\" --create-dept-group=true"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.department_create",
+        "cobra-help:dws contact dept create",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:contact.department_create#FAILED"
+      ]
+    },
+    "contact.department_update": {
+      "agent_summary": "更新指定部门的名称，并可调整父部门",
+      "use_when": [
+        "用户明确要求修改已有部门名称或迁移父部门，且已确认目标 deptId"
+      ],
+      "avoid_when": [
+        "创建新部门应使用 contact dept create；仅查看部门信息应使用 contact dept get-info"
+      ],
+      "examples": [
+        "dws contact dept update --dept 12345 --name \"研发中心\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.department_update",
+        "cobra-help:dws contact dept update",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:contact.department_update#FAILED"
+      ]
+    },
+    "contact.employee_update": {
+      "agent_summary": "修改指定员工的企业内姓名、所属部门或直属主管",
+      "use_when": [
+        "用户明确要求更新已有员工的组织信息，且已确认目标 userId 和至少一个修改项"
+      ],
+      "avoid_when": [
+        "修改当前用户自己的昵称或头像应使用 contact user update-self；创建企业专属账号应使用 contact account create"
+      ],
+      "examples": [
+        "dws contact user update --user-id user001 --org-user-name \"张三三\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.employee_update",
+        "cobra-help:dws contact user update",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:contact.employee_update#FAILED"
+      ]
+    },
+    "contact.exclusive_account_user_update": {
+      "agent_summary": "更新企业专属账号的组织信息或个人资料",
+      "use_when": [
+        "用户明确要求修改已有企业专属账号的姓名、部门、主管、昵称或头像"
+      ],
+      "avoid_when": [
+        "创建新企业专属账号应使用 contact account create；修改普通员工组织信息应使用 contact user update"
+      ],
+      "examples": [
+        "dws contact account update --user-id user001 --nick \"新昵称\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.exclusive_account_user_update",
+        "cobra-help:dws contact account update",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:contact.exclusive_account_user_update#FAILED"
+      ]
+    },
+    "contact.self_user_profile_update": {
+      "agent_summary": "更新当前登录用户自己的昵称或头像",
+      "use_when": [
+        "用户明确要求修改自己的 profile 昵称或头像 fileId"
+      ],
+      "avoid_when": [
+        "修改其他员工的组织信息应使用 contact user update；修改企业专属账号应使用 contact account update"
+      ],
+      "examples": [
+        "dws contact user update-self --nick \"新昵称\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.self_user_profile_update",
+        "cobra-help:dws contact user update-self",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:contact.self_user_profile_update#FAILED"
+      ]
     }
   },
   "products": {
     "contact": {
-      "agent_summary": "查询通讯录与花名册，并创建企业、企业账号或邀请员工",
+      "agent_summary": "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
       "use_when": [
         "按姓名/手机号/userId/部门条件做通讯录精确查询，或明确执行企业与员工入企管理"
       ],

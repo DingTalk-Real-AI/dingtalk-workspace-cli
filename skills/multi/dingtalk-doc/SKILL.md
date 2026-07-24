@@ -1,6 +1,6 @@
 ---
 name: dingtalk-doc
-description: 钉钉文档（云文档）。Use when 用户说 写文档/读文档/创建文档/编辑文档/搜文档/文档块/分块编辑/Markdown 写入/上传文件到文档。Distinct from dingtalk-drive(钉盘文件存储)、dingtalk-aitable(数据表格)、dingtalk-wiki(知识库空间)。命令前缀：dws doc。
+description: 钉钉在线文档（云文档）。Use when 用户说 写文档/读文档/按大纲、范围、章节或标签局部读取 JSONML/创建或编辑文档/文档块/文档评论及@群/Markdown 写入在线文档。Distinct from dingtalk-markdown(原生.md纯文本文件)、dingtalk-drive(通用文件存储)、dingtalk-aitable(数据表格)、dingtalk-wiki(知识库空间)。命令前缀：dws doc。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -34,6 +34,9 @@ metadata:
 - 目标知识库只用 `--workspace <workspaceId或URL>`，不要写 `--space-id` / `--spaceId`。
 - 文档内容：`create` / `update` 都只接 `--content` / `--content-file`，不要写 `--markdown`。
 - 复杂内容（换行、表格、代码块、长 Markdown）先写临时 `.md`，再用 `--content-file`，不要把大段 Markdown 塞进命令行。
+- JSONML 局部读取使用 `doc read --content-format jsonml --scope outline|range|section|tags`；`range` 传 `--start-block-id` / `--end-block-id`，`tags` 传 `--tags`，大纲深度用 `--max-depth`。
+- 局部读取返回的是 JSONML 片段，不应当作整篇文档缓存或直接全量覆盖回写。
+- `comment create` / `reply` / `update` 支持 `--mentioned-open-conversation-id` @群；`create-inline` 暂不支持 @群。
 - 每次 `create` / `update` / `block insert` / `media insert` 后必须 `dws doc read` 或 `dws doc block list` 回读关键内容。
 
 <!-- VISIBLE_SHORTCUTS_START -->
@@ -71,9 +74,11 @@ metadata:
 | "搜文档"（全局） | `dws drive search --query "<关键词>"`（`doc search` 已弃用；切到 `dingtalk-drive`） |
 | "在某知识库里搜文档" | `dws wiki node search --workspace <WS_ID> --query "<关键词>"` |
 | "读文档内容" | `dws doc read --node <nodeId>` |
+| "只读大纲/块范围/章节/标签内容" | `dws doc read --node <nodeId> --content-format jsonml --scope outline\|range\|section\|tags ...` |
 | "更新文档内容 / 分块追加" | `dws doc update --node <nodeId> --content "<分块>" --mode append` |
 | "删除块" | `dws doc block delete`（需用户确认） |
 | "更新文档评论" | `dws doc comment update --node <nodeId> --comment-key <key> --content "<内容>"` |
+| "评论里@群" | `dws doc comment create\|reply\|update ... --mentioned-open-conversation-id <openConversationId>` |
 | "删除文档评论" | `dws doc comment delete --node <nodeId> --comment-key <key> --yes`（需用户确认） |
 
 ## 评测/多步文档短路径
@@ -93,6 +98,7 @@ metadata:
 ## 跨产品协作
 
 - 文件存储 / 上传下载 → 切到 `dingtalk-drive`
+- 原生 `.md` 文件读取、创建、全量覆盖或局部替换 → 切到 `dingtalk-markdown`
 - 知识库空间管理 → 切到 `dingtalk-wiki`
 - 数据表 → 切到 `dingtalk-aitable`
 - 长篇报告生成（多源采集 + 写文档）→ 此 skill 提供 `doc_create_and_write.py` 脚本
