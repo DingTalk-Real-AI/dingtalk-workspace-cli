@@ -54,7 +54,15 @@ func (ParamNameHandler) Handle(ctx *pipeline.Context) error {
 	}
 
 	result := make([]string, 0, len(ctx.Args))
-	for _, arg := range ctx.Args {
+	for i, arg := range ctx.Args {
+		if arg == "--" {
+			result = append(result, ctx.Args[i:]...)
+			break
+		}
+		if bare, _, isFlag := splitFlagToken(arg); isFlag && ctx.IsFlagProtected(cmdutil.Morph(bare)) {
+			result = append(result, arg)
+			continue
+		}
 		rewritten, ok := tryFuzzyMatch(arg, known, names)
 		if ok {
 			ctx.AddCorrection("paramname", pipeline.PreParse, rewritten, arg, rewritten, "fuzzy")

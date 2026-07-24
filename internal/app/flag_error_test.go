@@ -103,3 +103,28 @@ func TestFlagErrorWithSuggestions_fallbackTailHint(t *testing.T) {
 		t.Fatalf("err tail = %q, want suffix See 'send --help' for usage.", msg)
 	}
 }
+
+func TestFlagErrorWithSuggestionsReviewedProtectionRoutes(t *testing.T) {
+	root := NewRootCommand()
+	for _, tc := range []struct {
+		path       []string
+		flag       string
+		wantReason string
+		wantHint   string
+	}{
+		{path: []string{"chat", "message", "list-by-sender"}, flag: "time", wantReason: "blocked_flag", wantHint: "blocked"},
+		{path: []string{"drive", "list"}, flag: "space", wantReason: "ambiguous_flag", wantHint: "ambiguous"},
+	} {
+		t.Run(strings.Join(tc.path, "/"), func(t *testing.T) {
+			cmd := mustFindCommand(t, root, tc.path...)
+			err := flagErrorWithSuggestions(cmd, fmt.Errorf("unknown flag: --%s", tc.flag))
+			var ae *apperrors.Error
+			if !stderrors.As(err, &ae) {
+				t.Fatalf("want *apperrors.Error, got %T", err)
+			}
+			if ae.Reason != tc.wantReason || !strings.Contains(ae.Hint, tc.wantHint) || !strings.Contains(ae.Hint, "--help") {
+				t.Fatalf("protected error = reason %q hint %q", ae.Reason, ae.Hint)
+			}
+		})
+	}
+}

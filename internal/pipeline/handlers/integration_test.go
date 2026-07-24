@@ -145,6 +145,55 @@ func TestFullPreParsePipeline(t *testing.T) {
 	}
 }
 
+func TestSemanticProtectionSurvivesStickyAndParamName(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		SemanticAliasHandler{Lookup: fakeLookup(nil, []string{"limt", "limit100"}, nil)},
+		StickyHandler{},
+		ParamNameHandler{},
+	)
+	ctx := &pipeline.Context{
+		Command: "dws demo cmd",
+		Args:    []string{"--limt", "10", "--limit100"},
+		FlagSpecs: []pipeline.FlagInfo{
+			{Name: "limit", Type: "int"},
+		},
+	}
+	if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
+		t.Fatalf("RunPhase() error = %v", err)
+	}
+	if got, want := strings.Join(ctx.Args, " "), "--limt 10 --limit100"; got != want {
+		t.Fatalf("protected args = %q, want %q", got, want)
+	}
+	if len(ctx.Corrections) != 0 {
+		t.Fatalf("protected args were corrected: %#v", ctx.Corrections)
+	}
+}
+
+func TestFullPreParsePipelineStopsAtDoubleDash(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		AliasHandler{},
+		SemanticAliasHandler{Lookup: fakeLookup(map[string]string{"keyword": "query"}, nil, nil)},
+		StickyHandler{},
+		ParamNameHandler{},
+	)
+	ctx := &pipeline.Context{
+		Command: "dws demo cmd",
+		Args:    []string{"--query", "before", "--", "--keyword", "--limit100", "--limt"},
+		FlagSpecs: []pipeline.FlagInfo{
+			{Name: "query", Type: "string"},
+			{Name: "limit", Type: "int"},
+		},
+	}
+	if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
+		t.Fatalf("RunPhase() error = %v", err)
+	}
+	if got, want := strings.Join(ctx.Args, " "), "--query before -- --keyword --limit100 --limt"; got != want {
+		t.Fatalf("args after -- = %q, want %q", got, want)
+	}
+}
+
 // TestFullPostParsePipeline exercises the PostParse handler chain
 // with the ParamValueHandler normalising multiple value types in a
 // single invocation.

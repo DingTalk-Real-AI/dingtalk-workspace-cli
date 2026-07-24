@@ -14,15 +14,22 @@ tmp="$(mktemp -d)"
 exec_tmp="$(policy_runtime_mktemp_dir dws-generated-drift)"
 metadata_generator="$exec_tmp/schema-agent-metadata"
 catalog_generator="$exec_tmp/schema-catalog"
+param_aliases_generator="$exec_tmp/param-aliases"
 trap 'rm -rf "$tmp" "$exec_tmp"' EXIT HUP INT TERM
 
 go build -o "$metadata_generator" ./internal/generator/cmd_schema_agent_metadata
 go build -a -o "$catalog_generator" ./internal/generator/cmd_schema_catalog
+go build -o "$param_aliases_generator" ./internal/generator/cmd_param_aliases
 
 # CommandRegistry is a reviewed input, never a generated artifact. Keep an
 # independent byte-for-byte guard around the ordinary downstream generators.
 registry_guard="$tmp/schema_command_registry.json"
 cp internal/cli/schema_command_registry.json "$registry_guard"
+# The parameter concept dictionary + its schema are reviewed inputs too.
+concepts_guard="$tmp/param_concepts.json"
+concepts_schema_guard="$tmp/param_concepts.schema.json"
+cp internal/cli/param_concepts.json "$concepts_guard"
+cp internal/cli/param_concepts.schema.json "$concepts_schema_guard"
 # Also guard human-authored metadata + selection hint trees.
 metadata_guard="$tmp/metadata-hints"
 selection_guard="$tmp/selection-hints"
@@ -33,6 +40,8 @@ metadata_tmp="$tmp/metadata"
 audit_tmp="$tmp/audit.json"
 catalog_tmp="$tmp/catalog.json"
 catalog_tmp_second="$tmp/catalog-second.json"
+param_aliases_tmp="$tmp/param_aliases_generated.go"
+param_aliases_tmp_second="$tmp/param_aliases_generated-second.go"
 
 "$metadata_generator" \
   -root . \
@@ -62,8 +71,26 @@ fi
 	-root . \
 	-output "$catalog_tmp_second"
 
+"$param_aliases_generator" \
+	-root . \
+	-output "$param_aliases_tmp"
+
+"$param_aliases_generator" \
+	-root . \
+	-output "$param_aliases_tmp_second"
+
 if ! cmp -s internal/cli/schema_command_registry.json "$registry_guard"; then
 	printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry.json' >&2
+	exit 1
+fi
+
+if ! cmp -s internal/cli/param_concepts.json "$concepts_guard"; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.json' >&2
+	exit 1
+fi
+
+if ! cmp -s internal/cli/param_concepts.schema.json "$concepts_schema_guard"; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.schema.json' >&2
 	exit 1
 fi
 
@@ -87,6 +114,19 @@ if ! cmp -s internal/cli/schema_catalog.json "$catalog_tmp"; then
 	printf '%s\n' 'generated drift: internal/cli/schema_catalog.json is stale' >&2
 	printf '%s\n' 'run: make generate-schema' >&2
 	diff -u internal/cli/schema_catalog.json "$catalog_tmp" || true
+	exit 1
+fi
+
+if ! cmp -s "$param_aliases_tmp" "$param_aliases_tmp_second"; then
+	printf '%s\n' 'generated drift: consecutive parameter-alias generations are not byte-identical' >&2
+	diff -u "$param_aliases_tmp" "$param_aliases_tmp_second" || true
+	exit 1
+fi
+
+if ! cmp -s internal/cli/param_aliases_generated.go "$param_aliases_tmp"; then
+	printf '%s\n' 'generated drift: internal/cli/param_aliases_generated.go is stale' >&2
+	printf '%s\n' 'run: make generate-schema' >&2
+	diff -u internal/cli/param_aliases_generated.go "$param_aliases_tmp" || true
 	exit 1
 fi
 

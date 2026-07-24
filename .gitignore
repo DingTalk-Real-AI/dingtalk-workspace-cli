@@ -54,6 +54,8 @@ test/dev_functional/results.jsonl
 /coverage-policy.txt
 /coverage.html
 dwsbin
+# stray compiled generator binary (source lives in internal/generator/cmd_param_aliases/)
+/cmd_param_aliases
 
 # Local shortcut eval / real-backend capture artifacts — may contain real PII
 # (employee names/emails, userIds, conversation & message IDs). Never commit.
