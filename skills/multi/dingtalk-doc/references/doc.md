@@ -61,9 +61,18 @@ Example:
   dws doc read --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
   dws doc read --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
   dws doc read --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
+  dws doc read --node <DOC_ID> --content-format jsonml --scope outline
 Flags:
-      --node string   文档 ID 或 URL (必填)
+      --node string             文档 ID 或 URL (必填)
+      --content-format string   输出格式: markdown / jsonml
+      --scope string            JSONML 节点范围: outline / range / section / tags
+      --tags string             scope=tags 时的节点 tag 列表
+      --max-depth int           筛选遍历最大深度，0 表示不限
+      --start-block-id string   range / section 起始块 UUID
+      --end-block-id string     range 结束块 UUID
 ```
+
+`--scope` 只适用于 JSONML 局部读取。结果是虚拟 fragment，剥壳后消费 children，不得把容器整体写回；详见 [`doc-read.md`](./doc/doc-read.md)。
 
 ### 创建文档
 ```
@@ -298,10 +307,12 @@ Usage:
 Example:
   dws doc comment create --node <DOC_ID> --content "这里需要修改"
   dws doc comment create --node <DOC_ID> --content "请review" --mention uid1,uid2
+  dws doc comment create --node <DOC_ID> --content "请群内关注" --mentioned-open-conversation-id <OPEN_CID>
 Flags:
       --node string      目标文档的标识，支持传入 URL 或 ID (必填)
       --content string   评论的文字内容，纯文本 (必填)
       --mention string   被 @ 的用户 uid 列表，逗号分隔
+      --mentioned-open-conversation-id strings  被 @ 的群 openConversationId，可重复或逗号分隔
 ```
 
 ### 创建划词评论 (内联评论)
@@ -330,21 +341,23 @@ Example:
   dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "同意"
   dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "比心" --emoji
   dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "请确认" --mention uid1,uid2
+  dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "请群内确认" --mentioned-open-conversation-id <OPEN_CID>
 Flags:
       --node string         目标文档的标识，支持传入 URL 或 ID (必填)
       --content string      回复的文字内容，表情回复时填写表情名称 (必填)
       --comment-key string  被回复评论的 commentKey，格式: {13位毫秒时间戳}{32位UUID}，可从 list/create 结果获取 (必填)
       --emoji               设为 true 时作为表情贴图回复 (默认 false)
       --mention string      被 @ 的用户 uid 列表，逗号分隔
+      --mentioned-open-conversation-id strings  被 @ 的群 openConversationId；不得与 --emoji 同时使用
 ```
 
 ### 更新文档评论
 ```text
 Usage:
-  dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content <CONTENT> [--mention uid1,uid2]
+  dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content <CONTENT> [--mention uid1,uid2] [--mentioned-open-conversation-id <OPEN_CID>]
 ```
 
-`commentKey` 从 `comment list/create/create-inline` 返回中获取。只有显式传入 `--mention` 时才更新被 @ 用户列表。
+`commentKey` 从 `comment list/create/create-inline` 返回中获取。全文评论的 `create` / `reply` / `update` 支持真实 @群；`create-inline` 不支持 @群。
 
 ### 删除文档评论
 ```text
@@ -909,6 +922,10 @@ dws doc comment create --node <DOC_ID> --content "这里需要补充数据来源
 #    再将 userId 传入 --mention
 dws doc comment create --node <DOC_ID> --content "请确认这部分内容" --mention <userId1>,<userId2> --format json
 
+# 3b. 创建评论并 @群（先唯一解析群 openConversationId）
+dws chat search --query "项目群" --format json
+dws doc comment create --node <DOC_ID> --content "请群内确认" --mentioned-open-conversation-id <OPEN_CID> --format json
+
 # 4. 更新某条评论（可选 --mention）
 dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已按最新数据修正" --format json
 
@@ -952,6 +969,7 @@ dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
 | `comment create` / `comment create-inline` | `commentKey` | comment reply/update/delete 的 --comment-key |
 | `block list` | `blockId` + 文本内容 | comment create-inline 的 --block-id 及 --start/--end 计算 |
 | `contact user search` | `userId` | comment create / create-inline / reply / update 的 --mention |
+| `chat search` | `openConversationId` | comment create / reply / update 的 --mentioned-open-conversation-id |
 | `wiki node create`（原 `doc file create`，已弃用） | `nodeId` | 后续 read / update / block 操作的 --node（仅 adoc 支持 read/update，axls/amind 等类型用各自产品的命令） |
 | `copy` / `move` | 新 `nodeId`（copy）或原 nodeId（move） | 后续 read / info 等的 --node |
 
@@ -1051,6 +1069,7 @@ EOF
 - `rename` 需要对文档有"编辑"权限
 - `copy` / `move` 不传 `--folder` 时，`--workspace` 表示放到知识库根目录；两者都不传则回落到"我的文档"
 - `comment create` 是全文评论；`comment create-inline` 是划词评论，必须先 `block list` 拿到 `blockId` 并确定 `--start` / `--end` 偏移（按块内纯文本字符算，从 0 开始）
+- 全文评论 `create` / `reply` / `update` 支持 `--mentioned-open-conversation-id` @群；划词评论不支持
 
 ## 自动化脚本
 
@@ -1062,4 +1081,5 @@ EOF
 
 - [aitable](./aitable.md) — 结构化数据表格（行列/字段/记录），不是富文本文档
 - [drive](./drive.md) — 钉盘文件存储/上传/下载，不是文档内容编辑
+- [markdown](../../dingtalk-markdown/references/markdown.md) — 原生 `.md` 文件的纯文本读写
 - [report](./report.md) — 钉钉日志系统（日报/周报模版），不是在线文档

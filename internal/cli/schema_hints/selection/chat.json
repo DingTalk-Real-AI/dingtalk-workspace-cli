@@ -1494,6 +1494,107 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/chat.md"
       ]
+    },
+    "chat.edit_message": {
+      "agent_summary": "编辑当前用户已发送消息的 Markdown 内容",
+      "use_when": [
+        "已有会话 openConversationId 和消息 openMessageId，需要更正已发送消息的标题、正文或 @ 信息"
+      ],
+      "avoid_when": [
+        "发送新消息应使用 chat message send；撤回消息应使用 chat message recall"
+      ],
+      "examples": [
+        "dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text \"更新后的内容\""
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、消息内容构造逻辑和 Wukong 对齐实现审阅编辑消息的选择边界与可执行参数组合。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.edit_message",
+        "cobra-help:dws chat message edit",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:chat.edit_message#FAILED"
+      ]
+    },
+    "chat.get_conv_categories_info": {
+      "agent_summary": "按分组 ID 批量获取自定义会话分组详情",
+      "use_when": [
+        "已经有一个或多个会话分组 categoryId，需要批量读取分组信息"
+      ],
+      "avoid_when": [
+        "不知道 categoryId 时先用 chat category list；按会话反查所属分组应使用 chat category list-by-conv"
+      ],
+      "examples": [
+        "dws chat category batch-info --category-ids 123,456"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、整数列表解析和 Wukong 对齐实现审阅批量分组详情的选择边界与示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.get_conv_categories_info",
+        "cobra-help:dws chat category batch-info",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:chat.get_conv_categories_info#FAILED"
+      ]
+    },
+    "chat.list_conv_categories_by_conv": {
+      "agent_summary": "查询指定会话所属的自定义会话分组",
+      "use_when": [
+        "已有会话 openConversationId，需要反查该会话被放入了哪些自定义分组"
+      ],
+      "avoid_when": [
+        "列出全部自定义分组应使用 chat category list；按 categoryId 查详情应使用 chat category batch-info"
+      ],
+      "examples": [
+        "dws chat category list-by-conv --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、会话定位别名和 Wukong 对齐实现审阅按会话反查分组的选择边界与示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.list_conv_categories_by_conv",
+        "cobra-help:dws chat category list-by-conv",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:chat.list_conv_categories_by_conv#FAILED"
+      ]
+    },
+    "chat.update_group_nick": {
+      "agent_summary": "设置或清除当前用户在指定群内的昵称",
+      "use_when": [
+        "用户要求修改自己的群昵称，或明确要求清除群昵称"
+      ],
+      "avoid_when": [
+        "修改群名称应使用 chat group rename；修改其他成员信息不应使用本命令"
+      ],
+      "examples": [
+        "dws chat group update-nick --group <openConversationId> --nick \"项目昵称\"",
+        "dws chat group update-nick --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "依据现有 Cobra leaf的新清除语义和 Wukong 对齐实现审阅设置与省略 --nick 清除两种结果。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.update_group_nick",
+        "cobra-help:dws chat group update-nick",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:chat.update_group_nick#FAILED"
+      ]
+    },
+    "chat.upgrade_group_to_external": {
+      "agent_summary": "不可逆地把已有普通群升级为外部群",
+      "use_when": [
+        "群主明确要求保留现有会话并升级为可跨组织协作的外部群，且已确认不可逆影响"
+      ],
+      "avoid_when": [
+        "新建外部群应使用 chat group create --type EXTERNAL；未确认群主身份和不可逆影响时不要执行"
+      ],
+      "examples": [
+        "dws chat group upgrade-to-external --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "依据新增 Cobra leaf、不可逆确认门禁和 Wukong 对齐实现审阅普通群升级外部群的严格选择边界与无 --yes 合约示例。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.upgrade_group_to_external",
+        "cobra-help:dws chat group upgrade-to-external",
+        "Wukong-parity:3306c3307",
+        "live-dws-schema:chat.upgrade_group_to_external#FAILED"
+      ]
     }
   },
   "products": {

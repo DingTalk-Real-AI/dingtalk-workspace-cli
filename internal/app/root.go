@@ -624,6 +624,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 		"profile":    true,
 		"version":    true,
 		"help":       true,
+		"markdown":   true,
 		"recovery":   true,
 		"schema":     true,
 		"mcp":        true,

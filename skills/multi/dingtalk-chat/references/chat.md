@@ -124,6 +124,23 @@ Flags:
       --user string        新群主 userId
 ```
 
+#### 将普通群升级为外部群 — 不可逆，仅群主可执行
+```
+Usage:
+  dws chat group upgrade-to-external [flags]
+Example:
+  dws chat group upgrade-to-external --group <openConversationId> --dry-run
+  dws chat group upgrade-to-external --group <openConversationId> --yes
+  dws chat group upgrade-to-external --group <openConversationId> --extension '{"source":"dws"}' --yes
+Flags:
+      --group string      待升级普通群的 openConversationId (必填)
+      --extension string  预留扩展字段 JSON 对象；对象值必须是字符串 (可选)
+      --dry-run           预览操作，不实际升级
+      --yes               确认执行不可逆升级
+```
+
+仅 `NORMAL_GROUP` 普通群可升级；新建外部群使用 `chat group create --type EXTERNAL`。正式执行前必须确认目标群和影响，再传 `--yes`。
+
 #### 获取群邀请链接 — 获取指定群聊的邀请加入链接
 
 可选 --expires-seconds 指定链接有效期（秒），0 表示永久有效，不传则使用服务端默认值。
@@ -222,16 +239,17 @@ Flags:
       --alias-title string   群备注标题 (必填)
 ```
 
-#### 设置我在群内的群昵称 — 设置当前用户在指定群里显示的昵称
+#### 设置或清除我在群内的群昵称
 ```
 Usage:
   dws chat group update-nick [flags]
 Example:
   dws chat group update-nick --group <openConversationId> --nick "我的群昵称"
+  dws chat group update-nick --group <openConversationId>
   # 查询群 ID: dws chat search --query "群名"
 Flags:
       --group string   群聊 openConversationId (必填)
-      --nick string    个人群昵称 (必填)
+      --nick string    个人群昵称；不传则清除当前群昵称
 ```
 
 #### 查看群内所有机器人 — 获取指定群聊中的所有机器人列表
@@ -633,6 +651,30 @@ Flags:
   - 仅支持撤回当前用户以个人身份发出的消息，不能撤回他人发送的消息，也不能撤回机器人发出的消息
   - 与 `recall-by-bot` 的区别：本命令通过 IM 接口撤回用户自己发出的消息（需要 openConversationId + openMessageId），`recall-by-bot` 通过机器人接口撤回机器人发出的消息（需要 robot-code + processQueryKey）
 ```
+
+#### 编辑已发送消息
+
+指定会话和消息后编辑 Markdown 消息内容。推荐使用 `--text`，CLI 会生成完整 content JSON；高级场景可直接传 `--content`，两者必须二选一且互斥。
+
+```
+Usage:
+  dws chat message edit [flags]
+Example:
+  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --title "标题" --text "更新后的内容"
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --text "<@all> 请查看" --at-all
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'
+Flags:
+      --conversation-id string       会话 openConversationId (必填；别名 --group / --id / --chat)
+      --msg-id string                消息 openMessageId (必填)
+      --text string                  编辑后的 Markdown 正文；与 --content 二选一
+      --title string                 消息标题；仅配合 --text，省略时从正文生成
+      --content string               完整 Markdown content JSON；与 --text 二选一
+      --at-all                       @所有人；正文缺少 <@all> 时自动补齐
+      --at-open-dingtalk-ids string  @成员的 openDingTalkId 列表，逗号分隔
+```
+
+`--at-open-dingtalk-ids` 对应正文中的 `<@openDingTalkId>` 占位符；裸 `@openDingTalkId` 会规范化为尖括号格式。
 
 #### 机器人发送消息（--group 群聊 / --users 单聊）
 
@@ -1380,6 +1422,28 @@ Example:
   # 返回当前用户的所有自定义会话分组
 ```
 
+#### 查看指定会话所属分组
+```
+Usage:
+  dws chat category list-by-conv [flags]
+Example:
+  dws chat category list-by-conv --group <openConversationId>
+Flags:
+      --group string  会话 openConversationId (必填；别名 --conversation-id / --id)
+```
+
+#### 批量查询会话分组信息
+```
+Usage:
+  dws chat category batch-info [flags]
+Example:
+  dws chat category batch-info --category-ids 123,456
+Flags:
+      --category-ids string  分组 ID 列表，逗号分隔 (必填)
+```
+
+分组 ID 可通过 `chat category list` 或 `list-by-conv` 获取。
+
 #### 拉取指定分组下的会话列表
 ```
 Usage:
@@ -1760,7 +1824,7 @@ Flags:
 用户说"加机器人到群" → `chat group members add-bot`
 用户说"改群名" → `chat group rename`
 用户说"设置群备注/给群加备注" → `chat group update-alias`
-用户说"改我在群里的昵称/设置群昵称" → `chat group update-nick`
+用户说"改我在群里的昵称/设置群昵称" → `chat group update-nick --nick`
 用户说"批量查群成员信息/按ID查群成员" → `chat group members list-by-ids`
 用户说"聊天记录/会话消息/拉取会话" → `chat message list`
 用户说"某人发给我的消息/指定发送者/某人的消息" → `chat message list-by-sender`（用户未明确说"单聊"时优先使用，跨单聊/群聊）
@@ -1771,6 +1835,7 @@ Flags:
 用户说"发单聊消息(以个人身份)" → `chat message send --user`（有 userId 时）或 `chat message send --open-dingtalk-id`（有 openDingTalkId 时）
 用户说"机器人发消息/机器人群发" → `chat message send-by-bot`
 用户说"撤回我发的消息/撤回消息" → `chat message recall`（通过 IM 接口撤回当前用户自己发出的消息，需要 openConversationId + openMessageId）
+用户说"编辑/修改已发送消息" → `chat message edit`（`--text` / `--content` 二选一）
 用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（通过机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
 用户说"Webhook 发消息/告警消息" → `chat message send-by-webhook`
 用户说"话题回复/群话题消息回复/拉取话题回复" → `chat message list-topic-replies`
@@ -1784,6 +1849,8 @@ Flags:
 用户说"我和XX的共同群/我们都在哪些群/查共同群" → `chat search-common`
 用户说"置顶会话/置顶消息/我的置顶/查看置顶" → `chat list-top-conversations`
 用户说"查看会话分组/自定义分组" → `chat category list`
+用户说"这个会话属于哪些分组" → `chat category list-by-conv`
+用户说"按多个分组 ID 批量查分组信息" → `chat category batch-info`
 用户说"某个分组下的会话/分组会话列表" → `chat category list-conversations`
 用户说"新建会话分组/创建分组" → `chat category create`
 用户说"创建智能分组/新建智能会话分组" → `chat category create-smart`
@@ -1800,6 +1867,8 @@ Flags:
 用户说"移除某人的群身份/撤销群身份" → `chat group-role remove-user`
 用户说"查询某人的群身份/某人在群里有什么身份" → `chat group-role query-user`
 用户说"转让群主/换群主/群主转让" → `chat group transfer-owner`
+用户说"把普通群升级为外部群" → `chat group upgrade-to-external`（不可逆，仅群主，确认后 `--yes`）
+用户说"清除/取消群昵称" → `chat group update-nick --group <openConversationId>`（不传 `--nick`）
 用户说"群邀请链接/入群链接/加群链接" → `chat group invite-url`
 用户说"分享群链接/把群分享给某人/群链接发到某群" → `chat group share-invite`
 用户说"群公告/发布公告/修改公告/查看公告/定时公告" → `chat group notice create/edit/get/list`
@@ -1875,8 +1944,12 @@ Flags:
 - `chat category list` — 获取用户自定义会话分组列表
 - `chat category list-conversations` — 拉取指定分组下的会话列表
 - `chat category create-smart` — 创建智能会话分组（可指定群名称关键词和成员作为匹配规则）
+- `chat category list-by-conv` / `chat category batch-info` — 查询会话所属分组 / 批量查询分组信息
 - `chat mute` — 开启/关闭会话消息免打扰（默认开启，--off 关闭）
 - `chat group transfer-owner` — 转让群主
+- `chat group upgrade-to-external` — 将普通群不可逆升级为外部群
+- `chat group update-nick` — 设置群昵称；省略 `--nick` 时清除
+- `chat message edit` — 编辑已发送 Markdown 消息
 - `chat group invite-url` — 获取群邀请链接
 - `chat group share-invite` — 分享群聊链接到会话
 - `chat group notice create/edit/get/list` — 群公告发布、修改、详情、列表

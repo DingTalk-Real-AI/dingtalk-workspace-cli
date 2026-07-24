@@ -67,9 +67,32 @@
       "reviewed": true
     },
     "todo.get_user_todos_in_current_org": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "get_user_todos_in_current_org"
+      },
       "interface_mode": "mcp",
       "availability": "available",
-      "reviewed": true
+      "reviewed": true,
+      "parameters": {
+        "role-types": {
+          "property": "roleTypes",
+          "required": false,
+          "description": "角色类型列表；省略时运行时默认使用 executor"
+        },
+        "query-all": {
+          "required": false,
+          "interface_type": "boolean",
+          "description": "为 true 时跨组织查询全部待办；默认仅查询当前组织待办"
+        }
+      },
+      "review_reason": "The reviewed handler defaults omitted role-types to executor, preserves current-organization behavior by default, and switches both single-page and auto-page calls to get_user_todos only when --query-all is explicitly true.",
+      "cli_path": "todo task list",
+      "runtime_gate": "none"
     },
     "todo.list_todo_comment": {
       "interface_mode": "mcp",
@@ -114,6 +137,102 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "todo.create_todo_tag": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI wraps one trimmed name in UserTagAddRequest and calls todo/create_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "name": {
+          "property": "name",
+          "required": true
+        }
+      },
+      "review_reason": "The reviewed handler requires a non-blank tag name, builds a one-element userTags request, and invokes create_todo_tag without a runtime confirmation gate.",
+      "cli_path": "todo tag create",
+      "runtime_gate": "none"
+    },
+    "todo.delete_todo_tag": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI parses tag codes into UserTagDeleteRequest and calls todo/delete_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "tag-codes": {
+          "property": "tagCodes",
+          "required": true,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed handler requires at least one non-empty tag code, permits caller-authoritative dry-run, and requires explicit --yes before invoking delete_todo_tag.",
+      "cli_path": "todo tag delete",
+      "runtime_gate": "confirm_delete"
+    },
+    "todo.list_todo_tags": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI calls todo/list_todo_tags, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "review_reason": "The reviewed parameterless handler lists the current user's todo tags without mutation or confirmation.",
+      "cli_path": "todo tag list",
+      "runtime_gate": "none"
+    },
+    "todo.tag_todo": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI builds TodoTagRequest and calls todo/tag_todo, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "task-id": {
+          "property": "taskId",
+          "required": true
+        },
+        "tag-codes": {
+          "property": "tagCodes",
+          "required": true,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed handler requires a task ID and at least one non-empty tag code before invoking tag_todo.",
+      "cli_path": "todo tag add",
+      "runtime_gate": "none"
+    },
+    "todo.update_todo_tag": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI decodes user tag JSON into UserTagAddRequest and calls todo/update_todo_tag, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "user-tags": {
+          "property": "userTags",
+          "required": true,
+          "interface_type": "array"
+        }
+      },
+      "review_reason": "The reviewed handler requires a non-null JSON array of tag update records and invokes update_todo_tag without a runtime confirmation gate.",
+      "cli_path": "todo tag update",
+      "runtime_gate": "none"
     }
   }
 }

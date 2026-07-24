@@ -37,6 +37,7 @@ func init() {
 		{"hrbrain", newHrbrainCommand},
 		{"live", newLiveCommand},
 		{"mail", newMailCommand},
+		{"markdown", newMarkdownCommand},
 		{"minutes", newMinutesCommand},
 		{"oa", newOaCommand},
 		{"report", newReportCommand},

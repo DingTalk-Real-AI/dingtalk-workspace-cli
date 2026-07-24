@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,80 +39,75 @@ func runDriveUpload(cmd *cobra.Command, _ []string) error {
 	}
 	fileSize := fi.Size()
 
+	// --node switches the upload from create mode to overwrite mode.
+	overwriteNodeID := flagOrFallback(cmd, "node", "node-id", "file-id", "doc-id")
+	parentID := docFolderFlag(cmd)
+	if overwriteNodeID != "" && parentID != "" {
+		return fmt.Errorf("--node 与 --folder 互斥：--node 用于覆盖已有文件，--folder 用于上传到目录，不可同时指定")
+	}
+
 	// 路由判断：--workspace 存在时走文档空间上传流程
 	workspaceID := flagOrFallback(cmd, "workspace", "workspace-id")
+	spaceID, _ := cmd.Flags().GetString("space-id")
+	if workspaceID != "" && spaceID != "" {
+		return fmt.Errorf("--space-id 与 --workspace 互斥：请只指定钉盘空间或知识库中的一个目标域")
+	}
 	if workspaceID != "" {
 		return runDriveUploadToDocSpace(cmd, filePath, fileName, fileSize, workspaceID)
 	}
 
-	parentID := flagOrFallback(cmd, "folder", "parent-id")
-	if err := validateDriveParentID(parentID); err != nil {
-		return err
+	if overwriteNodeID == "" {
+		if err := validateDriveParentID(parentID); err != nil {
+			return err
+		}
 	}
 
 	if deps.Caller.DryRun() {
+		if deps.Caller.Format() == "json" {
+			return deps.Out.PrintJSON(map[string]any{
+				"dry_run":      true,
+				"executed":     false,
+				"preview_kind": "plan",
+				"operation":    "upload",
+				"source":       "drive",
+				"file":         filePath,
+				"file_name":    fileName,
+				"file_size":    fileSize,
+				"space_id":     spaceID,
+				"folder_id":    parentID,
+				"node_id":      overwriteNodeID,
+			})
+		}
 		deps.Out.PrintKeyValue("操作", "上传文件到钉盘")
 		deps.Out.PrintKeyValue("文件", filePath)
 		deps.Out.PrintKeyValue("名称", fileName)
 		deps.Out.PrintKeyValue("大小", fmt.Sprintf("%d bytes", fileSize))
+		if overwriteNodeID != "" {
+			deps.Out.PrintKeyValue("覆盖目标", overwriteNodeID)
+		}
+		return nil
+	}
+
+	if overwriteNodeID != "" && !confirmDangerousAction(cmd, "overwrite drive file", overwriteNodeID) {
 		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// Step 1: get upload credentials
-	step1Args := map[string]any{
-		"fileName": fileName,
-		"fileSize": float64(fileSize),
-	}
-	if v, _ := cmd.Flags().GetString("space-id"); v != "" {
-		step1Args["spaceId"] = v
-	}
-	if v, _ := cmd.Flags().GetString("mime-type"); v != "" {
-		step1Args["mimeType"] = v
-	}
-	if parentID != "" {
-		step1Args["parentId"] = parentID
-	}
-
-	text, err := callMCPToolReturnText(ctx, "get_upload_info", step1Args)
-	if err != nil {
-		return err
-	}
-
-	resourceURL, uploadID, ossHeaders, err := parseDriveUploadInfo(text)
-	if err != nil {
-		return err
-	}
-
-	// Step 2: HTTP PUT to OSS
-	if err := httpPutFile(ctx, resourceURL, ossHeaders, filePath, fileSize); err != nil {
-		return err
-	}
-
-	// Step 3: commit
-	commitArgs := map[string]any{
-		"fileName": fileName,
-		"fileSize": float64(fileSize),
-		"uploadId": uploadID,
-	}
-	if v, _ := cmd.Flags().GetString("space-id"); v != "" {
-		commitArgs["spaceId"] = v
-	}
-	if parentID != "" {
-		commitArgs["parentId"] = parentID
-	}
-
-	return callMCPTool("commit_upload", commitArgs)
+	mimeType, _ := cmd.Flags().GetString("mime-type")
+	return uploadToDrive(ctx, filePath, fileName, fileSize, spaceID, parentID, overwriteNodeID, mimeType)
 }
 
 // runDriveUploadToDocSpace 处理文档空间上传流程（当 --workspace 存在时路由到此）。
 // 使用 doc MCP server 的 get_file_upload_info + commit_uploaded_file 工具。
 func runDriveUploadToDocSpace(cmd *cobra.Command, filePath, fileName string, fileSize int64, workspaceID string) error {
+	overwriteNodeID := flagOrFallback(cmd, "node", "node-id", "file-id", "doc-id")
 	folder := docFolderFlag(cmd)
-	if err := validateDocFolderID(folder); err != nil {
-		return err
+	if overwriteNodeID == "" {
+		if err := validateDocFolderID(folder); err != nil {
+			return err
+		}
 	}
 
 	// 补全文件名后缀
@@ -122,55 +118,41 @@ func runDriveUploadToDocSpace(cmd *cobra.Command, filePath, fileName string, fil
 	}
 
 	if deps.Caller.DryRun() {
+		if deps.Caller.Format() == "json" {
+			return deps.Out.PrintJSON(map[string]any{
+				"dry_run":      true,
+				"executed":     false,
+				"preview_kind": "plan",
+				"operation":    "upload",
+				"source":       "doc",
+				"file":         filePath,
+				"file_name":    fileName,
+				"file_size":    fileSize,
+				"workspace_id": workspaceID,
+				"folder_id":    folder,
+				"node_id":      overwriteNodeID,
+			})
+		}
 		deps.Out.PrintKeyValue("操作", "上传文件到文档空间")
 		deps.Out.PrintKeyValue("文件", filePath)
 		deps.Out.PrintKeyValue("名称", fileName)
 		deps.Out.PrintKeyValue("大小", fmt.Sprintf("%d bytes", fileSize))
 		deps.Out.PrintKeyValue("知识库", workspaceID)
+		if overwriteNodeID != "" {
+			deps.Out.PrintKeyValue("覆盖目标", overwriteNodeID)
+		}
+		return nil
+	}
+
+	if overwriteNodeID != "" && !confirmDangerousAction(cmd, "overwrite document-space file", overwriteNodeID) {
 		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// Step 1: get upload credentials (doc MCP server)
-	step1Args := map[string]any{
-		"workspaceId": workspaceID,
-	}
-	if folder != "" {
-		step1Args["folderId"] = folder
-	}
-
-	text, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_file_upload_info", step1Args)
-	if err != nil {
-		return err
-	}
-
-	resourceURL, uploadKey, ossHeaders, err := parseUploadInfo(text)
-	if err != nil {
-		return err
-	}
-
-	// Step 2: HTTP PUT to OSS
-	if err := httpPutFile(ctx, resourceURL, ossHeaders, filePath, fileSize); err != nil {
-		return err
-	}
-
-	// Step 3: commit (doc MCP server)
-	commitArgs := map[string]any{
-		"uploadKey":   uploadKey,
-		"name":        fileName,
-		"fileSize":    float64(fileSize),
-		"workspaceId": workspaceID,
-	}
-	if folder != "" {
-		commitArgs["folderId"] = folder
-	}
-	if convert, _ := cmd.Flags().GetBool("convert"); convert {
-		commitArgs["convertToOnlineDoc"] = true
-	}
-
-	return callMCPToolOnServer("doc", "commit_uploaded_file", commitArgs)
+	convert, _ := cmd.Flags().GetBool("convert")
+	return uploadToDocSpace(ctx, filePath, fileName, fileSize, workspaceID, folder, overwriteNodeID, convert)
 }
 
 func validateDriveParentID(parentID string) error {
@@ -572,9 +554,10 @@ func newDriveCommand() *cobra.Command {
 	driveUploadCmd.Flags().String("file-name", "", "文件显示名称 (默认使用文件名)")
 	driveUploadCmd.Flags().String("space-id", "", "目标钉盘空间 ID，不传则使用「我的文件」 (可选)")
 	driveUploadCmd.Flags().String("mime-type", "", "文件 MIME 类型，不传则自动推断 (可选)")
-	driveUploadCmd.Flags().String("folder", "", "父节点 ID，不传则上传到空间根目录 (可选)")
+	driveUploadCmd.Flags().String("folder", "", "父节点 ID，不传则上传到空间根目录 (可选，与 --node 互斥)")
 	driveUploadCmd.Flags().String("workspace", "", "目标知识库 ID，传入时路由到文档空间上传 (可选)")
 	driveUploadCmd.Flags().Bool("convert", false, "是否转换为钉钉在线文档 (仅文档空间上传时生效)")
+	driveUploadCmd.Flags().String("node", "", "覆盖目标文件 ID，传入即覆盖已有文件（与 --folder 互斥）(可选)")
 
 	driveListSpacesCmd := &cobra.Command{
 		Use:   "list-spaces",
@@ -1477,6 +1460,23 @@ func driveInfoWithDocFallback(fileID string, driveArgs map[string]any) error {
 	return deps.Out.PrintJSON(docResp)
 }
 
+// sanitizeFileName removes all directory components and NUL bytes so remote
+// metadata can never escape a caller-owned output or temporary directory.
+func sanitizeFileName(name string) string {
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = filepath.Base(name)
+	if name == "." || name == ".." || name == "/" || name == "" {
+		return "unnamed"
+	}
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "\x00", "")
+	if name == "" {
+		return "unnamed"
+	}
+	return name
+}
+
 // extractFileNameFromResponse extracts the fileName field from MCP download_file response JSON.
 // Returns empty string if not found.
 func extractFileNameFromResponse(text string) string {
@@ -1488,10 +1488,7 @@ func extractFileNameFromResponse(text string) string {
 		data = result
 	}
 	if name, ok := data["fileName"].(string); ok && name != "" {
-		// Sanitize: remove path separators to prevent directory traversal
-		name = strings.ReplaceAll(name, "/", "_")
-		name = strings.ReplaceAll(name, "\\", "_")
-		return name
+		return sanitizeFileName(name)
 	}
 	return ""
 }
@@ -1505,4 +1502,242 @@ func isDingTalkDocExtension(ext string) bool {
 	default:
 		return false
 	}
+}
+
+// uploadToDrive performs the complete drive upload workflow with explicit
+// server routing. overwriteFileID changes both MCP steps to overwrite mode and
+// deliberately excludes parentId.
+func uploadToDrive(ctx context.Context, filePath, fileName string, fileSize int64, spaceID, folderID, overwriteFileID, mimeType string) error {
+	step1Args := map[string]any{
+		"fileName": fileName,
+		"fileSize": float64(fileSize),
+	}
+	if spaceID != "" {
+		step1Args["spaceId"] = spaceID
+	}
+	if mimeType != "" {
+		step1Args["mimeType"] = mimeType
+	}
+	if overwriteFileID != "" {
+		step1Args["overwriteFileId"] = overwriteFileID
+	} else if folderID != "" {
+		step1Args["parentId"] = folderID
+	}
+
+	text, err := callMCPToolReturnTextOnServer(ctx, "drive", "get_upload_info", step1Args)
+	if err != nil {
+		return err
+	}
+	resourceURL, uploadID, headers, err := parseDriveUploadInfo(text)
+	if err != nil {
+		return err
+	}
+	if err := httpPutFile(ctx, resourceURL, headers, filePath, fileSize); err != nil {
+		return err
+	}
+
+	commitArgs := map[string]any{
+		"fileName": fileName,
+		"fileSize": float64(fileSize),
+		"uploadId": uploadID,
+	}
+	if spaceID != "" {
+		commitArgs["spaceId"] = spaceID
+	}
+	if overwriteFileID != "" {
+		commitArgs["overwriteFileId"] = overwriteFileID
+	} else if folderID != "" {
+		commitArgs["parentId"] = folderID
+	}
+	return callMCPToolOnServer("drive", "commit_upload", commitArgs)
+}
+
+// uploadToDocSpace performs the complete document-space upload workflow with
+// explicit server routing. overwriteNodeID changes both MCP steps to overwrite
+// mode and deliberately excludes folderId.
+func uploadToDocSpace(ctx context.Context, filePath, fileName string, fileSize int64, workspaceID, folderID, overwriteNodeID string, convert bool) error {
+	step1Args := map[string]any{}
+	if workspaceID != "" {
+		step1Args["workspaceId"] = workspaceID
+	}
+	if overwriteNodeID != "" {
+		step1Args["overwriteNodeId"] = overwriteNodeID
+		step1Args["name"] = fileName
+	} else if folderID != "" {
+		step1Args["folderId"] = folderID
+	}
+
+	text, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_file_upload_info", step1Args)
+	if err != nil {
+		return err
+	}
+	resourceURL, uploadKey, headers, err := parseUploadInfo(text)
+	if err != nil {
+		return err
+	}
+	if err := httpPutFile(ctx, resourceURL, headers, filePath, fileSize); err != nil {
+		return err
+	}
+
+	commitArgs := map[string]any{
+		"uploadKey": uploadKey,
+		"name":      fileName,
+		"fileSize":  float64(fileSize),
+	}
+	if workspaceID != "" {
+		commitArgs["workspaceId"] = workspaceID
+	}
+	if overwriteNodeID != "" {
+		commitArgs["overwriteNodeId"] = overwriteNodeID
+	} else if folderID != "" {
+		commitArgs["folderId"] = folderID
+	}
+	if convert {
+		commitArgs["convertToOnlineDoc"] = true
+	}
+	return callMCPToolOnServer("doc", "commit_uploaded_file", commitArgs)
+}
+
+func downloadFromDrive(ctx context.Context, fileID, spaceID string) (content, filename string, err error) {
+	args := map[string]any{"fileId": fileID}
+	if spaceID != "" {
+		args["spaceId"] = spaceID
+	}
+	text, err := callMCPToolReturnTextOnServer(ctx, "drive", "download_file", args)
+	if err != nil {
+		return "", "", err
+	}
+	resourceURL, headers, err := parseDownloadInfo(text)
+	if err != nil {
+		return "", "", err
+	}
+	filename = resolveDownloadFilename(text, resourceURL)
+	if filename == "" || filename == "unnamed" {
+		filename = "download.md"
+	}
+
+	tmpDir, err := os.MkdirTemp("", "dws-drive-download-*")
+	if err != nil {
+		return "", "", fmt.Errorf("创建临时目录失败: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	destPath := filepath.Join(tmpDir, sanitizeFileName(filename))
+	if err := httpGetFile(ctx, resourceURL, headers, destPath); err != nil {
+		return "", "", err
+	}
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		return "", "", fmt.Errorf("读取下载内容失败: %w", err)
+	}
+	return string(data), sanitizeFileName(filename), nil
+}
+
+func downloadFromDoc(ctx context.Context, nodeID string) (content, filename string, err error) {
+	text, err := callMCPToolReturnTextOnServer(ctx, "doc", "download_file", map[string]any{"nodeId": nodeID})
+	if err != nil {
+		return "", "", err
+	}
+	resourceURL, headers, err := parseDownloadInfo(text)
+	if err != nil {
+		return "", "", err
+	}
+	filename = resolveDownloadFilename(text, resourceURL)
+	if filename == "" || filename == "unnamed" {
+		filename = "download.md"
+	}
+
+	tmpDir, err := os.MkdirTemp("", "dws-doc-download-*")
+	if err != nil {
+		return "", "", fmt.Errorf("创建临时目录失败: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	destPath := filepath.Join(tmpDir, sanitizeFileName(filename))
+	if err := httpGetFile(ctx, resourceURL, headers, destPath); err != nil {
+		return "", "", err
+	}
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		return "", "", fmt.Errorf("读取下载内容失败: %w", err)
+	}
+	return string(data), sanitizeFileName(filename), nil
+}
+
+// resolveFileDomain probes both domains without guessing when neither probe
+// succeeds. Explicit --space-id/--workspace routing bypasses this helper.
+func resolveFileDomain(ctx context.Context, nodeID string) (string, error) {
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, driveErr := callMCPToolReturnTextOnServer(probeCtx, "drive", "get_file_info", map[string]any{"fileId": nodeID})
+	if driveErr == nil {
+		return "drive", nil
+	}
+	_, docErr := callMCPToolReturnTextOnServer(probeCtx, "doc", "get_document_info", map[string]any{"nodeId": nodeID})
+	if docErr == nil {
+		return "doc", nil
+	}
+	if isTimeoutCLIError(driveErr) || isTimeoutCLIError(docErr) {
+		return "", fmt.Errorf("路由文件所在域超时，请重试或通过 --space-id（钉盘）/ --workspace（知识库）显式指定")
+	}
+	if isPermissionCLIError(driveErr) || isPermissionCLIError(docErr) {
+		return "", fmt.Errorf("无权限访问该文件，请确认权限或通过 --space-id/--workspace 显式指定所在域")
+	}
+	return "", fmt.Errorf("文件 %s 在钉盘和知识库中均未找到，请确认 node ID 或显式指定 --space-id/--workspace", nodeID)
+}
+
+func fetchRemoteFileName(ctx context.Context, nodeID string, useDocServer bool) (string, error) {
+	serverID, toolName, args := "drive", "get_file_info", map[string]any{"fileId": nodeID}
+	if useDocServer {
+		serverID, toolName, args = "doc", "get_document_info", map[string]any{"nodeId": nodeID}
+	}
+	text, err := callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
+	if err != nil {
+		return "", err
+	}
+	return parseRemoteFileName(text), nil
+}
+
+func parseRemoteFileName(text string) string {
+	var data map[string]any
+	if err := json.Unmarshal([]byte(text), &data); err != nil {
+		return ""
+	}
+	if result, ok := data["result"].(map[string]any); ok {
+		data = result
+	}
+	if name, ok := data["fileName"].(string); ok && name != "" {
+		return sanitizeFileName(name)
+	}
+	name, _ := data["name"].(string)
+	ext, _ := data["extension"].(string)
+	if name == "" {
+		return ""
+	}
+	if ext == "" || strings.HasSuffix(strings.ToLower(name), "."+strings.ToLower(ext)) {
+		return sanitizeFileName(name)
+	}
+	return sanitizeFileName(name + "." + ext)
+}
+
+func isTimeoutCLIError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) {
+		return cliErr.Code == CodeNetworkTimeout || cliErr.Code == CodeLockTimeout
+	}
+	return isTimeoutError(err.Error())
+}
+
+func isPermissionCLIError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) {
+		return cliErr.Code == CodeAuthPermission
+	}
+	var patErr *PATError
+	return errors.As(err, &patErr)
 }

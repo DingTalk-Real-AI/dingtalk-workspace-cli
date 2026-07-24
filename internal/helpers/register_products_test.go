@@ -31,7 +31,7 @@ func TestCrossPlatformCoveragePublicProductCommandsBuildCompleteUniqueTrees(t *t
 	for _, want := range []string{
 		"agoal", "aisearch", "aitable", "attendance", "calendar", "chat",
 		"contact", "devdoc", "ding", "doc", "drive", "live", "mail",
-		"minutes", "oa", "report", "sheet", "todo", "wiki",
+		"markdown", "minutes", "oa", "report", "sheet", "todo", "wiki",
 	} {
 		if !seenProducts[want] {
 			t.Errorf("public product %q was not registered", want)

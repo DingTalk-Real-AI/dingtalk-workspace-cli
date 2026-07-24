@@ -237,10 +237,13 @@ Example:
   dws drive upload --file ./report.pdf
   dws drive upload --file ./slides.pptx --file-name "Q1汇报.pptx"
   dws drive upload --file ./data.xlsx --folder <dentryUuid>
+  dws drive upload --file ./updated.md --node <fileId>
+  dws drive upload --file ./updated.md --node <nodeId> --workspace <workspaceId> --yes
 Flags:
       --file string        本地文件路径 (必填)
       --file-name string   文件显示名称 (默认使用文件名)
-      --folder string      父节点 ID (dentryUuid)，不传则上传到空间根目录 (可选)
+      --folder string      父节点 ID，不传则上传到空间根目录 (可选，与 --node 互斥)
+      --node string        覆盖目标文件 ID，传入即覆盖已有文件 (可选，与 --folder 互斥)
       --space-id string    目标钉盘空间 ID，不传则使用「我的文件」 (可选)
       --workspace string   目标知识库 ID，传入时路由到文档空间上传 (可选)
       --convert            是否转换为钉钉在线文档 (仅文档空间上传时生效)
@@ -248,6 +251,8 @@ Flags:
 ```
 
 `upload` 命令内部自动完成三步流程（获取凭证 → OSS PUT → 提交入库），无需手动分步操作。上传到知识库/文档空间时加 `--workspace` 参数。
+
+传 `--node` 时覆盖指定文件：钉盘路由使用 fileId，知识库路由使用 nodeId。覆盖不可逆，先用全局 `--dry-run` 预览；获得用户明确确认后再加 `--yes`。`--node` 与创建新文件所用的 `--folder` 互斥。
 
 ### 获取上传凭证 (手动三步·仅特殊场景)
 
@@ -341,6 +346,7 @@ Flags:
 用户说"下载文件" → `download` 指定 `--output` 保存到本地
 用户说"新建文件夹/创建目录" → `mkdir`（钉盘空间）/ `wiki node create --type folder`（文档空间）
 用户说"上传文件/传文件到钉盘" → `upload`（首选此命令，自动完成三步流程）
+用户说"覆盖/替换钉盘或知识库中的已有文件" → `upload --node <fileId>`（不可逆，先 `--dry-run`，确认后再加 `--yes`）
 用户说"复制文件/移动文件/搬到/移到" → `copy` / `move`
 用户说"重命名/改名" → `rename`
 用户说"删除文件/删除文件夹/移到回收站" → `delete`（危险操作，需确认）
@@ -386,6 +392,10 @@ dws drive mkdir --name "项目资料" --format json
 # 6. 上传文件（首选 upload 命令，自动完成三步流程）
 dws drive upload --file ./报告.pdf --format json
 dws drive upload --file ./报告.pdf --folder <dentryUuid> --format json
+
+# 6b. 覆盖已有文件（先预览；用户确认后再执行）
+dws drive upload --file ./更新版.pdf --node <fileId> --dry-run --format json
+dws drive upload --file ./更新版.pdf --node <fileId> --yes --format json
 
 # 7. 删除文件/文件夹到回收站（危险操作：必须先向用户确认，用户同意后才加 --yes 执行）
 # 正确流程：1.向用户展示"即将删除「文件名」到回收站" → 2.等用户确认 → 3.执行下面命令
@@ -527,13 +537,15 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 | `search` | `spaceId` / `rootFolderId`（空间结果） | list 的 --space-id；`drive copy/move` 的 --folder |
 | `search` | `nextCursor` | search 的 --cursor（翻页） |
 | `mkdir` | `fileId`（UUID 格式） | list / upload 的 --folder |
-| `upload` | `dentryUuid` | download / info 的 --node |
+| `upload` | `dentryUuid` / `nodeId` | download / info / 后续 `upload --node` 覆盖 |
 | `recycle list` | `id`（回收项 ID） | recycle restore 的 --id |
 | `recycle list` | `name`（原始文件名） | 供用户确认还原目标 |
 | `recent` | `recentItems[].nodeId` / `docUrl` | doc read / info / update / block 操作的 --node |
 | `recent` | `nextCursor` | recent 的 --cursor（翻页） |
 
 > **重要**：`drive list` 返回结果中同时包含 `dentryId` 和 `fileId` 两个字段。所有需要传 `--node` 的命令（info / download / delete）必须使用 `fileId`（即 dentryUuid），**不要使用** `dentryId`。
+
+- `upload --node` 会覆盖已有文件且不可逆；`--node` 与 `--folder` 互斥。先 dry-run，得到用户明确确认后再加 `--yes`。
 
 ## 注意事项
 
@@ -557,5 +569,6 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 ## 相关产品
 
 - [doc](./doc.md) — 文档内容读写（Markdown/块级编辑/导出），不是文件存储
+- [markdown](../../dingtalk-markdown/references/markdown.md) — 钉盘或文档空间中原生 `.md` 文件的读取、创建、覆盖与局部替换
 - [wiki](./wiki.md) — 知识库/空间管理层（空间列表、节点创建、空间内搜索、成员管理）
 - [chat](./chat.md) — 发送图片/文件消息用 `chat message send --msg-type file --file-path`

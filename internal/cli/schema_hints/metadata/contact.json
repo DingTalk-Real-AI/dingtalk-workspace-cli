@@ -171,6 +171,223 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "contact.department_create": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps department creation flags to contact/department_create, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "name": {
+          "property": "deptName",
+          "required": true
+        },
+        "dept-name": {
+          "property": "deptName",
+          "required": false
+        },
+        "parent": {
+          "property": "superDeptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "super-dept-id": {
+          "property": "superDeptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "super-dept": {
+          "property": "superDeptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "create-dept-group": {
+          "property": "createDeptGroup",
+          "required": true,
+          "interface_type": "boolean"
+        }
+      },
+      "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+      "cli_path": "contact dept create",
+      "runtime_gate": "confirm_dangerous"
+    },
+    "contact.department_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps department update flags to contact/department_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "dept": {
+          "property": "deptId",
+          "required": true,
+          "interface_type": "integer"
+        },
+        "id": {
+          "property": "deptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "ids": {
+          "property": "deptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "dept-id": {
+          "property": "deptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "dept-ids": {
+          "property": "deptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "name": {
+          "property": "deptName",
+          "required": true
+        },
+        "dept-name": {
+          "property": "deptName",
+          "required": false
+        },
+        "parent": {
+          "property": "superDeptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "super-dept-id": {
+          "property": "superDeptId",
+          "required": false,
+          "interface_type": "integer"
+        },
+        "super-dept": {
+          "property": "superDeptId",
+          "required": false,
+          "interface_type": "integer"
+        }
+      },
+      "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+      "cli_path": "contact dept update",
+      "runtime_gate": "confirm_dangerous"
+    },
+    "contact.employee_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps employee update flags to contact/employee_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "user-id": {
+          "property": "userId",
+          "required": true
+        },
+        "id": {
+          "property": "userId",
+          "required": false
+        },
+        "userid": {
+          "property": "userId",
+          "required": false
+        },
+        "org-user-name": {
+          "property": "orgUserName",
+          "required": false
+        },
+        "depts": {
+          "property": "depts",
+          "required": false,
+          "interface_type": "array"
+        },
+        "master-user-id": {
+          "property": "masterUserId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+      "cli_path": "contact user update",
+      "runtime_gate": "confirm_dangerous"
+    },
+    "contact.exclusive_account_user_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account update flags to contact/exclusive_account_user_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "user-id": {
+          "property": "userId",
+          "required": true
+        },
+        "id": {
+          "property": "userId",
+          "required": false
+        },
+        "userid": {
+          "property": "userId",
+          "required": false
+        },
+        "org-user-name": {
+          "property": "orgUserName",
+          "required": false
+        },
+        "depts": {
+          "property": "depts",
+          "required": false,
+          "interface_type": "array"
+        },
+        "master-user-id": {
+          "property": "masterUserId",
+          "required": false
+        },
+        "nick": {
+          "property": "nick",
+          "required": false
+        },
+        "avatar-file-id": {
+          "property": "avatarFileId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+      "cli_path": "contact account update",
+      "runtime_gate": "confirm_dangerous"
+    },
+    "contact.self_user_profile_update": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps self-profile update flags to contact/self_user_profile_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "parameters": {
+        "nick": {
+          "property": "nick",
+          "required": false
+        },
+        "avatar-file-id": {
+          "property": "avatarFileId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+      "cli_path": "contact user update-self",
+      "runtime_gate": "confirm_dangerous"
     }
   }
 }
