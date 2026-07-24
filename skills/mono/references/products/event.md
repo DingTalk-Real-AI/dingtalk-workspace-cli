@@ -176,13 +176,14 @@ dws event stop --all --yes
 - 推荐 `--flatten -f ndjson`：顶层业务字段，一行一个事件 JSON，适合 Agent 管道读取。
 - 人工取样可用 `--flatten -f json --max-events 1`。`--format` 只控制序列化，`--flatten` 控制数据结构。
 - `--flatten` 的 `jq_root_path` 为 `.`；消息正文、发送人和会话 ID 分别直接读取顶层 `content`、`sender`、`conversation_id`。
+- 引用回复读取可选的 `quoted_message`；合并转发读取可选的 `forward_messages` 数组。两者保留内部消息的 `message_id/conversation_id/sender/sender_open_dingtalk_id/content/create_time`，不要解析可能随语言变化的外层聊天记录摘要。
 - Agent 已显式使用 `--flatten`，不要再生成 `fromjson` 或内部 payload 路径。不传时默认保持兼容 envelope，业务 payload 在 `.data | fromjson`。正常处理直接持续读取 stdout，不要改写为 `--output-dir` watcher。
 - 群自动回复使用顶层 `conversation_id`；单聊自动回复使用顶层 `sender_open_dingtalk_id`。
 - 已读事件直接读取 `reader/reader_open_dingtalk_id/read_time`；撤回事件读取 `recaller/recaller_open_dingtalk_id/recall_time`。
 - 表情回应事件直接读取 `operator/operator_open_dingtalk_id/reaction_name/reaction_text/operation_type/operation_time`。
 - 群成员加入/退出事件读取 `conversation_id/operator/operator_open_dingtalk_id/members/event_time`。`operator` 是执行操作的人，`members` 是本次加入或退出的成员数组，成员项包含 `nick/open_dingtalk_id`；系统操作或成员自行退出时操作人字段可能为空。
 - 群标题变更和群解散当前只承诺 `type/event_id/timestamp/subscribe_id/payload`；以实际 `payload` 为准，不猜测群标题、操作者等字段。
-- 图片、文件等媒体消息的 `content` 可能是可读描述；需要实际媒体文件时调用 `dws chat message download-media`。
+- 图片、文件等媒体消息的 `content` 可能是可读描述；合并转发媒体的下载定位信息位于对应 `forward_messages[].content`。需要实际媒体文件时调用 `dws chat message download-media`。
 - 正常动作事件输出不含内部 `payload/uid/corpid/clientId/filterSubId/bizid`；原始排查才使用 `-f raw` 或 `--debug-raw-events`。
 - 自己发的消息不作为事件回来（`isSelfLoop` 过滤）；自发验证会看到 0 事件，测试投递使用别人或机器人发消息。
 - `--jq <表达式>` 可进一步过滤或投影扁平输出。

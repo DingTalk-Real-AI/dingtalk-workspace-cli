@@ -274,8 +274,12 @@ Agent 使用 `--flatten -f ndjson`，stdout 每行是一个扁平业务事件对
 | `sender_open_dingtalk_id` | 发送人的开放钉钉 ID |
 | `create_time` | 消息创建时间 |
 | `event_time` | 消息事件时间戳 |
+| `quoted_message` | 可选；引用回复所引用的原消息对象 |
+| `forward_messages` | 可选；合并转发包含的原消息数组 |
 
-在 `--flatten` 模式下直接按顶层字段解析，不要再使用 `fromjson` 或内部 payload 路径。不传 `--flatten` 时保持兼容 transport envelope，字段为 `type/event_type/data/headers`，业务 payload 需从 `.data | fromjson` 读取。图片、文件等媒体消息的 `content` 可能是可读描述；需要实际媒体文件时调用 `dws chat message download-media`。
+`quoted_message` 和 `forward_messages[]` 的内部字段为 `message_id`、`conversation_id`、`sender`、`sender_open_dingtalk_id`、`content`、`create_time`。服务端未提供内部发送人时，`sender` 可能为空或为 `null` 字符串。合并转发必须按 `forward_messages` 判断和解析，不要匹配可能随语言变化的外层聊天记录摘要。
+
+在 `--flatten` 模式下直接按顶层字段解析，不要再使用 `fromjson` 或内部 payload 路径。不传 `--flatten` 时保持兼容 transport envelope，字段为 `type/event_type/data/headers`，业务 payload 需从 `.data | fromjson` 读取。图片、文件等媒体消息的 `content` 可能是可读描述；合并转发媒体的下载定位信息位于对应 `forward_messages[].content`。需要实际媒体文件时调用 `dws chat message download-media`。
 
 所有动作事件都包含顶层 `type`、`event_id`、`timestamp`、`subscribe_id`、`message_id`、`conversation_id`、`sender`、`sender_open_dingtalk_id` 和 `event_time`。各类动作的专有字段如下：
 

@@ -273,6 +273,8 @@ func TestPersonalEventFlattenedSchemaUsesSingleJSONSchema(t *testing.T) {
 				"message_id",
 				"create_time",
 				"event_time",
+				"quoted_message",
+				"forward_messages",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("schema output for %s missing %q: %s", eventKey, want, got)
@@ -316,6 +318,14 @@ func TestPersonalEventFlattenedSchemaUsesSingleJSONSchema(t *testing.T) {
 			}
 			if _, ok := props["content"].(map[string]any); !ok {
 				t.Fatalf("schema.properties.content = %#v, want object", props["content"])
+			}
+			quoted, ok := props["quoted_message"].(map[string]any)
+			if !ok || quoted["type"] != "object" {
+				t.Fatalf("schema.properties.quoted_message = %#v, want object", props["quoted_message"])
+			}
+			forward, ok := props["forward_messages"].(map[string]any)
+			if !ok || forward["type"] != "array" {
+				t.Fatalf("schema.properties.forward_messages = %#v, want array", props["forward_messages"])
 			}
 		})
 	}

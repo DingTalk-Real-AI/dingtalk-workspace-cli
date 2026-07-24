@@ -184,7 +184,158 @@ func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("ProjectOutput() = %#v, want %#v", got, want)
 			}
+			encoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, absent := range []string{"quoted_message", "forward_messages"} {
+				if strings.Contains(string(encoded), `"`+absent+`"`) {
+					t.Fatalf("ordinary message output contains optional field %q: %s", absent, encoded)
+				}
+			}
 		})
+	}
+}
+
+func TestProjectOutputPreservesQuotedMessageContext(t *testing.T) {
+	data := `{
+		"eventId":"quoted-event",
+		"eventKey":"user_im_message_receive_group",
+		"occurredAtMs":1784792292580,
+		"subId":"quoted-sub",
+		"payload":{
+			"body":{
+				"createTime":"2026-07-23 15:38:11",
+				"sender":"郑御白",
+				"openMessageId":"outer-message",
+				"senderOpenDingTalkId":"outer-sender-open-id",
+				"openConversationId":"target-conversation",
+				"content":"引用回复",
+				"quotedMessage":{
+					"createTime":"2026-07-23 15:35:03",
+					"sender":"null",
+					"openMessageId":"quoted-message",
+					"senderOpenDingTalkId":"quoted-sender-open-id",
+					"openConversationId":"source-conversation",
+					"content":"被引用的原消息"
+				}
+			},
+			"event_time":1784792291637
+		}
+	}`
+
+	projected, err := ProjectOutput(transport.Event{
+		EventType:   EventInChat,
+		SubscribeID: "outer-sub",
+		Data:        data,
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got := projected.(MessageEventOutput)
+	want := &MessageEventContext{
+		MessageID:            "quoted-message",
+		ConversationID:       "source-conversation",
+		Sender:               "null",
+		SenderOpenDingTalkID: "quoted-sender-open-id",
+		Content:              "被引用的原消息",
+		CreateTime:           "2026-07-23 15:35:03",
+	}
+	if !reflect.DeepEqual(got.QuotedMessage, want) {
+		t.Fatalf("quoted_message = %#v, want %#v", got.QuotedMessage, want)
+	}
+	if got.ForwardMessages != nil {
+		t.Fatalf("forward_messages = %#v, want nil", got.ForwardMessages)
+	}
+}
+
+func TestProjectOutputPreservesMergedForwardContextAndMediaLocator(t *testing.T) {
+	data := `{
+		"eventId":"forward-event",
+		"eventKey":"user_im_message_receive_group",
+		"occurredAtMs":1784861030151,
+		"subId":"forward-sub",
+		"payload":{
+			"body":{
+				"createTime":"2026-07-24 10:43:49",
+				"sender":"郑御白",
+				"openMessageId":"outer-forward-message",
+				"senderOpenDingTalkId":"outer-sender-open-id",
+				"openConversationId":"target-conversation",
+				"content":"Chat history between two users\nUser A:[Image]\nUser A:Forwarded chat record",
+				"forwardMessages":[
+					{
+						"createTime":"2026-07-24 10:33:31",
+						"sender":"null",
+						"openMessageId":"image-message",
+						"senderOpenDingTalkId":"image-sender-open-id",
+						"openConversationId":"source-conversation",
+						"content":"[图片消息](mediaId=media-1) 注意：如需下载使用dws chat message download-media命令下载"
+					},
+					{
+						"createTime":"2026-07-24 10:34:46",
+						"sender":"null",
+						"openMessageId":"text-message",
+						"openConversationId":"source-conversation",
+						"content":"转发聊天记录"
+					}
+				]
+			},
+			"event_time":1784861029265
+		}
+	}`
+
+	projected, err := ProjectOutput(transport.Event{
+		EventType:   EventInChat,
+		SubscribeID: "outer-sub",
+		Data:        data,
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got := projected.(MessageEventOutput)
+	want := []MessageEventContext{
+		{
+			MessageID:            "image-message",
+			ConversationID:       "source-conversation",
+			Sender:               "null",
+			SenderOpenDingTalkID: "image-sender-open-id",
+			Content:              "[图片消息](mediaId=media-1) 注意：如需下载使用dws chat message download-media命令下载",
+			CreateTime:           "2026-07-24 10:33:31",
+		},
+		{
+			MessageID:      "text-message",
+			ConversationID: "source-conversation",
+			Sender:         "null",
+			Content:        "转发聊天记录",
+			CreateTime:     "2026-07-24 10:34:46",
+		},
+	}
+	if !reflect.DeepEqual(got.ForwardMessages, want) {
+		t.Fatalf("forward_messages = %#v, want %#v", got.ForwardMessages, want)
+	}
+	if got.QuotedMessage != nil {
+		t.Fatalf("quoted_message = %#v, want nil", got.QuotedMessage)
+	}
+
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, wantFragment := range []string{
+		`"forward_messages"`,
+		`"message_id":"image-message"`,
+		`"conversation_id":"source-conversation"`,
+		`mediaId=media-1`,
+	} {
+		if !strings.Contains(string(encoded), wantFragment) {
+			t.Fatalf("flattened merged-forward output missing %q: %s", wantFragment, encoded)
+		}
+	}
+	for _, localizedDetection := range []string{"群聊的聊天记录", "的聊天记录"} {
+		if strings.Contains(got.Content, localizedDetection) {
+			t.Fatalf("test fixture should not require localized title %q for projection", localizedDetection)
+		}
 	}
 }
 

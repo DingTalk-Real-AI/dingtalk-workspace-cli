@@ -219,12 +219,13 @@ dws event consume user_im_message_receive_o2o \
 - `--flatten` 模式的顶层 `jq_root_path` 为 `.`；不传时为兼容存量脚本的 transport envelope，业务 payload 在 `.data | fromjson`。
 - `schema.properties` 是业务字段列表，例如 `content`、`sender`、`conversation_id`、`message_id`、`event_time`。
 - Agent 命令已显式传 `--flatten`，消息接收、已读、撤回和表情回应事件直接读取顶层业务字段；不要对该模式再生成 `fromjson` 或内部 transport 路径。
+- 引用回复读取可选的 `quoted_message`；合并转发读取可选的 `forward_messages` 数组。两者保留内部消息的 `message_id/conversation_id/sender/sender_open_dingtalk_id/content/create_time`；不要通过“聊天记录”等本地化外层文案识别或拆分合并转发。
 - 群成员加入/退出事件读取顶层 `conversation_id`、`operator`、`operator_open_dingtalk_id`、`members`、`event_time`。`operator` 是执行操作的人，`members` 是本次加入或退出的成员数组；成员项读取 `nick` 和 `open_dingtalk_id`。系统操作或成员自行退出时，操作人字段可能为空。
 - 群标题变更和群解散当前只承诺顶层 `type/event_id/timestamp/subscribe_id/payload`。读取 `payload` 时以实际键为准，不猜测群标题、操作者等尚未确认的字段；完整原始协议用 `-f raw` 或 `--debug-raw-events` 排查。
 - 群自动回复使用事件顶层 `conversation_id`；单聊自动回复使用顶层 `sender_open_dingtalk_id`。
 - 已读事件读取顶层 `reader`、`reader_open_dingtalk_id`、`read_time`；撤回事件读取 `recaller`、`recaller_open_dingtalk_id`、`recall_time`。
 - 表情回应事件读取顶层 `operator`、`operator_open_dingtalk_id`、`reaction_name`、`reaction_text`、`operation_type`、`operation_time`。
-- 图片、文件等媒体消息的 `content` 可能是可读描述；需要实际媒体文件时调用 `dws chat message download-media`。
+- 图片、文件等媒体消息的 `content` 可能是可读描述；合并转发媒体的下载定位信息位于对应 `forward_messages[].content`。需要实际媒体文件时调用 `dws chat message download-media`。
 
 ## Topic index
 

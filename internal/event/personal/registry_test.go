@@ -229,7 +229,7 @@ func TestFlattenedSchemaDocumentsUseMessageDTO(t *testing.T) {
 			wantProperties := []string{
 				"type", "event_id", "timestamp", "subscribe_id", "message_id",
 				"conversation_id", "sender", "sender_open_dingtalk_id", "content",
-				"create_time", "event_time",
+				"create_time", "event_time", "quoted_message", "forward_messages",
 			}
 			if len(props) != len(wantProperties) {
 				t.Fatalf("schema.properties = %#v, want exactly %d DTO fields", props, len(wantProperties))
@@ -243,6 +243,22 @@ func TestFlattenedSchemaDocumentsUseMessageDTO(t *testing.T) {
 				if _, ok := props[transportField]; ok {
 					t.Fatalf("flattened schema exposed transport field %q", transportField)
 				}
+			}
+			quoted := props["quoted_message"].(map[string]any)
+			if quoted["type"] != "object" {
+				t.Fatalf("quoted_message schema = %#v, want object", quoted)
+			}
+			quotedProperties, ok := quoted["properties"].(map[string]any)
+			if !ok || len(quotedProperties) != 6 {
+				t.Fatalf("quoted_message properties = %#v, want six context fields", quoted["properties"])
+			}
+			forward := props["forward_messages"].(map[string]any)
+			if forward["type"] != "array" {
+				t.Fatalf("forward_messages schema = %#v, want array", forward)
+			}
+			items, ok := forward["items"].(map[string]any)
+			if !ok || items["type"] != "object" {
+				t.Fatalf("forward_messages items = %#v, want object", forward["items"])
 			}
 		})
 	}
