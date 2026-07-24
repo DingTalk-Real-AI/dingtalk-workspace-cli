@@ -131,7 +131,11 @@ func reportEntryListResolveList(data map[string]any) []any {
 	if data == nil {
 		return []any{}
 	}
-	for _, key := range []string{"result", "data", "list", "items", "reportList", "records"} {
+	// get_received_report_list / get_send_report_list nest the list under
+	// result.report_list (snake_case); "report_list" MUST be probed — the
+	// camelCase "reportList" alone leaves +inbox-list / +outbox-list silently
+	// empty despite the backend returning reports.
+	for _, key := range []string{"result", "data", "list", "items", "report_list", "reportList", "records"} {
 		v, ok := data[key]
 		if !ok {
 			continue
@@ -140,7 +144,7 @@ func reportEntryListResolveList(data map[string]any) []any {
 			return arr
 		}
 		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "reportList", "records", "result", "data"} {
+			for _, ik := range []string{"list", "items", "report_list", "reportList", "records", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
 					return arr
 				}

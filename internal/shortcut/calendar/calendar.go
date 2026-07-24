@@ -494,7 +494,10 @@ func roomGroupsProject(data map[string]any) []map[string]any {
 // roomGroupsContainer locates the group slice across candidate wrapper keys,
 // unwrapping one nested object layer (e.g. result.list) when needed.
 func roomGroupsContainer(data map[string]any) []any {
-	keys := []string{"result", "data", "list", "items", "groups"}
+	// list_meeting_room_groups nests the groups under result.groupList;
+	// "groupList" MUST be probed or +room-groups silently returns empty despite
+	// the backend returning meeting-room groups.
+	keys := []string{"result", "data", "list", "items", "groupList", "groups"}
 	for _, k := range keys {
 		v, ok := data[k]
 		if !ok {

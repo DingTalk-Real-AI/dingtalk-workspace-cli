@@ -113,7 +113,13 @@ func callListProject(data map[string]any) []map[string]any {
 			continue
 		}
 		row := map[string]any{}
-		if v, ok := callListFirst(m, "taskUuid", "task_uuid", "uuid", "id"); ok {
+		// Only real taskUuid spellings map to taskUuid: the downstream
+		// +record-pause/resume/stop commands feed this value straight into the
+		// recording-control tool as the task uuid, so a minutesId (the minutes
+		// document id, a different identifier) must not be substituted here or
+		// record control would fail with a wrong id. The backend list already
+		// returns taskUuid.
+		if v, ok := callListFirst(m, "taskUuid", "task_uuid", "uuid"); ok {
 			row["taskUuid"] = v
 		}
 		if v, ok := callListFirst(m, "title", "name"); ok {
@@ -144,7 +150,10 @@ func callListProject(data map[string]any) []map[string]any {
 // callListResolveList locates the list payload inside the response, tolerating a
 // bare top-level array or nesting under result/data/list/items/records containers.
 func callListResolveList(data map[string]any) []any {
-	for _, key := range []string{"result", "data", "list", "items", "records", "dataList"} {
+	// list_by_keyword_and_time_range nests the minutes under result.itemList;
+	// "itemList" MUST be probed or +list-all/+list-mine/+list-shared silently
+	// return empty despite the backend returning minutes.
+	for _, key := range []string{"result", "data", "list", "items", "itemList", "records", "dataList"} {
 		v, ok := data[key]
 		if !ok {
 			continue
@@ -154,7 +163,7 @@ func callListResolveList(data map[string]any) []any {
 		}
 		// container may itself wrap the list one level deeper
 		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "records", "dataList", "result", "data"} {
+			for _, ik := range []string{"list", "items", "itemList", "records", "dataList", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
 					return arr
 				}

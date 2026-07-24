@@ -137,7 +137,11 @@ func oaFormResolveList(data map[string]any) []any {
 	if data == nil {
 		return []any{}
 	}
-	for _, key := range []string{"result", "data", "list", "items", "processList", "forms"} {
+	// list_user_visible_process nests the forms under result.processCodeList;
+	// probing must include that exact key (both at the top level in case the
+	// envelope is already unwrapped, and one level deeper under result/data) or
+	// the whole list silently projects to empty.
+	for _, key := range []string{"result", "data", "list", "items", "processList", "processCodeList", "forms"} {
 		v, ok := data[key]
 		if !ok {
 			continue
@@ -146,7 +150,7 @@ func oaFormResolveList(data map[string]any) []any {
 			return arr
 		}
 		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "processList", "forms", "result", "data"} {
+			for _, ik := range []string{"list", "items", "processList", "processCodeList", "forms", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
 					return arr
 				}
@@ -285,7 +289,12 @@ func oaInstanceResolveList(data map[string]any) []any {
 	if data == nil {
 		return []any{}
 	}
-	for _, key := range []string{"result", "data", "list", "items", "instances", "tasks"} {
+	// The approval instance tools (list_pending_approvals, get_done_tasks,
+	// get_submitted_instances, get_noticed_instances) all nest the instance list
+	// under result.values; "values" MUST be in the probe set or every one of
+	// +list-pending / +list-executed / +list-submitted / +list-cc silently
+	// projects to empty despite the backend returning records.
+	for _, key := range []string{"result", "data", "list", "items", "values", "instances", "tasks"} {
 		v, ok := data[key]
 		if !ok {
 			continue
@@ -294,7 +303,7 @@ func oaInstanceResolveList(data map[string]any) []any {
 			return arr
 		}
 		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "instances", "tasks", "result", "data"} {
+			for _, ik := range []string{"list", "items", "values", "instances", "tasks", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
 					return arr
 				}

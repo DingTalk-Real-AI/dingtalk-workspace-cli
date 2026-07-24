@@ -455,6 +455,12 @@ func searchClassProject(data map[string]any) []map[string]any {
 		if !ok {
 			continue
 		}
+		// get_class_list wraps each shift's identity/label under shiftVO
+		// (item = {"shiftVO": {id, name, ...}}); unwrap it first, otherwise every
+		// row projects empty and the whole command silently returns nothing.
+		if vo, ok := m["shiftVO"].(map[string]any); ok {
+			m = vo
+		}
 		row := map[string]any{}
 		if v, ok := attendanceFirst(m, "id", "classId", "class_id"); ok {
 			row["classId"] = v
@@ -668,12 +674,20 @@ var SearchAdjustmentRule = shortcut.Shortcut{
 // across candidate keys, so an unknown/empty shape yields an empty list rather
 // than a crash or fabricated data.
 func searchRuleProject(data map[string]any) []map[string]any {
-	raw := attendanceResolveList(data, "ruleList", "rules", "list", "items")
+	// get_overtime_rule nests the list under result.atRuleList and
+	// get_adjustment_rule under result.adjustmentList; both wrap each rule's
+	// identity/label under entityVO. Probe those container keys AND unwrap
+	// entityVO, otherwise +search-overtime-rule / +search-adjustment-rule
+	// silently return empty despite the backend returning rules.
+	raw := attendanceResolveList(data, "atRuleList", "adjustmentList", "ruleList", "rules", "list", "items")
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
+		}
+		if vo, ok := m["entityVO"].(map[string]any); ok {
+			m = vo
 		}
 		row := map[string]any{}
 		if v, ok := attendanceFirst(m, "id", "ruleId", "rule_id", "adjustmentId", "overtimeId"); ok {
