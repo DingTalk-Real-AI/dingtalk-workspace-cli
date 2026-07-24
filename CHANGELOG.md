@@ -22,19 +22,6 @@ automation, and deterministic Markdown test coverage on top of the
 
 - **Deterministic Markdown coverage** — replaces timing-dependent temporary-file deletion tests with synchronized file-stat failures so release admission no longer flakes on scheduler timing.
 
-## [1.0.55-beta.2] - 2026-07-23
-
-This beta validates Wukong capability parity across Chat, Contacts, documents,
-Drive, Markdown, and Todos, together with faster guarded releases and legacy
-authentication migration.
-
-### Added
-
-- **Chat editing and group management** — adds `chat message edit`, conversation-category lookups through `chat category list-by-conv` and `chat category batch-info`, and the confirmed, irreversible `chat group upgrade-to-external` flow.
-- **Contact maintenance commands** — adds `contact user update`, `contact user update-self`, `contact dept create`, `contact dept update`, and `contact account update`, all with guarded write behavior.
-- **Markdown file workflows** — adds the `markdown` product with `fetch`, `create`, `overwrite`, and `patch` commands for Drive-native `.md` files, including explicit routing, dry-run previews, and confirmation for destructive writes.
-- **Todo labels** — adds `todo tag add`, `delete`, `update`, `list`, and `create`.
-
 ### Changed
 
 - **Faster guarded releases** — trusts an independently revalidated, exact `CHANGELOG.md`-only successor of an already admitted `main` commit, runs cloud planning alongside governance, and executes sealed-release automation, compatibility, and multi-profile validation in parallel with artifact compilation. Normal cloud publication no longer requires an unshareable local packaging preflight.
