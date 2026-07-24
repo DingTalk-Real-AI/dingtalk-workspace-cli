@@ -27,9 +27,12 @@ import (
 var busctlReadFull = io.ReadFull
 
 // ReadyFDEnv is the env var the spawned `event _bus` child inspects to find
-// the ready-pipe write end. The parent passes the FD number; child opens it
-// via os.NewFile(fd, "ready") and writes 'R' on success or 'E' on failure.
-// 3 is the first FD slot beyond stdio in cmd.ExtraFiles.
+// the ready-pipe write end. The child opens the value via os.NewFile and
+// writes 'R' on success or 'E' on failure. On Unix the value is always 3 —
+// the first FD slot beyond stdio in cmd.ExtraFiles. On Windows ExtraFiles
+// is not supported (os.StartProcess rejects >3 files with EWINDOWS), so the
+// value is the pipe's handle value, which handle inheritance preserves in
+// the child — see attachReadyPipe in spawn_windows.go.
 const ReadyFDEnv = "DWS_EVENT_BUS_READY_FD"
 
 // ReadyTimeout caps how long Spawn waits for the child to signal readiness.
@@ -115,12 +118,18 @@ func Spawn(cfg SpawnConfig) (pid int, err error) {
 
 	args := append([]string{"event", "_bus", "--client-id", cfg.ClientID}, cfg.ExtraArgs...)
 	cmd := exec.Command(cfg.ExecPath, args...)
-	cmd.Env = append(cfg.Env, ReadyFDEnv+"=3")
-	cmd.ExtraFiles = []*os.File{pw} // child sees fd 3 = pw
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	applyDetach(cmd) // platform-specific Setsid / new process group
+	// Must come after applyDetach: the Windows variant appends to the
+	// SysProcAttr that applyDetach installs.
+	readyRef, err := attachReadyPipe(cmd, pw)
+	if err != nil {
+		_ = pw.Close()
+		return 0, fmt.Errorf("busctl: attach ready pipe: %w", err)
+	}
+	cmd.Env = append(cfg.Env, ReadyFDEnv+"="+readyRef)
 
 	if err := cmd.Start(); err != nil {
 		_ = pw.Close()
@@ -203,7 +212,10 @@ func waitReady(pr *os.File) error {
 // ReadyFDFromEnv returns the inherited ready pipe (or nil if not set). The
 // `event _bus` command handler calls this at startup, passes the returned
 // *os.File to bus.Run as Config.ReadyPipe, and the bus signals readiness
-// through it.
+// through it. The env value is an FD number on Unix and a handle value on
+// Windows; os.NewFile accepts either on its platform. The < 3 guard rejects
+// stdio FDs on Unix and is harmless on Windows, where real handle values
+// are nonzero multiples of 4.
 func ReadyFDFromEnv() *os.File {
 	v := os.Getenv(ReadyFDEnv)
 	if v == "" {

@@ -16,7 +16,10 @@
 package busctl
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 )
 
@@ -29,4 +32,24 @@ func applyDetach(cmd *exec.Cmd) {
 		CreationFlags: createNewProcessGroup,
 		HideWindow:    true,
 	}
+}
+
+// attachReadyPipe hands pw to the child on Windows, where cmd.ExtraFiles is
+// not supported — os.StartProcess fails with EWINDOWS ("fork/exec ...: not
+// supported by windows") on more than the 3 stdio files. Instead the pipe
+// handle is marked inheritable and listed in AdditionalInheritedHandles.
+// Inherited handles keep their value in the child, so ReadyFDEnv carries
+// the handle value itself and the child's os.NewFile reconstructs the
+// write end from it. Must run after applyDetach, which installs
+// SysProcAttr (the nil check below is a safety net, not the normal path).
+func attachReadyPipe(cmd *exec.Cmd, pw *os.File) (string, error) {
+	h := syscall.Handle(pw.Fd())
+	if err := syscall.SetHandleInformation(h, syscall.HANDLE_FLAG_INHERIT, syscall.HANDLE_FLAG_INHERIT); err != nil {
+		return "", fmt.Errorf("mark ready pipe inheritable: %w", err)
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.AdditionalInheritedHandles = append(cmd.SysProcAttr.AdditionalInheritedHandles, h)
+	return strconv.FormatUint(uint64(h), 10), nil
 }
