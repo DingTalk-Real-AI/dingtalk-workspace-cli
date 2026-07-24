@@ -43,6 +43,9 @@ func TestCrossPlatformCoverageTokenPersistencePreflightRemainingEdges(t *testing
 	})
 
 	edition.Override(&edition.Hooks{SaveToken: func(string, []byte) error { return nil }})
+	if err := prepareLoginPersistence(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := preflightTokenPersistence(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
@@ -55,6 +58,9 @@ func TestCrossPlatformCoverageTokenPersistencePreflightRemainingEdges(t *testing
 	authValidateEntries = func(string) error { return nil }
 	profileFail := errors.New("profile load failed")
 	profilesReadFile = func(string) ([]byte, error) { return nil, profileFail }
+	if err := prepareLoginPersistence(t.TempDir()); !errors.Is(err, profileFail) {
+		t.Fatalf("schema preflight profile load error = %v", err)
+	}
 	if err := preflightTokenPersistence(t.TempDir()); !errors.Is(err, profileFail) {
 		t.Fatalf("profile load error = %v", err)
 	}

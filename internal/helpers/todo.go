@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -182,7 +183,11 @@ func newTodoCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return callMCPTool("get_user_todos_in_current_org", toolArgs)
+				toolName := "get_user_todos_in_current_org"
+				if queryAll, _ := cmd.Flags().GetBool("query-all"); queryAll {
+					toolName = "get_user_todos"
+				}
+				return callMCPTool(toolName, toolArgs)
 			}
 			return todoListAutoPage(cmd, pageStr, size)
 		},
@@ -628,6 +633,7 @@ func newTodoCommand() *cobra.Command {
 	todoTaskListCmd.Flags().String("role-types", "", "角色类型: creator/executor/participant")
 	todoTaskListCmd.Flags().String("plan-finish-date-start", "", "截止时间范围查询开始 ISO-8601 (如 2026-03-10T18:00:00+08:00)")
 	todoTaskListCmd.Flags().String("plan-finish-date-end", "", "截止时间范围查询结束 ISO-8601 (如 2026-03-10T18:00:00+08:00)")
+	todoTaskListCmd.Flags().Bool("query-all", false, "查询所有待办，而不是仅查询当前组织待办")
 
 	todoTaskUpdateCmd.Flags().String("task-id", "", "待办任务 ID (必填)")
 	todoTaskUpdateCmd.Flags().String("title", "", "新标题")
@@ -771,6 +777,132 @@ func newTodoCommand() *cobra.Command {
 	todoCommentCmd.AddCommand(todoCommentAddCmd, todoCommentListCmd, todoCommentDeleteCmd)
 	todoCmd.AddCommand(todoCommentCmd)
 
+	// ──────────────────────────────────────────────────────────
+	// dws todo tag — 待办标签
+	// 对应 MCP：tag_todo / delete_todo_tag / update_todo_tag / list_todo_tags / create_todo_tag
+	// ──────────────────────────────────────────────────────────
+	todoTagCmd := &cobra.Command{Use: "tag", Short: "待办标签：打标 / 列表 / 创建 / 更新 / 删除", RunE: groupRunE}
+
+	todoTagAddCmd := &cobra.Command{
+		Use:   "add",
+		Short: "给待办打标",
+		Example: `  dws todo tag add --task-id <taskId> --tag-codes code1,code2
+
+  # 查询 taskId: dws todo task list`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "task-id", "tag-codes"); err != nil {
+				return err
+			}
+			tagCodes := parseStringList(mustGetFlag(cmd, "tag-codes"))
+			if len(tagCodes) == 0 {
+				return apperrors.NewValidation("--tag-codes must contain at least one non-empty code")
+			}
+			return callMCPTool("tag_todo", map[string]any{
+				"TodoTagRequest": map[string]any{
+					"taskId":   mustGetFlag(cmd, "task-id"),
+					"tagCodes": tagCodes,
+				},
+			})
+		},
+	}
+
+	todoTagDeleteCmd := &cobra.Command{
+		Use:   "delete",
+		Short: "删除待办标签",
+		Long:  `删除当前用户的待办标签。该操作不可逆；正式执行必须先获得用户确认并追加 --yes，可先使用 --dry-run 预览。`,
+		Example: `  dws todo tag delete --tag-codes code1,code2 --yes
+  # 查询 tag code: dws todo tag list`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "tag-codes"); err != nil {
+				return err
+			}
+			tagCodes := parseStringList(mustGetFlag(cmd, "tag-codes"))
+			if len(tagCodes) == 0 {
+				return apperrors.NewValidation("--tag-codes must contain at least one non-empty code")
+			}
+			if !deps.Caller.DryRun() && !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"删除待办标签不可逆；获得用户确认后加 --yes 执行，或加 --dry-run 预览",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认要删除的标签编码；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认标签编码", "获得用户确认后使用 --yes 执行"),
+				)
+			}
+			return callMCPTool("delete_todo_tag", map[string]any{
+				"UserTagDeleteRequest": map[string]any{
+					"tagCodes": tagCodes,
+				},
+			})
+		},
+	}
+
+	todoTagUpdateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "更新待办标签",
+		Example: `  dws todo tag update --user-tags '[{"code":"code1","name":"新名称"}]'
+  # 查询 code: dws todo tag list`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "user-tags"); err != nil {
+				return err
+			}
+			var userTags []any
+			if err := json.Unmarshal([]byte(mustGetFlag(cmd, "user-tags")), &userTags); err != nil {
+				return &CLIError{
+					Code:       CodeMissingParam,
+					Message:    fmt.Sprintf("--user-tags 必须是合法的 JSON 数组: %v", err),
+					Suggestion: `示例: --user-tags '[{"code":"code1","name":"新名称"}]'`,
+					Operation:  "todo.tag.update.user-tags",
+				}
+			}
+			if userTags == nil {
+				return apperrors.NewValidation("--user-tags must be a JSON array")
+			}
+			return callMCPTool("update_todo_tag", map[string]any{
+				"UserTagAddRequest": map[string]any{
+					"userTags": userTags,
+				},
+			})
+		},
+	}
+
+	todoTagListCmd := &cobra.Command{
+		Use:     "list",
+		Short:   "查询待办标签列表",
+		Example: `  dws todo tag list`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return callMCPTool("list_todo_tags", map[string]any{})
+		},
+	}
+
+	todoTagCreateCmd := &cobra.Command{
+		Use:     "create",
+		Short:   "创建待办标签",
+		Example: `  dws todo tag create --name "标签名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "name"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(mustGetFlag(cmd, "name"))
+			if name == "" {
+				return apperrors.NewValidation("--name must not be blank")
+			}
+			return callMCPTool("create_todo_tag", map[string]any{
+				"UserTagAddRequest": map[string]any{
+					"userTags": []map[string]any{{"name": name}},
+				},
+			})
+		},
+	}
+
+	todoTagAddCmd.Flags().String("task-id", "", "待办任务 ID (必填)")
+	todoTagAddCmd.Flags().String("tag-codes", "", "标签编码列表，逗号分隔 (必填)")
+	todoTagDeleteCmd.Flags().String("tag-codes", "", "要删除的标签编码列表，逗号分隔 (必填)")
+	todoTagUpdateCmd.Flags().String("user-tags", "", "标签列表 JSON 数组 (必填)")
+	todoTagCreateCmd.Flags().String("name", "", "标签名称 (必填)")
+
+	todoTagCmd.AddCommand(todoTagAddCmd, todoTagDeleteCmd, todoTagUpdateCmd, todoTagListCmd, todoTagCreateCmd)
+	todoCmd.AddCommand(todoTagCmd)
+
 	todoCmd.AddCommand(
 		hintSubCmd("create", "use: dws todo task create"),
 		hintSubCmd("list", "use: dws todo task list"),
@@ -800,11 +932,15 @@ func rejectUnsupportedTodoReminderFlags(cmd *cobra.Command) error {
 // todoListAutoPage 当 size > 20 时自动分页请求并合并结果。pageStr 为起始页码，wantSize 为期望条数。
 func todoListAutoPage(cmd *cobra.Command, pageStr string, wantSize int) error {
 	ctx := context.Background()
+	toolName := "get_user_todos_in_current_org"
+	if queryAll, _ := cmd.Flags().GetBool("query-all"); queryAll {
+		toolName = "get_user_todos"
+	}
 	if deps.Caller.DryRun() {
 		numPages := (wantSize + todoListPageSizeMax - 1) / todoListPageSizeMax
 		bold := color.New(color.FgYellow, color.Bold)
 		bold.Println("[DRY-RUN] 自动分页待办列表:")
-		deps.Out.PrintKeyValue("Tool", "get_user_todos_in_current_org")
+		deps.Out.PrintKeyValue("Tool", toolName)
 		deps.Out.PrintKeyValue("预计请求次数", fmt.Sprintf("%d (每页最多 %d 条)", numPages, todoListPageSizeMax))
 		return nil
 	}
@@ -822,7 +958,7 @@ func todoListAutoPage(cmd *cobra.Command, pageStr string, wantSize int) error {
 		if err != nil {
 			return err
 		}
-		text, err := callMCPToolReturnText(ctx, "get_user_todos_in_current_org", toolArgs)
+		text, err := callMCPToolReturnText(ctx, toolName, toolArgs)
 		if err != nil {
 			return err
 		}

@@ -107,6 +107,45 @@ func TestRuntimeRunnerDeduplicatesByResolvedIdentityInSameCorp(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRuntimeRunnerDeduplicatesReservedAndOrganizationAliasesForBlankProfile(t *testing.T) {
+	exact := authLogoutTestToken("corp_blank_alias")
+	exact.UserID = "identity_exact_alias"
+	configDir := setupAuthLogoutProfiles(t, exact)
+	blank := authLogoutTestToken("corp_blank_alias")
+	blank.AccessToken = "access-unresolved-alias"
+	blank.RefreshToken = "refresh-unresolved-alias"
+	blank.UserID = ""
+	blank.UserName = ""
+	if err := authpkg.SaveTokenData(configDir, blank); err != nil {
+		t.Fatalf("SaveTokenData(blank) error = %v", err)
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	var reserved string
+	for _, profile := range cfg.Profiles {
+		if profile.CorpID == blank.CorpID && profile.UserID == "" {
+			reserved = authpkg.ProfileSelectionSelector(profile, cfg)
+			break
+		}
+	}
+	if reserved == "" || reserved == blank.CorpID {
+		t.Fatalf("blank selector = %q, want reserved selector", reserved)
+	}
+
+	selections, multi, err := resolveMultiProfileSelections(configDir, reserved+","+blank.CorpID)
+	if err != nil {
+		t.Fatalf("resolveMultiProfileSelections() error = %v", err)
+	}
+	if !multi || len(selections) != 1 {
+		t.Fatalf("blank aliases = multi %v selections %#v, want one identity", multi, selections)
+	}
+	if selections[0].Selector != reserved || selections[0].Profile.UserID != "" {
+		t.Fatalf("blank selection = %#v, want first reserved alias preserved", selections[0])
+	}
+}
+
 func TestRuntimeRunnerKeepsSingleProfileBehavior(t *testing.T) {
 	setupAuthLogoutProfiles(t, authLogoutTestToken("corp_a"), authLogoutTestToken("corp_b"))
 	authpkg.SetRuntimeProfile("corp_a")

@@ -285,6 +285,574 @@
         "用户明确要求创建企业账号、专属账号或企业登录账号，并已提供员工名称和登录号"
       ]
     },
+    "contact account update": {
+      "agent_summary": "更新企业专属账号的组织信息或个人资料",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "创建新企业专属账号应使用 contact account create；修改普通员工组织信息应使用 contact user update"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact account update --user-id user001 --nick \"新昵称\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "更新企业专属账号的组织信息或个人资料",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": "更新企业专属账号的组织信息或个人资料",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "创建新企业专属账号应使用 contact account create；修改普通员工组织信息应使用 contact user update"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "创建新企业专属账号应使用 contact account create；修改普通员工组织信息应使用 contact user update"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact account update --user-id user001 --nick \"新昵称\""
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact account update --user-id user001 --nick \"新昵称\""
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account update flags to contact/exclusive_account_user_update, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account update flags to contact/exclusive_account_user_update, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one enterprise-account user ID plus at least one profile or organization update field, confirms, then invokes exclusive_account_user_update."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求修改已有企业专属账号的姓名、部门、主管、昵称或头像"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求修改已有企业专属账号的姓名、部门、主管、昵称或头像"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅企业账号更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account update flags to contact/exclusive_account_user_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.exclusive_account_user_update",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws contact account update",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.exclusive_account_user_update#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求修改已有企业专属账号的姓名、部门、主管、昵称或头像"
+      ]
+    },
+    "contact dept create": {
+      "agent_summary": "在当前企业的根部门或指定父部门下创建部门",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "修改已有部门名称或父级应使用 contact dept update；仅查找部门应使用 contact dept search"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact dept create --name \"新产品部\" --create-dept-group=true"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "在当前企业的根部门或指定父部门下创建部门",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": "在当前企业的根部门或指定父部门下创建部门",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "修改已有部门名称或父级应使用 contact dept update；仅查找部门应使用 contact dept search"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "修改已有部门名称或父级应使用 contact dept update；仅查找部门应使用 contact dept search"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact dept create --name \"新产品部\" --create-dept-group=true"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact dept create --name \"新产品部\" --create-dept-group=true"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "non_idempotent",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": "non_idempotent",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps department creation flags to contact/department_create, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps department creation flags to contact/department_create, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-name spelling and an explicit boolean group choice, optionally parses a parent department ID, confirms, then invokes department_create."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求新建部门，且已确认部门名称、父部门及是否同步创建部门群"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求新建部门，且已确认部门名称、父部门及是否同步创建部门群"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅创建部门的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps department creation flags to contact/department_create, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.department_create",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws contact dept create",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.department_create#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求新建部门，且已确认部门名称、父部门及是否同步创建部门群"
+      ]
+    },
     "contact dept get-info": {
       "agent_summary": "获取指定部门详情",
       "agent_summary_source": "dws-agent-selection/contact",
@@ -1303,6 +1871,290 @@
       ],
       "use_when": [
         "只知道部门名称或关键词，需要定位 deptId 时"
+      ]
+    },
+    "contact dept update": {
+      "agent_summary": "更新指定部门的名称，并可调整父部门",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "创建新部门应使用 contact dept create；仅查看部门信息应使用 contact dept get-info"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact dept update --dept 12345 --name \"研发中心\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "更新指定部门的名称，并可调整父部门",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": "更新指定部门的名称，并可调整父部门",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "创建新部门应使用 contact dept create；仅查看部门信息应使用 contact dept get-info"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "创建新部门应使用 contact dept create；仅查看部门信息应使用 contact dept get-info"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact dept update --dept 12345 --name \"研发中心\""
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact dept update --dept 12345 --name \"研发中心\""
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps department update flags to contact/department_update, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps department update flags to contact/department_update, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one department-ID spelling and one department-name spelling, optionally parses a parent ID, confirms, then invokes department_update."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求修改已有部门名称或迁移父部门，且已确认目标 deptId"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求修改已有部门名称或迁移父部门，且已确认目标 deptId"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅部门更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps department update flags to contact/department_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.department_update",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws contact dept update",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.department_update#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求修改已有部门名称或迁移父部门，且已确认目标 deptId"
       ]
     },
     "contact org create": {
@@ -3916,6 +4768,574 @@
       ],
       "use_when": [
         "已知手机号，需要精确搜索用户时"
+      ]
+    },
+    "contact user update": {
+      "agent_summary": "修改指定员工的企业内姓名、所属部门或直属主管",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "修改当前用户自己的昵称或头像应使用 contact user update-self；创建企业专属账号应使用 contact account create"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact user update --user-id user001 --org-user-name \"张三三\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "修改指定员工的企业内姓名、所属部门或直属主管",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": "修改指定员工的企业内姓名、所属部门或直属主管",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "修改当前用户自己的昵称或头像应使用 contact user update-self；创建企业专属账号应使用 contact account create"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "修改当前用户自己的昵称或头像应使用 contact user update-self；创建企业专属账号应使用 contact account create"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact user update --user-id user001 --org-user-name \"张三三\""
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact user update --user-id user001 --org-user-name \"张三三\""
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps employee update flags to contact/employee_update, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps employee update flags to contact/employee_update, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires one employee-ID spelling plus at least one update field, decodes optional department JSON, confirms, then invokes employee_update."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求更新已有员工的组织信息，且已确认目标 userId 和至少一个修改项"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求更新已有员工的组织信息，且已确认目标 userId 和至少一个修改项"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅员工组织信息更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps employee update flags to contact/employee_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.employee_update",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws contact user update",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.employee_update#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求更新已有员工的组织信息，且已确认目标 userId 和至少一个修改项"
+      ]
+    },
+    "contact user update-self": {
+      "agent_summary": "更新当前登录用户自己的昵称或头像",
+      "agent_summary_source": "dws-agent-selection/contact",
+      "availability": "available",
+      "avoid_when": [
+        "修改其他员工的组织信息应使用 contact user update；修改企业专属账号应使用 contact account update"
+      ],
+      "confirmation": "user_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws contact user update-self --nick \"新昵称\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "更新当前登录用户自己的昵称或头像",
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": "更新当前登录用户自己的昵称或头像",
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "修改其他员工的组织信息应使用 contact user update；修改企业专属账号应使用 contact account update"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "修改其他员工的组织信息应使用 contact user update；修改企业专属账号应使用 contact account update"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws contact user update-self --nick \"新昵称\""
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws contact user update-self --nick \"新昵称\""
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI maps self-profile update flags to contact/self_user_profile_update, which is absent from the pinned MCP metadata snapshot.",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI maps self-profile update flags to contact/self_user_profile_update, which is absent from the pinned MCP metadata snapshot.",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user.",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "The reviewed handler requires at least one of nickname or avatar file ID, confirms, then invokes self_user_profile_update for the current user."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户明确要求修改自己的 profile 昵称或头像 fileId"
+          ],
+          "source": "internal/cli/schema_hints/selection/contact.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确要求修改自己的 profile 昵称或头像 fileId"
+              ],
+              "source": "internal/cli/schema_hints/selection/contact.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据新增 Cobra leaf、确认门禁和 Wukong 对齐实现审阅当前用户资料更新的选择边界与无 --yes 合约示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI maps self-profile update flags to contact/self_user_profile_update, which is absent from the pinned MCP metadata snapshot.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=contact.self_user_profile_update",
+        "Wukong-parity:3306c3307",
+        "cobra-help:dws contact user update-self",
+        "internal/cli/schema_hints/metadata/contact.json",
+        "internal/cli/schema_hints/selection/contact.json",
+        "live-dws-schema:contact.self_user_profile_update#FAILED",
+        "skills/mono/references/products/contact.md"
+      ],
+      "use_when": [
+        "用户明确要求修改自己的 profile 昵称或头像 fileId"
       ]
     }
   }

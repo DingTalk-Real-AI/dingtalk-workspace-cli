@@ -1,9 +1,10 @@
 #!/bin/sh
 set -eu
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck disable=SC1091 # Resolved relative to this script at runtime.
 . "$SCRIPT_DIR/release-lib.sh"
-ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
+ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
 
 VERSION="${1:-}"
 REMOTE=""
@@ -247,7 +248,7 @@ printf '  commit:     %s\n' "$commit"
 printf '  failed run: https://github.com/%s/actions/runs/%s/attempts/%s\n' \
   "$EXPECTED_REPOSITORY" "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT"
 [ -t 0 ] || { printf '%s\n' 'interactive recovery confirmation is required' >&2; exit 1; }
-printf 'Type %s to request protected recovery: ' "$VERSION"
+printf 'Type %s to request machine-verified recovery: ' "$VERSION"
 IFS= read -r confirmation
 [ "$confirmation" = "$VERSION" ] || { printf '%s\n' 'release recovery cancelled' >&2; exit 1; }
 
@@ -284,8 +285,8 @@ while :; do
   sleep 2
 done
 
-printf 'Protected recovery run: https://github.com/%s/actions/runs/%s\n' "$EXPECTED_REPOSITORY" "$run_id"
-printf '%s\n' 'Approve the release-recovery environment when prompted; this command will follow the run.'
+printf 'Machine-verified recovery run: https://github.com/%s/actions/runs/%s\n' "$EXPECTED_REPOSITORY" "$run_id"
+printf '%s\n' 'The workflow will verify the exact tag, failed run, requester, and sealed metadata before rebuilding.'
 if ! gh run watch "$run_id" --repo "$EXPECTED_REPOSITORY" --exit-status; then
   gh run view "$run_id" --repo "$EXPECTED_REPOSITORY" --log-failed >&2 || true
   exit 1

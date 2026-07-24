@@ -99,6 +99,7 @@ var cmdToProduct = map[string]string{
 	"sheet":      "sheet",
 	"wiki":       "wiki",
 	"aisearch":   "aisearch",
+	"hrbrain":    "hrbrain",
 	"yida":       "yida",
 	// vendor extension command routing (kept here for resolveProductID)
 	"unified-toolkit": "unified-toolkit",

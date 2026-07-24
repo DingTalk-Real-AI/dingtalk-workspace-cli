@@ -250,6 +250,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	editionName := editionNameOrDefault()
 	workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
 	ipcEndpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+	spawnProfileSelector := personalBusProfileSelector(configDir, identity)
 
 	routes, err := consume.ParseRoutes(opts.Common.RoutesRaw)
 	if err != nil {
@@ -265,7 +266,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 			WorkDir:        workDir,
 			IPCEndpoint:    ipcEndpoint,
 			ClientID:       identity.ClientID,
-			SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, personalEventStreamTicketURL(opts.StreamTicketURL, configDir)),
+			SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, personalEventStreamTicketURL(opts.StreamTicketURL, configDir), spawnProfileSelector),
 			Compact:        opts.Common.Compact,
 			MaxEvents:      opts.Common.MaxEvents,
 			Duration:       opts.Common.Duration,
@@ -322,7 +323,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		WorkDir:          workDir,
 		IPCEndpoint:      ipcEndpoint,
 		ClientID:         identity.ClientID,
-		SpawnExtraArgs:   personalBusSpawnArgs(identity, opts.StreamTicketMode, opts.StreamTicketURL),
+		SpawnExtraArgs:   personalBusSpawnArgs(identity, opts.StreamTicketMode, opts.StreamTicketURL, spawnProfileSelector),
 		Compact:          opts.Common.Compact,
 		MaxEvents:        opts.Common.MaxEvents,
 		Duration:         opts.Common.Duration,
@@ -1161,7 +1162,44 @@ func newPersonalStreamSource(ctx context.Context, opts personalStreamSourceOptio
 	})
 }
 
-func personalBusSpawnArgs(identity personal.Identity, ticketMode, ticketURL string) []string {
+func personalBusProfileSelector(configDir string, identity personal.Identity) string {
+	// The parent already resolved and loaded this selector. Preserve it before
+	// consulting identity metadata: personal event discovery can fill an empty
+	// token userId from runtime defaults, and that inferred value must not turn a
+	// historical unresolved account into a different exact same-corp account in
+	// the detached child.
+	if selector := strings.TrimSpace(authpkg.RuntimeProfile()); selector != "" {
+		return selector
+	}
+	if cfg, err := authpkg.LoadProfiles(configDir); err == nil && cfg != nil {
+		// With no explicit process-local override, LoadTokenData selected the
+		// persisted current profile. Prefer that selection over the enriched
+		// identity: $currentUserId may describe an exact same-corp account even
+		// though the token came from the historical unresolved profile.
+		currentSelector := strings.TrimSpace(cfg.CurrentProfile)
+		for i := range cfg.Profiles {
+			profile := cfg.Profiles[i]
+			selector := authpkg.ProfileSelectionSelector(profile, cfg)
+			if selector == currentSelector &&
+				(strings.TrimSpace(identity.CorpID) == "" || strings.TrimSpace(profile.CorpID) == strings.TrimSpace(identity.CorpID)) {
+				return selector
+			}
+		}
+		for i := range cfg.Profiles {
+			profile := cfg.Profiles[i]
+			if strings.TrimSpace(profile.CorpID) == strings.TrimSpace(identity.CorpID) &&
+				strings.TrimSpace(profile.UserID) == strings.TrimSpace(identity.UserID) {
+				return authpkg.ProfileSelectionSelector(profile, cfg)
+			}
+		}
+	}
+	return authpkg.ProfileSelector(authpkg.Profile{
+		CorpID: identity.CorpID,
+		UserID: identity.UserID,
+	})
+}
+
+func personalBusSpawnArgs(identity personal.Identity, ticketMode, ticketURL string, profileSelectors ...string) []string {
 	args := []string{
 		"--source-kind", string(dwsevent.SourceKindPersonalStream),
 		"--stream-source-id", identity.SourceID,
@@ -1170,10 +1208,11 @@ func personalBusSpawnArgs(identity personal.Identity, ticketMode, ticketURL stri
 	// credentials as the parent, including when one organization has multiple
 	// logged-in users.
 	if cid := strings.TrimSpace(identity.CorpID); cid != "" {
-		args = append(args, "--profile", authpkg.ProfileSelector(authpkg.Profile{
-			CorpID: identity.CorpID,
-			UserID: identity.UserID,
-		}))
+		profileSelector := authpkg.ProfileSelector(authpkg.Profile{CorpID: identity.CorpID, UserID: identity.UserID})
+		if len(profileSelectors) > 0 && strings.TrimSpace(profileSelectors[0]) != "" {
+			profileSelector = strings.TrimSpace(profileSelectors[0])
+		}
+		args = append(args, "--profile", profileSelector)
 	}
 	if strings.TrimSpace(ticketMode) != "" {
 		args = append(args, "--stream-ticket-mode", ticketMode)

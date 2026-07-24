@@ -138,11 +138,177 @@ func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
 	return &data, nil
 }
 
-// preflightTokenPersistence verifies that every registered token slot can be
-// read before an OAuth login or exchange can target any profile.
-// A missing slot is safe (first login or a legacy fallback); any other error
-// stops the remote operation when existing ciphertext is already known to be
-// unreadable and therefore unsafe to update.
+// prepareLoginPersistence rejects profile registries written by a newer client
+// and protects the legacy global mirror before a new authorization flow
+// performs remote work. Version-1 registries keep using the existing full
+// migration in saveTokenDataLocked before any compatibility mirror is
+// overwritten.
+//
+// For v2/v3, only the organization referenced by the readable global mirror is
+// inspected. A uniquely matching half-migrated profile is repaired from that
+// mirror under the profiles lock. Missing or damaged slots in unrelated
+// organizations and orphan inventory are deliberately not scanned.
+func prepareLoginPersistence(configDir string) error {
+	if h := edition.Get(); h.SaveToken != nil {
+		return nil
+	}
+	return withProfilesLock(configDir, func() error {
+		cfg, err := profilesLoad(configDir)
+		if err != nil {
+			return fmt.Errorf("load token profiles: %w", err)
+		}
+		if err := ensureProfilesWritable(cfg); err != nil {
+			return err
+		}
+		return repairHalfMigratedGlobalTokenLocked(cfg)
+	})
+}
+
+// repairHalfMigratedGlobalTokenLocked preserves the only readable copy left by
+// an interrupted v1.0.53 migration. The caller must hold the profiles lock.
+func repairHalfMigratedGlobalTokenLocked(cfg *ProfilesConfig) error {
+	if cfg == nil || cfg.Version < profilesVersion || len(cfg.Profiles) == 0 {
+		return nil
+	}
+
+	global, err := profilesLoadLegacy()
+	if errors.Is(err, ErrTokenDataNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf(
+			"legacy token slot %q is unreadable; refusing to overwrite a potentially unique old login: %w",
+			keychain.AccountToken,
+			err,
+		)
+	}
+	if global == nil {
+		return nil
+	}
+	corpID := strings.TrimSpace(global.CorpID)
+	if corpID == "" {
+		return nil
+	}
+	profiles := profilesForCorpID(cfg, corpID)
+	if len(profiles) == 0 {
+		// A readable global token for an unregistered organization is an orphan,
+		// not a profile credential that this registry still promises to retain.
+		return nil
+	}
+
+	orgToken, orgErr := profilesLoadCorp(corpID)
+	allCanonical := true
+	for _, profile := range profiles {
+		if !loginProfileHasUsableCanonicalToken(profile, orgToken, orgErr) {
+			allCanonical = false
+			break
+		}
+	}
+	if allCanonical {
+		return nil
+	}
+
+	profile := uniqueV2GlobalRepairProfile(cfg, corpID)
+	if profile == nil {
+		return fmt.Errorf(
+			"legacy token slot %q may be the only recoverable login for one of %d accounts in organization %q; refusing to overwrite it until each account has a usable identity slot",
+			keychain.AccountToken,
+			len(profiles),
+			corpID,
+		)
+	}
+	userID := strings.TrimSpace(profile.UserID)
+	if userID != "" &&
+		orgErr == nil &&
+		loginTokenHasCredentialMaterial(orgToken) &&
+		legacyTokenMatchesV2RepairProfile(orgToken, profile) {
+		if err := repairLoginIdentityToken(profile, orgToken); err != nil {
+			return err
+		}
+		return nil
+	}
+	if !legacyTokenMatchesV2RepairProfile(global, profile) {
+		return fmt.Errorf(
+			"legacy token slot %q does not safely match the only profile in organization %q; refusing to overwrite a potentially unique old login",
+			keychain.AccountToken,
+			corpID,
+		)
+	}
+	if !loginTokenHasCredentialMaterial(global) {
+		return fmt.Errorf(
+			"legacy token slot %q has no recoverable credential material for organization %q; refusing to overwrite a potentially unique old login",
+			keychain.AccountToken,
+			corpID,
+		)
+	}
+
+	// The matching global token is the only recoverable copy. Overwrite a
+	// damaged organization slot as well as filling a missing one.
+	if err := profilesSaveCorp(corpID, global); err != nil {
+		return fmt.Errorf("repair organization token slot %q: %w", TokenAccountForCorpID(corpID), err)
+	}
+	if userID == "" {
+		return nil
+	}
+	return repairLoginIdentityToken(profile, global)
+}
+
+func loginProfileHasUsableCanonicalToken(
+	profile *Profile,
+	orgToken *TokenData,
+	orgErr error,
+) bool {
+	if profile == nil {
+		return false
+	}
+	corpID := strings.TrimSpace(profile.CorpID)
+	userID := strings.TrimSpace(profile.UserID)
+	if userID == "" {
+		return orgErr == nil &&
+			loginTokenHasCredentialMaterial(orgToken) &&
+			strings.TrimSpace(orgToken.CorpID) == corpID &&
+			strings.TrimSpace(orgToken.UserID) == ""
+	}
+	identity, err := profilesLoadIdentity(corpID, userID)
+	if err == nil &&
+		loginTokenHasCredentialMaterial(identity) &&
+		strings.TrimSpace(identity.CorpID) == corpID &&
+		strings.TrimSpace(identity.UserID) == userID {
+		return true
+	}
+	return false
+}
+
+func loginTokenHasCredentialMaterial(data *TokenData) bool {
+	return data != nil &&
+		(strings.TrimSpace(data.AccessToken) != "" ||
+			strings.TrimSpace(data.RefreshToken) != "" ||
+			strings.TrimSpace(data.PersistentCode) != "")
+}
+
+func repairLoginIdentityToken(profile *Profile, source *TokenData) error {
+	corpID := strings.TrimSpace(profile.CorpID)
+	userID := strings.TrimSpace(profile.UserID)
+	identityToken := source
+	if strings.TrimSpace(source.UserID) == "" {
+		enriched := *source
+		enriched.UserID = userID
+		if strings.TrimSpace(enriched.UserName) == "" {
+			enriched.UserName = strings.TrimSpace(profile.UserName)
+		}
+		identityToken = &enriched
+	}
+	if err := profilesSaveIdentity(corpID, userID, identityToken); err != nil {
+		return fmt.Errorf("repair identity token slot %q: %w", TokenAccountForIdentity(corpID, userID), err)
+	}
+	return nil
+}
+
+// preflightTokenPersistence verifies every persisted token slot, including
+// unregistered/orphan ciphertext. Keep this full-inventory validator for
+// migration, export and explicit storage diagnostics; login must use the
+// schema-only and target-only preflights instead so an unrelated damaged
+// account cannot block reauthorization.
 func preflightTokenPersistence(configDir string) error {
 	if h := edition.Get(); h.SaveToken != nil {
 		return nil
@@ -191,10 +357,11 @@ func preflightTokenPersistence(configDir string) error {
 	return nil
 }
 
-// preflightTokenRefreshPersistence checks only the slots a refresh can write.
-// An unrelated broken profile must not prevent the current profile from using
-// its still-valid credentials.
-func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
+// preflightTokenWritePersistence checks only the slots SaveTokenData can write
+// for data under the current runtime selector. It is shared by login and
+// refresh so both paths stay aligned with the same identity/org/global mirror
+// isolation rules.
+func preflightTokenWritePersistence(configDir string, data *TokenData) error {
 	if h := edition.Get(); h.SaveToken != nil {
 		return nil
 	}
@@ -206,31 +373,44 @@ func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
 		return err
 	}
 
-	if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
-		return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
+	plan := planTokenPersistenceWrites(cfg, data, RuntimeProfile())
+	if err := validateTokenPersistenceWritePlan(cfg, data, plan); err != nil {
+		return err
 	}
-	if data == nil || strings.TrimSpace(data.CorpID) == "" {
-		return nil
-	}
-	corpID := strings.TrimSpace(data.CorpID)
-	userID := strings.TrimSpace(data.UserID)
-	if userID != "" {
-		if _, err := LoadTokenDataKeychainForIdentity(corpID, userID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
-			return fmt.Errorf("identity token slot %q is unreadable: %w", TokenAccountForIdentity(corpID, userID), err)
+	if plan.WriteGlobal {
+		if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
 		}
 	}
-	checkOrganizationMirror := true
-	if _, _, exact := ParseIdentitySelector(RuntimeProfile()); exact {
-		checkOrganizationMirror =
-			exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]) ==
-				profileSelector(corpID, userID)
+	if plan.CorpID == "" {
+		return nil
 	}
-	if checkOrganizationMirror {
-		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
-			return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)
+	if plan.WriteIdentity {
+		if _, err := LoadTokenDataKeychainForIdentity(plan.CorpID, plan.UserID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			return fmt.Errorf(
+				"identity token slot %q is unreadable: %w",
+				TokenAccountForIdentity(plan.CorpID, plan.UserID),
+				err,
+			)
+		}
+	}
+	if plan.WriteOrganization {
+		if _, err := LoadTokenDataKeychainForCorpID(plan.CorpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			return fmt.Errorf(
+				"profile token slot %q is unreadable: %w",
+				TokenAccountForCorpID(plan.CorpID),
+				err,
+			)
 		}
 	}
 	return nil
+}
+
+// preflightTokenRefreshPersistence checks only the slots a refresh can write.
+// An unrelated broken profile must not prevent the current profile from using
+// its still-valid credentials.
+func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
+	return preflightTokenWritePersistence(configDir, data)
 }
 
 // DeleteTokenDataKeychain removes TokenData from the platform keychain.

@@ -16,6 +16,7 @@ func CmdToProduct() map[string]string {
 		"ding":       "ding",
 		"doc":        "doc",
 		"drive":      "drive",
+		"hrbrain":    "hrbrain",
 		"live":       "live",
 		"mail":       "mail",
 		"minutes":    "minutes",

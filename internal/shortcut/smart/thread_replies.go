@@ -78,11 +78,7 @@ var ThreadReplies = shortcut.Shortcut{
 		items := threadReplyItems(data)
 		results := make([]map[string]any, 0, len(items))
 		for _, m := range items {
-			results = append(results, map[string]any{
-				"sender":     threadReplySender(m),
-				"text":       threadReplyText(m),
-				"createTime": threadReplyCreateTime(m),
-			})
+			results = append(results, projectChatMessage(m))
 		}
 
 		return rt.Output(map[string]any{
@@ -119,55 +115,6 @@ func threadReplyItems(data map[string]any) []map[string]any {
 					return out
 				}
 			}
-		}
-	}
-	return nil
-}
-
-// threadReplySender reads a reply's speaker display name, tolerating common
-// sender-name keys.
-func threadReplySender(m map[string]any) any {
-	for _, key := range []string{"senderName", "senderNick", "nick", "senderStaffName", "userName", "name", "senderId", "senderStaffId"} {
-		if v, ok := m[key]; ok && v != nil {
-			if s, ok := v.(string); ok && s == "" {
-				continue
-			}
-			return v
-		}
-	}
-	return nil
-}
-
-// threadReplyText reads a reply's textual content, tolerating common text keys
-// and one level of nesting (e.g. {"text":{"content":"..."}}).
-func threadReplyText(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body"} {
-		v, ok := m[key]
-		if !ok || v == nil {
-			continue
-		}
-		switch t := v.(type) {
-		case string:
-			if t != "" {
-				return t
-			}
-		case map[string]any:
-			for _, inner := range []string{"content", "text", "value"} {
-				if s, ok := t[inner].(string); ok && s != "" {
-					return s
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// threadReplyCreateTime reads a reply's create/send time, returning the raw
-// value under whichever candidate key is present.
-func threadReplyCreateTime(m map[string]any) any {
-	for _, key := range []string{"createTime", "sendTime", "gmtCreate", "createAt", "timestamp", "time"} {
-		if v, ok := m[key]; ok && v != nil {
-			return v
 		}
 	}
 	return nil

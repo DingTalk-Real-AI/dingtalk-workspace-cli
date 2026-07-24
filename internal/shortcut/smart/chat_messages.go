@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 // ChatMessages: fetch the message list of one conversation (group OR single
@@ -111,11 +112,7 @@ var ChatMessages = shortcut.Shortcut{
 		items := chatMessageItems(data)
 		results := make([]map[string]any, 0, len(items))
 		for _, m := range items {
-			results = append(results, map[string]any{
-				"sender":     chatMessageSender(m),
-				"text":       chatMessageText(m),
-				"createTime": chatMessageCreateTime(m),
-			})
+			results = append(results, projectChatMessage(m))
 		}
 
 		return rt.Output(map[string]any{
@@ -156,53 +153,20 @@ func chatMessageItems(data map[string]any) []map[string]any {
 	return nil
 }
 
-// chatMessageSender reads a message's speaker display name, tolerating common
-// sender-name keys.
-func chatMessageSender(m map[string]any) any {
-	for _, key := range []string{"senderName", "senderNick", "nick", "senderStaffName", "userName", "name", "senderId", "senderStaffId"} {
-		if v, ok := m[key]; ok && v != nil {
-			if s, ok := v.(string); ok && s == "" {
-				continue
-			}
-			return v
-		}
+// projectChatMessage reshapes one raw message into the clean
+// {sender, text, createTime} projection, rendering card/auto-reply JSON and
+// marking encrypted messages via chatmsg, and recursively expanding forwarded
+// chat records under "forwarded".
+func projectChatMessage(m map[string]any) map[string]any {
+	row := map[string]any{
+		"sender":     chatmsg.Sender(m),
+		"text":       chatmsg.Text(m),
+		"createTime": chatmsg.CreateTime(m),
 	}
-	return nil
-}
-
-// chatMessageText reads a message's textual content, tolerating common text
-// keys and one level of nesting (e.g. {"content":{"text":"..."}}).
-func chatMessageText(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body"} {
-		v, ok := m[key]
-		if !ok || v == nil {
-			continue
-		}
-		switch t := v.(type) {
-		case string:
-			if t != "" {
-				return t
-			}
-		case map[string]any:
-			for _, inner := range []string{"text", "content", "value"} {
-				if s, ok := t[inner].(string); ok && s != "" {
-					return s
-				}
-			}
-		}
+	if forwarded := chatmsg.Forwarded(m, projectChatMessage); len(forwarded) > 0 {
+		row["forwarded"] = forwarded
 	}
-	return nil
-}
-
-// chatMessageCreateTime reads a message's create/send time, returning the raw
-// value under whichever candidate key is present.
-func chatMessageCreateTime(m map[string]any) any {
-	for _, key := range []string{"createTime", "sendTime", "gmtCreate", "createAt", "timestamp", "time"} {
-		if v, ok := m[key]; ok && v != nil {
-			return v
-		}
-	}
-	return nil
+	return row
 }
 
 func init() {

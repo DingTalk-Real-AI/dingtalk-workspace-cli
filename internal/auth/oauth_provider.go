@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -117,10 +118,13 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	if !force {
 		data, err := oauthLoadToken(p.configDir)
 		if err != nil && !errors.Is(err, ErrTokenDataNotFound) && !os.IsNotExist(err) {
-			if preflightErr := preflightTokenPersistence(p.configDir); preflightErr != nil {
-				return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), preflightErr)
+			// A damaged selected slot must not make browser reauthorization
+			// impossible. The target identity is unknown until token exchange, so
+			// continue into the full flow and let the target-only preflight reject
+			// an unsafe overwrite after identity enrichment.
+			if p.logger != nil {
+				p.logger.Warn(i18n.T("读取现有登录态失败，将尝试扫码登录"), "error", err)
 			}
-			return nil, fmt.Errorf("load existing access token: %w", err)
 		}
 		if err == nil {
 			// Case 1: access_token still valid — no action needed.
@@ -150,7 +154,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			}
 		}
 	}
-	if err := preflightTokenPersistence(p.configDir); err != nil {
+	if err := prepareLoginPersistence(p.configDir); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 
@@ -662,6 +666,7 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 		}
 		return nil, fmt.Errorf("load access token: %w", err)
 	}
+	profileSelector := StableTokenProfileSelector(p.configDir, data)
 
 	// Fast path: access_token still valid — no lock needed.
 	if data.IsAccessTokenValid() {
@@ -678,17 +683,38 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 		// refresh credential. Keep the profile active so a long-running source
 		// can retry after backoff. Terminal and unknown failures remain fatal.
 		if ClassifyRefreshFailure(rErr) != RefreshFailureTransient {
-			_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+			_ = oauthMarkProfile(p.configDir, profileSelector, ProfileStatusExpired)
 		}
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
+		var exchangeErr *MCPTokenExchangeError
+		if errors.As(rErr, &exchangeErr) && exchangeErr.requiresReauthorization() {
+			return nil, fmt.Errorf(
+				"%s: %w",
+				legacyRefreshReauthorizationGuidance(profileSelector),
+				rErr,
+			)
+		}
 		return nil, fmt.Errorf("%s: %w", i18n.T("refresh_token 刷新失败"), rErr)
 	} else {
-		_ = oauthMarkProfile(p.configDir, TokenProfileSelector(data), ProfileStatusExpired)
+		_ = oauthMarkProfile(p.configDir, profileSelector, ProfileStatusExpired)
 	}
 
 	return nil, fmt.Errorf("%s: %w", i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"), ErrTokenDataNotFound)
+}
+
+func legacyRefreshReauthorizationGuidance(profileSelector string) string {
+	guidance := "旧版登录态已无法由当前认证服务刷新；本地 profile 已保留，请重新运行 dws auth login 完成一次重新授权"
+	profileSelector = strings.TrimSpace(profileSelector)
+	if profileSelector == "" {
+		return guidance
+	}
+	return fmt.Sprintf(
+		"%s；为保留原身份，请把 --profile 参数设置为下方 profile 标识（标识仅作数据展示，不是可执行命令）:\nprofile: %s",
+		guidance,
+		strconv.Quote(profileSelector),
+	)
 }
 
 // GetAccessToken returns a valid access token, auto-refreshing if needed.
@@ -763,6 +789,9 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 // ExchangeAuthCode takes an AuthCode and an optional UserID provided by an
 // external host, exchanges it for tokens, and persists them.
 func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid string) (*TokenData, error) {
+	if err := prepareLoginPersistence(p.configDir); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	tokenData, err := oauthExchange(p, ctx, authCode)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("换取 token 失败"), err)
@@ -802,6 +831,9 @@ func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenD
 		"user_id", strings.TrimSpace(tokenData.UserID),
 		"user_name", strings.TrimSpace(tokenData.UserName),
 	)
+	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := oauthSaveToken(p.configDir, tokenData); err != nil {
 		return err
 	}
@@ -812,14 +844,18 @@ func (p *OAuthProvider) prepareLoginToken(ctx context.Context, tokenData *TokenD
 	if tokenData == nil {
 		return fmt.Errorf("token data is empty")
 	}
+	tokenData.FreshAuthorization = true
 	if p != nil && p.IdentityEnricher != nil {
 		if err := p.IdentityEnricher(ctx, tokenData); err != nil {
 			return fmt.Errorf("resolve login identity: %w", err)
 		}
 	}
-	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
-		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
-	}
+	// v1.0.52 and earlier deliberately persisted the freshly exchanged token
+	// before best-effort contact enrichment. External-worker accounts can have a
+	// valid organization token while contact cannot return a userId, so rejecting
+	// that shape here makes an otherwise successful reauthorization impossible.
+	// SaveTokenData remains the safety boundary: an unresolved organization token
+	// cannot overwrite an organization that already has exact account identities.
 	return nil
 }
 
@@ -829,6 +865,9 @@ func (p *OAuthProvider) persistKnownLoginToken(tokenData *TokenData) error {
 	}
 	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
 		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
+	}
+	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 	return oauthSaveToken(p.configDir, tokenData)
 }

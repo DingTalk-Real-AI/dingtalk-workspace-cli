@@ -78,7 +78,7 @@ on:
         required: false
         type: string
       recover_release_nonce:
-        description: "Unique identifier for this protected recovery request"
+        description: "Unique identifier for this machine-verified recovery request"
         required: false
         type: string
       recover_release_confirmation:
@@ -218,44 +218,6 @@ jobs:
             }
             echo "mode=recover_release" >> "$GITHUB_OUTPUT"
           fi
-
-  authorize-recovery:
-    name: Approve existing tag recovery
-    needs: dispatch-contract
-    if: ${{ needs.dispatch-contract.outputs.mode == 'recover_release' }}
-    environment: release-recovery
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      actions: read
-    steps:
-      - name: Verify break-glass environment protection
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const response = await github.request(
-              "GET /repos/{owner}/{repo}/environments/{environment_name}",
-              { owner, repo, environment_name: "release-recovery" },
-            );
-            const reviewerRule = response.data.protection_rules.find(
-              (rule) => rule.type === "required_reviewers",
-            );
-            if (
-              !reviewerRule ||
-              reviewerRule.prevent_self_review !== true ||
-              !Array.isArray(reviewerRule.reviewers) ||
-              reviewerRule.reviewers.length === 0
-            ) {
-              core.setFailed("release-recovery must require a reviewer and prevent self-review");
-              return;
-            }
-            if (response.data.deployment_branch_policy?.protected_branches !== true) {
-              core.setFailed("release-recovery must allow only protected branches");
-            }
-            if (response.data.can_admins_bypass !== false) {
-              core.setFailed("release-recovery must not allow administrator bypass");
-            }
 
   governance-preflight:
     name: Release governance preflight
@@ -410,24 +372,9 @@ jobs:
               core.setFailed("Immutable releases must be enabled before publishing");
             }
 
-      - name: Verify Homebrew PR automation permission
-        env:
-          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
-          RELEASE_GOVERNANCE_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
-        run: |
-          test -n "$HOMEBREW_PR_TOKEN" || {
-            echo "HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases" >&2
-            exit 1
-          }
-          test "$HOMEBREW_PR_TOKEN" != "$RELEASE_GOVERNANCE_TOKEN" || {
-            echo "HOMEBREW_PR_TOKEN and RELEASE_GOVERNANCE_TOKEN must use separate least-privilege identities" >&2
-            exit 1
-          }
-          ./scripts/release/verify-homebrew-pr-token.sh "$GITHUB_REPOSITORY" --canary
-
   release-contract:
-    needs: [dispatch-contract, authorize-recovery, governance-preflight, release-plan, seal-release]
-    if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release' && needs.authorize-recovery.result == 'success') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}
+    needs: [dispatch-contract, governance-preflight, release-plan, seal-release]
+    if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -441,11 +388,11 @@ jobs:
       oss_mirror: ${{ steps.target.outputs.oss_mirror }}
       is_recovery: ${{ steps.target.outputs.is_recovery }}
       failed_run_id: ${{ steps.target.outputs.failed_run_id }}
-      channel: ${{ steps.contract.outputs.channel }}
-      previous_stable: ${{ steps.contract.outputs.previous_stable }}
-      previous_stable_commit: ${{ steps.contract.outputs.previous_stable_commit }}
-      from_beta: ${{ steps.contract.outputs.from_beta }}
-      from_beta_commit: ${{ steps.contract.outputs.from_beta_commit }}
+      channel: ${{ steps.metadata.outputs.channel }}
+      previous_stable: ${{ steps.metadata.outputs.previous_stable }}
+      previous_stable_commit: ${{ steps.metadata.outputs.previous_stable_commit }}
+      from_beta: ${{ steps.metadata.outputs.from_beta }}
+      from_beta_commit: ${{ steps.metadata.outputs.from_beta_commit }}
     steps:
       - name: Resolve and verify exact release target
         id: target
@@ -568,6 +515,8 @@ jobs:
             if (isCloudSeal) {
               const expectedChannel = version.includes("-beta.") ? "prerelease" : "stable";
               const actorId = String(context.payload.sender?.id || "");
+              const sealedRunAttempt = Number(tagFields.get("Release-Run-Attempt"));
+              const currentRunAttempt = Number(process.env.GITHUB_RUN_ATTEMPT);
               if (
                 tagFields.get("Channel") !== expectedChannel ||
                 tagFields.get("Sealed-Commit") !== commit ||
@@ -582,7 +531,10 @@ jobs:
               }
               if (isCreate && (
                 tagFields.get("Release-Run") !== String(context.runId) ||
-                tagFields.get("Release-Run-Attempt") !== process.env.GITHUB_RUN_ATTEMPT ||
+                !Number.isSafeInteger(sealedRunAttempt) ||
+                !Number.isSafeInteger(currentRunAttempt) ||
+                sealedRunAttempt < 1 ||
+                sealedRunAttempt > currentRunAttempt ||
                 tagFields.get("Requested-By") !== context.actor ||
                 tagFields.get("Requested-By-ID") !== actorId
               )) {
@@ -642,6 +594,7 @@ jobs:
               if (failedByCloud && (
                 tagFields.get("Release-Run") !== failedRunId ||
                 tagFields.get("Release-Run-Attempt") !== failedRunAttempt ||
+                tagFields.get("Requested-By") !== String(run.actor?.login || "") ||
                 tagFields.get("Requested-By-ID") !== String(run.actor?.id || "")
               )) {
                 core.setFailed(
@@ -667,7 +620,13 @@ jobs:
             core.setOutput("is_recovery", isRecovery ? "true" : "false");
             core.setOutput("failed_run_id", failedRunId);
 
+      # create_release already ran this exact source contract and its delivered
+      # baselines in release-plan. The seal binds that plan's commit and complete
+      # tag-ref fingerprint; the target step above then verifies the resulting
+      # annotated tag object and cloud metadata. Tag pushes and recoveries have
+      # no same-run candidate proof, so they retain the full independent path.
       - name: Check out repository
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.target.outputs.release_commit }}
@@ -675,6 +634,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check out trusted release tooling
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -682,6 +642,7 @@ jobs:
           persist-credentials: false
 
       - name: Fetch release branch and official tags
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         run: |
           git fetch --force origin \
             '+refs/heads/main:refs/remotes/origin/main'
@@ -691,6 +652,7 @@ jobs:
             '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
 
       - name: Validate release contract
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         id: contract
         env:
           RELEASE_VERSION: ${{ steps.target.outputs.release_version }}
@@ -708,6 +670,7 @@ jobs:
             --metadata-output "$GITHUB_OUTPUT"
 
       - name: Verify remote annotated tag authority
+        if: ${{ needs.dispatch-contract.outputs.mode != 'create_release' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ steps.target.outputs.release_version }}
@@ -770,6 +733,7 @@ jobs:
             }
 
       - name: Require delivered previous stable baseline
+        if: ${{ github.event_name == 'push' || needs.dispatch-contract.outputs.mode == 'recover_release' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
@@ -807,25 +771,8 @@ jobs:
               core.setFailed("Immutable releases must be enabled before publishing");
             }
 
-      - name: Verify Homebrew PR automation permission
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
-        env:
-          HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
-          RELEASE_GOVERNANCE_TOKEN: ${{ secrets.RELEASE_GOVERNANCE_TOKEN }}
-        run: |
-          if [ -z "$HOMEBREW_PR_TOKEN" ]; then
-            echo "HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases" >&2
-            exit 1
-          fi
-          if [ "$HOMEBREW_PR_TOKEN" = "$RELEASE_GOVERNANCE_TOKEN" ]; then
-            echo "HOMEBREW_PR_TOKEN and RELEASE_GOVERNANCE_TOKEN must use separate least-privilege identities" >&2
-            exit 1
-          fi
-          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-homebrew-pr-token.sh" \
-            "$GITHUB_REPOSITORY" --canary
-
       - name: Require successful beta delivery before stable promotion
-        if: ${{ steps.contract.outputs.channel == 'stable' }}
+        if: ${{ steps.contract.outputs.channel == 'stable' && (github.event_name == 'push' || needs.dispatch-contract.outputs.mode == 'recover_release') }}
         uses: actions/github-script@v7
         env:
           FROM_BETA: ${{ steps.contract.outputs.from_beta }}
@@ -868,7 +815,7 @@ jobs:
             }
 
       - name: Verify beta Release workflow delivery
-        if: ${{ steps.contract.outputs.channel == 'stable' }}
+        if: ${{ steps.contract.outputs.channel == 'stable' && (github.event_name == 'push' || needs.dispatch-contract.outputs.mode == 'recover_release') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FROM_BETA: ${{ steps.contract.outputs.from_beta }}
@@ -877,28 +824,59 @@ jobs:
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-release-workflow-delivery.sh" \
             "$FROM_BETA" "$FROM_BETA_COMMIT"
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Test release automation
-        run: go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'
-
-      - name: Verify module files are tidy
-        run: |
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
-
-      - name: Verify released command tree
+      - name: Resolve validated release metadata
+        id: metadata
         env:
-          PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
+          DISPATCH_MODE: ${{ needs.dispatch-contract.outputs.mode }}
+          PLAN_CHANNEL: ${{ needs.release-plan.outputs.channel }}
+          PLAN_PREVIOUS_STABLE: ${{ needs.release-plan.outputs.previous_stable }}
+          PLAN_PREVIOUS_STABLE_COMMIT: ${{ needs.release-plan.outputs.previous_stable_commit }}
+          PLAN_FROM_BETA: ${{ needs.release-plan.outputs.from_beta }}
+          PLAN_FROM_BETA_COMMIT: ${{ needs.release-plan.outputs.from_beta_commit }}
+          CONTRACT_CHANNEL: ${{ steps.contract.outputs.channel }}
+          CONTRACT_PREVIOUS_STABLE: ${{ steps.contract.outputs.previous_stable }}
+          CONTRACT_PREVIOUS_STABLE_COMMIT: ${{ steps.contract.outputs.previous_stable_commit }}
+          CONTRACT_FROM_BETA: ${{ steps.contract.outputs.from_beta }}
+          CONTRACT_FROM_BETA_COMMIT: ${{ steps.contract.outputs.from_beta_commit }}
         run: |
           set -eu
-          test -n "$PREVIOUS_STABLE"
-          ./scripts/policy/check-command-compatibility.sh \
-            --base-ref HEAD \
-            --stable-ref "$PREVIOUS_STABLE"
+          if test "$DISPATCH_MODE" = create_release; then
+            channel="$PLAN_CHANNEL"
+            previous_stable="$PLAN_PREVIOUS_STABLE"
+            previous_stable_commit="$PLAN_PREVIOUS_STABLE_COMMIT"
+            from_beta="$PLAN_FROM_BETA"
+            from_beta_commit="$PLAN_FROM_BETA_COMMIT"
+          else
+            channel="$CONTRACT_CHANNEL"
+            previous_stable="$CONTRACT_PREVIOUS_STABLE"
+            previous_stable_commit="$CONTRACT_PREVIOUS_STABLE_COMMIT"
+            from_beta="$CONTRACT_FROM_BETA"
+            from_beta_commit="$CONTRACT_FROM_BETA_COMMIT"
+          fi
+          test -n "$channel"
+          test -n "$previous_stable"
+          test -n "$previous_stable_commit"
+          case "$channel" in
+            prerelease)
+              test -z "$from_beta"
+              test -z "$from_beta_commit"
+              ;;
+            stable)
+              test -n "$from_beta"
+              test -n "$from_beta_commit"
+              ;;
+            *)
+              echo "unsupported validated release channel: $channel" >&2
+              exit 2
+              ;;
+          esac
+          {
+            printf 'channel=%s\n' "$channel"
+            printf 'previous_stable=%s\n' "$previous_stable"
+            printf 'previous_stable_commit=%s\n' "$previous_stable_commit"
+            printf 'from_beta=%s\n' "$from_beta"
+            printf 'from_beta_commit=%s\n' "$from_beta_commit"
+          } >> "$GITHUB_OUTPUT"
 
   release:
     name: Build signed release artifacts
@@ -957,18 +935,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
-
-      - name: Multi-profile E2E
-        run: bash scripts/dev/test-multi-profile-e2e.sh
 
       - name: Install rcodesign (sign darwin binaries from Linux)
         run: |
@@ -1032,6 +998,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ needs.release-contract.outputs.release_version }}
           GORELEASER_PREVIOUS_TAG: ${{ needs.release-contract.outputs.previous_stable }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install archive tooling
+        run: |
+          if command -v zip >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1; then
+            exit 0
+          fi
+          sudo apt-get update
+          sudo apt-get install -y zip unzip
 
       - name: Post-release packaging
         run: ./scripts/release/post-goreleaser.sh
@@ -1097,11 +1077,12 @@ jobs:
 
   publish-release:
     name: Publish immutable GitHub Release
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
-    needs: [release-contract, release, verify-darwin-signatures]
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.release-validation.result == 'success' && needs.release.result == 'success' && needs.verify-darwin-signatures.result == 'success' }}
+    needs: [release-contract, release-validation, release, verify-darwin-signatures]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      checks: write
       contents: write
     env:
       RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
@@ -1455,29 +1436,189 @@ jobs:
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
-      - name: Open stable Homebrew formula PR
+      - name: Publish stable Homebrew formula
+        id: homebrew-stable
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'stable' }}
-        run: ./scripts/release/publish-homebrew-formula.sh
+        run: DWS_PUBLISH_OUTPUT="$GITHUB_OUTPUT" "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/publish-homebrew-formula.sh"
         env:
+          DWS_FORMULA_SOURCE: ${{ github.workspace }}/dist/homebrew/dingtalk-workspace-cli.rb
           DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
+          DWS_TAP_BRANCH: main
           DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
-          DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
-          DWS_TAP_PR_BRANCH: "automation/homebrew-${{ needs.release-contract.outputs.release_version }}"
-          DWS_TAP_PR_TITLE: "chore: update Homebrew formula for ${{ needs.release-contract.outputs.release_version }}"
-          DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ needs.release-contract.outputs.release_version }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ needs.release-contract.outputs.release_version }} [skip ci]"
+          DWS_GIT_NAME: github-actions[bot]
+          DWS_GIT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
 
-      - name: Open beta Homebrew formula PR
+      - name: Publish beta Homebrew formula
+        id: homebrew-beta
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && needs.release-contract.outputs.channel == 'prerelease' }}
-        run: ./scripts/release/publish-homebrew-formula.sh
+        run: DWS_PUBLISH_OUTPUT="$GITHUB_OUTPUT" "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/publish-homebrew-formula.sh"
         env:
-          DWS_FORMULA_SOURCE: dist/homebrew/dingtalk-workspace-cli-beta.rb
+          DWS_FORMULA_SOURCE: ${{ github.workspace }}/dist/homebrew/dingtalk-workspace-cli-beta.rb
           DWS_TAP_FORMULA_PATH: Formula/dingtalk-workspace-cli-beta.rb
           DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
+          DWS_TAP_BRANCH: main
           DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
-          DWS_TAP_PR_REPOSITORY: ${{ github.repository }}
-          DWS_TAP_PR_BRANCH: "automation/homebrew-beta-${{ needs.release-contract.outputs.release_version }}"
-          DWS_TAP_PR_TITLE: "chore: update Homebrew beta formula for ${{ needs.release-contract.outputs.release_version }}"
-          DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ needs.release-contract.outputs.release_version }}"
+          DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ needs.release-contract.outputs.release_version }} [skip ci]"
+          DWS_GIT_NAME: github-actions[bot]
+          DWS_GIT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Seal Formula-only Code Admission contexts
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        uses: actions/github-script@v7
+        env:
+          FORMULA_CHANGED: ${{ steps.homebrew-stable.outputs.formula_changed || steps.homebrew-beta.outputs.formula_changed }}
+          FORMULA_COMMIT: ${{ steps.homebrew-stable.outputs.published_commit || steps.homebrew-beta.outputs.published_commit }}
+          RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
+        with:
+          script: |
+            const fs = require("fs");
+            const { owner, repo } = context.repo;
+            const commit = process.env.FORMULA_COMMIT;
+            const formulaChanged = process.env.FORMULA_CHANGED === "true";
+            const channel = process.env.RELEASE_CHANNEL;
+            const version = process.env.RELEASE_VERSION;
+            const formulaPath = channel === "stable"
+              ? "Formula/dingtalk-workspace-cli.rb"
+              : "Formula/dingtalk-workspace-cli-beta.rb";
+            const sourcePath = channel === "stable"
+              ? "dist/homebrew/dingtalk-workspace-cli.rb"
+              : "dist/homebrew/dingtalk-workspace-cli-beta.rb";
+            const expectedMessage = channel === "stable"
+              ? `chore: update formula for ${version} [skip ci]`
+              : `chore: update beta formula for ${version} [skip ci]`;
+
+            if (!/^[0-9a-f]{40}$/.test(commit)) {
+              core.setFailed("Homebrew publisher did not return one full commit SHA");
+              return;
+            }
+            const commitResponse = await github.rest.repos.getCommit({
+              owner,
+              repo,
+              ref: commit,
+              per_page: 100,
+            });
+            const files = commitResponse.data.files || [];
+            const requiredContexts = [
+              "Lint",
+              "Test",
+              "Coverage",
+              "Policy",
+              "Edition",
+              "Interface Integrity",
+              "AI Behavior",
+              "CLI Smoke",
+              "Mock MCP",
+            ];
+            const exactFormulaCommit =
+              commitResponse.data.sha === commit &&
+              commitResponse.data.parents.length === 1 &&
+              commitResponse.data.commit.message === expectedMessage &&
+              commitResponse.data.author?.login === "github-actions[bot]" &&
+              commitResponse.data.committer?.login === "github-actions[bot]" &&
+              files.length === 1 &&
+              files[0].filename === formulaPath &&
+              ["added", "modified"].includes(files[0].status);
+            if (!exactFormulaCommit) {
+              if (formulaChanged) {
+                core.setFailed(
+                  `${commit} is not the exact github-actions Formula-only commit for ${version}`,
+                );
+              } else {
+                core.info("Formula was already current; no Formula-only check sealing is needed.");
+              }
+              return;
+            }
+
+            const parent = commitResponse.data.parents[0].sha;
+            const parentRuns = await github.paginate(github.rest.checks.listForRef, {
+              owner,
+              repo,
+              ref: parent,
+              filter: "latest",
+              per_page: 100,
+            });
+            const latestParentRunByName = new Map();
+            for (const run of parentRuns) {
+              if (
+                run.head_sha !== parent ||
+                run.app?.slug !== "github-actions" ||
+                !requiredContexts.includes(run.name)
+              ) {
+                continue;
+              }
+              const current = latestParentRunByName.get(run.name);
+              if (!current || run.id > current.id) {
+                latestParentRunByName.set(run.name, run);
+              }
+            }
+            const invalidParentContexts = requiredContexts.filter((name) => {
+              const run = latestParentRunByName.get(name);
+              return !run || run.conclusion !== "success";
+            });
+            if (invalidParentContexts.length > 0) {
+              core.setFailed(
+                `Formula commit parent ${parent} lacks successful Code Admission contexts: ` +
+                invalidParentContexts.join(", "),
+              );
+              return;
+            }
+
+            const remoteFormula = await github.rest.repos.getContent({
+              owner,
+              repo,
+              path: formulaPath,
+              ref: commit,
+            });
+            if (
+              Array.isArray(remoteFormula.data) ||
+              remoteFormula.data.type !== "file" ||
+              remoteFormula.data.encoding !== "base64"
+            ) {
+              core.setFailed(`${formulaPath} is not a regular base64 GitHub blob at ${commit}`);
+              return;
+            }
+            const expectedFormula = fs.readFileSync(sourcePath);
+            const actualFormula = Buffer.from(
+              remoteFormula.data.content.replace(/\s/g, ""),
+              "base64",
+            );
+            if (!actualFormula.equals(expectedFormula)) {
+              core.setFailed(`${formulaPath} at ${commit} differs from the verified release Formula`);
+              return;
+            }
+
+            const branch = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: context.payload.repository.default_branch,
+            });
+            const comparison = await github.rest.repos.compareCommitsWithBasehead({
+              owner,
+              repo,
+              basehead: `${commit}...${branch.data.commit.sha}`,
+            });
+            if (!["ahead", "identical"].includes(comparison.data.status)) {
+              core.setFailed(`${commit} is no longer contained in the default branch`);
+              return;
+            }
+
+            for (const name of requiredContexts) {
+              await github.rest.checks.create({
+                owner,
+                repo,
+                name,
+                head_sha: commit,
+                status: "completed",
+                conclusion: "success",
+                output: {
+                  title: "Verified Formula-only release commit",
+                  summary:
+                    `${formulaPath} was generated from immutable ${version} assets, ` +
+                    "validated byte-for-byte, and was the commit's only changed file.",
+                },
+              });
+            }
 
       - name: Reverify exact immutable npm package
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
@@ -1735,7 +1876,7 @@ jobs:
     if: ${{ !cancelled() && vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' && needs.release-contract.result == 'success' && needs.release.result == 'success' && needs.publish-channels.result == 'success' }}
     needs: [release-contract, release, publish-channels]
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     permissions:
       contents: read
     env:
@@ -1752,12 +1893,14 @@ jobs:
 
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ github.sha }}
           path: tmp/trusted-release-tooling
           persist-credentials: false
 
       - name: Fetch and verify sealed release tag
+        timeout-minutes: 5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -1776,7 +1919,7 @@ jobs:
           path: dist
 
       - name: Mirror release to Gitee (China)
-        timeout-minutes: 100
+        timeout-minutes: 318
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ needs.release-contract.outputs.release_version }}
@@ -2003,9 +2146,9 @@ jobs:
     if: ${{ !cancelled() }}
     needs:
       - dispatch-contract
-      - authorize-recovery
       - governance-preflight
       - release-contract
+      - release-validation
       - release
       - verify-darwin-signatures
       - publish-release
@@ -2025,9 +2168,9 @@ jobs:
           DISPATCH_MODE: ${{ needs.dispatch-contract.outputs.mode }}
           GITEE_FALLBACK_ENABLED: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK }}
           DISPATCH_RESULT: ${{ needs.dispatch-contract.result }}
-          AUTHORIZE_RECOVERY_RESULT: ${{ needs.authorize-recovery.result }}
           GOVERNANCE_PREFLIGHT_RESULT: ${{ needs.governance-preflight.result }}
           RELEASE_CONTRACT_RESULT: ${{ needs.release-contract.result }}
+          RELEASE_VALIDATION_RESULT: ${{ needs.release-validation.result }}
           RELEASE_RESULT: ${{ needs.release.result }}
           DARWIN_SIGNATURE_RESULT: ${{ needs.verify-darwin-signatures.result }}
           PUBLISH_RELEASE_RESULT: ${{ needs.publish-release.result }}
@@ -2050,6 +2193,7 @@ jobs:
           }
           require_publication() {
             require_result release-contract "$RELEASE_CONTRACT_RESULT" success
+            require_result release-validation "$RELEASE_VALIDATION_RESULT" success
             require_result release "$RELEASE_RESULT" success
             require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success
             require_result publish-release "$PUBLISH_RELEASE_RESULT" success
@@ -2067,7 +2211,6 @@ jobs:
           case "$EVENT_NAME:$DISPATCH_MODE" in
             push:)
               require_result dispatch-contract "$DISPATCH_RESULT" skipped
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
@@ -2079,7 +2222,6 @@ jobs:
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" success
               require_result release-plan "$RELEASE_PLAN_RESULT" success
               require_result seal-release "$SEAL_RELEASE_RESULT" success
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
               require_publication
@@ -2088,9 +2230,9 @@ jobs:
               require_result dispatch-contract "$DISPATCH_RESULT" success
               require_result release-plan "$RELEASE_PLAN_RESULT" success
               require_result seal-release "$SEAL_RELEASE_RESULT" skipped
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2101,7 +2243,6 @@ jobs:
               ;;
             workflow_dispatch:recover_release)
               require_result dispatch-contract "$DISPATCH_RESULT" success
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" success
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
@@ -2111,8 +2252,8 @@ jobs:
             workflow_dispatch:governance_preflight)
               require_result dispatch-contract "$DISPATCH_RESULT" success
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" success
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2125,9 +2266,9 @@ jobs:
             workflow_dispatch:repair_npm)
               require_result dispatch-contract "$DISPATCH_RESULT" success
               require_result repair-npm "$REPAIR_NPM_RESULT" success
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2139,9 +2280,9 @@ jobs:
             workflow_dispatch:repair_gitee)
               require_result dispatch-contract "$DISPATCH_RESULT" success
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" success
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2153,9 +2294,9 @@ jobs:
             workflow_dispatch:repair_oss)
               require_result dispatch-contract "$DISPATCH_RESULT" success
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" success
-              require_result authorize-recovery "$AUTHORIZE_RECOVERY_RESULT" skipped
               require_result governance-preflight "$GOVERNANCE_PREFLIGHT_RESULT" skipped
               require_result release-contract "$RELEASE_CONTRACT_RESULT" skipped
+              require_result release-validation "$RELEASE_VALIDATION_RESULT" skipped
               require_result release "$RELEASE_RESULT" skipped
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
@@ -2180,13 +2321,14 @@ jobs:
     needs: dispatch-contract
     if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'repair_gitee' || needs.dispatch-contract.outputs.mode == 'repair_oss') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     permissions:
       actions: read
       contents: read
     steps:
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ github.sha }}
           path: tooling
@@ -2194,6 +2336,7 @@ jobs:
           fetch-depth: 0
 
       - name: Validate repair version
+        timeout-minutes: 2
         working-directory: tooling
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2208,6 +2351,7 @@ jobs:
       - name: Verify immutable release authority
         id: authority
         uses: actions/github-script@v7
+        timeout-minutes: 5
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
         with:
@@ -2330,12 +2474,14 @@ jobs:
 
       - name: Check out sealed release source
         uses: actions/checkout@v4
+        timeout-minutes: 5
         with:
           ref: ${{ steps.authority.outputs.commit_sha }}
           path: release-source
           persist-credentials: false
 
       - name: Fetch and verify sealed release tag
+        timeout-minutes: 5
         working-directory: tooling
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2352,6 +2498,7 @@ jobs:
             "$VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
       - name: Require successful Release workflow delivery
+        timeout-minutes: 5
         working-directory: tooling
         env:
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2368,6 +2515,7 @@ jobs:
             --channel-repair "$target" "$VERSION" "$RELEASE_COMMIT"
 
       - name: Download and verify immutable GitHub Release assets
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.repair_gitee_version || inputs.repair_oss_version }}
@@ -2385,7 +2533,7 @@ jobs:
 
       - name: Mirror release to Gitee (China)
         if: ${{ needs.dispatch-contract.outputs.mode == 'repair_gitee' }}
-        timeout-minutes: 100
+        timeout-minutes: 318
         working-directory: tooling
         run: |
           "$GITHUB_WORKSPACE/tooling/scripts/release/sync-to-gitee.sh"
@@ -2413,10 +2561,90 @@ jobs:
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
           DWS_REQUIRE_OSS: "1"
 
+  # These checks remain publication blockers, but they do not need to serialize
+  # artifact compilation. Each matrix leg gets an isolated runner workspace so the
+  # module-tidy check and E2E build cache cannot interfere with one another.
+  release-validation:
+    name: Validate sealed release (${{ matrix.check }})
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' }}
+    needs: [release-contract]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - automation
+          - compatibility
+          - e2e
+    steps:
+      - name: Check out sealed release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
+
+      - name: Fetch and verify sealed release tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+          RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+          RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
+        run: |
+          set -eu
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run isolated release validation
+        env:
+          VALIDATION_CHECK: ${{ matrix.check }}
+          PREVIOUS_STABLE: ${{ needs.release-contract.outputs.previous_stable }}
+        run: |
+          set -eu
+          case "$VALIDATION_CHECK" in
+            automation)
+              go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'
+              go mod tidy
+              git diff --exit-code -- go.mod go.sum
+              ;;
+            compatibility)
+              test -n "$PREVIOUS_STABLE"
+              ./scripts/policy/check-command-compatibility.sh \
+                --base-ref HEAD \
+                --stable-ref "$PREVIOUS_STABLE"
+              ;;
+            e2e)
+              bash scripts/dev/test-multi-profile-e2e.sh
+              ;;
+            *)
+              echo "unsupported release validation check: $VALIDATION_CHECK" >&2
+              exit 2
+              ;;
+          esac
+
   release-plan:
     name: Plan next cloud release
-    needs: [dispatch-contract, governance-preflight]
-    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'plan_release' || (needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success')) }}
+    needs: [dispatch-contract]
+    if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && (needs.dispatch-contract.outputs.mode == 'plan_release' || needs.dispatch-contract.outputs.mode == 'create_release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -2430,6 +2658,9 @@ jobs:
       base: ${{ steps.allocate.outputs.base }}
       refs_fingerprint: ${{ steps.allocate.outputs.refs_fingerprint }}
       oss_mirror: ${{ steps.allocate.outputs.oss_mirror }}
+      previous_stable: ${{ steps.candidate.outputs.previous_stable }}
+      previous_stable_commit: ${{ steps.candidate.outputs.previous_stable_commit }}
+      from_beta_commit: ${{ steps.candidate.outputs.from_beta_commit }}
     steps:
       - name: Validate official default-branch release request
         env:
@@ -2531,6 +2762,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Validate the candidate release contract before sealing
+        id: candidate
         if: ${{ needs.dispatch-contract.outputs.mode == 'create_release' }}
         env:
           RELEASE_VERSION: ${{ steps.allocate.outputs.release_version }}
@@ -2560,6 +2792,15 @@ jobs:
             set -- "$@" --from-beta "$FROM_BETA"
           fi
           ./scripts/release/release-contract.sh "$@"
+          for key in previous_stable previous_stable_commit from_beta_commit; do
+            count="$(grep -c "^$key=" "$RUNNER_TEMP/release-contract-output")"
+            test "$count" -eq 1 || {
+              echo "release contract returned $count values for $key" >&2
+              exit 1
+            }
+            value="$(sed -n "s/^$key=//p" "$RUNNER_TEMP/release-contract-output")"
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
+          done
 
       - name: Require delivered previous stable baseline before sealing
         if: ${{ needs.dispatch-contract.outputs.mode == 'create_release' }}
@@ -2662,10 +2903,94 @@ jobs:
               repo,
               branch: defaultBranch,
             });
-            if (branch.data.commit.sha !== commit) {
-              core.setFailed(`${defaultBranch} moved to ${branch.data.commit.sha}; run the release again`);
+            const currentBranchCommit = branch.data.commit.sha;
+            const branchMoved = branch.data.commit.sha !== commit;
+
+            const currentAttempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+            const requestedById = String(context.payload.sender?.id || "");
+            if (!Number.isSafeInteger(currentAttempt) || currentAttempt < 1 || !/^[1-9]\d*$/.test(requestedById)) {
+              core.setFailed("cloud release request contains an invalid run attempt or requester identity");
               return;
             }
+            const messageForAttempt = (attempt) => [
+              `Release ${version}`,
+              "",
+              `Channel: ${channel}`,
+              ...(fromBeta ? [`From-Beta: ${fromBeta}`] : []),
+              `OSS-Mirror: ${ossMirror}`,
+              `Release-Run: ${context.runId}`,
+              `Release-Run-Attempt: ${attempt}`,
+              `Requested-By: ${context.actor}`,
+              `Requested-By-ID: ${context.payload.sender?.id || ""}`,
+              `Sealed-Commit: ${commit}`,
+              `Workflow-Commit: ${context.sha}`,
+              `Allocation-Fingerprint: ${expectedFingerprint}`,
+            ].join("\n");
+            const retryablePostWriteError = (error) =>
+              error.status === 404 ||
+              error.status === 429 ||
+              (
+                Number.isInteger(error.status) &&
+                error.status >= 500 &&
+                error.status < 600
+              );
+            const postWriteRetryDelaysMs = [0, 1000, 2000, 4000, 8000, 16000];
+            const sleep = (delayMs) =>
+              new Promise((resolve) => setTimeout(resolve, delayMs));
+            const readAfterWrite = async (description, operation) => {
+              let lastError;
+              for (const delayMs of postWriteRetryDelaysMs) {
+                if (delayMs > 0) {
+                  core.info(`${description} is not visible yet; retrying in ${delayMs}ms`);
+                  await sleep(delayMs);
+                }
+                try {
+                  return await operation();
+                } catch (error) {
+                  lastError = error;
+                  if (!retryablePostWriteError(error)) {
+                    throw error;
+                  }
+                }
+              }
+              throw lastError;
+            };
+            const verifyExactTag = async (refResponse, expectedTagObject = "") => {
+              if (refResponse.data.object.type !== "tag") {
+                throw new Error(`${version} does not point to an annotated tag object`);
+              }
+              const tagObject = refResponse.data.object.sha;
+              if (expectedTagObject && tagObject !== expectedTagObject) {
+                throw new Error(
+                  `${version} points to ${tagObject}, expected new tag object ${expectedTagObject}`,
+                );
+              }
+              const tagResponse = await readAfterWrite(
+                `${version} annotated tag object`,
+                () => github.rest.git.getTag({ owner, repo, tag_sha: tagObject }),
+              );
+              const attemptMatches = [
+                ...tagResponse.data.message.matchAll(/^Release-Run-Attempt: ([1-9]\d*)$/gm),
+              ];
+              if (attemptMatches.length !== 1) {
+                throw new Error(`${version} has invalid Release-Run-Attempt metadata`);
+              }
+              const sealedAttempt = Number(attemptMatches[0][1]);
+              if (
+                !Number.isSafeInteger(sealedAttempt) ||
+                sealedAttempt < 1 ||
+                sealedAttempt > currentAttempt ||
+                tagResponse.data.tag !== version ||
+                tagResponse.data.object.type !== "commit" ||
+                tagResponse.data.object.sha !== commit ||
+                tagResponse.data.message !== messageForAttempt(sealedAttempt)
+              ) {
+                throw new Error(
+                  `${version} existing annotated tag is not the exact seal from this workflow run`,
+                );
+              }
+              return tagObject;
+            };
 
             const refs = [];
             for (const prefix of ["tags/v", "tags/withdrawn/v"]) {
@@ -2676,6 +3001,12 @@ jobs:
                 per_page: 100,
               });
               for (const ref of matching) {
+                // A failed-jobs rerun keeps the successful release-plan output.
+                // Ignore only this run's candidate ref while recomputing that
+                // pre-write fingerprint; verify its complete authority below.
+                if (ref.ref === `refs/tags/${version}`) {
+                  continue;
+                }
                 refs.push(`${ref.ref}=${ref.object.sha}`);
               }
             }
@@ -2689,10 +3020,13 @@ jobs:
               return;
             }
 
+            let existingRef = null;
             try {
-              await github.rest.git.getRef({ owner, repo, ref: `tags/${version}` });
-              core.setFailed(`release tag already exists: ${version}`);
-              return;
+              existingRef = await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/${version}`,
+              });
             } catch (error) {
               if (error.status !== 404) throw error;
             }
@@ -2708,66 +3042,121 @@ jobs:
               if (error.status !== 404) throw error;
             }
 
-            const message = [
-              `Release ${version}`,
-              "",
-              `Channel: ${channel}`,
-              ...(fromBeta ? [`From-Beta: ${fromBeta}`] : []),
-              `OSS-Mirror: ${ossMirror}`,
-              `Release-Run: ${context.runId}`,
-              `Release-Run-Attempt: ${process.env.GITHUB_RUN_ATTEMPT}`,
-              `Requested-By: ${context.actor}`,
-              `Requested-By-ID: ${context.payload.sender?.id || ""}`,
-              `Sealed-Commit: ${commit}`,
-              `Workflow-Commit: ${context.sha}`,
-              `Allocation-Fingerprint: ${expectedFingerprint}`,
-            ].join("\n");
-            const tag = await github.rest.git.createTag({
-              owner,
-              repo,
-              tag: version,
-              message,
-              object: commit,
-              type: "commit",
-            });
-            await github.rest.git.createRef({
-              owner,
-              repo,
-              ref: `refs/tags/${version}`,
-              sha: tag.data.sha,
-            });
-
-            const sealedRef = await github.rest.git.getRef({
-              owner,
-              repo,
-              ref: `tags/${version}`,
-            });
-            if (
-              sealedRef.data.object.type !== "tag" ||
-              sealedRef.data.object.sha !== tag.data.sha
-            ) {
-              core.setFailed(`${version} did not seal to the new annotated tag object`);
-              return;
+            if (branchMoved) {
+              if (!existingRef) {
+                core.setFailed(
+                  `${defaultBranch} moved to ${currentBranchCommit} before the tag was created; run the release again`,
+                );
+                return;
+              }
+              const comparison = await github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: `${commit}...${currentBranchCommit}`,
+              });
+              if (!["ahead", "identical"].includes(comparison.data.status)) {
+                core.setFailed(
+                  `${version} sealed commit is no longer contained in ${defaultBranch}`,
+                );
+                return;
+              }
             }
-            const sealedTag = await github.rest.git.getTag({
-              owner,
-              repo,
-              tag_sha: tag.data.sha,
-            });
-            if (
-              sealedTag.data.tag !== version ||
-              sealedTag.data.object.type !== "commit" ||
-              sealedTag.data.object.sha !== commit ||
-              sealedTag.data.message !== message
-            ) {
-              core.setFailed(`${version} annotated tag authority differs after creation`);
-              return;
+
+            let sealedTagObject = "";
+            let reusedExistingSeal = false;
+            if (existingRef) {
+              sealedTagObject = await verifyExactTag(existingRef);
+              reusedExistingSeal = true;
+              core.info(
+                `Reusing exact ${version} seal from run ${context.runId}; continuing failed jobs without recovery approval`,
+              );
+            } else {
+              const message = messageForAttempt(currentAttempt);
+              const tag = await github.rest.git.createTag({
+                owner,
+                repo,
+                tag: version,
+                message,
+                object: commit,
+                type: "commit",
+              });
+              if (
+                tag.data.tag !== version ||
+                tag.data.object.type !== "commit" ||
+                tag.data.object.sha !== commit ||
+                tag.data.message !== message
+              ) {
+                core.setFailed(`${version} annotated tag creation response differs from the seal`);
+                return;
+              }
+
+              let createRefResponse = null;
+              let createRefError = null;
+              for (const delayMs of postWriteRetryDelaysMs) {
+                if (delayMs > 0) {
+                  core.info(
+                    `${version} ref creation is not confirmed; retrying in ${delayMs}ms`,
+                  );
+                  await sleep(delayMs);
+                }
+                try {
+                  createRefResponse = await github.rest.git.createRef({
+                    owner,
+                    repo,
+                    ref: `refs/tags/${version}`,
+                    sha: tag.data.sha,
+                  });
+                  break;
+                } catch (error) {
+                  createRefError = error;
+                  if (
+                    error.status !== 422 &&
+                    error.status !== 429 &&
+                    !(Number.isInteger(error.status) && error.status >= 500 && error.status < 600)
+                  ) {
+                    throw error;
+                  }
+                  try {
+                    const observedRef = await github.rest.git.getRef({
+                      owner,
+                      repo,
+                      ref: `tags/${version}`,
+                    });
+                    await verifyExactTag(observedRef, tag.data.sha);
+                    createRefResponse = observedRef;
+                    break;
+                  } catch (observeError) {
+                    if (!retryablePostWriteError(observeError)) {
+                      throw observeError;
+                    }
+                  }
+                }
+              }
+              if (!createRefResponse) {
+                throw createRefError;
+              }
+              if (
+                createRefResponse.data.object.type !== "tag" ||
+                createRefResponse.data.object.sha !== tag.data.sha
+              ) {
+                core.setFailed(`${version} ref creation response differs from the new tag object`);
+                return;
+              }
+
+              const sealedRef = await readAfterWrite(
+                `${version} tag ref`,
+                () => github.rest.git.getRef({ owner, repo, ref: `tags/${version}` }),
+              );
+              sealedTagObject = await verifyExactTag(sealedRef, tag.data.sha);
             }
 
             core.setOutput("release_version", version);
             core.setOutput("release_commit", commit);
-            core.setOutput("release_tag_object", tag.data.sha);
+            core.setOutput("release_tag_object", sealedTagObject);
             await core.summary
               .addHeading("Cloud release sealed")
-              .addRaw(`\`${version}\` → \`${commit}\` (run ${context.runId})`)
+              .addRaw(
+                `\`${version}\` → \`${commit}\` (run ${context.runId}` +
+                `${reusedExistingSeal ? ", exact seal reused" : ""})`,
+              )
               .write();

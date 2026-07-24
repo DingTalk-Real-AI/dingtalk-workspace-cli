@@ -112,23 +112,49 @@ func searchMailFirstMailbox(rt *shortcut.RuntimeContext) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	boxes := searchMailUnwrapList(data, "mailboxes", "list", "items", "data", "result", "records")
-	for _, m := range boxes {
+	if addr := searchMailPickMailbox(data); addr != "" {
+		return addr, nil
+	}
+	return "", apperrors.NewValidation("未找到可用邮箱，请用 --email 指定要搜索的邮箱地址")
+}
+
+// searchMailPickMailbox resolves the first usable mailbox address from a
+// list_user_mailboxes response. It tolerates every observed shape: objects with
+// an email field (result.emailAccounts[].email) and bare string arrays
+// (result.emailAccounts[]), each at the top level or one level under a
+// result/data wrapper. searchMailToMaps drops plain strings, so the bare-string
+// case is scanned separately — otherwise all three smart mail shortcuts wrongly
+// report that no mailbox exists.
+func searchMailPickMailbox(data map[string]any) string {
+	containers := []string{"emailAccounts", "mailboxes", "list", "items", "data", "result", "records"}
+	for _, m := range searchMailUnwrapList(data, containers...) {
 		if addr := searchMailFirstString(m, "email", "emailAddress", "mailbox", "address", "account"); addr != "" {
-			return addr, nil
+			return addr
 		}
 	}
-	// Some gateways return the addresses as a bare string list.
-	for _, key := range []string{"mailboxes", "list", "items", "data", "result"} {
-		if arr, ok := data[key].([]any); ok {
-			for _, it := range arr {
-				if s, ok := it.(string); ok && s != "" {
-					return s, nil
+	scanStrings := func(m map[string]any) string {
+		for _, key := range containers {
+			if arr, ok := m[key].([]any); ok {
+				for _, it := range arr {
+					if s, ok := it.(string); ok && s != "" {
+						return s
+					}
 				}
 			}
 		}
+		return ""
 	}
-	return "", apperrors.NewValidation("未找到可用邮箱，请用 --email 指定要搜索的邮箱地址")
+	if s := scanStrings(data); s != "" {
+		return s
+	}
+	for _, wrap := range []string{"result", "data"} {
+		if inner, ok := data[wrap].(map[string]any); ok {
+			if s := scanStrings(inner); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 // searchMailMessages extracts the message list from a search_emails response.

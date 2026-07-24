@@ -3159,7 +3159,13 @@ func TestCrossPlatformCoverageMultiAccountSelectorAndIdentityLoadEdges(t *testin
 	if got, err := loadTokenForProfileIdentity(profile); err != nil || got.AccessToken != "mirror" {
 		t.Fatalf("identity repair = %#v %v", got, err)
 	}
-	if _, err := loadTokenForProfileIdentity(Profile{CorpID: "corp-a"}); err != nil {
-		t.Fatalf("organization-only token load = %v", err)
+	if _, err := loadTokenForProfileIdentity(Profile{CorpID: "corp-a"}); err == nil {
+		t.Fatal("unresolved profile loaded organization token owned by an exact identity")
+	}
+	profilesLoadCorp = func(string) (*TokenData, error) {
+		return &TokenData{CorpID: "corp-a", AccessToken: "organization"}, nil
+	}
+	if got, err := loadTokenForProfileIdentity(Profile{CorpID: "corp-a"}); err != nil || got.AccessToken != "organization" {
+		t.Fatalf("organization-only token load = %#v %v", got, err)
 	}
 }

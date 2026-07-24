@@ -208,6 +208,18 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 		return "", fmt.Errorf(`--content-format jsonml 字段 "jsonml" 必须是数组`)
 	}
 
+	// A scoped read returns a read-only fragment container. Strip that
+	// container before root/schema validation so users can feed the selected
+	// nodes into create/update without writing the synthetic fragment tag.
+	bodyArr, fragmentCount := stripBodyFragments(bodyArr)
+	if fragmentCount > 0 {
+		fmt.Fprintf(
+			os.Stderr,
+			"[WARN] 已自动移除 %d 处 fragment 只读容器外层（fragment 是 doc read --scope/--tags 的查询结果，不能写回文档），保留其子节点。请确认这是你想写入的内容。\n",
+			fragmentCount,
+		)
+	}
+
 	// Root 校验：doc create/update 要求以 ["root", {attrs?}, ...] 为根。
 	if len(bodyArr) == 0 {
 		return "", fmt.Errorf(`--content-format jsonml body 为空数组，期望 ["root", {attrs?}, ...blocks]`)
@@ -221,7 +233,7 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 	// when the original input is a bare JSONML array AND was not repaired.
 	// If repair happened, original source is broken — validate parsed data instead.
 	var vr *doc.JsonMLValidationResult
-	if !repaired && strings.HasPrefix(strings.TrimSpace(originalSrc), "[") {
+	if !repaired && fragmentCount == 0 && strings.HasPrefix(strings.TrimSpace(originalSrc), "[") {
 		vr = doc.ValidateJsonMLSource([]byte(originalSrc))
 	} else {
 		vr = doc.ValidateJsonMLBodyV2(bodyArr)
@@ -289,15 +301,32 @@ func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
 		}
 		return "", fmt.Errorf("JSON 语法错误: %w", err)
 	}
-	if _, ok := node.([]any); !ok {
+	nodeArr, ok := node.([]any)
+	if !ok {
 		return "", fmt.Errorf("--content-format jsonml 要求 --element 为 JSON 数组，实际类型: %T", node)
 	}
+
+	// Block writes accept one node. Unwrap a scoped-read fragment only when it
+	// resolves to exactly one node; nested fragments inside a regular node are
+	// spliced recursively.
+	strippedNode, fragmentCount, err := stripNodeFragments(nodeArr)
+	if err != nil {
+		return "", err
+	}
+	if fragmentCount > 0 {
+		fmt.Fprintf(
+			os.Stderr,
+			"[WARN] 已自动移除 %d 处 fragment 只读容器外层（fragment 是 doc read --scope/--tags 的查询结果，不能写回文档），保留其子节点。\n",
+			fragmentCount,
+		)
+	}
+	node = strippedNode
 
 	// Validate: always ON.
 	// Use ValidateJsonMLSource with original bytes for accurate line/col positions
 	// when the original input is a bare JSONML node array AND was not repaired.
 	var vr *doc.JsonMLValidationResult
-	if !repaired && strings.HasPrefix(strings.TrimSpace(originalSrc), "[") {
+	if !repaired && fragmentCount == 0 && strings.HasPrefix(strings.TrimSpace(originalSrc), "[") {
 		vr = doc.ValidateJsonMLSource([]byte(originalSrc))
 	} else {
 		vr = doc.ValidateJsonMLNodeV2(node)

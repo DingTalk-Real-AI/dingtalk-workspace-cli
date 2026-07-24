@@ -1,6 +1,6 @@
 # 发布手册（预发 / 正式）
 
-发布只走一条受控链路：GitHub Actions 的 `Release` workflow 负责版本分配、封板、构建、签名和下游发布；Homebrew 以 workflow 自动创建的 Formula PR 经独立审核合入为交付边界。本地 `dws-release` 仍是兼容入口，但不再要求某一台固定电脑承担打包；不要直接运行 `goreleaser release`，也不要手工补打、移动或复用 tag。
+发布只走一条受控链路：GitHub Actions 的 `Release` workflow 负责版本分配、封板、构建、签名和下游发布；Homebrew Formula 在不可变 Release 资产及 checksum 通过校验后，由同一 workflow 直接写入 `main`，不再创建二次 PR。本地 `dws-release` 仍是兼容入口，但不再要求某一台固定电脑承担打包；不要直接运行 `goreleaser release`，也不要手工补打、移动或复用 tag。
 
 发布前必须完成平台治理：目标 GitHub 仓库已启用 immutable releases，`main` 精确要求 `CI` workflow 的九个 context：`Lint`、`Test`、`Coverage`、`Policy`、`Edition`、`Interface Integrity`、`AI Behavior`、`CLI Smoke`、`Mock MCP`。云端和本地入口都会在封 tag 前检查 immutable releases、当前 SHA 的全部九个 context 和在途 Release；`v*` tag ruleset 仍需仓库管理员预先配置。
 
@@ -13,7 +13,9 @@
 3. workflow summary 会给出唯一的下一版本。把对应的精确 `CHANGELOG.md` 章节通过 PR 合入 `main`。
 4. 再次运行，改为 `release_operation=publish`，并输入 `PUBLISH beta` 或 `PUBLISH stable`。
 
-`plan` 是纯只读操作，不创建 tag、预留版本号或生成包。CHANGELOG 合入期间若另一个发布先占用了该版本，`publish` 会重新分配并因 CHANGELOG 章节不匹配而拒绝，需要重新 plan。`publish` 会先再次确认 dispatch SHA 仍是当前 `main`、Code Admission 和平台治理均通过，再由唯一的 write job 使用 GitHub API 原子创建 annotated tag；同一次 run 随即进入既有的跨平台构建、GitHub/npm、可选 OSS/Gitee 发布和 Homebrew PR DAG。内置 `GITHUB_TOKEN` 创建的 tag 不依赖第二条 workflow 被再次触发。
+`plan` 是纯只读操作，不创建 tag、预留版本号或生成包。CHANGELOG 合入期间若另一个发布先占用了该版本，`publish` 会重新分配并因 CHANGELOG 章节不匹配而拒绝，需要重新 plan。`publish` 会先再次确认 dispatch SHA 仍是当前 `main`、Code Admission 和平台治理均通过，再由唯一的 write job 使用 GitHub API 原子创建 annotated tag；同一次 run 随即进入既有的跨平台构建、GitHub/npm、可选 OSS/Gitee 发布和 Homebrew 直交付 DAG。内置 `GITHUB_TOKEN` 创建的 tag 不依赖第二条 workflow 被再次触发。
+
+为缩短封板前后的关键路径，`publish` 的只读版本规划会与平台治理检查并行，seal 仍严格等待二者成功；plan 在 candidate annotated tag 上验证过的 contract 和 stable/beta baseline 会绑定进 seal，并由 seal 后的 tag authority 检查复用。Code Admission 状态与 immutable-releases 治理仍会在 seal 后再次读取，避免 preflight 与发布之间的状态变化被忽略。随后三类只读门禁（release automation、命令兼容性、multi-profile E2E）与 GoReleaser 构建并行；Node/archive 等仅供后处理使用的工具也延后到构建完成后安装。并行和已验证结果复用只改变调度，不降低发布门禁：任何一条验证失败都会阻止 GitHub Release、npm、镜像和 Homebrew 发布，delivery proof 也要求三条验证 job 全部成功。
 
 OSS 镜像默认不参与发布 DAG，适用于尚未创建 Bucket 的仓库。云端封板会把当时的仓库变量 `ENABLE_OSS_MIRROR=true` 记录为不可变 tag 元数据 `OSS-Mirror: enabled`，否则记录为 `deferred`；后续发布和撤回只读取该 sealed policy，不读取变量的当前值。`enabled` 继续对缺失凭据、无效 Bucket、上传、pointer 和撤回失败保持 fail-closed；`deferred` 明确跳过不存在的渠道。为避免补发后撤回遗漏，deferred 版本暂不接受 `repair_oss_version`，启用 OSS 只影响后续新 tag，直到补齐可审计的不可变 repair 证明。
 
@@ -130,14 +132,14 @@ dws-release v1.2.3 --from-beta v1.2.3-beta.1 --publish
 
 ## CI/CD 保证
 
-- 只接受 `vX.Y.Z-beta.N` 和 `vX.Y.Z`，且新版本必须高于上一正式版。这里的“上一正式版”必须同时具备公开非草稿 GitHub Release 和同 tag/commit 的成功 Release workflow；只有 tag、没有交付成功的孤儿版本会阻断后续发布，要求走受保护恢复补齐。云端 tag 会固定 `Release-Run`、requester、commit 和版本分配指纹，交付验证按该精确 run/attempt 及完整 job graph 取证，不接受任意 `workflow_dispatch`。历史版本若曾通过专用 recovery workflow 完成交付，只能使用仓库内 `delivered-stable-recoveries.json` 中精确到 tag、commit、run、workflow SHA 与 attempt 的 reviewed 证据。
+- 只接受 `vX.Y.Z-beta.N` 和 `vX.Y.Z`，且新版本必须高于上一正式版。这里的“上一正式版”必须同时具备公开非草稿 GitHub Release 和同 tag/commit 的成功 Release workflow；只有 tag、没有交付成功的孤儿版本会阻断后续发布，要求走机器核验恢复补齐。云端 tag 会固定 `Release-Run`、requester、commit 和版本分配指纹，交付验证按该精确 run/attempt 及完整 job graph 取证，不接受任意 `workflow_dispatch`。历史版本若曾通过专用 recovery workflow 完成交付，只能使用仓库内 `delivered-stable-recoveries.json` 中精确到 tag、commit、run、workflow SHA 与 attempt 的 reviewed 证据。
 - tag 必须是 annotated tag；本地脚本要求封板提交已通过 PR 合入并包含在远端 `main` 历史中，发布只推送 tag。CI 允许其后 `main` 继续前进，但始终要求封板提交位于 `main` 历史中。
 - 日常 CI 和发布前都会对比“最新已交付正式版”的完整命令树；若长时间预检期间该 baseline 发生变化，会针对新的 baseline 重新比较。
 - GoReleaser 只构建；Darwin 重签、checksums 重算和 npm 安装验证通过后，才统一上传 GitHub Release 的最终产物。
 - 六个平台归档会逐个解包并核验二进制内嵌版本；公开资产集合、checksums 集合和 npm tarball integrity 都必须精确一致。npm tarball 固定由 npm `10.9.2` 打包，避免重跑时因 runner 自带 npm 漂移产生不同字节。
 - stable 发布到 npm `latest`；prerelease 发布到 npm `beta`。启用 `ENABLE_OSS_MIRROR=true` 后，stable 同步 OSS `latest.txt` 和共享安装脚本，prerelease 只同步 OSS `beta.txt`，不会覆盖稳定入口。
 - Release workflow 使用一个最多容纳 100 个 pending run 的串行 publication queue；版本规划、云端封板、发布、恢复、修复和撤回共享同一发布锁。
-- 本地 tag push 失败时会删除本次新建的本地 tag。远端 tag 一旦创建，后续发布归 CI 所有；发布中途失败时走受保护恢复，禁止改 tag 指向或复用版本号。只有已经公开版本经过受保护的全渠道撤回并留下永久 `withdrawn/...` 墓碑后，撤回 workflow 才会在最后一步删除原 tag。
+- 本地 tag push 失败时会删除本次新建的本地 tag。远端 tag 一旦创建，后续发布归 CI 所有；发布中途失败时先重跑同一 run 的失败 jobs，必须跨 run 时走机器核验恢复，禁止改 tag 指向或复用版本号。只有已经公开版本经过受保护的全渠道撤回并留下永久 `withdrawn/...` 墓碑后，撤回 workflow 才会在最后一步删除原 tag。
 
 npm 补发只允许从默认分支触发 Release workflow 的 `repair_npm_version`。它只支持启用 immutable releases 后、由本流水线成功产出的公开 immutable release：目标必须是 `main` 历史中的 annotated tag，并且同 commit 的 `Build immutable GitHub Release` job 已成功。即使后续 npm 分发失败，这个独立的产物封存边界仍可作为补发依据。补发会用目标 commit 的 npm 模板重组包，逐平台核验资产和二进制版本，再发布到隔离的 `backfill` dist-tag，不会回滚 `latest` / `beta`。历史 mutable release 不进入自动补发路径，避免把可被替换的资产带入 npm。
 
@@ -164,17 +166,17 @@ dws-release recover v1.2.3-beta.1
 
 - 输入精确绑定原 annotated tag object、commit 和失败的 sealed `Release` run；云端 run 还必须与 tag 内的 run ID、attempt、requester 完全一致，commit 必须仍在 `main` 历史中。
 - 目标只允许不存在 GitHub Release 或仍为 Draft；已经公开的版本不能全量重建：单个下游故障走对应的 channel repair，版本本身有问题则走受保护的全平台 withdrawal。
-- `release-recovery` environment 必须限制为受保护分支、配置至少一名 required reviewer，并禁止自审；workflow 会通过 API 复核这些设置，未配置时 fail closed。
+- 恢复不再进入人工审批 environment。workflow 会机器核验 tag object、commit、原失败 run/attempt、请求人、完整 seal metadata、`main` 祖先关系以及 Release 状态；任一事实不一致都会在构建前 fail closed。
 - 恢复复用正常的 contract、构建、Developer ID 签名、资产校验、immutable 发布、Homebrew、npm，以及已启用的 OSS jobs，不存在 recovery 专用 publisher 或门禁跳过。
 - 如果 GitHub Release 已在 recovery 中封存、后续 Homebrew/npm 校验发生瞬时失败，只重跑该 run 的 failed jobs；流水线仅在隐藏 run marker、tag object、commit 和 finalized artifact 字节全部精确一致时复用公开 Release。
 
 成功的默认分支恢复 run 会成为后续 beta → stable 和 stable baseline 验证的可审计交付证据；历史临时分支恢复仍只接受 reviewed manifest 中的固定证据。
 
-云端 seal 后不要使用 GitHub 的 “Re-run failed jobs” 作为交付修复：annotated tag 永久绑定最初的 run attempt，普通 rerun 不会成为可接受的交付证据。GitHub Release 尚未公开时走上述 protected recovery；已经公开且仅 npm/OSS/Gitee 某一渠道失败时走对应 repair；版本内容本身有问题时走 withdrawal。
+seal job 写入 tag 后如果只因 GitHub API 瞬时 404/429/5xx 或后续 job 失败，可直接使用 GitHub 的 “Re-run failed jobs”。同一 run 会精确复用原 release-plan；seal 只在 version、tag object、commit、channel、beta 来源、OSS policy、请求人、run ID 和完整 message 全部匹配且原 attempt 不大于当前 attempt 时认领已有 tag。不同 run 或任一字段不匹配时不会认领。GitHub Release 尚未公开且必须跨 run 重建时走上述机器核验 recovery；已经公开且仅 npm/OSS/Gitee 某一渠道失败时走对应 repair；版本内容本身有问题时走 withdrawal。
 
 OSS 的 `latest.txt` / `beta.txt` 是镜像频道元数据；当前仓库安装器仍主要从 GitHub/Gitee 解析版本。启用 OSS 后，发布和撤回把它作为受控分发渠道处理，保证一旦外部消费者接入该 pointer，也不会继续解析到已撤回版本；未启用时两条流程都明确跳过不存在的 OSS 渠道。
 
-Release workflow 会生成 Darwin/Linux 双架构 Formula，并分别为 stable/beta 打开 Homebrew PR；tap 的默认分支仍以独立审核合入为交付边界。撤回 workflow 使用相同模板和回退版本 checksums 打开反向 PR；问题 GitHub Release 会先被移除以阻止新安装，永久墓碑和 workflow 日志承担审计/续跑依据。
+Release workflow 会生成 Darwin/Linux 双架构 Formula，并在不可变资产逐个校验后，只提交对应 stable 或 beta Formula 文件到 `main`；并发 `main` 更新会以全新 clone 最多重试三次，绝不 force push。由于 `GITHUB_TOKEN` 的 push 不会启动另一轮 CI，workflow 只在确认该 commit 单父、唯一改动为目标 Formula、内容与本次已验证产物逐字节一致，且父 commit 九项 Code Admission 全绿后，直接为 Formula-only commit 封存同名九项成功 checks，避免下一次发布因缺失 contexts 被卡住。撤回 workflow 暂时仍使用相同模板和回退版本 checksums 打开反向 PR；问题 GitHub Release 会先被移除以阻止新安装，永久墓碑和 workflow 日志承担审计/续跑依据。
 
 ## 平台治理前置
 
@@ -187,9 +189,9 @@ Release workflow 会生成 Darwin/Linux 双架构 Formula，并分别为 stable/
 - 配置 `APPLE_CERTIFICATE_P12_BASE64`、`APPLE_CERTIFICATE_PASSWORD` 和具备发布权限的 `NPM_TOKEN`；撤回还要求该 npm 身份能够执行 `deprecate` 和修改 dist-tag。
 - 启用 OSS 镜像时，先创建有效 Bucket，再设置仓库变量 `ENABLE_OSS_MIRROR=true`，并配置 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`、`OSS_BUCKET`，按需配置 `OSS_PREFIX`。启用后发布保持 fail-closed；撤回身份必须能够补齐安全版本资产、写 `latest.txt` / `beta.txt` 并删除问题版本前缀。尚未 provision Bucket 时保持该变量未设置或不等于 `true`，新 tag 会封存 `OSS-Mirror: deferred` 并跳过 OSS；该版本不能通过现有 repair 流程事后改成启用。
 - 若启用 Gitee fallback，设置 `ENABLE_GITEE_UPLOAD_FALLBACK=true`，并配置 `GITEE_TOKEN`、`GITEE_USER`、`GITEE_REPO`；该身份必须能够创建和删除目标仓库的 Release 与 tag。
-- 单独配置 `HOMEBREW_PR_TOKEN`，优先使用仅授权本仓库且具备 `Contents: write`、`Pull requests: write` 的 fine-grained PAT；若组织策略不允许该账号使用 fine-grained PAT，则回退到仅带 `public_repo` scope 的专用 classic PAT。治理预检和 tag contract 会验证 token 身份、classic scope，并用 `[skip ci]` 临时分支和 draft PR 完成真实写权限 canary，随后立即关闭 PR、删除分支；任何清理失败都会 fail closed。门禁也会拒绝与治理 token 复用。
-- 创建 `release-recovery` environment，只允许受保护分支，设置 required reviewer、禁止自审并关闭管理员绕过。workflow 会读取 environment 的 required-reviewer、prevent-self-review 和 protected-branch 规则；规则缺失时紧急恢复会失败，正常 beta/stable tag 发布不受影响。
+- 正常 Homebrew 发布使用现有的 `HOMEBREW_PR_TOKEN` 直接提交 Formula-only commit，不再创建 Homebrew PR，也不跑权限 canary。GitHub 不允许内置 Actions App 作为当前仓库 ruleset 的 bypass actor，因此两个默认分支 ruleset 都只给该 token 所属的指定发布管理员用户 `always` bypass；仓库脚本仍会限制提交路径、校验 Ruby、禁止 force push，并在并发更新时重新基于最新 `main`。
+- `HOMEBREW_PR_TOKEN` 应保持仓库范围的 `Contents: write` 与 `Pull requests: write` 权限；后者仅供撤回流程创建回退 PR。不要与 `RELEASE_GOVERNANCE_TOKEN` 复用，并定期审计 token owner 与 ruleset bypass actor 一致。
 - 创建 `release-withdrawal` environment，只允许受保护分支，设置至少一名 required reviewer、禁止申请人自审并关闭管理员绕过。撤回 workflow 会通过 API 复核这些规则；任何一项缺失都会在触碰 npm、OSS、Gitee、Homebrew 或 GitHub Release 前失败。
-- 仓库或组织的 Actions 策略必须允许 `Release` 与 `Withdraw release` workflow 的 `GITHUB_TOKEN` 获得各 job 声明的 `contents: write`。若上述发布凭证采用 environment secret，确认 `release-withdrawal` 审批完成后能够读取撤回所需的 npm、OSS、Gitee 和 Homebrew 凭证。
+- 仓库或组织的 Actions 策略必须允许 `Release` 与 `Withdraw release` workflow 的 `GITHUB_TOKEN` 获得各 job 声明的 `contents: write`；Release 的 GitHub Actions identity 还必须能够直接更新两个受控 Formula 路径。若撤回凭证采用 environment secret，确认 `release-withdrawal` 审批完成后能够读取撤回所需的 npm、OSS、Gitee 和 Homebrew 凭证。
 
 immutable releases，或任一 Code Admission context 缺失、未成功时，发布脚本会自动拒绝封 tag。tag ruleset 可能来自组织层，脚本不自动推断其最终作用范围；管理员确认不能省略，脚本约定也不能替代平台强制。
