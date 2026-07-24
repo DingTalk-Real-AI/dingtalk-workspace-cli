@@ -24,8 +24,8 @@ import (
 // records.
 func TestRecentListProjectResultWrapper(t *testing.T) {
 	const raw = `{"result":{"hasMore":true,"nextCursor":"c2","recentItems":[
-		{"name":"周报","nodeType":"doc","nodeId":"n1","docUrl":"https://x/1"},
-		{"name":"预算表","nodeType":"sheet","nodeId":"n2","docUrl":"https://x/2"}
+		{"name":"weekly report","nodeType":"doc","nodeId":"n1","docUrl":"https://x/1"},
+		{"name":"budget sheet","nodeType":"sheet","nodeId":"n2","docUrl":"https://x/2"}
 	]}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -33,7 +33,7 @@ func TestRecentListProjectResultWrapper(t *testing.T) {
 	}
 	out := recentListProject(data)
 	if got, _ := out["count"].(int); got != 2 {
-		t.Fatalf("上下层数据不一致: 底层 result.recentItems 有 2 条，投影 count=%v (%v)", out["count"], out)
+		t.Fatalf("lower/upper mismatch: result.recentItems has 2 entries, projection count=%v (%v)", out["count"], out)
 	}
 	if out["hasMore"] != true || out["nextCursor"] != "c2" {
 		t.Fatalf("pagination fields lost from result wrapper: %v", out)
@@ -55,7 +55,7 @@ func TestRecentListProjectNoItems(t *testing.T) {
 
 // TestRecentListProjectTopLevel covers the already-unwrapped shape.
 func TestRecentListProjectTopLevel(t *testing.T) {
-	const raw = `{"recentItems":[{"name":"周报","nodeId":"n1"}],"hasMore":false}`
+	const raw = `{"recentItems":[{"name":"weekly report","nodeId":"n1"}],"hasMore":false}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)

@@ -113,7 +113,13 @@ func callListProject(data map[string]any) []map[string]any {
 			continue
 		}
 		row := map[string]any{}
-		if v, ok := callListFirst(m, "taskUuid", "task_uuid", "uuid", "minutesId", "minutes_id", "id"); ok {
+		// Only real taskUuid spellings map to taskUuid: the downstream
+		// +record-pause/resume/stop commands feed this value straight into the
+		// recording-control tool as the task uuid, so a minutesId (the minutes
+		// document id, a different identifier) must not be substituted here or
+		// record control would fail with a wrong id. The backend list already
+		// returns taskUuid.
+		if v, ok := callListFirst(m, "taskUuid", "task_uuid", "uuid"); ok {
 			row["taskUuid"] = v
 		}
 		if v, ok := callListFirst(m, "title", "name"); ok {

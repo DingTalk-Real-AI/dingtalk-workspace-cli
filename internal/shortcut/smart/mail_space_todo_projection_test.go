@@ -62,15 +62,15 @@ func TestSearchMailPickMailbox(t *testing.T) {
 // container is probed — otherwise +resolve-space silently finds no candidates.
 func TestResolveSpaceItemsWikiSpaces(t *testing.T) {
 	const raw = `{"result":{"wikiSpaces":[
-		{"spaceId":"s1","name":"研发知识库"},
-		{"spaceId":"s2","name":"产品知识库"}
+		{"spaceId":"s1","name":"R&D wiki"},
+		{"spaceId":"s2","name":"product wiki"}
 	]}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatal(err)
 	}
 	if got := resolveSpaceItems(data); len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 result.wikiSpaces 有 2 条，resolver 返回 %d 条", len(got))
+		t.Fatalf("lower/upper mismatch: result.wikiSpaces has 2 entries, resolver returned %d", len(got))
 	}
 }
 
@@ -166,8 +166,8 @@ func TestCreatedTodosBackendError(t *testing.T) {
 func TestCreatedTodosProjectsCards(t *testing.T) {
 	fake := &stubMailboxCaller{byTool: map[string]string{
 		"get_user_todos_in_current_org": `{"result":{"todoCards":[
-			{"subject":"待办A","taskId":"111","dueTime":1784686500000},
-			{"subject":"待办B","taskId":"222"}
+			{"subject":"todoA","taskId":"111","dueTime":1784686500000},
+			{"subject":"todoB","taskId":"222"}
 		]}}`,
 	}}
 	out := runShortcut(t, fake, "todo", "+created-todos", "--format", "json")
@@ -177,7 +177,7 @@ func TestCreatedTodosProjectsCards(t *testing.T) {
 	}
 	created, _ := d["created"].([]any)
 	if len(created) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 2 条待办，投影 created=%d (%s)", len(created), out)
+		t.Fatalf("lower/upper mismatch: 2 todos in backend, projection created=%d (%s)", len(created), out)
 	}
 	if !strings.Contains(out, "111") || !strings.Contains(out, "222") {
 		t.Fatalf("projected rows missing taskId: %s", out)
@@ -187,17 +187,17 @@ func TestCreatedTodosProjectsCards(t *testing.T) {
 // TestSmartSearchMailAutoResolvesMailbox runs +search-mail without --email so the
 // shortcut must auto-resolve the mailbox from list_user_mailboxes
 // (result.emailAccounts) before searching. Before the fix this returned
-// "未找到可用邮箱" because emailAccounts was not probed.
+// the no-mailbox validation error because emailAccounts was not probed.
 func TestSmartSearchMailAutoResolvesMailbox(t *testing.T) {
 	fake := &stubMailboxCaller{byTool: map[string]string{
 		"list_user_mailboxes": `{"emailAccounts":[{"email":"me@example.com"}]}`,
-		"search_emails":       `{"result":{"messages":[{"subject":"周报","from":"a@x.com"}]}}`,
+		"search_emails":       `{"result":{"messages":[{"subject":"weekly report","from":"a@x.com"}]}}`,
 	}}
-	out := runShortcut(t, fake, "mail", "+search-mail", "--query", "subject:周报", "--format", "json")
+	out := runShortcut(t, fake, "mail", "+search-mail", "--query", "subject:weekly report", "--format", "json")
 	if strings.Contains(out, "未找到可用邮箱") || out == "" {
 		t.Fatalf("mailbox auto-resolve failed: %s", out)
 	}
-	if !strings.Contains(out, "周报") {
+	if !strings.Contains(out, "weekly report") {
 		t.Fatalf("search result not projected: %s", out)
 	}
 }

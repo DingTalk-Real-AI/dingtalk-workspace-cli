@@ -25,9 +25,9 @@ import (
 func TestListFormsProjectProcessCodeListShape(t *testing.T) {
 	// Faithful list_user_visible_process shape (as returned by the backend).
 	const raw = `{"result":{"processCodeList":[
-		{"processCode":"PROC-1","processName":"请假","dirName":"假勤管理"},
-		{"processCode":"PROC-2","processName":"补卡申请","dirName":"假勤管理"},
-		{"processCode":"PROC-3","processName":"加班","dirName":"假勤管理"}
+		{"processCode":"PROC-1","processName":"leave","dirName":"attendance"},
+		{"processCode":"PROC-2","processName":"check-in fix","dirName":"attendance"},
+		{"processCode":"PROC-3","processName":"overtime","dirName":"attendance"}
 	],"totalCount":-1},"success":true}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -36,7 +36,7 @@ func TestListFormsProjectProcessCodeListShape(t *testing.T) {
 
 	forms := listFormsProject(data)
 	if len(forms) != 3 {
-		t.Fatalf("上下层数据不一致: 底层有 3 张表单，投影返回 %d 张 (forms=%v)", len(forms), forms)
+		t.Fatalf("lower/upper mismatch: 3 forms in backend, projection returned %d (forms=%v)", len(forms), forms)
 	}
 	for _, f := range forms {
 		if f["processCode"] == nil || f["name"] == nil {
@@ -48,7 +48,7 @@ func TestListFormsProjectProcessCodeListShape(t *testing.T) {
 // TestListFormsProjectBareArrayShape ensures a bare top-level array still works.
 func TestListFormsProjectBareArrayShape(t *testing.T) {
 	const raw = `{"result":[
-		{"processCode":"PROC-9","processName":"通用审批"}
+		{"processCode":"PROC-9","processName":"generic approval"}
 	]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -65,15 +65,15 @@ func TestListFormsProjectBareArrayShape(t *testing.T) {
 // "values" or all four commands silently return empty despite backend records.
 func TestOAInstanceResolveListValuesShape(t *testing.T) {
 	const raw = `{"result":{"hasMore":false,"values":[
-		{"processInstanceId":"i-1","title":"测试用户的请假"},
-		{"processInstanceId":"i-2","title":"测试用户的报销"}
+		{"processInstanceId":"i-1","title":"user leave"},
+		{"processInstanceId":"i-2","title":"user reimbursement"}
 	]}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
 	if got := oaInstanceResolveList(data); len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 result.values 有 2 条，resolver 返回 %d 条", len(got))
+		t.Fatalf("lower/upper mismatch: result.values has 2 entries, resolver returned %d", len(got))
 	}
 	// End-to-end through a real projection that uses the shared resolver.
 	if instances := listSubmittedProject(data); len(instances) != 2 {

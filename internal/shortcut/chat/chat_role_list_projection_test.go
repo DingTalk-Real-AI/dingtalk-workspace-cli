@@ -33,7 +33,7 @@ func TestChatRoleListProjectRolesShape(t *testing.T) {
 	}
 	got := chatRoleListProject(data)
 	if len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 result.roles 有 2 条，投影返回 %d 条 (%v)", len(got), got)
+		t.Fatalf("lower/upper mismatch: result.roles has 2 entries, projection returned %d (%v)", len(got), got)
 	}
 	if got[0]["openRoleId"] == nil || got[0]["name"] == nil {
 		t.Fatalf("role fields missing: %v", got[0])
@@ -43,7 +43,7 @@ func TestChatRoleListProjectRolesShape(t *testing.T) {
 // TestChatGroupResolveListStillHandlesGroups ensures adding "roles" did not
 // disturb the group-listing shape the resolver is shared with.
 func TestChatGroupResolveListStillHandlesGroups(t *testing.T) {
-	const raw = `{"result":{"groups":[{"openConversationId":"c1","title":"项目群"}]}}`
+	const raw = `{"result":{"groups":[{"openConversationId":"c1","title":"project group"}]}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)

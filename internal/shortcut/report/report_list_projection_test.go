@@ -25,14 +25,14 @@ import (
 // reports.
 func TestReportEntryListResolveListSnakeShape(t *testing.T) {
 	const raw = `{"result":{"report_list":[
-		{"reportId":"r1","templateName":"日报"},
-		{"reportId":"r2","templateName":"周报"}
+		{"reportId":"r1","templateName":"daily report"},
+		{"reportId":"r2","templateName":"weekly report"}
 	]}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
 	if got := reportEntryListResolveList(data); len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 result.report_list 有 2 条，resolver 返回 %d 条", len(got))
+		t.Fatalf("lower/upper mismatch: result.report_list has 2 entries, resolver returned %d", len(got))
 	}
 }

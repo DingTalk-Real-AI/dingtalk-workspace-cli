@@ -24,8 +24,8 @@ import (
 // silently returns empty despite the backend returning shifts.
 func TestSearchClassProjectShiftVOShape(t *testing.T) {
 	const raw = `{"result":{"items":[
-		{"shiftVO":{"id":957395083,"name":"默认班次"}},
-		{"shiftVO":{"id":957395084,"name":"早班"}}
+		{"shiftVO":{"id":957395083,"name":"default shift"}},
+		{"shiftVO":{"id":957395084,"name":"morning shift"}}
 	]}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -33,7 +33,7 @@ func TestSearchClassProjectShiftVOShape(t *testing.T) {
 	}
 	got := searchClassProject(data)
 	if len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 2 个班次，投影返回 %d 个 (%v)", len(got), got)
+		t.Fatalf("lower/upper mismatch: 2 shifts in backend, projection returned %d (%v)", len(got), got)
 	}
 	if got[0]["name"] == nil || got[0]["classId"] == nil {
 		t.Fatalf("shiftVO fields not unwrapped: %v", got[0])
@@ -52,8 +52,8 @@ func TestSearchRuleProjectEntityVOShape(t *testing.T) {
 		{"adjustment", "adjustmentList"},
 	} {
 		raw := `{"result":{"` + tc.key + `":[
-			{"entityVO":{"id":11,"name":"工作日加班"},"permissionVO":{}},
-			{"entityVO":{"id":12,"name":"节假日加班"},"permissionVO":{}}
+			{"entityVO":{"id":11,"name":"weekday overtime"},"permissionVO":{}},
+			{"entityVO":{"id":12,"name":"holiday overtime"},"permissionVO":{}}
 		]}}`
 		var data map[string]any
 		if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -61,7 +61,7 @@ func TestSearchRuleProjectEntityVOShape(t *testing.T) {
 		}
 		got := searchRuleProject(data)
 		if len(got) != 2 {
-			t.Fatalf("[%s] 上下层数据不一致: 底层 result.%s 有 2 条，投影返回 %d 条", tc.name, tc.key, len(got))
+			t.Fatalf("[%s] lower/upper mismatch: result.%s has 2 entries, projection returned %d", tc.name, tc.key, len(got))
 		}
 		if got[0]["ruleId"] == nil || got[0]["name"] == nil {
 			t.Fatalf("[%s] entityVO fields not unwrapped: %v", tc.name, got[0])

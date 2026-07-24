@@ -24,21 +24,21 @@ import (
 // return empty despite the backend returning spaces.
 func TestSpaceListProjectWikiSpacesShape(t *testing.T) {
 	const raw = `{"result":{"hasMore":false,"wikiSpaces":[
-		{"workspaceId":"w1","name":"研发知识库"},
-		{"workspaceId":"w2","name":"产品知识库"}
+		{"workspaceId":"w1","name":"R&D wiki"},
+		{"workspaceId":"w2","name":"product wiki"}
 	]},"success":true}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
 	if spaces := spaceListProject(data); len(spaces) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 result.wikiSpaces 有 2 条，投影返回 %d 条 (%v)", len(spaces), spaces)
+		t.Fatalf("lower/upper mismatch: result.wikiSpaces has 2 entries, projection returned %d (%v)", len(spaces), spaces)
 	}
 }
 
 // TestSpaceListProjectTopLevelWikiSpaces covers the already-unwrapped shape.
 func TestSpaceListProjectTopLevelWikiSpaces(t *testing.T) {
-	const raw = `{"wikiSpaces":[{"workspaceId":"w1","name":"研发知识库"}]}`
+	const raw = `{"wikiSpaces":[{"workspaceId":"w1","name":"R&D wiki"}]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)

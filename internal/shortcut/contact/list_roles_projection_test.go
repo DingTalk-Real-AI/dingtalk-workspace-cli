@@ -26,13 +26,13 @@ import (
 func TestListRolesProjectGroupedShape(t *testing.T) {
 	// Faithful get_org_labels shape (as returned by the backend / leaf command).
 	const raw = `{"result":[
-		{"groupName":"默认","labels":[
-			{"labelId":101,"name":"角色A"},
-			{"labelId":102,"name":"角色B"},
-			{"labelId":103,"name":"角色C"}]},
-		{"groupName":"职务","labels":[
-			{"labelId":104,"name":"角色D"},
-			{"labelId":105,"name":"角色E"}]}
+		{"groupName":"default","labels":[
+			{"labelId":101,"name":"roleA"},
+			{"labelId":102,"name":"roleB"},
+			{"labelId":103,"name":"roleC"}]},
+		{"groupName":"job","labels":[
+			{"labelId":104,"name":"roleD"},
+			{"labelId":105,"name":"roleE"}]}
 	]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -41,7 +41,7 @@ func TestListRolesProjectGroupedShape(t *testing.T) {
 
 	roles := listRolesProject(data)
 	if len(roles) != 5 {
-		t.Fatalf("上下层数据不一致: 底层有 5 个角色，投影返回 %d 个 (roles=%v)", len(roles), roles)
+		t.Fatalf("lower/upper mismatch: 5 roles in backend, projection returned %d (roles=%v)", len(roles), roles)
 	}
 	for _, r := range roles {
 		if r["labelId"] == nil || r["labelName"] == nil {
@@ -55,7 +55,7 @@ func TestListRolesProjectGroupedShape(t *testing.T) {
 // through rather than dropped.
 func TestListRolesProjectNestedWrapperAndNonMap(t *testing.T) {
 	const raw = `{"result":{"labels":[
-		{"groupName":"默认","labels":[{"labelId":1,"name":"角色A"}]},
+		{"groupName":"default","labels":[{"labelId":1,"name":"roleA"}]},
 		"junk"
 	]}}`
 	var data map[string]any
@@ -71,8 +71,8 @@ func TestListRolesProjectNestedWrapperAndNonMap(t *testing.T) {
 // response is already a flat label list (response-shape drift tolerance).
 func TestListRolesProjectFlatShape(t *testing.T) {
 	const raw = `{"result":[
-		{"labelId":1,"name":"销售"},
-		{"labelId":2,"name":"市场"}
+		{"labelId":1,"name":"sales"},
+		{"labelId":2,"name":"market"}
 	]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {

@@ -24,8 +24,8 @@ import (
 // +list-dept-members silently returns empty despite the backend returning members.
 func TestMemberListProjectDeptUserListShape(t *testing.T) {
 	const raw = `{"deptUserList":[
-		{"userInfo":{"userId":"u1","name":"张三"}},
-		{"userInfo":{"userId":"u2","name":"李四"}}
+		{"userInfo":{"userId":"u1","name":"Alice"}},
+		{"userInfo":{"userId":"u2","name":"Bob"}}
 	]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -33,7 +33,7 @@ func TestMemberListProjectDeptUserListShape(t *testing.T) {
 	}
 	got := memberListProject(data)
 	if len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 deptUserList 有 2 人，投影返回 %d 人 (%v)", len(got), got)
+		t.Fatalf("lower/upper mismatch: deptUserList has 2 members, projection returned %d (%v)", len(got), got)
 	}
 	if got[0]["userId"] == nil || got[0]["name"] == nil {
 		t.Fatalf("userInfo fields not unwrapped: %v", got[0])
@@ -46,8 +46,8 @@ func TestMemberListProjectDeptUserListShape(t *testing.T) {
 // +list-role-members silently returns empty despite the role having members.
 func TestMemberListProjectLabelUserListShape(t *testing.T) {
 	const raw = `{"labelUserList":[
-		{"userInfo":{"userId":"u1","name":"王五"}},
-		{"userInfo":{"userId":"u2","name":"赵六"}}
+		{"userInfo":{"userId":"u1","name":"Carol"}},
+		{"userInfo":{"userId":"u2","name":"Dave"}}
 	]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -55,7 +55,7 @@ func TestMemberListProjectLabelUserListShape(t *testing.T) {
 	}
 	got := memberListProject(data)
 	if len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 labelUserList 有 2 人，投影返回 %d 人 (%v)", len(got), got)
+		t.Fatalf("lower/upper mismatch: labelUserList has 2 members, projection returned %d (%v)", len(got), got)
 	}
 	if got[0]["userId"] == nil || got[0]["name"] == nil {
 		t.Fatalf("userInfo not unwrapped: %v", got[0])
@@ -65,7 +65,7 @@ func TestMemberListProjectLabelUserListShape(t *testing.T) {
 // TestMemberListProjectFlatRoleShape ensures the shared projection still handles
 // a flat member shape unchanged.
 func TestMemberListProjectFlatRoleShape(t *testing.T) {
-	const raw = `{"result":[{"userId":"u9","name":"张三"}]}`
+	const raw = `{"result":[{"userId":"u9","name":"Alice"}]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)

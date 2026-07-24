@@ -24,14 +24,14 @@ import (
 // backend returning meeting-room groups.
 func TestRoomGroupsProjectGroupListShape(t *testing.T) {
 	const raw = `{"result":{"groupList":[
-		{"groupId":"g1","groupName":"北楼会议室"},
-		{"groupId":"g2","groupName":"南楼会议室"}
+		{"groupId":"g1","groupName":"north rooms"},
+		{"groupId":"g2","groupName":"south rooms"}
 	]}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
 	if got := roomGroupsProject(data); len(got) != 2 {
-		t.Fatalf("上下层数据不一致: 底层 result.groupList 有 2 条，投影返回 %d 条", len(got))
+		t.Fatalf("lower/upper mismatch: result.groupList has 2 entries, projection returned %d", len(got))
 	}
 }
