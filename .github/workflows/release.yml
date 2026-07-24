@@ -1444,7 +1444,7 @@ jobs:
           DWS_FORMULA_SOURCE: ${{ github.workspace }}/dist/homebrew/dingtalk-workspace-cli.rb
           DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
           DWS_TAP_BRANCH: main
-          DWS_TAP_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
           DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ needs.release-contract.outputs.release_version }} [skip ci]"
           DWS_GIT_NAME: github-actions[bot]
           DWS_GIT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
@@ -1458,7 +1458,7 @@ jobs:
           DWS_TAP_FORMULA_PATH: Formula/dingtalk-workspace-cli-beta.rb
           DWS_TAP_REPO_URL: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
           DWS_TAP_BRANCH: main
-          DWS_TAP_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DWS_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
           DWS_TAP_COMMIT_MESSAGE: "chore: update beta formula for ${{ needs.release-contract.outputs.release_version }} [skip ci]"
           DWS_GIT_NAME: github-actions[bot]
           DWS_GIT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com

@@ -1973,7 +1973,6 @@ func TestReleaseWorkflowPublishesStableHomebrewFormulaDirectly(t *testing.T) {
 	workflow := string(data)
 	for _, forbidden := range []string{
 		"Verify Homebrew PR automation permission",
-		"secrets.HOMEBREW_PR_TOKEN",
 		"verify-homebrew-pr-token.sh",
 		"DWS_TAP_PR_REPOSITORY",
 		"DWS_TAP_PR_BRANCH",
@@ -1998,7 +1997,7 @@ func TestReleaseWorkflowPublishesStableHomebrewFormulaDirectly(t *testing.T) {
 		"github.repository_owner == 'DingTalk-Real-AI'",
 		"needs.release-contract.outputs.channel == 'stable'",
 		"scripts/release/publish-homebrew-formula.sh",
-		"secrets.GITHUB_TOKEN",
+		"secrets.HOMEBREW_PR_TOKEN",
 	} {
 		if !strings.Contains(section, required) {
 			t.Errorf("direct stable Homebrew publication is missing %q", required)
@@ -2037,7 +2036,7 @@ func TestReleaseWorkflowPublishesBetaHomebrewFormulaDirectly(t *testing.T) {
 		"needs.release-contract.outputs.channel == 'prerelease'",
 		"dist/homebrew/dingtalk-workspace-cli-beta.rb",
 		"Formula/dingtalk-workspace-cli-beta.rb",
-		"secrets.GITHUB_TOKEN",
+		"secrets.HOMEBREW_PR_TOKEN",
 	} {
 		if !strings.Contains(section, required) {
 			t.Errorf("direct beta Homebrew publication is missing %q", required)

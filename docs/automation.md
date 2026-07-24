@@ -69,25 +69,20 @@ exactly one tracked Formula after the immutable GitHub assets and their
 checksums have passed verification. The publisher validates the rendered Ruby,
 commits only the configured Formula path, never force-pushes `main`, and retries
 from a fresh clone up to three times when `main` advances concurrently. Normal
-stable and beta releases do not create a Formula PR and do not require a
-personal PAT or permission canary. Because a built-in-token push does not start
-another CI run, the workflow creates the nine Code Admission checks for the
-Formula-only commit only after proving its sole parent already has all nine
-successful checks and the committed Formula exactly matches this release's
-verified bytes.
+stable and beta releases do not create a Formula PR or run a permission
+canary. The workflow uses the existing repository-scoped
+`HOMEBREW_PR_TOKEN` release identity because GitHub does not allow its built-in
+Actions App to bypass this repository's rulesets. That identity is the sole
+user bypass actor on the two default-branch rulesets. The workflow creates the
+nine Code Admission checks for the Formula-only commit only after proving its
+sole parent already has all nine successful checks and the committed Formula
+exactly matches this release's verified bytes.
 
-Repository rules must allow the GitHub Actions integration used by the trusted
-Release workflow to push that Formula-only commit to `main`. This bypass is a
-platform setting and cannot be installed by repository code; keep it scoped to
-the GitHub Actions integration, audit changes to the Release workflow, and do
-not grant an equivalent bypass to a personal PAT. The workflow and publisher
-provide the path restriction; GitHub rulesets do not infer that restriction
-from the token.
-
-`HOMEBREW_PR_TOKEN` remains only for the withdrawal workflow while Homebrew
-rollback still uses an independently reviewed PR. Keep that credential
-repository-scoped with only `Contents: write` and `Pull requests: write`, and
-do not reuse `RELEASE_GOVERNANCE_TOKEN`.
+Keep `HOMEBREW_PR_TOKEN` repository-scoped with `Contents: write` and
+`Pull requests: write` (the latter remains necessary for withdrawal rollback),
+keep its owner as the designated ruleset bypass actor, and do not reuse
+`RELEASE_GOVERNANCE_TOKEN`. The workflow and publisher provide the Formula-only
+path restriction; GitHub rulesets do not infer that restriction from the token.
 
 ## Release Governance and Recovery
 
