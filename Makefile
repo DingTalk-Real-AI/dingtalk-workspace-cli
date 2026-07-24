@@ -39,8 +39,8 @@ help:
 	@printf "  make package       - Build all release artifacts locally\n"
 	@printf "  make changelog-pre VERSION=vX.Y.Z-beta.N - Prepare prerelease notes\n"
 	@printf "  make changelog-stable VERSION=vX.Y.Z FROM_BETA=vX.Y.Z-beta.N - Prepare stable notes\n"
-	@printf "  make release-pre VERSION=vX.Y.Z-beta.N [PUBLISH=1] - Validate or publish prerelease\n"
-	@printf "  make release-stable VERSION=vX.Y.Z FROM_BETA=vX.Y.Z-beta.N [PUBLISH=1] - Validate or publish stable\n"
+	@printf "  make release-pre VERSION=vX.Y.Z-beta.N - Validate prerelease; publish official releases from Actions\n"
+	@printf "  make release-stable VERSION=vX.Y.Z FROM_BETA=vX.Y.Z-beta.N - Validate stable; publish official releases from Actions\n"
 	@printf "  make publish-homebrew-formula - Push dist/homebrew/dingtalk-workspace-cli.rb to a tap repo\n"
 
 build:

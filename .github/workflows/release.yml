@@ -2,9 +2,6 @@ name: Release
 run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_operation != 'none' && format('Release {0} {1} ({2})', inputs.release_operation, inputs.release_channel, inputs.release_bump) || github.event_name == 'workflow_dispatch' && inputs.governance_preflight_nonce != '' && format('Release governance preflight {0}', inputs.governance_preflight_nonce) || github.event_name == 'workflow_dispatch' && inputs.recover_release_version != '' && format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce) || github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' && format('Release npm repair {0}', inputs.repair_npm_version) || github.event_name == 'workflow_dispatch' && inputs.repair_gitee_version != '' && format('Release Gitee repair {0}', inputs.repair_gitee_version) || github.event_name == 'workflow_dispatch' && inputs.repair_oss_version != '' && format('Release OSS repair {0}', inputs.repair_oss_version) || github.workflow }}
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       release_operation:
@@ -33,10 +30,6 @@ on:
           - patch
           - minor
           - major
-      release_confirmation:
-        description: "For publish, type PUBLISH beta or PUBLISH stable"
-        required: false
-        type: string
       repair_npm_version:
         description: "Recover npm for a public immutable release without moving latest/beta"
         required: false
@@ -122,7 +115,6 @@ jobs:
           RELEASE_OPERATION: ${{ inputs.release_operation }}
           RELEASE_CHANNEL: ${{ inputs.release_channel }}
           RELEASE_BUMP: ${{ inputs.release_bump }}
-          RELEASE_CONFIRMATION: ${{ inputs.release_confirmation }}
         run: |
           set -eu
           release_flow=0
@@ -157,16 +149,8 @@ jobs:
               exit 1
             esac
             if test "$RELEASE_OPERATION" = plan; then
-              test -z "$RELEASE_CONFIRMATION" || {
-                echo "release_confirmation must be empty for a plan" >&2
-                exit 1
-              }
               echo "mode=plan_release" >> "$GITHUB_OUTPUT"
             elif test "$RELEASE_OPERATION" = publish; then
-              test "$RELEASE_CONFIRMATION" = "PUBLISH $RELEASE_CHANNEL" || {
-                echo "release_confirmation must be exactly: PUBLISH $RELEASE_CHANNEL" >&2
-                exit 1
-              }
               echo "mode=create_release" >> "$GITHUB_OUTPUT"
             else
               echo "release_operation must be none, plan, or publish" >&2
@@ -218,6 +202,53 @@ jobs:
             }
             echo "mode=recover_release" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Authorize repository release requester
+        if: ${{ steps.mode.outputs.mode == 'plan_release' || steps.mode.outputs.mode == 'create_release' }}
+        uses: actions/github-script@v7
+        env:
+          EXPECTED_REPOSITORY: DingTalk-Real-AI/dingtalk-workspace-cli
+          REQUESTED_BY: ${{ github.actor }}
+          TRIGGERED_BY: ${{ github.triggering_actor }}
+        with:
+          script: |
+            const expectedRepository = process.env.EXPECTED_REPOSITORY;
+            if (context.payload.repository.full_name !== expectedRepository) {
+              core.setFailed(`release requests are restricted to ${expectedRepository}`);
+              return;
+            }
+
+            const actors = new Set([
+              process.env.REQUESTED_BY,
+              process.env.TRIGGERED_BY,
+            ]);
+            for (const username of actors) {
+              if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(username || "")) {
+                core.setFailed("release request contains an invalid GitHub actor");
+                return;
+              }
+              let permission;
+              try {
+                const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                  ...context.repo,
+                  username,
+                });
+                permission = response.data.permission;
+              } catch (error) {
+                if (error.status === 404) {
+                  core.setFailed(`${username} is not an authorized repository collaborator`);
+                  return;
+                }
+                throw error;
+              }
+              // GitHub maps maintain to the legacy write permission here.
+              if (!["write", "admin"].includes(permission)) {
+                core.setFailed(
+                  `${username} needs repository write, maintain, or admin access to release`,
+                );
+                return;
+              }
+            }
 
   governance-preflight:
     name: Release governance preflight
@@ -2841,15 +2872,98 @@ jobs:
     name: Seal cloud release tag
     needs: [dispatch-contract, governance-preflight, release-plan]
     if: ${{ !cancelled() && needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' }}
+    environment:
+      name: ${{ inputs.release_channel == 'stable' && 'release-stable' || 'release-beta' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: write
     outputs:
       release_version: ${{ steps.seal.outputs.release_version }}
       release_commit: ${{ steps.seal.outputs.release_commit }}
       release_tag_object: ${{ steps.seal.outputs.release_tag_object }}
     steps:
+      - name: Verify release environment governance before sealing
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ENVIRONMENT: ${{ inputs.release_channel == 'stable' && 'release-stable' || 'release-beta' }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const environmentName = process.env.RELEASE_ENVIRONMENT;
+            const expectedRepository = "DingTalk-Real-AI/dingtalk-workspace-cli";
+            if (
+              context.payload.repository.full_name !== expectedRepository ||
+              !["release-beta", "release-stable"].includes(environmentName)
+            ) {
+              core.setFailed("release environment validation is not bound to an official channel");
+              return;
+            }
+
+            const response = await github.request(
+              "GET /repos/{owner}/{repo}/environments/{environment_name}",
+              { owner, repo, environment_name: environmentName },
+            );
+            const environment = response.data;
+            const branchPolicy = environment.deployment_branch_policy;
+            const protectionRules = environment.protection_rules || [];
+            const reviewerRules = protectionRules.filter(
+              (rule) => rule.type === "required_reviewers",
+            );
+            const waitRules = protectionRules.filter(
+              (rule) => rule.type === "wait_timer",
+            );
+            if (
+              environment.name !== environmentName ||
+              environment.can_admins_bypass !== false ||
+              branchPolicy?.protected_branches !== true ||
+              branchPolicy?.custom_branch_policies !== false ||
+              waitRules.length !== 0
+            ) {
+              core.setFailed(`${environmentName} does not match the required release policy`);
+              return;
+            }
+
+            if (environmentName === "release-beta") {
+              if (reviewerRules.length !== 0) {
+                core.setFailed("release-beta must not require a manual reviewer");
+              }
+              return;
+            }
+
+            if (
+              reviewerRules.length !== 1 ||
+              reviewerRules[0].prevent_self_review !== true ||
+              !Array.isArray(reviewerRules[0].reviewers) ||
+              reviewerRules[0].reviewers.length === 0
+            ) {
+              core.setFailed(
+                "release-stable requires a non-self reviewing administrator",
+              );
+              return;
+            }
+            for (const reviewer of reviewerRules[0].reviewers) {
+              if (
+                reviewer.type !== "User" ||
+                !reviewer.reviewer?.login
+              ) {
+                core.setFailed("release-stable reviewers must be repository administrators");
+                return;
+              }
+              const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: reviewer.reviewer.login,
+              });
+              if (permission.data.permission !== "admin") {
+                core.setFailed(
+                  `${reviewer.reviewer.login} is no longer a repository administrator`,
+                );
+                return;
+              }
+            }
+
       - name: Create one immutable annotated release tag
         id: seal
         uses: actions/github-script@v7
