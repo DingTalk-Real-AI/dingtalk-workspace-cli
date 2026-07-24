@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:be0a967cd36b8430c22dd27fbd9a01ec232d0ce07b8a5ca3f9d35f2554ecbbe4",
-  "surface_hash": "sha256:2c84c53f5844050980fb5e1459c92e3afbd701357e125608f4c41a43abc9bdd5",
-  "source_files": 155,
-  "hint_files": 50,
-  "hint_products": 41,
-  "hint_tools": 1336,
+  "source_hash": "sha256:a863576bec9b7b7de62ac058b179c3089f8043321a9d5d6f70e2a2684446636e",
+  "surface_hash": "sha256:8eef4235b4391a6a865c180ebd3a65ca3531a84c6985b37811f23fff9daf2e3a",
+  "source_files": 158,
+  "hint_files": 52,
+  "hint_products": 42,
+  "hint_tools": 1358,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -27,15 +27,15 @@
     ]
   },
   "coverage": {
-    "surface_products": 24,
-    "products_with_metadata": 24,
-    "surface_tools": 592,
-    "tools_with_metadata": 592,
-    "tools_with_agent_summary": 592,
-    "tools_with_use_when": 592,
-    "tools_with_avoid_when": 592,
-    "tools_with_examples": 592,
-    "tools_with_interface_mode": 592,
+    "surface_products": 25,
+    "products_with_metadata": 25,
+    "surface_tools": 603,
+    "tools_with_metadata": 603,
+    "tools_with_agent_summary": 603,
+    "tools_with_use_when": 603,
+    "tools_with_avoid_when": 603,
+    "tools_with_examples": 603,
+    "tools_with_interface_mode": 603,
     "unmatched_skill_tools": 118,
     "unreviewed_skill_tools": 7
   },
@@ -163,7 +163,7 @@
     {
       "tool_path": "calendar participant delete",
       "source": "skills/mono/SKILL.md",
-      "line": 146,
+      "line": 148,
       "candidates": [
         "calendar attendee delete",
         "calendar event delete",
