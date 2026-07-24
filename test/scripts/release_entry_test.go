@@ -313,3 +313,47 @@ func TestReleaseCommandRejectsNonInteractivePublishWithoutYes(t *testing.T) {
 		t.Fatalf("rejected non-interactive publish created a tag: %s", got)
 	}
 }
+
+func TestReleaseCommandRejectsDirectOfficialPublication(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	installReleaseCommandFixture(t, r)
+	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(betaSection())), 0o644)
+	r.commitAndPush(t, "install release automation")
+	mustRun(t, r.root, "git", "remote", "set-url", "origin",
+		"https://github.com/dingtalk-real-ai/DingTalk-Workspace-CLI.git")
+
+	output, err := runReleaseScript(t, r.root, filepath.Join(r.root, "scripts", "release", "release.sh"),
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin", "--publish", "--yes",
+	)
+	if err == nil || !strings.Contains(output, "Direct tag publication to the official repository is disabled") {
+		t.Fatalf("direct official publication was not rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "actions/workflows/release.yml") {
+		t.Fatalf("direct official publication did not point to the cloud release page:\n%s", output)
+	}
+	if got := mustOutput(t, r.root, "git", "tag", "--list", "v1.0.1-beta.1"); got != "" {
+		t.Fatalf("rejected official publication created a tag: %s", got)
+	}
+}
+
+func TestDWSReleaseEntryRejectsDirectOfficialPublication(t *testing.T) {
+	f := newReleaseEntryFixture(t)
+	mustWriteFile(t, filepath.Join(f.repo.root, "CHANGELOG.md"), []byte(releaseChangelog(betaSection())), 0o644)
+	f.repo.commitAndPush(t, "add beta changelog")
+	mustRun(t, f.repo.root, "git", "remote", "set-url", "origin",
+		"https://github.com/DINGTALK-REAL-AI/dingtalk-workspace-cli.git")
+	if output, err := f.run(t, nil, "config", "--remote", "origin"); err != nil {
+		t.Fatalf("configure official remote error = %v\noutput:\n%s", err, output)
+	}
+
+	output, err := f.run(t, nil, "v1.0.1-beta.1", "--publish")
+	if err == nil || !strings.Contains(output, "Direct local publication is disabled for official releases") {
+		t.Fatalf("official entry publication was not rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "actions/workflows/release.yml") {
+		t.Fatalf("official entry did not point to the cloud release page:\n%s", output)
+	}
+	if got := f.callLog(t); got != "" {
+		t.Fatalf("official entry delegated direct publication: %q", got)
+	}
+}

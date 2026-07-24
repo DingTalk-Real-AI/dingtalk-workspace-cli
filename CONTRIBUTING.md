@@ -91,3 +91,10 @@ coverage is additionally selected for platform-sensitive code.
    contexts are current and green, auto-merge completes the PR. If `main`
    advances first, strict status checks revalidate the branch; no separate
    routine merge request is needed.
+
+Contributors without repository write access stop at the PR flow. Explicitly
+authorized collaborators with `write`, `maintain`, or `admin` access can use
+[Actions → Release](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/release.yml)
+to publish beta releases without manual approval. The same internal roles may
+start a stable release, but a different repository administrator must approve
+the `release-stable` Environment deployment before publication continues.

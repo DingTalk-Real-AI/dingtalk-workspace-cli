@@ -909,11 +909,15 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 		"- publish",
 		"release_channel:",
 		"release_bump:",
-		"release_confirmation:",
 		`release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery`,
 		`echo "mode=plan_release"`,
 		`echo "mode=create_release"`,
-		`release_confirmation must be exactly: PUBLISH $RELEASE_CHANNEL`,
+		"name: Authorize repository release requester",
+		`if: ${{ steps.mode.outputs.mode == 'plan_release' || steps.mode.outputs.mode == 'create_release' }}`,
+		`REQUESTED_BY: ${{ github.actor }}`,
+		`TRIGGERED_BY: ${{ github.triggering_actor }}`,
+		"github.rest.repos.getCollaboratorPermissionLevel",
+		`!["write", "admin"].includes(permission)`,
 		`needs.dispatch-contract.outputs.mode == 'plan_release'`,
 		`needs.governance-preflight.result == 'success'`,
 		"actions: read",
@@ -950,10 +954,28 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 	if strings.Contains(plan, "refs/tags/v refs/tags/withdrawn/v") {
 		t.Error("cloud release planning must use wildcard ref patterns that match the seal API prefixes")
 	}
+	workflowHeader := workflow[:strings.Index(workflow, "\njobs:\n")]
+	if strings.Contains(workflowHeader, "\n  push:\n") {
+		t.Error("new releases must not bypass cloud authorization through a tag-push trigger")
+	}
+	if regexp.MustCompile(`(?m)^      release_confirmation:$`).MatchString(workflowHeader) ||
+		strings.Contains(workflow, "release_confirmation must be exactly: PUBLISH") {
+		t.Error("cloud publication must not retain the redundant typed confirmation gate")
+	}
 
 	for _, required := range []string{
 		"name: Seal cloud release tag",
+		`name: ${{ inputs.release_channel == 'stable' && 'release-stable' || 'release-beta' }}`,
+		"actions: read",
 		"contents: write",
+		"name: Verify release environment governance before sealing",
+		`"GET /repos/{owner}/{repo}/environments/{environment_name}"`,
+		`environment.can_admins_bypass !== false`,
+		`branchPolicy?.protected_branches !== true`,
+		`branchPolicy?.custom_branch_policies !== false`,
+		`reviewerRules.length !== 0`,
+		`reviewerRules[0].prevent_self_review !== true`,
+		`permission.data.permission !== "admin"`,
 		"name: Create one immutable annotated release tag",
 		`branch.data.commit.sha !== commit`,
 		`actualFingerprint !== expectedFingerprint`,
@@ -972,6 +994,11 @@ func TestReleaseWorkflowPlansAndSealsCurrentMainInTheCloud(t *testing.T) {
 		}
 	}
 	createRef := strings.Index(seal, "github.rest.git.createRef")
+	environmentPolicy := strings.Index(seal, "Verify release environment governance before sealing")
+	createTagStep := strings.Index(seal, "Create one immutable annotated release tag")
+	if environmentPolicy == -1 || createTagStep == -1 || environmentPolicy > createTagStep {
+		t.Fatal("release Environment policy must be verified before the first tag write")
+	}
 	visibilityRead := strings.LastIndex(seal, "github.rest.git.getRef")
 	if createRef == -1 || visibilityRead == -1 || visibilityRead < createRef {
 		t.Fatal("cloud release seal must confirm tag-ref visibility after creating the ref")
