@@ -27,6 +27,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// markdownStatUpload stats the prepared upload file. Tests override it to
+// deterministically simulate the file disappearing between write and stat.
+var markdownStatUpload = os.Stat
+
 func newMarkdownCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "markdown",
@@ -257,7 +261,7 @@ func runMarkdownCreate(cmd *cobra.Command, _ []string) error {
 	if !hasMarkdownExtension(nameFlag) {
 		return fmt.Errorf("--name 必须以 .md 结尾，当前: %s", nameFlag)
 	}
-	info, err := os.Stat(uploadPath)
+	info, err := markdownStatUpload(uploadPath)
 	if err != nil {
 		return fmt.Errorf("读取上传文件失败: %w", err)
 	}
@@ -421,7 +425,7 @@ func runMarkdownOverwrite(cmd *cobra.Command, _ []string) error {
 	if !hasMarkdownExtension(nameFlag) {
 		return fmt.Errorf("--name 必须以 .md 结尾，当前: %s", nameFlag)
 	}
-	info, err := os.Stat(uploadPath)
+	info, err := markdownStatUpload(uploadPath)
 	if err != nil {
 		return fmt.Errorf("读取上传文件失败: %w", err)
 	}
@@ -563,7 +567,7 @@ func runMarkdownPatch(cmd *cobra.Command, _ []string) error {
 	if err := os.WriteFile(uploadPath, []byte(newContent), 0o600); err != nil {
 		return fmt.Errorf("写入临时文件失败: %w", err)
 	}
-	info, err := os.Stat(uploadPath)
+	info, err := markdownStatUpload(uploadPath)
 	if err != nil {
 		return fmt.Errorf("读取临时文件失败: %w", err)
 	}
