@@ -125,9 +125,15 @@ func TestClientCreateRuleBasedSubscriptionsUsesDocumentedRuleParam(t *testing.T)
 		{"reaction_o2o/openDingtalkId", EventReactionO2O, RuleOptions{OpenDingTalkID: "open-user-1"}, map[string]any{"targetUid": "open-user-1", "targetUidType": "openDingtalkId"}},
 		{"receive_user/staffId", EventFromUser, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
 		{"receive_user/openDingtalkId", EventFromUser, RuleOptions{OpenDingTalkID: "open-user-1"}, map[string]any{"targetUid": "open-user-1", "targetUidType": "openDingtalkId"}},
+		{"receive_o2o_all", EventAllSingleChat, RuleOptions{}, map[string]any{}},
+		{"receive_group_all", EventAllGroupChat, RuleOptions{}, map[string]any{}},
 		{"read_group", EventReadGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 		{"recall_group", EventRecallGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 		{"reaction_group", EventReactionGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"group_updated", EventGroupUpdated, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"group_member_added", EventGroupMemberAdded, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"group_member_exited", EventGroupMemberExited, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{"group_disbanded", EventGroupDisbanded, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

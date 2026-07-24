@@ -468,7 +468,7 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 <details>
 <summary><strong>个人事件订阅</strong> — 实时接收钉钉消息，驱动事件触发的 Agent</summary>
 
-`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录包括：当前用户被 @ 的消息、与指定用户的单聊消息、指定群的消息。
+`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应，以及群标题变更和群解散事件。
 
 默认 `ndjson`、`json`、`pretty` 输出保留兼容 transport envelope（`type`、`event_type`、字符串 `data`、`headers`），`compact` 继续沿用原 processor。Agent 或新脚本显式加 `--flatten` 后，输出稳定的顶层业务字段。`--format` 控制 JSON 序列化，`--flatten` 控制数据结构，且不能与 `-f raw` 或 `--debug-raw-events` 同时使用。
 
@@ -497,6 +497,25 @@ dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId
 # 监听指定群的消息
 dws event consume user_im_message_receive_group --group <openConversationId> --flatten -f ndjson
 
+# 监听所有单聊或所有群消息
+dws event consume user_im_message_receive_o2o_all --flatten -f ndjson
+dws event consume user_im_message_receive_group_all --flatten -f ndjson
+
+# 监听指定群标题变更、成员进退群或群解散
+dws event consume user_im_group_updated --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_member_added --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_member_exited --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_disbanded --group <openConversationId> --flatten -f ndjson
+
+# 一个进程监听同一用户的多个事件
+dws event consume \
+  user_im_message_receive_o2o \
+  user_im_message_read_o2o \
+  user_im_message_recall_o2o \
+  --user <userId> \
+  --flatten \
+  -f ndjson
+
 # 查看本地 consume，并取消指定订阅
 dws event status
 dws event stop <subscribe_id>
@@ -508,6 +527,7 @@ dws event stop <subscribe_id>
 |------|------|
 | 自动编排 | `consume` 创建或复用个人订阅，`stop` 取消订阅并清理本地状态 |
 | 共享连接 | 同一用户的多个 consumer 共享本地 bus 和云端长连接 |
+| 多事件进程 | 同一目标的兼容事件可由一个 consume 进程监听，每个事件仍有独立订阅 |
 | 订阅隔离 | 正常 consumer 同时按事件类型和 `subscribe_id` 匹配 |
 | Agent 友好输出 | Stream 事件写入 stdout，连接状态和诊断信息写入 stderr |
 | 状态可观测 | `status` 同时显示服务端订阅、personal bus 和本地 consumers |

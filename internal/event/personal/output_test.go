@@ -124,8 +124,34 @@ func personalReactionData(eventKey, messageID, conversationID string) string {
 	}`, eventKey, conversationID, messageID)
 }
 
+func personalGroupMemberData(eventKey string) string {
+	return fmt.Sprintf(`{
+		"eventId":"group-member-event",
+		"eventKey":%q,
+		"occurredAtMs":1784782513647,
+		"subId":"group-member-sub",
+		"payload":{
+			"uid":100001,
+			"clientId":"internal-client",
+			"corpid":"internal-corp",
+			"bizid":"internal-biz",
+			"filterSubId":"internal-filter",
+			"body":{
+				"operNick":"测试用户甲",
+				"members":[
+					{"nick":"测试用户乙","openDingTalkId":"member-open-id-1"},
+					{"nick":"测试用户丙","openDingTalkId":"member-open-id-2"}
+				],
+				"operOpenDingtalkId":"operator-open-id",
+				"openConversationId":"cid-group-1"
+			},
+			"event_time":1784782513502
+		}
+	}`, eventKey)
+}
+
 func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
-	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
+	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat} {
 		t.Run(eventKey, func(t *testing.T) {
 			projected, err := ProjectOutput(transport.Event{
 				Type:          transport.FrameTypeEvent,
@@ -157,6 +183,367 @@ func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("ProjectOutput() = %#v, want %#v", got, want)
+			}
+			encoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, absent := range []string{"quoted_message", "forward_messages"} {
+				if strings.Contains(string(encoded), `"`+absent+`"`) {
+					t.Fatalf("ordinary message output contains optional field %q: %s", absent, encoded)
+				}
+			}
+		})
+	}
+}
+
+func TestProjectOutputPreservesQuotedMessageContext(t *testing.T) {
+	data := `{
+		"eventId":"quoted-event",
+		"eventKey":"user_im_message_receive_group",
+		"occurredAtMs":1784792292580,
+		"subId":"quoted-sub",
+		"payload":{
+			"body":{
+				"createTime":"2026-07-23 15:38:11",
+				"sender":"郑御白",
+				"openMessageId":"outer-message",
+				"senderOpenDingTalkId":"outer-sender-open-id",
+				"openConversationId":"target-conversation",
+				"content":"引用回复",
+				"quotedMessage":{
+					"createTime":"2026-07-23 15:35:03",
+					"sender":"null",
+					"openMessageId":"quoted-message",
+					"senderOpenDingTalkId":"quoted-sender-open-id",
+					"openConversationId":"source-conversation",
+					"content":"被引用的原消息"
+				}
+			},
+			"event_time":1784792291637
+		}
+	}`
+
+	projected, err := ProjectOutput(transport.Event{
+		EventType:   EventInChat,
+		SubscribeID: "outer-sub",
+		Data:        data,
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got := projected.(MessageEventOutput)
+	want := &MessageEventContext{
+		MessageID:            "quoted-message",
+		ConversationID:       "source-conversation",
+		Sender:               "null",
+		SenderOpenDingTalkID: "quoted-sender-open-id",
+		Content:              "被引用的原消息",
+		CreateTime:           "2026-07-23 15:35:03",
+	}
+	if !reflect.DeepEqual(got.QuotedMessage, want) {
+		t.Fatalf("quoted_message = %#v, want %#v", got.QuotedMessage, want)
+	}
+	if got.ForwardMessages != nil {
+		t.Fatalf("forward_messages = %#v, want nil", got.ForwardMessages)
+	}
+}
+
+func TestProjectOutputPreservesMergedForwardContextAndMediaLocator(t *testing.T) {
+	data := `{
+		"eventId":"forward-event",
+		"eventKey":"user_im_message_receive_group",
+		"occurredAtMs":1784861030151,
+		"subId":"forward-sub",
+		"payload":{
+			"body":{
+				"createTime":"2026-07-24 10:43:49",
+				"sender":"郑御白",
+				"openMessageId":"outer-forward-message",
+				"senderOpenDingTalkId":"outer-sender-open-id",
+				"openConversationId":"target-conversation",
+				"content":"Chat history between two users\nUser A:[Image]\nUser A:Forwarded chat record",
+				"forwardMessages":[
+					{
+						"createTime":"2026-07-24 10:33:31",
+						"sender":"null",
+						"openMessageId":"image-message",
+						"senderOpenDingTalkId":"image-sender-open-id",
+						"openConversationId":"source-conversation",
+						"content":"[图片消息](mediaId=media-1) 注意：如需下载使用dws chat message download-media命令下载"
+					},
+					{
+						"createTime":"2026-07-24 10:34:46",
+						"sender":"null",
+						"openMessageId":"text-message",
+						"openConversationId":"source-conversation",
+						"content":"转发聊天记录"
+					}
+				]
+			},
+			"event_time":1784861029265
+		}
+	}`
+
+	projected, err := ProjectOutput(transport.Event{
+		EventType:   EventInChat,
+		SubscribeID: "outer-sub",
+		Data:        data,
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got := projected.(MessageEventOutput)
+	want := []MessageEventContext{
+		{
+			MessageID:            "image-message",
+			ConversationID:       "source-conversation",
+			Sender:               "null",
+			SenderOpenDingTalkID: "image-sender-open-id",
+			Content:              "[图片消息](mediaId=media-1) 注意：如需下载使用dws chat message download-media命令下载",
+			CreateTime:           "2026-07-24 10:33:31",
+		},
+		{
+			MessageID:      "text-message",
+			ConversationID: "source-conversation",
+			Sender:         "null",
+			Content:        "转发聊天记录",
+			CreateTime:     "2026-07-24 10:34:46",
+		},
+	}
+	if !reflect.DeepEqual(got.ForwardMessages, want) {
+		t.Fatalf("forward_messages = %#v, want %#v", got.ForwardMessages, want)
+	}
+	if got.QuotedMessage != nil {
+		t.Fatalf("quoted_message = %#v, want nil", got.QuotedMessage)
+	}
+
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, wantFragment := range []string{
+		`"forward_messages"`,
+		`"message_id":"image-message"`,
+		`"conversation_id":"source-conversation"`,
+		`mediaId=media-1`,
+	} {
+		if !strings.Contains(string(encoded), wantFragment) {
+			t.Fatalf("flattened merged-forward output missing %q: %s", wantFragment, encoded)
+		}
+	}
+	for _, localizedDetection := range []string{"群聊的聊天记录", "的聊天记录"} {
+		if strings.Contains(got.Content, localizedDetection) {
+			t.Fatalf("test fixture should not require localized title %q for projection", localizedDetection)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupLifecycleEvents(t *testing.T) {
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
+		t.Run(eventKey, func(t *testing.T) {
+			data := fmt.Sprintf(`{
+				"eventId":"group-event",
+				"eventKey":%q,
+				"occurredAtMs":1784009000000,
+				"subId":"data-sub",
+				"payload":{
+					"uid":100001,
+					"CORPID":"internal-corp",
+					"clientId":"internal-client",
+					"filterSubId":"internal-filter",
+					"bizid":"internal-biz",
+					"orgId":100002,
+					"sourceId":"open",
+					"event_time":1784008999000,
+					"body":{
+						"openConversationId":"cid-group-1",
+						"title":"测试群新标题",
+						"operator":{"uid":"business-user-1"}
+					}
+				}
+			}`, eventKey)
+			projected, err := ProjectOutput(transport.Event{
+				EventID:     "outer-event",
+				EventType:   eventKey,
+				SubscribeID: "outer-sub",
+				Data:        data,
+			})
+			if err != nil {
+				t.Fatalf("ProjectOutput() error = %v", err)
+			}
+			got, ok := projected.(GroupLifecycleEventOutput)
+			if !ok {
+				t.Fatalf("ProjectOutput() type = %T", projected)
+			}
+			if got.Type != eventKey || got.EventID != "group-event" || got.Timestamp != 1784009000000 || got.SubscribeID != "outer-sub" {
+				t.Fatalf("common fields = %#v", got)
+			}
+			for _, internal := range []string{"uid", "CORPID", "clientId", "filterSubId", "bizid", "orgId", "sourceId"} {
+				if _, ok := got.Payload[internal]; ok {
+					t.Fatalf("payload retained internal field %q: %#v", internal, got.Payload)
+				}
+			}
+			body, ok := got.Payload["body"].(map[string]any)
+			if !ok || body["title"] != "测试群新标题" {
+				t.Fatalf("payload body = %#v", got.Payload["body"])
+			}
+			operator := body["operator"].(map[string]any)
+			if operator["uid"] != "business-user-1" {
+				t.Fatalf("nested business uid was removed: %#v", operator)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupMemberEvents(t *testing.T) {
+	for _, eventKey := range []string{EventGroupMemberAdded, EventGroupMemberExited} {
+		t.Run(eventKey, func(t *testing.T) {
+			projected, err := ProjectOutput(transport.Event{
+				EventID:       "outer-event",
+				EventBornTime: 11,
+				EventType:     eventKey,
+				SubscribeID:   "outer-sub",
+				Data:          personalGroupMemberData(eventKey),
+			})
+			if err != nil {
+				t.Fatalf("ProjectOutput() error = %v", err)
+			}
+			want := GroupMemberEventOutput{
+				Type:                   eventKey,
+				EventID:                "group-member-event",
+				Timestamp:              1784782513647,
+				SubscribeID:            "outer-sub",
+				ConversationID:         "cid-group-1",
+				Operator:               "测试用户甲",
+				OperatorOpenDingTalkID: "operator-open-id",
+				Members: []GroupMemberEventMember{
+					{Nick: "测试用户乙", OpenDingTalkID: "member-open-id-1"},
+					{Nick: "测试用户丙", OpenDingTalkID: "member-open-id-2"},
+				},
+				EventTime: 1784782513502,
+			}
+			if !reflect.DeepEqual(projected, want) {
+				t.Fatalf("ProjectOutput() = %#v, want %#v", projected, want)
+			}
+			assertNoInternalActionFields(t, projected)
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupMemberAllowsMissingOperator(t *testing.T) {
+	data := strings.ReplaceAll(personalGroupMemberData(EventGroupMemberExited), `"operNick":"测试用户甲",`, "")
+	data = strings.ReplaceAll(data, `"operOpenDingtalkId":"operator-open-id",`, "")
+	projected, err := ProjectOutput(transport.Event{EventType: EventGroupMemberExited, Data: data})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got := projected.(GroupMemberEventOutput)
+	if got.Operator != "" || got.OperatorOpenDingTalkID != "" {
+		t.Fatalf("operator fields = %q/%q, want empty", got.Operator, got.OperatorOpenDingTalkID)
+	}
+	if len(got.Members) != 2 {
+		t.Fatalf("members = %#v, want two members", got.Members)
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputGroupMemberRejectsLegacyOperatorOpenIDSpellings(t *testing.T) {
+	for _, legacyField := range []string{"operOpenDingtlkId", "operOpenDingTalkId"} {
+		t.Run(legacyField, func(t *testing.T) {
+			data := strings.Replace(personalGroupMemberData(EventGroupMemberAdded), "operOpenDingtalkId", legacyField, 1)
+			projected, err := ProjectOutput(transport.Event{EventType: EventGroupMemberAdded, Data: data})
+			if err != nil {
+				t.Fatalf("ProjectOutput() error = %v", err)
+			}
+			got := projected.(GroupMemberEventOutput)
+			if got.OperatorOpenDingTalkID != "" {
+				t.Fatalf("operator_open_dingtalk_id = %q, want empty for legacy field %s", got.OperatorOpenDingTalkID, legacyField)
+			}
+			if got.Members[0].OpenDingTalkID != "member-open-id-1" {
+				t.Fatalf("members[0].open_dingtalk_id = %q, want protocol openDingTalkId value", got.Members[0].OpenDingTalkID)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageGroupMemberBodyUnmarshalErrors(t *testing.T) {
+	var malformed personalGroupMemberBody
+	if err := malformed.UnmarshalJSON([]byte(`{`)); err == nil {
+		t.Fatal("UnmarshalJSON() error = nil, want malformed object error")
+	}
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{name: "invalid members", data: `{"members":"invalid"}`},
+		{name: "invalid operator open id", data: `{"operOpenDingtalkId":{"unexpected":true}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body personalGroupMemberBody
+			if err := json.Unmarshal([]byte(tt.data), &body); err == nil {
+				t.Fatal("json.Unmarshal() error = nil, want protocol error")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputRejectsInvalidGroupMemberPayloads(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{
+			name: "missing conversation",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"members":[{"nick":"测试用户甲","openDingTalkId":"member-1"}]},"event_time":1}}`,
+		},
+		{
+			name: "empty conversation",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"openConversationId":" ","members":[{"nick":"测试用户甲","openDingTalkId":"member-1"}]},"event_time":1}}`,
+		},
+		{
+			name: "missing members",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"openConversationId":"cid-1"},"event_time":1}}`,
+		},
+		{
+			name: "empty members",
+			data: `{"eventKey":"user_im_group_member_added","payload":{"body":{"openConversationId":"cid-1","members":[]},"event_time":1}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{EventID: "outer-event", EventType: EventGroupMemberAdded, Data: tt.data}
+			projected, err := ProjectOutput(ev)
+			if err == nil {
+				t.Fatal("ProjectOutput() error = nil, want group member validation error")
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputRejectsInvalidGroupLifecyclePayloads(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{name: "missing", data: `{"eventKey":"user_im_group_updated"}`},
+		{name: "null", data: `{"eventKey":"user_im_group_updated","payload":null}`},
+		{name: "empty object", data: `{"eventKey":"user_im_group_updated","payload":{}}`},
+		{name: "array", data: `{"eventKey":"user_im_group_updated","payload":[]}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{EventID: "outer-event", EventType: EventGroupUpdated, Data: tt.data}
+			projected, err := ProjectOutput(ev)
+			if err == nil {
+				t.Fatal("ProjectOutput() error = nil, want payload validation error")
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
 			}
 		})
 	}
@@ -333,12 +720,16 @@ func TestCrossPlatformCoverageProjectOutputRejectsEmptyPayloads(t *testing.T) {
 		EventSingleChat,
 		EventInChat,
 		EventFromUser,
+		EventAllSingleChat,
+		EventAllGroupChat,
 		EventReadO2O,
 		EventReadGroup,
 		EventRecallO2O,
 		EventRecallGroup,
 		EventReactionO2O,
 		EventReactionGroup,
+		EventGroupMemberAdded,
+		EventGroupMemberExited,
 	}
 	payloads := []struct {
 		name string
@@ -382,5 +773,36 @@ func TestCrossPlatformCoverageProjectOutputMalformedDataReturnsRawEnvelope(t *te
 	got, ok := projected.(transport.Event)
 	if !ok || !reflect.DeepEqual(got, ev) {
 		t.Fatalf("ProjectOutput() fallback = %#v", projected)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaReflectionSupportsNestedArraysAndPointers(t *testing.T) {
+	type nested struct {
+		Value  string `json:"value" description:"nested value" format:"nested_id"`
+		Hidden string `json:"-"`
+	}
+	type fixture struct {
+		Items []*nested      `json:"items" description:"nested items"`
+		Meta  map[string]any `json:"meta" additional_properties:"true"`
+	}
+
+	schema := schemaForStruct(reflect.TypeOf((*fixture)(nil)))
+	properties := schema["properties"].(map[string]any)
+	if len(properties) != 2 {
+		t.Fatalf("schema properties = %#v, want items and meta", properties)
+	}
+	items := properties["items"].(map[string]any)
+	itemSchema := items["items"].(map[string]any)
+	itemProperties := itemSchema["properties"].(map[string]any)
+	if items["type"] != "array" || itemSchema["type"] != "object" || len(itemProperties) != 1 {
+		t.Fatalf("nested items schema = %#v", items)
+	}
+	value := itemProperties["value"].(map[string]any)
+	if value["type"] != "string" || value["description"] != "nested value" || value["format"] != "nested_id" {
+		t.Fatalf("nested value schema = %#v", value)
+	}
+	meta := properties["meta"].(map[string]any)
+	if meta["type"] != "object" || meta["additionalProperties"] != true {
+		t.Fatalf("meta schema = %#v", meta)
 	}
 }

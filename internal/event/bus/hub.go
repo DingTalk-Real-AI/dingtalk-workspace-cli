@@ -41,7 +41,8 @@ type Consumer struct {
 	Filter       string   // raw regex from Hello (for status display)
 	SubscribeID  string   // optional personal subscription label and local isolation key
 	SubscribedAt time.Time
-	SendCh       chan any // bus → consume frames (Event/SourceState/Heartbeat/Bye)
+	SendCh       chan any    // bus → consume frames (Event/SourceState/Heartbeat/Bye)
+	StopCh       chan string // targeted local stop reason; consumed by daemon writer
 	matcher      consumerMatcher
 	sendMu       sync.Mutex    // serialises Deliver/Broadcast with SendCh close
 	closed       bool          // guarded by sendMu
@@ -192,10 +193,52 @@ func (h *Hub) Register(hello transport.Hello) (*Consumer, error) {
 		SubscribeID:  strings.TrimSpace(hello.SubscribeID),
 		SubscribedAt: time.Now().UTC(),
 		SendCh:       make(chan any, h.bufferSize),
+		StopCh:       make(chan string, 1),
 		matcher:      m,
 	}
 	h.consumers[c.ID] = c
 	return c, nil
+}
+
+// StopConsumers requests a graceful close for every consumer whose exact
+// SubscribeID appears in subscribeIDs. The daemon writer owns the wire, so
+// this method signals StopCh instead of writing or closing SendCh directly.
+func (h *Hub) StopConsumers(subscribeIDs []string, reason string) []string {
+	targets := make(map[string]struct{}, len(subscribeIDs))
+	for _, id := range subscribeIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			targets[id] = struct{}{}
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(reason) == "" {
+		reason = transport.ByeReasonSubscriptionStopped
+	}
+
+	matched := make(map[string]struct{}, len(targets))
+	h.mu.RLock()
+	for _, c := range h.consumers {
+		id := strings.TrimSpace(c.SubscribeID)
+		if _, ok := targets[id]; !ok {
+			continue
+		}
+		matched[id] = struct{}{}
+		select {
+		case c.StopCh <- reason:
+		default:
+			// A stop is already queued for this consumer.
+		}
+	}
+	h.mu.RUnlock()
+
+	out := make([]string, 0, len(matched))
+	for id := range matched {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Unregister removes a consumer by ID and closes its sendCh. Idempotent —

@@ -691,6 +691,52 @@ func TestPersonalSourceSenderEventPassesNormalBusFilter(t *testing.T) {
 	}
 }
 
+func TestPersonalSourceNewIMEventsPassNormalBusFilter(t *testing.T) {
+	for _, eventKey := range []string{
+		"user_im_message_receive_o2o_all",
+		"user_im_message_receive_group_all",
+		"user_im_group_updated",
+		"user_im_group_member_added",
+		"user_im_group_member_exited",
+		"user_im_group_disbanded",
+	} {
+		t.Run(eventKey, func(t *testing.T) {
+			subscribeID := "sub-" + eventKey
+			src := personalSourceForRawEventTests()
+			raw := src.rawEventFromDataFrame(&payload.DataFrame{
+				Headers: payload.DataFrameHeader{
+					"EVENT_TYPE": eventKey,
+					"SUB_ID":     subscribeID,
+				},
+				Data: fmt.Sprintf(`{"eventKey":%q,"subId":%q,"payload":{"body":{"content":"test"}}}`, eventKey, subscribeID),
+			})
+			h := bus.NewHub(10)
+			consumer, err := h.Register(transport.Hello{
+				EventTypes:  []string{eventKey},
+				SubscribeID: subscribeID,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			h.Deliver(raw)
+
+			select {
+			case frame := <-consumer.SendCh:
+				eventFrame, ok := frame.(transport.Event)
+				if !ok {
+					t.Fatalf("frame = %T, want transport.Event", frame)
+				}
+				if eventFrame.EventType != eventKey || eventFrame.SubscribeID != subscribeID {
+					t.Fatalf("event = %#v", eventFrame)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for filtered event")
+			}
+		})
+	}
+}
+
 func personalSourceForRawEventTests() *PersonalSource {
 	return &PersonalSource{cfg: PersonalConfig{
 		SourceID: "fallback_source",

@@ -26,14 +26,16 @@ import (
 type FrameType string
 
 const (
-	FrameTypeHello       FrameType = "hello"        // consume → bus
-	FrameTypeHelloAck    FrameType = "hello_ack"    // bus → consume
-	FrameTypeEvent       FrameType = "event"        // bus → consume
-	FrameTypeHeartbeat   FrameType = "heartbeat"    // bidirectional
-	FrameTypeSourceState FrameType = "source_state" // bus → consume
-	FrameTypeBye         FrameType = "bye"          // bidirectional
-	FrameTypeStatusReq   FrameType = "status_req"   // consume/ad-hoc → bus
-	FrameTypeStatusResp  FrameType = "status_resp"  // bus → consume/ad-hoc
+	FrameTypeHello            FrameType = "hello"              // consume → bus
+	FrameTypeHelloAck         FrameType = "hello_ack"          // bus → consume
+	FrameTypeEvent            FrameType = "event"              // bus → consume
+	FrameTypeHeartbeat        FrameType = "heartbeat"          // bidirectional
+	FrameTypeSourceState      FrameType = "source_state"       // bus → consume
+	FrameTypeBye              FrameType = "bye"                // bidirectional
+	FrameTypeStatusReq        FrameType = "status_req"         // consume/ad-hoc → bus
+	FrameTypeStatusResp       FrameType = "status_resp"        // bus → consume/ad-hoc
+	FrameTypeConsumerStopReq  FrameType = "consumer_stop_req"  // ad-hoc → bus
+	FrameTypeConsumerStopResp FrameType = "consumer_stop_resp" // bus → ad-hoc
 )
 
 // Hello is the first frame a consumer sends after dialing the bus. The bus
@@ -56,9 +58,10 @@ type Hello struct {
 type HelloRole string
 
 const (
-	HelloRoleConsumer HelloRole = ""       // default
-	HelloRoleStatus   HelloRole = "status" // event list / event status
-	HelloRoleStop     HelloRole = "stop"   // event stop (graceful trigger)
+	HelloRoleConsumer     HelloRole = ""              // default
+	HelloRoleStatus       HelloRole = "status"        // event list / event status
+	HelloRoleStop         HelloRole = "stop"          // event stop (graceful trigger)
+	HelloRoleConsumerStop HelloRole = "consumer_stop" // stop selected consumers only
 )
 
 // HelloAck is the bus's reply on accepted Hello. SourceState/StateSource
@@ -117,9 +120,29 @@ type SourceState struct {
 //	"shutdown"      — bus SIGTERM/SIGINT
 //	"idle_timeout"  — bus IdleTimeout fired with no consumers
 //	"stop_request"  — bus received explicit Stop RPC
+//	"subscription_stopped" — one consumer was removed by subscribe_id
 type Bye struct {
 	Type   FrameType `json:"type"`
 	Reason string    `json:"reason"`
+}
+
+const ByeReasonSubscriptionStopped = "subscription_stopped"
+
+// ConsumerStopReq asks the bus to close consumers whose exact personal
+// subscription IDs match. It is an additive local IPC control operation;
+// the remote Stream connection remains alive while other consumers exist.
+type ConsumerStopReq struct {
+	Type         FrameType `json:"type"`
+	SubscribeIDs []string  `json:"subscribe_ids"`
+}
+
+// ConsumerStopResp reports which requested subscriptions had a live local
+// consumer. Missing IDs are not errors because a server subscription can be
+// cancelled after its foreground consumer has already exited.
+type ConsumerStopResp struct {
+	Type     FrameType `json:"type"`
+	Stopped  []string  `json:"stopped,omitempty"`
+	NotFound []string  `json:"not_found,omitempty"`
 }
 
 // StatusReq is an empty JSON frame ad-hoc tooling sends after Hello to

@@ -2,7 +2,7 @@
   "product_id": "event",
   "tools": {
     "event consume": {
-      "agent_summary": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
+      "agent_summary": "订阅并持续消费一个或多个兼容的个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
       "agent_summary_source": "dws-agent-selection/event",
       "availability": "available",
       "avoid_when": [
@@ -14,18 +14,18 @@
       "effect_source": "agent-hint",
       "examples": [
         "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
-        "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
+        "dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --flatten --max-events 2 --format ndjson"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
+          "value": "订阅并持续消费一个或多个兼容的个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
           "candidates": [
             {
-              "value": "订阅并持续消费指定个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
+              "value": "订阅并持续消费一个或多个兼容的个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -106,7 +106,7 @@
         "examples": {
           "value": [
             "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
-            "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
+            "dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --flatten --max-events 2 --format ndjson"
           ],
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
@@ -116,7 +116,7 @@
             {
               "value": [
                 "dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
-                "dws event consume user_im_message_reaction_group --group cid-example --flatten --max-events 1 --format ndjson"
+                "dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --flatten --max-events 2 --format ndjson"
               ],
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
@@ -231,8 +231,11 @@
         "use_when": {
           "value": [
             "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
+            "用户明确要求监听当前身份的所有单聊或所有群消息",
             "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
-            "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
+            "需要监听指定群的标题变更、成员进退群或群解散事件",
+            "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标",
+            "同一目标、同一过滤条件需要同时监听多个兼容事件"
           ],
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
@@ -242,8 +245,11 @@
             {
               "value": [
                 "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
+                "用户明确要求监听当前身份的所有单聊或所有群消息",
                 "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
-                "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
+                "需要监听指定群的标题变更、成员进退群或群解散事件",
+                "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标",
+                "同一目标、同一过滤条件需要同时监听多个兼容事件"
               ],
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
@@ -270,8 +276,11 @@
       ],
       "use_when": [
         "需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
+        "用户明确要求监听当前身份的所有单聊或所有群消息",
         "需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
-        "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标"
+        "需要监听指定群的标题变更、成员进退群或群解散事件",
+        "监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标",
+        "同一目标、同一过滤条件需要同时监听多个兼容事件"
       ]
     },
     "event list": {
@@ -763,7 +772,7 @@
         },
         "use_when": {
           "value": [
-            "已知任一公开个人消息 event_key，消费前需要理解扁平输出字段"
+            "已知任一公开个人 IM event_key，消费前需要理解输出字段或保守 payload 契约"
           ],
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
@@ -772,7 +781,7 @@
           "candidates": [
             {
               "value": [
-                "已知任一公开个人消息 event_key，消费前需要理解扁平输出字段"
+                "已知任一公开个人 IM event_key，消费前需要理解输出字段或保守 payload 契约"
               ],
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
@@ -797,7 +806,7 @@
         "skills/mono/references/products/event.md"
       ],
       "use_when": [
-        "已知任一公开个人消息 event_key，消费前需要理解扁平输出字段"
+        "已知任一公开个人 IM event_key，消费前需要理解输出字段或保守 payload 契约"
       ]
     },
     "event status": {

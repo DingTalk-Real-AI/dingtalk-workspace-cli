@@ -1,6 +1,6 @@
 # dws event — 个人 IM 事件
 
-通过个人 Stream 长连接监听当前用户的钉钉消息接收、已读、撤回和表情回应事件，NDJSON 输出到 stdout，用于驱动事件触发的 Agent。实时监听、自动回复、订阅事件都必须使用 `dws event consume`，不要写脚本轮询消息历史。
+通过个人 Stream 长连接监听当前用户的钉钉消息接收、全量消息、已读、撤回、表情回应和群生命周期事件，NDJSON 输出到 stdout，用于驱动事件触发的 Agent。实时监听、自动回复、订阅事件都必须使用 `dws event consume`，不要写脚本轮询消息历史。
 
 ## 运行方式
 
@@ -14,7 +14,7 @@
 | Command | Purpose |
 |---|---|
 | `dws event schema <event_key> --flatten` | 查看 Agent 使用的顶层业务字段 schema |
-| `dws event consume <event_key> --flatten [flags]` | 阻塞消费，事件写到 stdout，用 `-f ndjson` |
+| `dws event consume <event_key> [event_key...] --flatten [flags]` | 阻塞消费一个或多个兼容事件，事件写到 stdout，用 `-f ndjson` |
 | `dws event status --event <event_key>` | 查看个人订阅、bus、本地 consume |
 | `dws event stop <subscribe_id> --dry-run` / `--yes` | 先预览，再确认取消订阅并停止对应本地消费 |
 | `dws event stop --all --dry-run` / `--yes` | 先预览，再确认清理当前身份下全部个人订阅 |
@@ -29,14 +29,20 @@
 | `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
 | `user_im_message_receive_user` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` 或 `--open-dingtalk-id` |
+| `user_im_message_receive_o2o_all` | 当前用户收到的所有单聊消息 | 无 |
+| `user_im_message_receive_group_all` | 当前用户收到的所有群聊消息 | 无 |
 | `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_read_group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
 | `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_recall_group` | 指定群聊中的消息被撤回 | `--group` |
 | `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | 指定群聊中的消息收到表情回应 | `--group` |
+| `user_im_group_updated` | 指定群聊的标题发生变更 | `--group` |
+| `user_im_group_member_added` | 指定群聊有成员加入 | `--group` |
+| `user_im_group_member_exited` | 指定群聊有成员退出 | `--group` |
+| `user_im_group_disbanded` | 指定群聊被解散 | `--group` |
 
-只承认上表 10 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
+只承认上表 16 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
 
 ## Intent mapping
 
@@ -48,27 +54,35 @@
 | "监听 XX 群消息" | 先 `dws chat search --query "XX" --format json`，确认后 consume group |
 | "监听 userId test-user-001 发给我的消息" | `event consume`，事件码 `user_im_message_receive_user`，参数 `--user test-user-001 --flatten -f ndjson` |
 | "监听 openDingtalkId abc 发给我的消息" | `event consume`，事件码 `user_im_message_receive_user`，参数 `--open-dingtalk-id abc --flatten -f ndjson` |
+| "监听我的所有单聊消息" | `event consume`，事件码 `user_im_message_receive_o2o_all`，参数 `--flatten -f ndjson` |
+| "监听我所在的所有群消息" | `event consume`，事件码 `user_im_message_receive_group_all`，参数 `--flatten -f ndjson` |
 | "监听我发给 userId test-user-001 的消息是否已读" | `event consume`，事件码 `user_im_message_read_o2o`，参数 `--user test-user-001 --flatten -f ndjson` |
 | "监听 XX 群消息已读" | 先解析群 ID，再 consume `user_im_message_read_group --group <id>` |
 | "监听我和 userId test-user-001 的消息撤回" | `event consume`，事件码 `user_im_message_recall_o2o`，参数 `--user test-user-001 --flatten -f ndjson` |
 | "监听 XX 群消息撤回" | 先解析群 ID，再 consume `user_im_message_recall_group --group <id>` |
 | "监听我和 userId test-user-001 的消息贴表情" | `event consume`，事件码 `user_im_message_reaction_o2o`，参数 `--user test-user-001 --flatten -f ndjson` |
 | "监听 XX 群消息表情回应" | 先解析群 ID，再 consume `user_im_message_reaction_group --group <id>` |
+| "监听 XX 群改名" | 先解析群 ID，再 consume `user_im_group_updated --group <id>` |
+| "监听有人加入 XX 群" | 先解析群 ID，再 consume `user_im_group_member_added --group <id>` |
+| "监听有人退出 XX 群" | 先解析群 ID，再 consume `user_im_group_member_exited --group <id>` |
+| "监听 XX 群解散" | 先解析群 ID，再 consume `user_im_group_disbanded --group <id>`；破坏性自测只能用测试群 |
 | "监听并自动回复某人的单聊消息" | 先解析对端 userId，再启动 o2o consume；不要写轮询脚本 |
+| "同时监听同一人的单聊、已读和撤回" | 一个 consume 放入 3 个 event key，共享同一个 `--user` |
+| "同时监听同一群的消息、改名和解散" | 一个 consume 放入 3 个 event key，共享同一个 `--group` |
 | "查看个人消息事件 schema" | `dws event schema <event_key> --flatten` |
 | "看个人事件订阅状态" | `dws event status --event <event_key>` |
 | "停止这个个人事件订阅" | `dws event stop <subscribe_id> --dry-run`，确认后改用 `--yes` |
 
 多候选让用户确认。缺必填 ID 且解析不出先追问，不要猜。企业内部 userId 使用 `--user`；明确给出 openDingtalkId，或目标是外部联系人、机器人、跨组织身份时使用 `--open-dingtalk-id`。两者严格二选一，不得混填、猜测或自动转换身份类型。
 
-“我和某人的单聊”使用 `receive_o2o`；“某人发给我的消息/某人发送的消息”使用 `receive_user`，后者覆盖该发送人的单聊和群聊消息。用户要求执行“撤回消息”时走 `dws chat`；只有“监听/订阅消息撤回”才走 `dws event`。“贴标签”表示给消息贴表情时，对应 `reaction` 表情回应事件。
+“我和某人的单聊”使用 `receive_o2o`；“某人发给我的消息/某人发送的消息”使用 `receive_user`，后者覆盖该发送人的单聊和群聊消息。只有明确说“所有”时才使用 `receive_o2o_all/receive_group_all`，指定对象仍使用范围更小的事件。用户要求执行“撤回消息”时走 `dws chat`；只有“监听/订阅消息撤回”才走 `dws event`。“贴标签”表示给消息贴表情时，对应 `reaction` 表情回应事件。
 
 ## Call flow
 
 1. 从用户意图选择事件码；人名或群名先解析成必填 ID。
 2. 需要了解字段时运行 `dws event schema <event_key> --flatten`，读取 `schema.properties`；此模式的 `jq_root_path` 为 `.`。
-3. 启动 `dws event consume <event_key> ... --flatten -f ndjson`，等待 stderr 出现 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 后开始处理 stdout，不要用 `sleep` 猜测。
-4. stdout 每行是一个扁平事件 JSON；直接按该事件的 `schema.properties` 读取顶层字段。
+3. 启动 `dws event consume <event_key> [event_key...] ... --flatten -f ndjson`。单事件等待 `ready event_key=...`；多事件记录每条 `subscription event_key=... subscribe_id=...`，再等待整体 `ready event_count=...`。不要用 `sleep` 猜测。
+4. stdout 每行是一个扁平事件 JSON；消息、动作及群成员加入/退出事件读取顶层业务字段。群标题变更和群解散只读取公共字段和 `payload` 中实际存在的字段。
 5. 需要确认监听状态时运行 `dws event status --event <event_key>`，查看 `Subscriptions` 和 `Consumers`。
 6. 任务完成后优雅结束 consume；本次新建的订阅会自动取消。复用已有订阅或需要从外部主动取消时，先运行 `dws event stop <subscribe_id> --dry-run`，向用户确认后再以 `--yes` 执行；自测可在 consume 加 `--max-events` 或 `--duration` 自动退出。
 
@@ -79,12 +93,18 @@ dws event schema user_im_message_receive_at --flatten
 dws event schema user_im_message_receive_o2o --flatten
 dws event schema user_im_message_receive_group --flatten
 dws event schema user_im_message_receive_user --flatten
+dws event schema user_im_message_receive_o2o_all --flatten
+dws event schema user_im_message_receive_group_all --flatten
 dws event schema user_im_message_read_o2o --flatten
 dws event schema user_im_message_read_group --flatten
 dws event schema user_im_message_recall_o2o --flatten
 dws event schema user_im_message_recall_group --flatten
 dws event schema user_im_message_reaction_o2o --flatten
 dws event schema user_im_message_reaction_group --flatten
+dws event schema user_im_group_updated --flatten
+dws event schema user_im_group_member_added --flatten
+dws event schema user_im_group_member_exited --flatten
+dws event schema user_im_group_disbanded --flatten
 ```
 
 ```bash
@@ -94,13 +114,41 @@ dws event consume user_im_message_receive_o2o --open-dingtalk-id abc --flatten -
 dws event consume user_im_message_receive_group --group <openConversationId> --flatten -f ndjson
 dws event consume user_im_message_receive_user --user test-user-001 --flatten -f ndjson
 dws event consume user_im_message_receive_user --open-dingtalk-id abc --flatten -f ndjson
+dws event consume user_im_message_receive_o2o_all --flatten -f ndjson
+dws event consume user_im_message_receive_group_all --flatten -f ndjson
 dws event consume user_im_message_read_o2o --user test-user-001 --flatten -f ndjson
 dws event consume user_im_message_read_group --group <openConversationId> --flatten -f ndjson
 dws event consume user_im_message_recall_o2o --user test-user-001 --flatten -f ndjson
 dws event consume user_im_message_recall_group --group <openConversationId> --flatten -f ndjson
 dws event consume user_im_message_reaction_o2o --user test-user-001 --flatten -f ndjson
 dws event consume user_im_message_reaction_group --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_updated --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_member_added --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_member_exited --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_disbanded --group <openConversationId> --flatten -f ndjson
 ```
+
+同一目标、同一过滤条件的兼容事件优先使用一个多事件命令：
+
+```bash
+dws event consume \
+  user_im_message_receive_o2o \
+  user_im_message_read_o2o \
+  user_im_message_recall_o2o \
+  --user test-user-001 \
+  --flatten \
+  -f ndjson
+
+dws event consume \
+  user_im_message_receive_group \
+  user_im_group_updated \
+  user_im_group_disbanded \
+  --group <openConversationId> \
+  --flatten \
+  -f ndjson
+```
+
+用户类事件共享 `--user` 或 `--open-dingtalk-id`，群类事件共享 `--group`，无目标事件可加入任一组合。用户类与群类、不同目标或不同过滤条件要拆成多个进程。多事件共享 `--query` / `--filter-json` 时，所选事件必须全部是消息接收事件。
 
 上述所有 `*_o2o` 命令和 `user_im_message_receive_user` 都可将 `--user <userId>` 替换为 `--open-dingtalk-id <openDingtalkId>`，但两个参数不能同时使用。
 
@@ -117,22 +165,25 @@ dws event stop --all --yes
 
 ## Subprocess contract
 
-- 就绪：连上后 stderr 打 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`，父进程等这行再读 stdout。不要 `--quiet`（会抑制它）。
+- 就绪：单事件等待 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`；多事件等待 `[event] ready event_count=<n> bus_pid=<pid>`，并保存此前每条 `[event] subscription ...` 的 subscribe ID。不要 `--quiet`。
 - 退出：末行 `[event] exited — received N event(s) in Xs (reason: limit|timeout|signal|bus_shutdown)`；受控退出码 0，失败非 0 且无 exited 行、有 Error 行。
 - stdin 关闭 = 停机：仅当 stdin 是管道且未设 `--max-events/--duration` 时生效；交互终端和 `< /dev/null` 不触发。用管道 stdin 又要常驻就喂 `< <(tail -f /dev/null)`。
 - 订阅清理：本次新建的订阅任意退出即自动退订；`--subscribe-id` 复用的保留；`--ephemeral` 强制退订。优雅停用 SIGTERM、关 stdin，或外部先预览 `dws event stop <subscribe_id> --dry-run`、确认后加 `--yes`。不要 `kill -9`（跳过退订、泄漏服务端订阅）。
-- 一 consume 一 event_key；监听 N 个就起 N 个 consume，共用一个 bus。
+- 一个 consume 可监听多个兼容 event key，每个事件仍有独立订阅和 consumer，共用一个 bus、远程连接及输出。`event stop <subscribe_id>` 只移除目标事件，最后一个被移除后进程退出。
 
 ## Output parsing
 
 - 推荐 `--flatten -f ndjson`：顶层业务字段，一行一个事件 JSON，适合 Agent 管道读取。
 - 人工取样可用 `--flatten -f json --max-events 1`。`--format` 只控制序列化，`--flatten` 控制数据结构。
 - `--flatten` 的 `jq_root_path` 为 `.`；消息正文、发送人和会话 ID 分别直接读取顶层 `content`、`sender`、`conversation_id`。
+- 引用回复读取可选的 `quoted_message`；合并转发读取可选的 `forward_messages` 数组。两者保留内部消息的 `message_id/conversation_id/sender/sender_open_dingtalk_id/content/create_time`，不要解析可能随语言变化的外层聊天记录摘要。
 - Agent 已显式使用 `--flatten`，不要再生成 `fromjson` 或内部 payload 路径。不传时默认保持兼容 envelope，业务 payload 在 `.data | fromjson`。正常处理直接持续读取 stdout，不要改写为 `--output-dir` watcher。
 - 群自动回复使用顶层 `conversation_id`；单聊自动回复使用顶层 `sender_open_dingtalk_id`。
 - 已读事件直接读取 `reader/reader_open_dingtalk_id/read_time`；撤回事件读取 `recaller/recaller_open_dingtalk_id/recall_time`。
 - 表情回应事件直接读取 `operator/operator_open_dingtalk_id/reaction_name/reaction_text/operation_type/operation_time`。
-- 图片、文件等媒体消息的 `content` 可能是可读描述；需要实际媒体文件时调用 `dws chat message download-media`。
+- 群成员加入/退出事件读取 `conversation_id/operator/operator_open_dingtalk_id/members/event_time`。`operator` 是执行操作的人，`members` 是本次加入或退出的成员数组，成员项包含 `nick/open_dingtalk_id`；系统操作或成员自行退出时操作人字段可能为空。
+- 群标题变更和群解散当前只承诺 `type/event_id/timestamp/subscribe_id/payload`；以实际 `payload` 为准，不猜测群标题、操作者等字段。
+- 图片、文件等媒体消息的 `content` 可能是可读描述；合并转发媒体的下载定位信息位于对应 `forward_messages[].content`。需要实际媒体文件时调用 `dws chat message download-media`。
 - 正常动作事件输出不含内部 `payload/uid/corpid/clientId/filterSubId/bizid`；原始排查才使用 `-f raw` 或 `--debug-raw-events`。
 - 自己发的消息不作为事件回来（`isSelfLoop` 过滤）；自发验证会看到 0 事件，测试投递使用别人或机器人发消息。
 - `--jq <表达式>` 可进一步过滤或投影扁平输出。

@@ -27,17 +27,31 @@ import (
 // message receive events. Schema output is generated from these tags so the
 // documented fields cannot drift from the values written by consume.
 type MessageEventOutput struct {
-	Type                 string `json:"type" description:"事件类型，固定为当前 event_key"`
-	EventID              string `json:"event_id" description:"事件 ID，可用于去重"`
-	Timestamp            int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
-	SubscribeID          string `json:"subscribe_id" description:"订阅 ID"`
-	MessageID            string `json:"message_id" description:"开放消息 ID" format:"open_message_id"`
-	ConversationID       string `json:"conversation_id" description:"会话 ID" format:"open_conversation_id"`
-	Sender               string `json:"sender" description:"发送人展示名"`
-	SenderOpenDingTalkID string `json:"sender_open_dingtalk_id" description:"发送人开放 ID" format:"open_dingtalk_id"`
-	Content              string `json:"content" description:"消息正文"`
-	CreateTime           string `json:"create_time" description:"消息创建时间"`
-	EventTime            int64  `json:"event_time" description:"消息事件时间戳" format:"timestamp_ms"`
+	Type                 string                `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID              string                `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp            int64                 `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID          string                `json:"subscribe_id" description:"订阅 ID"`
+	MessageID            string                `json:"message_id" description:"开放消息 ID" format:"open_message_id"`
+	ConversationID       string                `json:"conversation_id" description:"会话 ID" format:"open_conversation_id"`
+	Sender               string                `json:"sender" description:"发送人展示名"`
+	SenderOpenDingTalkID string                `json:"sender_open_dingtalk_id" description:"发送人开放 ID" format:"open_dingtalk_id"`
+	Content              string                `json:"content" description:"消息正文"`
+	CreateTime           string                `json:"create_time" description:"消息创建时间"`
+	EventTime            int64                 `json:"event_time" description:"消息事件时间戳" format:"timestamp_ms"`
+	QuotedMessage        *MessageEventContext  `json:"quoted_message,omitempty" description:"引用回复所引用的原消息；非引用回复时不输出"`
+	ForwardMessages      []MessageEventContext `json:"forward_messages,omitempty" description:"合并转发包含的原消息列表；非合并转发时不输出"`
+}
+
+// MessageEventContext preserves the business context nested under a quoted
+// reply or merged-forward message. Keep these fields structured instead of
+// parsing the localized outer content summary.
+type MessageEventContext struct {
+	MessageID            string `json:"message_id" description:"内部消息的开放消息 ID" format:"open_message_id"`
+	ConversationID       string `json:"conversation_id" description:"内部消息原来所在的会话 ID" format:"open_conversation_id"`
+	Sender               string `json:"sender" description:"内部消息发送人展示名；服务端未提供时可能为空或为 null 字符串"`
+	SenderOpenDingTalkID string `json:"sender_open_dingtalk_id" description:"内部消息发送人开放 ID；服务端未提供时为空" format:"open_dingtalk_id"`
+	Content              string `json:"content" description:"内部消息正文；媒体消息可能包含 mediaId 等下载定位信息"`
+	CreateTime           string `json:"create_time" description:"内部消息创建时间"`
 }
 
 type ReadEventOutput struct {
@@ -95,6 +109,35 @@ type baseEventOutput struct {
 	SubscribeID string `json:"subscribe_id" description:"订阅 ID"`
 }
 
+// GroupLifecycleEventOutput is intentionally conservative until stable group
+// event payload samples are available. Payload keeps unknown business fields
+// while transport identity and routing metadata remain available only in raw
+// output.
+type GroupLifecycleEventOutput struct {
+	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
+	Payload     map[string]any `json:"payload" description:"群生命周期事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+}
+
+type GroupMemberEventOutput struct {
+	Type                   string                   `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID                string                   `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp              int64                    `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID            string                   `json:"subscribe_id" description:"订阅 ID"`
+	ConversationID         string                   `json:"conversation_id" description:"发生成员变更的群会话 ID" format:"open_conversation_id"`
+	Operator               string                   `json:"operator" description:"执行成员变更操作的用户展示名，系统操作或成员自行退出时可能为空"`
+	OperatorOpenDingTalkID string                   `json:"operator_open_dingtalk_id" description:"执行成员变更操作的用户开放 ID，系统操作或成员自行退出时可能为空" format:"open_dingtalk_id"`
+	Members                []GroupMemberEventMember `json:"members" description:"本次加入或退出的成员列表"`
+	EventTime              int64                    `json:"event_time" description:"群成员变更事件时间戳" format:"timestamp_ms"`
+}
+
+type GroupMemberEventMember struct {
+	Nick           string `json:"nick" description:"成员展示名"`
+	OpenDingTalkID string `json:"open_dingtalk_id" description:"成员开放 ID" format:"open_dingtalk_id"`
+}
+
 type personalEventData struct {
 	EventID      string          `json:"eventId"`
 	EventKey     string          `json:"eventKey"`
@@ -106,13 +149,24 @@ type personalEventData struct {
 type personalMessagePayload struct {
 	EventTime int64 `json:"event_time"`
 	Body      struct {
-		CreateTime           string `json:"createTime"`
-		Sender               string `json:"sender"`
-		OpenMessageID        string `json:"openMessageId"`
-		SenderOpenDingTalkID string `json:"senderOpenDingTalkId"`
-		OpenConversationID   string `json:"openConversationId"`
-		Content              string `json:"content"`
+		CreateTime           string                   `json:"createTime"`
+		Sender               string                   `json:"sender"`
+		OpenMessageID        string                   `json:"openMessageId"`
+		SenderOpenDingTalkID string                   `json:"senderOpenDingTalkId"`
+		OpenConversationID   string                   `json:"openConversationId"`
+		Content              string                   `json:"content"`
+		QuotedMessage        *personalMessageContext  `json:"quotedMessage"`
+		ForwardMessages      []personalMessageContext `json:"forwardMessages"`
 	} `json:"body"`
+}
+
+type personalMessageContext struct {
+	CreateTime           string `json:"createTime"`
+	Sender               string `json:"sender"`
+	OpenMessageID        string `json:"openMessageId"`
+	SenderOpenDingTalkID string `json:"senderOpenDingTalkId"`
+	OpenConversationID   string `json:"openConversationId"`
+	Content              string `json:"content"`
 }
 
 type personalReadPayload struct {
@@ -159,6 +213,23 @@ type personalReactionBody struct {
 	SenderOpenDingTalkID   string `json:"senderOpenDingTalkId"`
 }
 
+type personalGroupMemberPayload struct {
+	EventTime int64                   `json:"event_time"`
+	Body      personalGroupMemberBody `json:"body"`
+}
+
+type personalGroupMemberBody struct {
+	ConversationID         string                      `json:"openConversationId"`
+	Operator               string                      `json:"operNick"`
+	OperatorOpenDingTalkID string                      `json:"-"`
+	Members                []personalGroupMemberRecord `json:"members"`
+}
+
+type personalGroupMemberRecord struct {
+	Nick           string `json:"nick"`
+	OpenDingTalkID string `json:"openDingTalkId"`
+}
+
 func (b *personalReactionBody) UnmarshalJSON(data []byte) error {
 	// encoding/json otherwise falls back to case-insensitive field matching.
 	// Read this protocol field from a map so only operOpenDingtalkId is accepted.
@@ -179,6 +250,29 @@ func (b *personalReactionBody) UnmarshalJSON(data []byte) error {
 	}
 
 	*b = personalReactionBody(decoded)
+	return nil
+}
+
+func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
+	// Keep the protocol spelling strict: encoding/json would otherwise accept
+	// operOpenDingTalkId through case-insensitive fallback matching.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+
+	type bodyAlias personalGroupMemberBody
+	var decoded bodyAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	if raw, ok := fields["operOpenDingtalkId"]; ok {
+		if err := json.Unmarshal(raw, &decoded.OperatorOpenDingTalkID); err != nil {
+			return fmt.Errorf("decode operOpenDingtalkId: %w", err)
+		}
+	}
+
+	*b = personalGroupMemberBody(decoded)
 	return nil
 }
 
@@ -204,6 +298,18 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		if err := decodeRequiredPayload(data.Payload, &payload); err != nil {
 			return ev, fmt.Errorf("decode personal message payload: %w", err)
 		}
+		var quotedMessage *MessageEventContext
+		if payload.Body.QuotedMessage != nil {
+			projected := projectMessageEventContext(*payload.Body.QuotedMessage)
+			quotedMessage = &projected
+		}
+		var forwardMessages []MessageEventContext
+		if len(payload.Body.ForwardMessages) > 0 {
+			forwardMessages = make([]MessageEventContext, 0, len(payload.Body.ForwardMessages))
+			for _, message := range payload.Body.ForwardMessages {
+				forwardMessages = append(forwardMessages, projectMessageEventContext(message))
+			}
+		}
 		return MessageEventOutput{
 			Type:                 eventType,
 			EventID:              eventID,
@@ -216,6 +322,8 @@ func ProjectOutput(ev transport.Event) (any, error) {
 			Content:              payload.Body.Content,
 			CreateTime:           payload.Body.CreateTime,
 			EventTime:            payload.EventTime,
+			QuotedMessage:        quotedMessage,
+			ForwardMessages:      forwardMessages,
 		}, nil
 	}
 
@@ -232,9 +340,55 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		return projectRecallEvent(ev, base, data.Payload)
 	case isReactionEvent(eventType):
 		return projectReactionEvent(ev, base, data.Payload)
+	case isGroupMemberEvent(eventType):
+		return projectGroupMemberEvent(ev, base, data.Payload)
+	case isGroupLifecycleEvent(eventType):
+		payload, err := decodeGroupLifecyclePayload(data.Payload)
+		if err != nil {
+			return ev, fmt.Errorf("decode personal group lifecycle payload: %w", err)
+		}
+		return GroupLifecycleEventOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			Payload:     payload,
+		}, nil
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
 	}
+}
+
+func projectMessageEventContext(message personalMessageContext) MessageEventContext {
+	return MessageEventContext{
+		MessageID:            message.OpenMessageID,
+		ConversationID:       message.OpenConversationID,
+		Sender:               message.Sender,
+		SenderOpenDingTalkID: message.SenderOpenDingTalkID,
+		Content:              message.Content,
+		CreateTime:           message.CreateTime,
+	}
+}
+
+func decodeGroupLifecyclePayload(raw json.RawMessage) (map[string]any, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, fmt.Errorf("payload is missing")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(trimmed, &payload); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return nil, fmt.Errorf("payload is empty")
+	}
+	for key := range payload {
+		switch strings.ToLower(key) {
+		case "uid", "corpid", "clientid", "filtersubid", "bizid", "orgid", "sourceid":
+			delete(payload, key)
+		}
+	}
+	return payload, nil
 }
 
 func projectReadEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
@@ -303,6 +457,38 @@ func projectReactionEvent(ev transport.Event, base baseEventOutput, raw json.Raw
 	}, nil
 }
 
+func projectGroupMemberEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalGroupMemberPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return ev, fmt.Errorf("decode personal group member payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Body.ConversationID) == "" {
+		return ev, fmt.Errorf("decode personal group member payload: openConversationId is required")
+	}
+	if len(payload.Body.Members) == 0 {
+		return ev, fmt.Errorf("decode personal group member payload: members is required")
+	}
+
+	members := make([]GroupMemberEventMember, 0, len(payload.Body.Members))
+	for _, member := range payload.Body.Members {
+		members = append(members, GroupMemberEventMember{
+			Nick:           member.Nick,
+			OpenDingTalkID: member.OpenDingTalkID,
+		})
+	}
+	return GroupMemberEventOutput{
+		Type:                   base.Type,
+		EventID:                base.EventID,
+		Timestamp:              base.Timestamp,
+		SubscribeID:            base.SubscribeID,
+		ConversationID:         payload.Body.ConversationID,
+		Operator:               payload.Body.Operator,
+		OperatorOpenDingTalkID: payload.Body.OperatorOpenDingTalkID,
+		Members:                members,
+		EventTime:              payload.EventTime,
+	}, nil
+}
+
 func decodeRequiredPayload(raw json.RawMessage, target any) error {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -364,16 +550,26 @@ func decodePersonalEventData(raw string) (personalEventData, error) {
 
 func outputSchema(eventKey string) map[string]any {
 	outputType := outputTypeForEvent(eventKey)
-	properties := make(map[string]any, outputType.NumField())
-	for i := 0; i < outputType.NumField(); i++ {
-		field := outputType.Field(i)
+	schema := schemaForStruct(outputType)
+	properties := schema["properties"].(map[string]any)
+	if property, ok := properties["type"].(map[string]any); ok {
+		property["enum"] = []string{eventKey}
+	}
+	return schema
+}
+
+func schemaForStruct(t reflect.Type) map[string]any {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	properties := make(map[string]any, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
 		if name == "" || name == "-" {
 			continue
 		}
-		property := map[string]any{
-			"type": schemaType(field.Type),
-		}
+		property := schemaForType(field.Type)
 		if description := field.Tag.Get("description"); description != "" {
 			property["description"] = description
 		}
@@ -383,14 +579,28 @@ func outputSchema(eventKey string) map[string]any {
 		if field.Tag.Get("additional_properties") == "true" {
 			property["additionalProperties"] = true
 		}
-		if name == "type" {
-			property["enum"] = []string{eventKey}
-		}
 		properties[name] = property
 	}
 	return map[string]any{
 		"type":       "object",
 		"properties": properties,
+	}
+}
+
+func schemaForType(t reflect.Type) map[string]any {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		return schemaForStruct(t)
+	case reflect.Slice, reflect.Array:
+		return map[string]any{
+			"type":  "array",
+			"items": schemaForType(t.Elem()),
+		}
+	default:
+		return map[string]any{"type": schemaType(t)}
 	}
 }
 
@@ -437,6 +647,10 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(RecallEventOutput{})
 	case isReactionEvent(eventKey):
 		return reflect.TypeOf(ReactionEventOutput{})
+	case isGroupMemberEvent(eventKey):
+		return reflect.TypeOf(GroupMemberEventOutput{})
+	case isGroupLifecycleEvent(eventKey):
+		return reflect.TypeOf(GroupLifecycleEventOutput{})
 	default:
 		return reflect.TypeOf(baseEventOutput{})
 	}
@@ -452,6 +666,15 @@ func isRecallEvent(eventKey string) bool {
 
 func isReactionEvent(eventKey string) bool {
 	return eventKey == EventReactionO2O || eventKey == EventReactionGroup
+}
+
+func isGroupMemberEvent(eventKey string) bool {
+	return eventKey == EventGroupMemberAdded || eventKey == EventGroupMemberExited
+}
+
+func isGroupLifecycleEvent(eventKey string) bool {
+	return eventKey == EventGroupUpdated ||
+		eventKey == EventGroupDisbanded
 }
 
 func schemaType(t reflect.Type) string {

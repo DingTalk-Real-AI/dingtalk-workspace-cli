@@ -290,6 +290,58 @@ func TestHub_UnregisterIdempotent(t *testing.T) {
 	h.Unregister(9999) // unknown ID
 }
 
+func TestHub_StopConsumersTargetsExactSubscribeID(t *testing.T) {
+	h := NewHub(10)
+	a, err := h.Register(transport.Hello{SubscribeID: "sub-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := h.Register(transport.Hello{SubscribeID: "sub-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stopped := h.StopConsumers([]string{" sub-a ", "sub-a", "missing"}, "")
+	if len(stopped) != 1 || stopped[0] != "sub-a" {
+		t.Fatalf("stopped = %#v, want [sub-a]", stopped)
+	}
+	select {
+	case reason := <-a.StopCh:
+		if reason != transport.ByeReasonSubscriptionStopped {
+			t.Fatalf("reason = %q", reason)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("sub-a stop was not signalled")
+	}
+	select {
+	case reason := <-b.StopCh:
+		t.Fatalf("sub-b was stopped: %q", reason)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestHub_StopConsumersCoalescesQueuedStop(t *testing.T) {
+	h := NewHub(10)
+	c, err := h.Register(transport.Hello{SubscribeID: "sub-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := h.StopConsumers([]string{"sub-a"}, "first"); len(got) != 1 {
+		t.Fatalf("first stop = %#v", got)
+	}
+	if got := h.StopConsumers([]string{"sub-a"}, "second"); len(got) != 1 {
+		t.Fatalf("second stop = %#v", got)
+	}
+	if reason := <-c.StopCh; reason != "first" {
+		t.Fatalf("queued reason = %q, want first", reason)
+	}
+	select {
+	case reason := <-c.StopCh:
+		t.Fatalf("duplicate stop queued: %q", reason)
+	default:
+	}
+}
+
 func TestHub_ConcurrentDeliverBroadcastUnregister(t *testing.T) {
 	for iteration := 0; iteration < 200; iteration++ {
 		h := NewHub(4)

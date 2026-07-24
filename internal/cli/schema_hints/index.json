@@ -656,6 +656,16 @@
       "target": "event consume",
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
+    "event consume user_im_message_receive_o2o_all -f ndjson": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的全量单聊事件 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_message_receive_group_all -f ndjson": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的全量群消息事件 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
     "event consume user_im_message_read_o2o": {
       "status": "alias",
       "target": "event consume",
@@ -686,6 +696,26 @@
       "target": "event consume",
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event consume leaf"
     },
+    "event consume user_im_group_updated": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的群标题变更事件 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_group_member_added": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的群成员加入事件 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_group_member_exited": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的群成员退出事件 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
+    "event consume user_im_group_disbanded": {
+      "status": "alias",
+      "target": "event consume",
+      "reason": "已审查的群解散事件 Skill 引用，固定映射到当前公开 event consume leaf"
+    },
     "event schema user_im_message_receive_at": {
       "status": "alias",
       "target": "event schema",
@@ -702,6 +732,16 @@
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
     "event schema user_im_message_receive_user": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_receive_o2o_all": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_message_receive_group_all": {
       "status": "alias",
       "target": "event schema",
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
@@ -732,6 +772,26 @@
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
     },
     "event schema user_im_message_reaction_group": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_group_updated": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_group_member_added": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_group_member_exited": {
+      "status": "alias",
+      "target": "event schema",
+      "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"
+    },
+    "event schema user_im_group_disbanded": {
       "status": "alias",
       "target": "event schema",
       "reason": "已审查的带 event_key 参数的 Skill 引用，固定映射到当前公开 event schema leaf"

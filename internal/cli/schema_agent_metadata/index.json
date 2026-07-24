@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:bda812c0b48f221a70f9c710d56a4dead5916bf425a9b153e7b275d15365f1a0",
+  "source_hash": "sha256:6476ce71a3390ba917908d92aae636ed6519499a099f23d4d6b2b2295a67e677",
   "surface_hash": "sha256:8eef4235b4391a6a865c180ebd3a65ca3531a84c6985b37811f23fff9daf2e3a",
   "coverage": {
     "surface_products": 25,
@@ -12,8 +12,8 @@
     "tools_with_avoid_when": 603,
     "tools_with_examples": 603,
     "tools_with_interface_mode": 603,
-    "unmatched_skill_tools": 118,
-    "unreviewed_skill_tools": 7
+    "unmatched_skill_tools": 122,
+    "unreviewed_skill_tools": 11
   },
   "products": {
     "aisearch": {
@@ -870,20 +870,20 @@
       ]
     },
     "event": {
-      "agent_summary": "订阅/消费个人消息接收、已读、撤回和表情回应事件，并管理订阅生命周期",
+      "agent_summary": "订阅/消费个人消息、动作与群生命周期事件，并管理订阅生命周期",
       "agent_summary_source": "dws-agent-selection/event",
       "avoid_when": [
         "查历史聊天或主动发消息分别用 chat 查询/发送命令"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "订阅/消费个人消息接收、已读、撤回和表情回应事件，并管理订阅生命周期",
+          "value": "订阅/消费个人消息、动作与群生命周期事件，并管理订阅生命周期",
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "订阅/消费个人消息接收、已读、撤回和表情回应事件，并管理订阅生命周期",
+              "value": "订阅/消费个人消息、动作与群生命周期事件，并管理订阅生命周期",
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -910,7 +910,7 @@
         },
         "use_when": {
           "value": [
-            "需要实时监听个人消息接收、已读、撤回或表情回应事件，或管理个人事件订阅生命周期"
+            "需要实时监听个人消息接收、全量消息、已读、撤回、表情回应或群生命周期事件，或管理个人事件订阅生命周期"
           ],
           "source": "internal/cli/schema_hints/selection/event.json",
           "precedence": "reviewed_explicit",
@@ -918,7 +918,7 @@
           "candidates": [
             {
               "value": [
-                "需要实时监听个人消息接收、已读、撤回或表情回应事件，或管理个人事件订阅生命周期"
+                "需要实时监听个人消息接收、全量消息、已读、撤回、表情回应或群生命周期事件，或管理个人事件订阅生命周期"
               ],
               "source": "internal/cli/schema_hints/selection/event.json",
               "precedence": "reviewed_explicit",
@@ -938,7 +938,7 @@
         "skills/mono/references/products/event.md"
       ],
       "use_when": [
-        "需要实时监听个人消息接收、已读、撤回或表情回应事件，或管理个人事件订阅生命周期"
+        "需要实时监听个人消息接收、全量消息、已读、撤回、表情回应或群生命周期事件，或管理个人事件订阅生命周期"
       ]
     },
     "hrbrain": {

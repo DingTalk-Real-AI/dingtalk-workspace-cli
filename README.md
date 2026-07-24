@@ -474,7 +474,7 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog currently covers messages that mention the current user, one-to-one messages with a specified user, and messages in a specified group.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, and group title/disband lifecycle events.
 
 The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
 
@@ -503,6 +503,25 @@ dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId
 # Listen for messages in a specified group
 dws event consume user_im_message_receive_group --group <openConversationId> --flatten -f ndjson
 
+# Listen for all one-to-one or all group messages
+dws event consume user_im_message_receive_o2o_all --flatten -f ndjson
+dws event consume user_im_message_receive_group_all --flatten -f ndjson
+
+# Listen for a specified group's title changes, member changes, or disband event
+dws event consume user_im_group_updated --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_member_added --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_member_exited --group <openConversationId> --flatten -f ndjson
+dws event consume user_im_group_disbanded --group <openConversationId> --flatten -f ndjson
+
+# Listen for multiple events for the same user in one process
+dws event consume \
+  user_im_message_receive_o2o \
+  user_im_message_read_o2o \
+  user_im_message_recall_o2o \
+  --user <userId> \
+  --flatten \
+  -f ndjson
+
 # Inspect local consumers and cancel a subscription
 dws event status
 dws event stop <subscribe_id>
@@ -514,6 +533,7 @@ For one-to-one and specified-sender events, use exactly one target identity: `--
 |---------|---------|
 | Managed lifecycle | `consume` creates or reuses the personal subscription; `stop` cancels it and cleans local state |
 | Shared connection | Consumers for the same user share one local bus and cloud connection |
+| Multi-event process | One consume process can listen for compatible events for the same target while retaining one subscription per event |
 | Subscription isolation | Normal consumers match both event type and `subscribe_id` |
 | Agent-friendly output | Stream events are written to stdout as NDJSON; status and diagnostics use stderr |
 | Observability | `status` shows remote subscriptions, the personal bus, and local consumers |

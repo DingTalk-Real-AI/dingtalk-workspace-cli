@@ -104,6 +104,15 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 			"operation_type",
 			"dws chat message download-media",
 			"--open-dingtalk-id",
+			"user_im_message_receive_o2o_all",
+			"user_im_message_receive_group_all",
+			"user_im_group_updated",
+			"user_im_group_member_added",
+			"user_im_group_member_exited",
+			"user_im_group_disbanded",
+			"operator_open_dingtalk_id",
+			"members",
+			"open_dingtalk_id",
 		} {
 			if !strings.Contains(text, required) {
 				t.Errorf("%s missing event contract %q", path, required)
@@ -116,6 +125,34 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 		} {
 			if strings.Contains(text, retired) {
 				t.Errorf("%s still documents retired event path %q", path, retired)
+			}
+		}
+	}
+}
+
+func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "mono", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		parts := strings.SplitN(string(content), "---", 3)
+		if len(parts) != 3 {
+			t.Fatalf("%s missing YAML frontmatter", path)
+		}
+		frontmatter := parts[1]
+		for _, required := range []string{"个人 IM 事件", "群成员加入", "群成员退出"} {
+			if !strings.Contains(frontmatter, required) {
+				t.Errorf("%s frontmatter missing event discovery trigger %q", path, required)
 			}
 		}
 	}
