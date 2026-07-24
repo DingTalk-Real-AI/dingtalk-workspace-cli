@@ -1867,7 +1867,7 @@ jobs:
           set -eu
           . ./scripts/release/release-lib.sh
           attempt=1
-          max_attempts=12
+          max_attempts=60
           while :; do
             delivered="$(npm view dingtalk-workspace-cli "dist-tags.$NPM_TAG" \
               --registry=https://registry.npmjs.org --prefer-online)"
@@ -1885,7 +1885,12 @@ jobs:
               exit 1
             fi
             echo "npm $NPM_TAG still reports older v$delivered; waiting for registry propagation ($attempt/$max_attempts)."
-            sleep 5
+            # incremental backoff: 5s for first 12 attempts (1 min), then 10s
+            if [ "$attempt" -lt 12 ]; then
+              sleep 5
+            else
+              sleep 10
+            fi
             attempt=$((attempt + 1))
           done
 
