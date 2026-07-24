@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.55-beta.3] - 2026-07-24
+
+This beta validates the HR Brain command surface, smoother guarded release
+automation, and deterministic Markdown test coverage on top of the
+`v1.0.55-beta.2` baseline.
 
 ### Added
 
