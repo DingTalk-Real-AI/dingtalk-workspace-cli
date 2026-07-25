@@ -13,11 +13,14 @@
       "availability": "available",
       "reviewed": true,
       "parameters": {
+        "sender-user-id": {
+          "required": false
+        },
         "to-chat": {
           "required": false
         }
       },
-      "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+      "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
       "cli_path": "report entry submit",
       "runtime_gate": "none",
       "confirmation": "not_required"

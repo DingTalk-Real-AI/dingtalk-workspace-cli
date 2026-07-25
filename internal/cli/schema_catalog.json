@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "source_hash": "sha256:46412dbee4c24a4c7cbd322a78b7d54b05b255fe5dbe9fe9b6ee049422572a9f",
+  "source_hash": "sha256:190b6abd13ef55b68db6a0c7ee2680b4b6abf608560f187248482022ef64a3ca",
   "surface_hash": "sha256:8eef4235b4391a6a865c180ebd3a65ca3531a84c6985b37811f23fff9daf2e3a",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 25,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:bda812c0b48f221a70f9c710d56a4dead5916bf425a9b153e7b275d15365f1a0",
+      "source_hash": "sha256:77860a44806639f8d37a8eaf44971dee231041158160f139d4c59c899a0718cf",
       "surface_hash": "sha256:8eef4235b4391a6a865c180ebd3a65ca3531a84c6985b37811f23fff9daf2e3a",
       "surface_products": 25,
       "surface_tools": 603,
@@ -16227,7 +16227,7 @@
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "按模版提交一份新日报",
+            "agent_summary": "按模版以当前用户或显式指定员工为发送人提交一份新日报",
             "agent_summary_source": "dws-agent-selection/report",
             "aliases": [
               "report create"
@@ -16235,13 +16235,15 @@
             "availability": "available",
             "avoid_when": [
               "尚未读取模板字段时先用 dws report template list / template get",
-              "只需查看已有日志正文时改用 dws report entry get"
+              "只需查看已有日志正文时改用 dws report entry get",
+              "不要根据接收人、姓名或上下文猜测 --sender-user-id；--to-user-ids 仅表示接收人",
+              "没有自有应用 AppKey/AppSecret 或管理员工日志权限时不要选择委托提交路径"
             ],
             "canonical_path": "report.create_report",
             "cli_name": "submit",
             "cli_path": "report entry submit",
             "confirmation": "not_required",
-            "description": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。",
+            "description": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n默认通过 MCP 以当前登录用户提交，成功后会自动反查详情并追加钉钉跳转链接。\n显式传入非空 --sender-user-id 时，改用自有应用凭证通过钉钉 OAPI 代指定员工提交；\n该路径需要“管理员工日志数据”权限，且失败时不会回退 MCP。",
             "effect": "write",
             "group": "entry",
             "idempotency": "unknown",
@@ -16257,7 +16259,8 @@
             "risk": "medium",
             "title": "提交一份新日报（按模版）",
             "use_when": [
-              "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+              "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时",
+              "用户明确要求以某个员工 userId 为发送人代提交，且已有自有应用凭证和“管理员工日志数据”权限时，使用 --sender-user-id"
             ]
           },
           {
@@ -370109,7 +370112,7 @@
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.create_report",
         "structured-hint:internal/cli/schema_hints/selection-review.json#report.create_report"
       ],
-      "agent_summary": "按模版提交一份新日报",
+      "agent_summary": "按模版以当前用户或显式指定员工为发送人提交一份新日报",
       "agent_summary_source": "dws-agent-selection/report",
       "aliases": [
         "report create"
@@ -370117,7 +370120,9 @@
       "availability": "available",
       "avoid_when": [
         "尚未读取模板字段时先用 dws report template list / template get",
-        "只需查看已有日志正文时改用 dws report entry get"
+        "只需查看已有日志正文时改用 dws report entry get",
+        "不要根据接收人、姓名或上下文猜测 --sender-user-id；--to-user-ids 仅表示接收人",
+        "没有自有应用 AppKey/AppSecret 或管理员工日志权限时不要选择委托提交路径"
       ],
       "canonical_path": "report.create_report",
       "cli_name": "submit",
@@ -370131,36 +370136,36 @@
           ]
         ]
       },
-      "description": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。",
+      "description": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n默认通过 MCP 以当前登录用户提交，成功后会自动反查详情并追加钉钉跳转链接。\n显式传入非空 --sender-user-id 时，改用自有应用凭证通过钉钉 OAPI 代指定员工提交；\n该路径需要“管理员工日志数据”权限，且失败时不会回退 MCP。",
       "display": "钉钉日志（OA 周报应用 / 日志模版填报）",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
         "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
-        "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+        "dws report entry submit --sender-user-id \u003cemployeeUserId\u003e --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json"
       ],
       "field_provenance": {
         "agent_summary": {
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/report.json",
-              "value": "按模版提交一份新日报"
+              "value": "按模版以当前用户或显式指定员工为发送人提交一份新日报"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
           "source": "internal/cli/schema_hints/selection/report.json",
-          "value": "按模版提交一份新日报"
+          "value": "按模版以当前用户或显式指定员工为发送人提交一份新日报"
         },
         "availability": {
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
               "selected": true,
               "source": "internal/cli/schema_hints/metadata/report.json",
               "value": "available"
@@ -370174,7 +370179,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
           "source": "internal/cli/schema_hints/metadata/report.json",
           "value": "available"
         },
@@ -370182,22 +370187,26 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/report.json",
               "value": [
                 "尚未读取模板字段时先用 dws report template list / template get",
-                "只需查看已有日志正文时改用 dws report entry get"
+                "只需查看已有日志正文时改用 dws report entry get",
+                "不要根据接收人、姓名或上下文猜测 --sender-user-id；--to-user-ids 仅表示接收人",
+                "没有自有应用 AppKey/AppSecret 或管理员工日志权限时不要选择委托提交路径"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
           "source": "internal/cli/schema_hints/selection/report.json",
           "value": [
             "尚未读取模板字段时先用 dws report template list / template get",
-            "只需查看已有日志正文时改用 dws report entry get"
+            "只需查看已有日志正文时改用 dws report entry get",
+            "不要根据接收人、姓名或上下文猜测 --sender-user-id；--to-user-ids 仅表示接收人",
+            "没有自有应用 AppKey/AppSecret 或管理员工日志权限时不要选择委托提交路径"
           ]
         },
         "canonical_path": {
@@ -370211,7 +370220,7 @@
             },
             {
               "precedence": "reviewed_manual",
-              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
               "selected": false,
               "source": "reviewed_manual_hint",
               "source_ref": "report entry submit",
@@ -370228,7 +370237,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
               "selected": true,
               "source": "internal/cli/schema_hints/metadata/report.json",
               "value": "not_required"
@@ -370242,7 +370251,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
           "source": "internal/cli/schema_hints/metadata/report.json",
           "value": "not_required"
         },
@@ -370252,7 +370261,7 @@
               "precedence": "cobra_help",
               "selected": true,
               "source": "cobra_help",
-              "value": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。"
+              "value": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n默认通过 MCP 以当前登录用户提交，成功后会自动反查详情并追加钉钉跳转链接。\n显式传入非空 --sender-user-id 时，改用自有应用凭证通过钉钉 OAPI 代指定员工提交；\n该路径需要“管理员工日志数据”权限，且失败时不会回退 MCP。"
             },
             {
               "precedence": "mcp_metadata",
@@ -370264,7 +370273,7 @@
           "precedence": "cobra_help",
           "resolution": "highest_precedence",
           "source": "cobra_help",
-          "value": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。"
+          "value": "按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，\n与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。\n\n长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；\n也可用 --contents - 从 stdin 读取。\n默认通过 MCP 以当前登录用户提交，成功后会自动反查详情并追加钉钉跳转链接。\n显式传入非空 --sender-user-id 时，改用自有应用凭证通过钉钉 OAPI 代指定员工提交；\n该路径需要“管理员工日志数据”权限，且失败时不会回退 MCP。"
         },
         "effect": {
           "candidates": [
@@ -370284,22 +370293,22 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/report.json",
               "value": [
                 "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
-                "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+                "dws report entry submit --sender-user-id \u003cemployeeUserId\u003e --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
           "source": "internal/cli/schema_hints/selection/report.json",
           "value": [
             "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
-            "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+            "dws report entry submit --sender-user-id \u003cemployeeUserId\u003e --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json"
           ]
         },
         "idempotency": {
@@ -370320,7 +370329,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
               "selected": true,
               "source": "internal/cli/schema_hints/metadata/report.json",
               "value": "mcp"
@@ -370334,7 +370343,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
           "source": "internal/cli/schema_hints/metadata/report.json",
           "value": "mcp"
         },
@@ -370382,14 +370391,14 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
               "selected": true,
               "source": "internal/cli/schema_hints/metadata/report.json",
               "value": true
             },
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
               "selected": false,
               "source": "internal/cli/schema_hints/selection/report.json",
               "value": true
@@ -370397,7 +370406,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+          "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
           "source": "internal/cli/schema_hints/metadata/report.json",
           "value": true
         },
@@ -370439,20 +370448,22 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+              "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/report.json",
               "value": [
-                "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+                "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时",
+                "用户明确要求以某个员工 userId 为发送人代提交，且已有自有应用凭证和“管理员工日志数据”权限时，使用 --sender-user-id"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+          "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
           "source": "internal/cli/schema_hints/selection/report.json",
           "value": [
-            "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+            "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时",
+            "用户明确要求以某个员工 userId 为发送人代提交，且已有自有应用凭证和“管理员工日志数据”权限时，使用 --sender-user-id"
           ]
         }
       },
@@ -370467,7 +370478,7 @@
       "is_alias": false,
       "metadata_source": "embedded-mcp-metadata",
       "name": "create_report",
-      "parameter_count": 6,
+      "parameter_count": 7,
       "parameters": {
         "contents": {
           "description": "日志内容 JSON 数组 (必填，或用 --contents-file)，每项含 key/sort/content/contentType/type；传 - 表示从 stdin 读取",
@@ -370842,6 +370853,126 @@
           "required": false,
           "type": "string"
         },
+        "sender-user-id": {
+          "description": "日志发送人 userId；设置后使用自有应用凭证通过钉钉 OAPI 代提交",
+          "example": "employeeUserId",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "日志发送人 userId；设置后使用自有应用凭证通过钉钉 OAPI 代提交"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "日志发送人 userId；设置后使用自有应用凭证通过钉钉 OAPI 代提交"
+            },
+            "example": {
+              "candidates": [
+                {
+                  "precedence": "typed_metadata",
+                  "selected": true,
+                  "source": "typed_parameter_metadata",
+                  "value": "employeeUserId"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "typed_metadata",
+              "resolution": "highest_precedence",
+              "source": "typed_parameter_metadata",
+              "value": "employeeUserId"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "conditional adapter route selector mapped to DingTalk OAPI create_report_param.userid; it is not a property of the ordinary MCP report/create_report request",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "senderUserId"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "conditional adapter route selector mapped to DingTalk OAPI create_report_param.userid; it is not a property of the ordinary MCP report/create_report request",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
         "template-id": {
           "description": "日志模版 ID (必填)",
           "field_provenance": {
@@ -370992,7 +371123,7 @@
               "candidates": [
                 {
                   "precedence": "reviewed_manual",
-                  "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+                  "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
                   "selected": true,
                   "source": "reviewed_manual_hint",
                   "value": false
@@ -371012,7 +371143,7 @@
               ],
               "precedence": "reviewed_manual",
               "resolution": "highest_precedence",
-              "review_reason": "The reviewed optional --to-chat switch defaults to false and only controls post-submit delivery; it is not required to create a report.",
+              "review_reason": "The reviewed command remains pinned to its backwards-compatible default MCP report/create_report interface and is a non-idempotent medium-risk write with no runtime confirmation gate. --sender-user-id is an explicitly excluded conditional adapter input: a non-empty value selects the application-authenticated OAPI route, which never falls back to MCP after failure.",
               "source": "reviewed_manual_hint",
               "value": false
             },
@@ -371171,7 +371302,8 @@
       "source": "reviewed_command_registry",
       "title": "提交一份新日报（按模版）",
       "use_when": [
-        "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+        "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时",
+        "用户明确要求以某个员工 userId 为发送人代提交，且已有自有应用凭证和“管理员工日志数据”权限时，使用 --sender-user-id"
       ]
     },
     "report.get_available_report_templates": {

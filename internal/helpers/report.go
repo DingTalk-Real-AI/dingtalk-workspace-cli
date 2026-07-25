@@ -127,13 +127,17 @@ func newReportCommand() *cobra.Command {
 
 长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；
 也可用 --contents - 从 stdin 读取。
-提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。`,
+默认通过 MCP 以当前登录用户提交，成功后会自动反查详情并追加钉钉跳转链接。
+显式传入非空 --sender-user-id 时，改用自有应用凭证通过钉钉 OAPI 代指定员工提交；
+该路径需要“管理员工日志数据”权限，且失败时不会回退 MCP。`,
 		Example: `  dws report entry submit --template-id TPL_ID --contents '[{"content":"完成开发","sort":"0","key":"今日完成","contentType":"markdown","type":"1"}]'
   # 推荐：长内容走文件
   dws report entry submit --template-id TPL_ID --contents-file ./report.json
   # 或 stdin
   cat report.json | dws report entry submit --template-id TPL_ID --contents -
-  dws report entry submit --template-id TPL_ID --contents '[...]' --to-chat --to-user-ids userId1,userId2`,
+  dws report entry submit --template-id TPL_ID --contents '[...]' --to-chat --to-user-ids userId1,userId2
+  # 代指定员工提交；建议先加 --dry-run 预览
+  dws report entry submit --sender-user-id employeeUserId --template-id TPL_ID --contents-file ./report.json --dry-run`,
 		RunE: runReportCreate,
 	}
 	addReportCreateFlags(entrySubmitCmd)
@@ -319,14 +323,45 @@ func runReportCreate(cmd *cobra.Command, args []string) error {
 		ddFrom = "dws"
 	}
 	toChat, _ := cmd.Flags().GetBool("to-chat")
+	toUserIDs := parseReportUserIDs(mustGetFlag(cmd, "to-user-ids"))
+	senderUserID, _ := cmd.Flags().GetString("sender-user-id")
+	senderUserID = strings.TrimSpace(senderUserID)
+	if cmd.Flags().Changed("sender-user-id") {
+		if senderUserID == "" {
+			return &CLIError{
+				Code:       CodeMissingParam,
+				Message:    "flag --sender-user-id requires a non-empty value",
+				Suggestion: "传入要作为日志发送人的员工 userId；如需以当前登录用户提交，请完全移除 --sender-user-id",
+				Operation:  "report.create.delegated",
+			}
+		}
+		if deps == nil || deps.ReportSenderSubmitter == nil {
+			return &CLIError{
+				Code:       CodeUnclassified,
+				Message:    "delegated report submission transport is not configured",
+				Suggestion: "请使用完整的 dws CLI 运行该命令；不要通过未注入应用传输层的 helper 测试壳执行",
+				Operation:  "report.create.delegated",
+			}
+		}
+		return deps.ReportSenderSubmitter.Submit(cmd.Context(), cmd, ReportSenderSubmission{
+			SenderUserID: senderUserID,
+			TemplateID:   tplID,
+			Contents:     contents,
+			DDFrom:       ddFrom,
+			ToChat:       toChat,
+			ToUserIDs:    toUserIDs,
+			DryRun:       deps.Caller != nil && deps.Caller.DryRun(),
+		})
+	}
+
 	toolArgs := map[string]any{
 		"templateId": tplID,
 		"contents":   contents,
 		"ddFrom":     ddFrom,
 		"toChat":     toChat,
 	}
-	if v, _ := cmd.Flags().GetString("to-user-ids"); v != "" {
-		toolArgs["toUserIds"] = parseReportUserIDs(v)
+	if len(toUserIDs) > 0 {
+		toolArgs["toUserIds"] = toUserIDs
 	}
 	return callReportCreateWithDetailURL(toolArgs)
 }
@@ -487,6 +522,7 @@ func addReportCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().String("contents", "", "日志内容 JSON 数组 (必填，或用 --contents-file)，每项含 key/sort/content/contentType/type；传 - 表示从 stdin 读取")
 	cmd.Flags().String("contents-file", "", "从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容，避免 shell 引号转义；优先级：--contents-file > --contents - (stdin) > --contents '<json>'）")
 	cmd.Flags().String("dd-from", "dws", "创建来源标识")
+	cmd.Flags().String("sender-user-id", "", "日志发送人 userId；设置后使用自有应用凭证通过钉钉 OAPI 代提交")
 	cmd.Flags().Bool("to-chat", false, "是否发送到日志接收人单聊")
 	cmd.Flags().String("to-user-ids", "", "接收人 userId，逗号分隔 (可选)")
 }

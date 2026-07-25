@@ -1807,6 +1807,7 @@
     "pat.batch_grant --products": "aggregate/two-stage wrapper: --products is merged with all product/domain flags into productCodes for pat.batch_plan; only the plan's selectedScopes are later sent to pat.batch_grant.scopes",
     "pat.batch_grant --recommend": "two-stage conditional wrapper: --recommend is sent to pat.batch_plan, and pat.batch_grant receives only the plan-selected scopes; it is not a pat.batch_grant RPC property",
     "report.create_report --contents-file": "local JSON file input used to populate contents",
+    "report.create_report --sender-user-id": "conditional adapter route selector mapped to DingTalk OAPI create_report_param.userid; it is not a property of the ordinary MCP report/create_report request",
     "sheet.batch_update --continue-on-error": "Reviewed unpinned adapter: sheet.batch_update has no singular pinned interface_ref; --continue-on-error is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.batch_update --node": "Reviewed unpinned adapter: sheet.batch_update has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
     "sheet.batch_update --operations": "Reviewed unpinned adapter: sheet.batch_update has no singular pinned interface_ref; --operations is a CLI wrapper input and does not publish a direct interface property.",

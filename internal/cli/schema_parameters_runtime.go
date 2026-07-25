@@ -226,7 +226,8 @@ func init() {
 	RegisterRuntimeSchemaParameterMetadata("report.create_report", RuntimeSchemaParameterMetadata{
 		Formats: map[string]string{"contents": "json"},
 		Examples: map[string]string{
-			"contents": `[{"content":"schema smoke","sort":"0","key":"work","contentType":"markdown","type":"1"}]`,
+			"contents":       `[{"content":"schema smoke","sort":"0","key":"work","contentType":"markdown","type":"1"}]`,
+			"sender-user-id": "employeeUserId",
 		},
 	})
 	RegisterRuntimeSchemaParameterMetadata("sheet.batch_update", RuntimeSchemaParameterMetadata{

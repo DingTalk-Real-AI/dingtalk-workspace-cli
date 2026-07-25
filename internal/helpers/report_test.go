@@ -22,10 +22,12 @@ type reportTestCaller struct {
 	response string
 	err      error
 	calls    []string
+	lastArgs map[string]any
 }
 
-func (c *reportTestCaller) CallTool(_ context.Context, _, tool string, _ map[string]any) (*edition.ToolResult, error) {
+func (c *reportTestCaller) CallTool(_ context.Context, _, tool string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, tool)
+	c.lastArgs = args
 	if c.err != nil {
 		return nil, c.err
 	}

@@ -37,8 +37,20 @@ var (
 
 // Deps holds shared dependencies injected from the host application.
 type Deps struct {
-	Caller edition.ToolCaller
-	Out    *Formatter
+	Caller                edition.ToolCaller
+	Out                   *Formatter
+	ReportSenderSubmitter ReportSenderSubmitter
+}
+
+// DepsOption configures an optional helper dependency.
+type DepsOption func(*Deps)
+
+// WithReportSenderSubmitter configures the transport used only when report
+// submission explicitly selects --sender-user-id.
+func WithReportSenderSubmitter(submitter ReportSenderSubmitter) DepsOption {
+	return func(target *Deps) {
+		target.ReportSenderSubmitter = submitter
+	}
 }
 
 // deps is the package-level dependency holder, set during registration.
@@ -47,10 +59,15 @@ var deps *Deps
 // InitDeps initializes shared dependencies for all product commands.
 // Must be called before any product command's RunE executes (typically
 // during command tree construction in newLegacyPublicCommands).
-func InitDeps(caller edition.ToolCaller) {
+func InitDeps(caller edition.ToolCaller, options ...DepsOption) {
 	deps = &Deps{
 		Caller: caller,
 		Out:    NewFormatter(),
+	}
+	for _, option := range options {
+		if option != nil {
+			option(deps)
+		}
 	}
 }
 
