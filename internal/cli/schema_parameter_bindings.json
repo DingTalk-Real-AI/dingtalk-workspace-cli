@@ -2,8 +2,8 @@
   "version": 3,
   "baseline": {
     "manifest": "schema-parameter-bindings-v3",
-    "sha256": "sha256:9008afd72243232d4bcb37b46f1e8fc10e2bc283c8af26c59fbdb4901ebeef2f",
-    "reason": "Reviewed v3 baseline for the complete active canonical/flag/property manifest after splitting the fixed-scope minutes list commands into distinct registry identities.",
+    "sha256": "sha256:a30e040dfe51f17fcce99ead2a1cb2c3807848096708d188fe37502250a204bb",
+    "reason": "Reviewed v3 baseline for the complete active canonical/flag/property manifest after adding the chat reply at-users mapping.",
     "reviewed": true
   },
   "removals": {
@@ -393,6 +393,7 @@
     },
     "chat.reply_personal_message": {
       "ai-tag": "clawType",
+      "at-users": "atOpenDingTalkIds",
       "conversation-id": "openConversationId"
     },
     "chat.search_at_me_message": {

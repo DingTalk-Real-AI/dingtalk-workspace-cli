@@ -3578,13 +3578,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageReplyCmd := &cobra.Command{
 		Use:   "reply",
 		Short: "引用回复消息（支持单聊/群聊）",
-		Long: `以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。
+		Long: `以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。可通过 --at-users 传入逗号分隔的 userId 或 openDingTalkId；userId 会自动解析为 openDingTalkId，回复正文中的对应 @ 标识也会同步转换为 <@openDingTalkId>。
 
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>
           （人员信息可通过 dws contact user search --keyword "姓名" --format json 获取）`,
-		Example: `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"`,
+		Example: `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"
+  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "@userId 收到" --at-users userId`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "conversation-id", "ref-msg-id", "ref-sender", "text"); err != nil {
 				return err
@@ -3597,11 +3598,25 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				}
 				refSender = resolved
 			}
+			text := mustGetFlag(cmd, "text")
+			atUsers := parseCSVValues(mustGetFlag(cmd, "at-users"))
+			var atOpenDingTalkIDs []string
+			if len(atUsers) > 0 {
+				resolved, err := resolveOpenDingTalkIDs(cmd.Context(), atUsers)
+				if err != nil {
+					return fmt.Errorf("cannot resolve --at-users: %w", err)
+				}
+				text = normalizeAtPlaceholders(text, atUsers, true)
+				for i, atUser := range atUsers {
+					text = strings.ReplaceAll(text, "<@"+atUser+">", "<@"+resolved[i]+">")
+				}
+				atOpenDingTalkIDs = resolved
+			}
 			replyContent := map[string]string{
 				"referenceOpenMessageId":   mustGetFlag(cmd, "ref-msg-id"),
 				"srcMsgSendOpenDingTalkId": refSender,
 				"replyMsgType":             "text",
-				"content":                  mustGetFlag(cmd, "text"),
+				"content":                  text,
 			}
 			contentJSON, _ := marshalJSONRaw(replyContent)
 			clawType := ""
@@ -3614,6 +3629,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				"msgType":            "reply",
 				"content":            string(contentJSON),
 				"clawType":           clawType,
+			}
+			if len(atOpenDingTalkIDs) > 0 {
+				toolArgs["atOpenDingTalkIds"] = atOpenDingTalkIDs
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
@@ -3629,6 +3647,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	_ = chatMessageReplyCmd.MarkFlagRequired("ref-sender")
 	chatMessageReplyCmd.Flags().String("text", "", "回复内容 (必填)")
 	_ = chatMessageReplyCmd.MarkFlagRequired("text")
+	chatMessageReplyCmd.Flags().String("at-users", "", "@指定成员的 userId 或 openDingTalkId 列表，逗号分隔；正文需包含对应的 @ 标识")
 	chatMessageReplyCmd.Flags().String("uuid", "", "幂等键（可选）")
 	chatMessageReplyCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
 	cli.AttachRuntimeSchema(chatMessageReplyCmd, "chat", "reply_personal_message", "hardcoded:chat")
