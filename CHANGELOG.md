@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Delegated report submission** (#406) — `dws report entry submit --sender-user-id <userId>` and the deprecated `dws report create` alias can submit through DingTalk OAPI `POST /topapi/report/create` with the requested sender. Ordinary submissions still use MCP `report.create_report`; delegated failures never fall back to MCP, dry-run does not resolve credentials, and the OAPI route requires the caller's own AppKey/AppSecret plus the “管理员工日志数据” permission.
+
 ## [1.0.55-beta.3] - 2026-07-24
 
 This beta validates the HR Brain command surface, smoother guarded release

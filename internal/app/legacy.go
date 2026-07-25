@@ -29,7 +29,7 @@ import (
 
 func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool) []*cobra.Command {
 	injectStaticServers()
-	helpers.InitDeps(caller)
+	helpers.InitDeps(caller, helpers.WithReportSenderSubmitter(newReportSenderOAPISubmitter()))
 	commands := helpers.NewPublicCommands(runner)
 	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
 	// command tree, so distilled high-frequency operations mount alongside the

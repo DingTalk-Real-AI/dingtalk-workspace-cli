@@ -41,6 +41,7 @@ metadata:
 | "今天收到的日志" | `python scripts/report_received_today.py` |
 | "看日志模版" | `dws report template list` → `dws report template get --name "<模版名>"` |
 | "提交日报 / 周报（按模版）" | `dws report entry submit --template-id <id> --contents-file <CWD 下的 .json>` |
+| "以指定员工为发送人提交日志" | `dws report entry submit --sender-user-id <userId> --template-id <id> --contents-file <CWD 下的 .json>` |
 | "我收到的日志" | `dws report inbox list --start <ISO> --end <ISO> --cursor 0 --size 20` |
 | "我已发送的日志" | `dws report outbox list --cursor 0 --size 20` |
 | "查看某条日志正文" | `dws report entry get --report-id <id>` |
@@ -54,6 +55,13 @@ metadata:
 - 查“收到的日志”必须用 `dws report inbox list --start "<ISO>" --end "<ISO>" --cursor 0 --size 20 --format json`，并把“今天 / 最近 30 天”等时间词先展开成完整 ISO 起止时间；查“我发出的日志”用 `dws report outbox list --cursor 0 --size 20 --format json`。
 - 列表返回后，后续 `entry get` / `entry stats` 必须复用同一个 `reportId`（在返回的 `_internalDetailCommands[].command` 里）；不要重新挑选、猜测或改用标题。
 - 用户要正文时用 `dws report entry get --report-id <reportId>`；用户要已读/统计时用 `dws report entry stats --report-id <reportId>`。
+
+## 指定发送人提交
+
+- 只有用户明确给出要作为发送人的员工 userId 时才传 `--sender-user-id`；`--to-user-ids` 是接收人，不能当作发送人。
+- 不传 `--sender-user-id` 时继续通过 MCP `report.create_report` 以当前登录用户提交。
+- 传入非空 `--sender-user-id` 时改走钉钉 OAPI `POST /topapi/report/create`；OAPI 失败后禁止改走 MCP 重试，避免日志被静默提交成当前用户。
+- 委托提交需要自有应用 AppKey/AppSecret（命令行、环境变量或登录配置）和“管理员工日志数据”权限。可先加 `--dry-run` 查看不含 access token 的请求预览。
 
 ## 跨产品协作
 

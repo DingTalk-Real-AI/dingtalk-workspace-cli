@@ -9,20 +9,23 @@
   },
   "tools": {
     "report.create_report": {
-      "agent_summary": "按模版提交一份新日报",
+      "agent_summary": "按模版以当前用户或显式指定员工为发送人提交一份新日报",
       "use_when": [
-        "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"
+        "已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时",
+        "用户明确要求以某个员工 userId 为发送人代提交，且已有自有应用凭证和“管理员工日志数据”权限时，使用 --sender-user-id"
       ],
       "avoid_when": [
         "尚未读取模板字段时先用 dws report template list / template get",
-        "只需查看已有日志正文时改用 dws report entry get"
+        "只需查看已有日志正文时改用 dws report entry get",
+        "不要根据接收人、姓名或上下文猜测 --sender-user-id；--to-user-ids 仅表示接收人",
+        "没有自有应用 AppKey/AppSecret 或管理员工日志权限时不要选择委托提交路径"
       ],
       "examples": [
         "dws report entry submit --template-id <templateId> --contents-file ./report.json --format json",
-        "dws report entry submit --template-id <templateId> --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
+        "dws report entry submit --sender-user-id <employeeUserId> --template-id <templateId> --contents-file ./report.json --format json"
       ],
       "reviewed": true,
-      "review_reason": "结合本机 dws schema 实时描述、Skill 与 Cobra 手写选型；pinned schema_mcp_metadata 仅对照。",
+      "review_reason": "结合当前静态 Cobra handler、条件 MCP/OAPI 路由、安全边界与 Skill 手写选型；委托发送人必须由用户显式提供，且失败不得降级为当前用户提交。",
       "source_refs": [
         "CommandRegistry:canonical_path=report.create_report",
         "cobra-help:dws report entry submit",
