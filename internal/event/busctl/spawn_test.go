@@ -17,8 +17,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -101,9 +99,6 @@ func spawnWithMarker(t *testing.T, marker string, opts ...func(*SpawnConfig)) (i
 }
 
 func TestSpawn_ReadySuccess(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Spawn uses Unix Setsid; Windows path covered separately")
-	}
 	pid, err := spawnWithMarker(t, "ready")
 	if err != nil {
 		t.Fatalf("Spawn ready: %v", err)
@@ -119,9 +114,6 @@ func TestSpawn_ReadySuccess(t *testing.T) {
 }
 
 func TestSpawn_ReadyFailReportsErrSpawnFailed(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Spawn uses Unix Setsid")
-	}
 	pid, err := spawnWithMarker(t, "fail")
 	if !errors.Is(err, ErrSpawnFailed) {
 		t.Fatalf("err = %v, want ErrSpawnFailed", err)
@@ -132,9 +124,6 @@ func TestSpawn_ReadyFailReportsErrSpawnFailed(t *testing.T) {
 }
 
 func TestSpawn_ChildSilentExitReportsErrSpawnFailed(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Spawn uses Unix Setsid")
-	}
 	_, err := spawnWithMarker(t, "silent")
 	if !errors.Is(err, ErrSpawnFailed) {
 		t.Fatalf("err = %v, want ErrSpawnFailed (EOF on pipe)", err)
@@ -142,52 +131,28 @@ func TestSpawn_ChildSilentExitReportsErrSpawnFailed(t *testing.T) {
 }
 
 func TestSpawn_StallReportsTimeout(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Spawn uses Unix Setsid")
-	}
-	// Temporarily shorten ReadyTimeout via a local Spawn variant. The
-	// production timeout is 10s — too long for a unit test. We exec
-	// manually with a tiny io-wait wrapper to verify the behaviour.
-	//
-	// We can't change the package-level const, so we re-implement the
-	// timeout part directly using the same primitives the production
-	// code uses.
-	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), childEnvMarker+"=stall", ReadyFDEnv+"=3")
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd.ExtraFiles = []*os.File{pw}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start: %v", err)
-	}
-	defer func() {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-	}()
-	_ = pw.Close()
+	// Production ReadyTimeout is 10s — too long for a unit test. It is a
+	// package var precisely so tests can shrink it; safe to mutate because
+	// these tests never call t.Parallel.
+	old := ReadyTimeout
+	ReadyTimeout = 300 * time.Millisecond
+	defer func() { ReadyTimeout = old }()
 
-	// Replicate waitReady with a tiny timeout.
-	done := make(chan error, 1)
-	go func() {
-		b := make([]byte, 1)
-		_, err := pr.Read(b)
-		done <- err
-	}()
-	select {
-	case <-done:
-		t.Fatal("child should have stalled; got data on ready pipe")
-	case <-time.After(200 * time.Millisecond):
-		// expected — child is stalling, no ready byte arrived
+	pid, err := spawnWithMarker(t, "stall")
+	if pid > 0 {
+		defer func() {
+			if proc, ferr := os.FindProcess(pid); ferr == nil {
+				_ = proc.Kill()
+				_, _ = proc.Wait()
+			}
+		}()
 	}
-	_ = pr.Close()
+	if !errors.Is(err, ErrSpawnTimeout) {
+		t.Fatalf("err = %v, want ErrSpawnTimeout", err)
+	}
 }
 
 func TestSpawn_StdioDetached(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Spawn uses Unix Setsid; Windows stdio handling differs")
-	}
 	// Capture this process's stdout for the duration of the child run.
 	// If applyDetach is broken and cmd.Stdout would otherwise inherit,
 	// the child's "POLLUTION-FROM-CHILD" line would land in our pipe.
@@ -252,9 +217,6 @@ func TestReadyFDFromEnv_LowFDRejected(t *testing.T) {
 // waitReady must surface the child's real startup error (written after the
 // 'E' byte) so consume shows WHY the bus failed, not an opaque message.
 func TestWaitReady_FailureSurfacesChildError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses Unix pipe")
-	}
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -277,9 +239,6 @@ func TestWaitReady_FailureSurfacesChildError(t *testing.T) {
 
 // A bare 'E' (no trailing text) still reports ErrSpawnFailed.
 func TestWaitReady_BareFailureByte(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses Unix pipe")
-	}
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)

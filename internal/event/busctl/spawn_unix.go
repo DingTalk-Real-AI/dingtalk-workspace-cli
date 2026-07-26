@@ -16,6 +16,7 @@
 package busctl
 
 import (
+	"os"
 	"os/exec"
 	"syscall"
 )
@@ -28,4 +29,11 @@ func applyDetach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid: true,
 	}
+}
+
+// attachReadyPipe hands pw to the child as fd 3 via ExtraFiles and returns
+// the ReadyFDEnv value the child passes to os.NewFile.
+func attachReadyPipe(cmd *exec.Cmd, pw *os.File) (string, error) {
+	cmd.ExtraFiles = []*os.File{pw} // child sees fd 3 = pw
+	return "3", nil
 }
