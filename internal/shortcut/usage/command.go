@@ -46,8 +46,8 @@ func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "列出内建 shortcut 及其完整参数契约",
-		Long: "列出独立于 Runtime Schema 的 shortcut catalog。每条记录包含公开参数、" +
-			"必填/枚举约束、跨参数约束与可执行示例；也可用 dws <service> +<command> --help 查看单条契约。",
+		Long: "列出内建 shortcut catalog。公开 shortcut 同时进入 Runtime Schema；本列表保留轻量批量发现，" +
+			"leaf Schema 提供 Agent 选择、参数、约束、安全与接口契约，Cobra help 提供当前可执行 flags。",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			svc, _ := cmd.Flags().GetString("service")
 			rows := make([]shortcutListRow, 0)
@@ -62,7 +62,7 @@ func newListCommand() *cobra.Command {
 			}
 			return output.WriteCommandPayload(cmd, map[string]any{
 				"catalog":        "shortcut",
-				"runtime_schema": false,
+				"runtime_schema": true,
 				"count":          len(rows),
 				"shortcuts":      rows,
 			}, output.FormatJSON)

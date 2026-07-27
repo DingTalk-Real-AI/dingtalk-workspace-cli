@@ -1,0 +1,391 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "dws-agent-selection/devapp",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source",
+    "reviewed": true
+  },
+  "tools": {
+    "devapp.shortcut_list": {
+      "agent_summary": "查询开放平台企业内部应用列表",
+      "use_when": [
+        "当你要在开发者后台盘点或定位某个企业内部应用（例如按应用名、appKey、创建人或机器人名搜索，拿到其 unifiedAppId 以便后续查看详情、配置或发布）时使用；支持关键词过滤、排序和分页，返回应用列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +list"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_list",
+        "cobra-help:dws devapp +list",
+        "ShortcutRegistry:devapp +list"
+      ]
+    },
+    "devapp.shortcut_get": {
+      "agent_summary": "查询开放平台企业内部应用详情",
+      "use_when": [
+        "当你已知某应用的 unifiedAppId、需要查看它的完整配置信息（如名称、描述、图标、能力开关等）以便核对现状或作为修改前的依据时使用；输入 unifiedAppId，返回单个应用的详情。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +get --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_get",
+        "cobra-help:dws devapp +get",
+        "ShortcutRegistry:devapp +get"
+      ]
+    },
+    "devapp.shortcut_create": {
+      "agent_summary": "创建开放平台企业内部应用",
+      "use_when": [
+        "当你要在开放平台从零新建一个企业内部应用（H5/机器人等的载体）时使用；传入应用名称、可选描述与图标 mediaId，会实际创建出一个新应用并返回其 unifiedAppId 供后续配置。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +create --name <NAME>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_create",
+        "cobra-help:dws devapp +create",
+        "ShortcutRegistry:devapp +create"
+      ]
+    },
+    "devapp.shortcut_update": {
+      "agent_summary": "修改开放平台企业内部应用基础信息",
+      "use_when": [
+        "当你要改动一个已存在应用的基础信息（更名、改描述或换图标）时使用；指定 unifiedAppId 及要更新的字段，会实际写回并覆盖对应的应用基础资料。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +update --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_update",
+        "cobra-help:dws devapp +update",
+        "ShortcutRegistry:devapp +update"
+      ]
+    },
+    "devapp.shortcut_delete": {
+      "agent_summary": "删除开放平台企业内部应用（不可逆）",
+      "use_when": [
+        "当你确认要彻底废弃某个企业内部应用时使用；传入 unifiedAppId 会真实且不可逆地删除该应用及其配置，执行前务必确认无误。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +delete --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_delete",
+        "cobra-help:dws devapp +delete",
+        "ShortcutRegistry:devapp +delete"
+      ]
+    },
+    "devapp.shortcut_enable": {
+      "agent_summary": "启用开放平台企业内部应用",
+      "use_when": [
+        "当某个应用处于停用状态、你要让它重新生效可用时使用；传入 unifiedAppId 会实际将应用状态切换为启用。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +enable --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_enable",
+        "cobra-help:dws devapp +enable",
+        "ShortcutRegistry:devapp +enable"
+      ]
+    },
+    "devapp.shortcut_disable": {
+      "agent_summary": "停用开放平台企业内部应用",
+      "use_when": [
+        "当你要临时下线某个应用、让它对用户不可用又不删除时使用；传入 unifiedAppId 会实际将应用状态切换为停用，可日后再启用恢复。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +disable --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_disable",
+        "cobra-help:dws devapp +disable",
+        "ShortcutRegistry:devapp +disable"
+      ]
+    },
+    "devapp.shortcut_webapp_get": {
+      "agent_summary": "查询网页应用配置",
+      "use_when": [
+        "当你要查看某应用的网页（H5）能力现状，如移动端/PC 首页地址、管理后台地址等，以便核对或作为改配置前的参考时使用；输入 unifiedAppId，返回当前网页应用配置。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +webapp-get --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_webapp_get",
+        "cobra-help:dws devapp +webapp-get",
+        "ShortcutRegistry:devapp +webapp-get"
+      ]
+    },
+    "devapp.shortcut_webapp_config": {
+      "agent_summary": "配置网页应用能力",
+      "use_when": [
+        "当你要为应用开通或调整网页（H5）入口，如设置移动端/PC 端首页 URL、管理后台地址或页面类型时使用；指定 unifiedAppId 及相应地址，会实际写入该应用的网页应用配置。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +webapp-config --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_webapp_config",
+        "cobra-help:dws devapp +webapp-config",
+        "ShortcutRegistry:devapp +webapp-config"
+      ]
+    },
+    "devapp.shortcut_permission_list": {
+      "agent_summary": "查询开放平台应用权限列表",
+      "use_when": [
+        "当你要查看某应用已申请/可申请的 API 权限点及其授权状态（用于排查接口报权限错、或确认某 scopeValue 是否已开通）时使用；可按关键词、scopeValue、授权状态等过滤，返回权限点列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +permission-list --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_permission_list",
+        "cobra-help:dws devapp +permission-list",
+        "ShortcutRegistry:devapp +permission-list"
+      ]
+    },
+    "devapp.shortcut_member_list": {
+      "agent_summary": "查询开放平台应用成员",
+      "use_when": [
+        "当你要查看某应用有哪些成员及其角色（如谁是开发者/管理员），用于核对协作人员或权限归属时使用；输入 unifiedAppId，返回成员列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +member-list --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_member_list",
+        "cobra-help:dws devapp +member-list",
+        "ShortcutRegistry:devapp +member-list"
+      ]
+    },
+    "devapp.shortcut_member_add": {
+      "agent_summary": "添加开放平台应用成员",
+      "use_when": [
+        "当你要给某应用增加协作人员（如把某人加为开发者）时使用；传入 unifiedAppId、userId 列表和成员类型（如 DEVELOPER），会实际把这些人加入应用成员并赋予对应角色。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +member-add --unified-app-id <UNIFIED_APP_ID> --user-ids <VALUES> --member-type <MEMBER_TYPE>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_member_add",
+        "cobra-help:dws devapp +member-add",
+        "ShortcutRegistry:devapp +member-add"
+      ]
+    },
+    "devapp.shortcut_member_remove": {
+      "agent_summary": "移除开放平台应用成员",
+      "use_when": [
+        "当某人离职或不再参与、你要取消其对应用的访问/协作权限时使用；传入 unifiedAppId、userId 列表和成员类型，会实际把这些人从应用成员中移除。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +member-remove --unified-app-id <UNIFIED_APP_ID> --user-ids <VALUES> --member-type <MEMBER_TYPE>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_member_remove",
+        "cobra-help:dws devapp +member-remove",
+        "ShortcutRegistry:devapp +member-remove"
+      ]
+    },
+    "devapp.shortcut_robot_get": {
+      "agent_summary": "查询现有应用的机器人配置",
+      "use_when": [
+        "当你要查看某应用已有的机器人配置（名称、回调地址、模式 HTTPS/STREAM/AISKILL、技能等）以核对现状或作为改配置前的依据时使用；输入 unifiedAppId，返回当前机器人配置。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +robot-get --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_robot_get",
+        "cobra-help:dws devapp +robot-get",
+        "ShortcutRegistry:devapp +robot-get"
+      ]
+    },
+    "devapp.shortcut_event_list": {
+      "agent_summary": "查询应用已订阅的事件列表",
+      "use_when": [
+        "当你要确认某应用当前订阅了哪些事件回调（用于排查漏收事件、或退订前先查事件码）时使用；输入 unifiedAppId，可按事件码/名称关键词过滤并分页，返回已订阅事件列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +event-list --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_event_list",
+        "cobra-help:dws devapp +event-list",
+        "ShortcutRegistry:devapp +event-list"
+      ]
+    },
+    "devapp.shortcut_version_list": {
+      "agent_summary": "分页查询应用版本列表",
+      "use_when": [
+        "当你要查看某应用的历史版本（找某个 versionId、看各版本发布状态或回顾迭代记录）时使用；输入 unifiedAppId 并分页，返回版本列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +version-list --unified-app-id <UNIFIED_APP_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_version_list",
+        "cobra-help:dws devapp +version-list",
+        "ShortcutRegistry:devapp +version-list"
+      ]
+    },
+    "devapp.shortcut_version_get": {
+      "agent_summary": "查询指定版本详情",
+      "use_when": [
+        "当你已知某个 versionId、要查看该版本的具体内容（版本号、描述、包含的配置等）以核对发布内容时使用；输入 unifiedAppId 和 versionId，返回单个版本的详情。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +version-get --unified-app-id <UNIFIED_APP_ID> --version-id <VERSION_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_version_get",
+        "cobra-help:dws devapp +version-get",
+        "ShortcutRegistry:devapp +version-get"
+      ]
+    },
+    "devapp.shortcut_version_check_approval": {
+      "agent_summary": "预检版本发布是否需要审批（不实际发布）",
+      "use_when": [
+        "当你在正式发布某版本前想先确认它是否会触发审批、是否含高敏权限等发布前置要求时使用；传入 unifiedAppId 和 versionId，仅做预检返回审批要求，不会真正发布。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +version-check-approval --unified-app-id <UNIFIED_APP_ID> --version-id <VERSION_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_version_check_approval",
+        "cobra-help:dws devapp +version-check-approval",
+        "ShortcutRegistry:devapp +version-check-approval"
+      ]
+    },
+    "devapp.shortcut_version_status": {
+      "agent_summary": "查询版本发布/审批状态",
+      "use_when": [
+        "当你已提交发布、想跟进某版本当前处于什么阶段（审批中、已发布、被驳回等）时使用；输入 unifiedAppId 和 versionId，返回该版本的发布/审批状态。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws devapp +version-status --unified-app-id <UNIFIED_APP_ID> --version-id <VERSION_ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#devapp.shortcut_version_status",
+        "cobra-help:dws devapp +version-status",
+        "ShortcutRegistry:devapp +version-status"
+      ]
+    }
+  },
+  "products": {
+    "devapp": {
+      "agent_summary": "管理钉钉开放平台企业内部应用、成员、权限、机器人、事件与版本",
+      "use_when": [
+        "请求涉及企业内部应用的查询、创建、配置、成员权限、机器人、事件订阅或版本管理"
+      ],
+      "avoid_when": [
+        "开放平台接口文档搜索使用 devdoc；普通钉钉业务数据使用对应产品命令"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the public devapp Shortcut surface; product routing does not alter command identity, parameters, or runtime safety.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json",
+        "internal/shortcut/devapp",
+        "CommandRegistry:product=devapp"
+      ]
+    }
+  }
+}

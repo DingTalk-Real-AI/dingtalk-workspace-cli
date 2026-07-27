@@ -94,6 +94,14 @@ func TestDecodeCommandRegistryEnforcesReviewedSourceConstraints(t *testing.T) {
 	if got := registry.ByCanonical["sample.run"].Visibility; got != SchemaVisibilityPublic {
 		t.Fatalf("default visibility = %q, want public", got)
 	}
+
+	shortcut, err := decodeCommandRegistry([]byte(wrap(`[{"id":"sample","tools":[{"canonical_path":"sample.shortcut_run","cli_path":"sample +run"}]}]`)))
+	if err != nil {
+		t.Fatalf("decode shortcut registry path: %v", err)
+	}
+	if got := shortcut.ByCanonical["sample.shortcut_run"].PrimaryCLIPath; got != "sample +run" {
+		t.Fatalf("shortcut primary path = %q, want sample +run", got)
+	}
 }
 
 func TestCommandRegistryHashCoversEveryStableCommandField(t *testing.T) {

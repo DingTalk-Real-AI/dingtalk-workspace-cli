@@ -638,6 +638,201 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/mail.md"
       ]
+    },
+    "mail.shortcut_thread_list": {
+      "agent_summary": "列出指定邮箱文件夹下的邮件会话（thread）",
+      "use_when": [
+        "当你想按会话（同一往来主题的邮件串）而非单封邮件来浏览某个文件夹时使用；传入邮箱和文件夹 ID，可按时间范围和升降序筛选，返回会话列表及其 conversationId，供 +thread 查看详情。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +thread-list --email user@company.com --folder 104 --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_thread_list",
+        "cobra-help:dws mail +thread-list",
+        "ShortcutRegistry:mail +thread-list"
+      ]
+    },
+    "mail.shortcut_folder_list": {
+      "agent_summary": "列出顶层文件夹或指定父文件夹下的子文件夹",
+      "use_when": [
+        "当你需要了解某个邮箱有哪些文件夹、或要取得文件夹 ID 以便移动邮件、按文件夹列信/建规则时使用；传入邮箱（可选父文件夹 ID 查子级），返回文件夹列表及其 ID。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +folder-list --email user@company.com"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_folder_list",
+        "cobra-help:dws mail +folder-list",
+        "ShortcutRegistry:mail +folder-list"
+      ]
+    },
+    "mail.shortcut_tag_list": {
+      "agent_summary": "列出指定邮箱下的所有邮件标签",
+      "use_when": [
+        "当你要查看邮箱里有哪些标签、或需要取得标签 ID 以便给邮件/会话加标签时使用；传入邮箱地址，返回全部邮件标签及其 ID。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +tag-list --email user@company.com"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_tag_list",
+        "cobra-help:dws mail +tag-list",
+        "ShortcutRegistry:mail +tag-list"
+      ]
+    },
+    "mail.shortcut_user_search": {
+      "agent_summary": "按关键词或工号搜索邮箱用户（仅企业邮箱）",
+      "use_when": [
+        "当你只知道同事的姓名或工号、需要查出其企业邮箱地址以便发信或添加联系人时使用；提供关键词或工号（至少其一），返回匹配的企业邮箱用户列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +user-search --keyword \"张三\"",
+        "dws mail +user-search --email user@company.com --employee-no \"E123456\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_user_search",
+        "cobra-help:dws mail +user-search",
+        "ShortcutRegistry:mail +user-search"
+      ]
+    },
+    "mail.shortcut_template_list": {
+      "agent_summary": "列出指定邮箱的所有邮件模板",
+      "use_when": [
+        "当你想查看某个邮箱下已有哪些邮件模板、或需要取得模板 ID 以便查看详情或更新时使用；传入邮箱和每页数量，返回模板列表，支持分页。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +template-list --email user@company.com --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_template_list",
+        "cobra-help:dws mail +template-list",
+        "ShortcutRegistry:mail +template-list"
+      ]
+    },
+    "mail.shortcut_contact_list": {
+      "agent_summary": "列出指定邮箱的所有邮件联系人",
+      "use_when": [
+        "当你想查看某邮箱通讯录里有哪些联系人、或需要取得联系人 ID 以便更新或删除时使用；传入邮箱和每页数量，返回联系人列表，支持分页。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +contact-list --email user@company.com --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_contact_list",
+        "cobra-help:dws mail +contact-list",
+        "ShortcutRegistry:mail +contact-list"
+      ]
+    },
+    "mail.shortcut_find_mail_user": {
+      "agent_summary": "按关键词搜索邮箱联系人并投影列表（姓名/昵称/邮箱/工号等）",
+      "use_when": [
+        "当你只知道某人的姓名、花名或邮箱片段，想在企业邮箱通讯录里按关键词把匹配的邮箱用户找出来、并只看一份精简清单（姓名、昵称、邮箱地址、工号、职位、工作地）而不想拿到一大坨原始字段时使用；内部按 --query 关键词调用邮箱用户搜索，再在本地把每个匹配用户投影成整洁记录打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做搜索与本地投影，不会修改任何数据；注意仅企业邮箱可用（个人邮箱如 xxx@dingtalk.com 会因无权限报错）；若没有命中则提示「没搜到邮箱联系人」。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +find-mail-user --query \"张三\"",
+        "dws mail +find-mail-user --query alice --limit 10"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_find_mail_user",
+        "cobra-help:dws mail +find-mail-user",
+        "ShortcutRegistry:mail +find-mail-user"
+      ]
+    },
+    "mail.shortcut_recent_mail": {
+      "agent_summary": "列出收件箱近期邮件会话并投影列表（主题/发件人/时间/threadId）",
+      "use_when": [
+        "当你想快速看一眼自己邮箱里近期的邮件会话（收件箱线程/conversation），只需要一份精简清单（主题、发件人、最后修改时间、会话 threadId）、而不想翻完整正文或原始字段时使用；内部先确定要看的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再解析要看的文件夹——你可以用 --folder 指定文件夹 ID，不指定时自动定位收件箱——然后列出该文件夹下的近期会话，最后在本地把每条会话投影成 {subject, from, date, threadId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做列举与本地投影，不会修改、发送或删除任何邮件；若最近没有邮件则提示「最近没有邮件」。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +recent-mail",
+        "dws mail +recent-mail --limit 30"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_recent_mail",
+        "cobra-help:dws mail +recent-mail",
+        "ShortcutRegistry:mail +recent-mail"
+      ]
+    },
+    "mail.shortcut_search_mail": {
+      "agent_summary": "按 KQL 关键词搜索邮件并投影列表（主题/发件人/时间/messageId）",
+      "use_when": [
+        "当你想按关键词（KQL 表达式，如 subject:周报、from:alice、hasAttachments:true、folderId:2 等）快速搜自己的邮件、并只看一份精简清单（主题、发件人、时间、邮件 messageId）而不想翻完整正文时使用；内部先确定要搜的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再执行邮件搜索，最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做搜索与本地投影，不会修改、发送或删除任何邮件；若没有命中则返回空列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +search-mail --query \"subject:周报\"",
+        "dws mail +search-mail --query \"from:alice AND date>2025-06-01T00:00:00Z\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_search_mail",
+        "cobra-help:dws mail +search-mail",
+        "ShortcutRegistry:mail +search-mail"
+      ]
+    },
+    "mail.shortcut_unread_mail": {
+      "agent_summary": "列出未读邮件并投影列表（主题/发件人/时间/messageId）",
+      "use_when": [
+        "当你想快速看自己邮箱里有哪些未读邮件、并只看一份精简清单（主题、发件人、时间、邮件 messageId）而不想翻完整正文时使用；内部先确定要查的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再用 KQL 过滤条件 isRead:false 搜索未读邮件，最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做搜索与本地投影，不会把邮件标记为已读，也不会修改、发送或删除任何邮件；若没有未读邮件则返回空列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws mail +unread-mail",
+        "dws mail +unread-mail --email user@company.com"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#mail.shortcut_unread_mail",
+        "cobra-help:dws mail +unread-mail",
+        "ShortcutRegistry:mail +unread-mail"
+      ]
     }
   },
   "products": {

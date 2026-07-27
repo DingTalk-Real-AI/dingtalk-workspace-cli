@@ -2,7 +2,7 @@
 """Generate shortcut sections for DWS skills.
 
 The skill should teach agents which high-level shortcut entries are available
-in the public catalog. `dws shortcut list` publishes their machine-readable
+in the public catalog and Runtime Schema. Leaf Schema publishes the Agent
 contract, while leaf `--help` remains the source of truth for accepted flags.
 """
 
@@ -112,7 +112,7 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
     return f"""{PRODUCT_START}
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service {service} --format json` 读取参数、约束、风险和示例，并以 `dws {service} <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 leaf Schema（例如 `dws schema --cli-path "{service} +<shortcut>" --format json`）读取 Agent 选择、参数、约束、风险和确认语义；用 `dws shortcut list --service {service} --format json` 批量发现；最后以 `dws {service} <shortcut> --help` 核对当前 Cobra flags。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

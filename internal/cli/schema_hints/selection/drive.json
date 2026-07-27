@@ -621,6 +621,142 @@
         "structured-hint:internal/cli/schema_hints/products/drive.json",
         "live-mcp:none (Cobra+Skill; composite/unpinned)"
       ]
+    },
+    "drive.shortcut_info": {
+      "agent_summary": "获取钉盘文件/文件夹元数据",
+      "use_when": [
+        "当你已经知道某个节点的 dentryUuid、想查看它的详细信息（名称、大小、类型、创建/修改时间、所属空间等）而不是仅列表概览时使用；输入 node（节点 ID），返回该单个文件或文件夹的完整元数据。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws drive +info --node <dentryUuid>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.shortcut_info",
+        "cobra-help:dws drive +info",
+        "ShortcutRegistry:drive +info"
+      ]
+    },
+    "drive.shortcut_search": {
+      "agent_summary": "搜索钉盘文件",
+      "use_when": [
+        "当你只记得文件名或内容关键词、不知道它在哪个目录时用它全局检索钉盘文件；输入 query，可按文件类型、扩展名、创建者、创建/修改时间范围过滤，返回匹配文件及其 ID，便于再做下载或整理。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws drive +search --query \"季度汇报\"",
+        "dws drive +search --query \"合同\" --target file --extensions pdf,docx"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.shortcut_search",
+        "cobra-help:dws drive +search",
+        "ShortcutRegistry:drive +search"
+      ]
+    },
+    "drive.shortcut_search_docs": {
+      "agent_summary": "搜索文档空间文档",
+      "use_when": [
+        "当你只记得文档标题或关键词、想在文档空间/知识库中检索在线文档（区别于 +search 检索钉盘文件）时使用；输入 query 关键词，返回匹配的文档及其节点信息。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws drive +search-docs --query \"季度汇报\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.shortcut_search_docs",
+        "cobra-help:dws drive +search-docs",
+        "ShortcutRegistry:drive +search-docs"
+      ]
+    },
+    "drive.shortcut_copy": {
+      "agent_summary": "复制文件/文档到指定位置",
+      "use_when": [
+        "当你想保留原件、把某个文件/文档拷贝一份到指定文件夹或知识库时使用；输入源节点 node 及目标 folder/workspace，会实际生成一个副本，原文件位置不变。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws drive +copy --node <nodeId> --folder <targetFolderId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.shortcut_copy",
+        "cobra-help:dws drive +copy",
+        "ShortcutRegistry:drive +copy"
+      ]
+    },
+    "drive.shortcut_move": {
+      "agent_summary": "移动文件/文档到指定位置",
+      "use_when": [
+        "当你要把某个文件/文档从当前位置转移到另一个文件夹或知识库（整理归档、调整目录结构）时使用；输入源节点 node 及目标 folder/workspace，会实际改变文件所在位置，原位置不再保留该文件。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws drive +move --node <nodeId> --folder <targetFolderId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.shortcut_move",
+        "cobra-help:dws drive +move",
+        "ShortcutRegistry:drive +move"
+      ]
+    },
+    "drive.shortcut_recent": {
+      "agent_summary": "获取最近访问/编辑的文档列表",
+      "use_when": [
+        "当你想快速找回「我最近看过/改过的那个文档」而不记得它放在哪时使用；可按操作类型（最近访问/最近编辑）和创建人（全部/我创建/他人创建）过滤，返回近期文档列表及其节点信息。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws drive +recent",
+        "dws drive +recent --operate-type 1 --creator-type 1"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.shortcut_recent",
+        "cobra-help:dws drive +recent",
+        "ShortcutRegistry:drive +recent"
+      ]
+    },
+    "drive.shortcut_find_file": {
+      "agent_summary": "按名称关键词搜索钉盘文件并投影关键字段（只读）",
+      "use_when": [
+        "当你只记得钉盘文件的名字（或其中一部分），想快速按文件名关键词找到它、拿到它的 dentryId 以便后续下载/查看，却不想手动翻目录或写复杂过滤条件时使用；内部调用钉盘的 search_files 工具，把 --query 作为文件名关键词(keyword) 并限定搜索范围为钉盘文件(searchTarget=file)，再在本地把每条命中结果精简为「文件名、类型、dentryId、大小」四个字段后打印。这是纯只读操作，只做搜索与本地投影，不会创建、移动或删除任何文件；未命中时返回空列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws drive +find-file --query 季度汇报",
+        "dws drive +find-file --query 合同"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#drive.shortcut_find_file",
+        "cobra-help:dws drive +find-file",
+        "ShortcutRegistry:drive +find-file"
+      ]
     }
   },
   "products": {

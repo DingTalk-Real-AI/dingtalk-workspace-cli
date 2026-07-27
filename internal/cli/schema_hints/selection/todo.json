@@ -525,6 +525,215 @@
         "Wukong-parity:3306c3307",
         "live-dws-schema:todo.update_todo_tag#FAILED"
       ]
+    },
+    "todo.shortcut_assign": {
+      "agent_summary": "按姓名给某人创建并指派一条待办（自动解析 userId）",
+      "use_when": [
+        "当你想把一件事指派给某位同事、但只知道对方姓名不想先查 userId 时使用；内部先按姓名解析出唯一 userId，再创建待办并把 TA 设为执行人。会真实创建待办。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +assign --to 张三 --task \"整理周报\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_assign",
+        "cobra-help:dws todo +assign",
+        "ShortcutRegistry:todo +assign"
+      ]
+    },
+    "todo.shortcut_assign_multi": {
+      "agent_summary": "把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId）",
+      "use_when": [
+        "当你想把同一条待办同时指派给好几个同事、但手上只有他们的姓名而不是 userId 时使用；内部会把 --to 里的每个姓名逐个解析成唯一 userId，只要有任何一个姓名查不到或者重名有歧义，就把这些问题一次性汇总报错、并且完全不创建待办（不会建出只指派了一半人的残缺待办）。全部姓名都解析成功后，才用这些 userId 一次性创建这条待办并指派给所有人。会真实创建一条新的待办。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +assign-multi --to \"张三,李四\" --task \"周五前提交排期\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_assign_multi",
+        "cobra-help:dws todo +assign-multi",
+        "ShortcutRegistry:todo +assign-multi"
+      ]
+    },
+    "todo.shortcut_created_todos": {
+      "agent_summary": "列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的）",
+      "use_when": [
+        "当你想快速看清『哪些待办是我自己创建/发起的』，而不是别人指派给我执行的待办时使用；内部拉取你当前组织下角色为创建人(creator)的待办列表（roleTypes=[\"creator\"]，creator 是待办列表支持的角色枚举之一），再在本地把每条待办投影成标题(subject)、任务 ID(taskId) 和截止时间(dueTime) 打印出来。这是纯只读操作，只做列表与投影，不会创建或修改任何待办；若没有你创建的待办则返回空列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +created-todos"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_created_todos",
+        "cobra-help:dws todo +created-todos",
+        "ShortcutRegistry:todo +created-todos"
+      ]
+    },
+    "todo.shortcut_overdue": {
+      "agent_summary": "列出我已过期未完成的待办",
+      "use_when": [
+        "当你想快速看清自己有哪些待办已经过了截止时间却还没做完、方便优先处理时使用；内部先拉取你当前组织下作为执行人(executor)的待办列表，再在本地按「有截止时间(dueTime) 且早于当前时刻 且尚未完成」的条件筛选，最后只打印这些逾期待办的标题(subject)、截止时间(dueTime) 和任务 ID(taskId)。这是纯只读操作，只做列表与本地过滤，不会修改或完成任何待办；若没有逾期待办则返回空列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +overdue"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_overdue",
+        "cobra-help:dws todo +overdue",
+        "ShortcutRegistry:todo +overdue"
+      ]
+    },
+    "todo.shortcut_remind": {
+      "agent_summary": "给自己创建一条带截止/提醒时间的待办",
+      "use_when": [
+        "当你想给自己记一件事、并（可选）设一个截止/提醒时间，又不想先查自己的 userId 时使用；内部先解析当前登录用户的 userId，再显式设置 executorIds，--at 会按 ISO8601 解析为截止时间。会真实创建待办。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +remind --task \"交周报\" --at 2026-03-10T18:00:00+08:00"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_remind",
+        "cobra-help:dws todo +remind",
+        "ShortcutRegistry:todo +remind"
+      ]
+    },
+    "todo.shortcut_todo_done": {
+      "agent_summary": "按标题关键词把我的某条待办标记完成（自动定位 taskId）",
+      "use_when": [
+        "当你只记得某条待办的标题关键词、想直接把它标记完成，却不想先翻列表复制 taskId 时使用；内部先拉取你当前组织下作为执行人的待办列表，按标题(subject)包含关键词匹配：没匹配到会提示「没找到匹配待办」，匹配到多条会列出候选(标题+taskId)让你写得更精确，唯一命中时才把它标记为已完成。这会真实修改待办完成状态。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +todo-done --task 周报"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_todo_done",
+        "cobra-help:dws todo +todo-done",
+        "ShortcutRegistry:todo +todo-done"
+      ]
+    },
+    "todo.shortcut_get_my_tasks": {
+      "agent_summary": "查询当前组织下我的待办列表",
+      "use_when": [
+        "当你想查看自己在当前组织下的待办清单、盘点未完成事项或按条件筛选任务时使用；可按完成状态、优先级、角色（创建者/执行者/参与者）和截止时间范围过滤并分页，返回匹配的待办列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +get-my-tasks --status false --priority 40,30"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_get_my_tasks",
+        "cobra-help:dws todo +get-my-tasks",
+        "ShortcutRegistry:todo +get-my-tasks"
+      ]
+    },
+    "todo.shortcut_list_sub": {
+      "agent_summary": "查询子待办列表",
+      "use_when": [
+        "当你已知某个待办任务 ID、想了解它被拆解出的所有子任务时使用；输入父任务 ID，返回其下的子待办列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +list-sub --task-id <taskId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_list_sub",
+        "cobra-help:dws todo +list-sub",
+        "ShortcutRegistry:todo +list-sub"
+      ]
+    },
+    "todo.shortcut_get": {
+      "agent_summary": "查询待办详情",
+      "use_when": [
+        "当你已知某条待办的任务 ID、想查看它的完整信息（标题、执行者、截止时间、优先级、状态等）时使用；输入任务 ID，返回该待办的详细内容。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +get --task-id <taskId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_get",
+        "cobra-help:dws todo +get",
+        "ShortcutRegistry:todo +get"
+      ]
+    },
+    "todo.shortcut_list_attachment": {
+      "agent_summary": "查询待办任务的附件列表",
+      "use_when": [
+        "当你想查看某条待办上挂了哪些附件、或需要拿到附件 ID 以便后续删除时使用；输入任务 ID，返回该待办的附件列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +list-attachment --task-id <taskId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_list_attachment",
+        "cobra-help:dws todo +list-attachment",
+        "ShortcutRegistry:todo +list-attachment"
+      ]
+    },
+    "todo.shortcut_list_comment": {
+      "agent_summary": "查询待办评论列表",
+      "use_when": [
+        "当你想查看某条待办下的讨论记录、了解协作沟通历史或获取评论 ID 以便删除时使用；输入任务 ID 并可分页，返回该待办的评论列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws todo +list-comment --task-id <taskId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#todo.shortcut_list_comment",
+        "cobra-help:dws todo +list-comment",
+        "ShortcutRegistry:todo +list-comment"
+      ]
     }
   },
   "products": {

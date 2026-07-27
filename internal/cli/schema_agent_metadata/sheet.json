@@ -1,6 +1,522 @@
 {
   "product_id": "sheet",
   "tools": {
+    "sheet +list-sheets": {
+      "agent_summary": "获取表格文档中全部工作表列表",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet +list-sheets --node NODE_ID"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "获取表格文档中全部工作表列表",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": "获取表格文档中全部工作表列表",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": [
+                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet +list-sheets --node NODE_ID"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet +list-sheets --node NODE_ID"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "当你拿到一个表格文档、想先了解它里面有哪些工作表（sheet）以及各自的 sheetId 时使用，通常作为读写具体数据前的第一步；传入表格文档 ID 或 URL，返回工作表清单。"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": [
+                "当你拿到一个表格文档、想先了解它里面有哪些工作表（sheet）以及各自的 sheetId 时使用，通常作为读写具体数据前的第一步；传入表格文档 ID 或 URL，返回工作表清单。"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "ShortcutRegistry:sheet +list-sheets",
+        "cobra-help:dws sheet +list-sheets",
+        "internal/cli/schema_command_registry.json#sheet.shortcut_list_sheets",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json"
+      ],
+      "use_when": [
+        "当你拿到一个表格文档、想先了解它里面有哪些工作表（sheet）以及各自的 sheetId 时使用，通常作为读写具体数据前的第一步；传入表格文档 ID 或 URL，返回工作表清单。"
+      ]
+    },
+    "sheet +read": {
+      "agent_summary": "读取工作表指定范围的结构化单元格数据",
+      "agent_summary_source": "dws-agent-selection/sheet",
+      "availability": "available",
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws sheet +read --node NODE_ID --sheet-id SHEET_ID --range \"A1:D10\""
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "读取工作表指定范围的结构化单元格数据",
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": "读取工作表指定范围的结构化单元格数据",
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": [
+                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws sheet +read --node NODE_ID --sheet-id SHEET_ID --range \"A1:D10\""
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": [
+                "dws sheet +read --node NODE_ID --sheet-id SHEET_ID --range \"A1:D10\""
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity."
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "当你需要按单元格逐格获取数据（含类型、公式或格式化值等结构化信息）以便程序处理时使用；传入表格与可选范围（A1 表示法，不传则全部），可指定取格式化值/原始值/公式，返回结构化单元格数组。若只想要纯文本可改用 +csv-get。"
+          ],
+          "source": "internal/cli/schema_hints/selection/sheet.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+          "candidates": [
+            {
+              "value": [
+                "当你需要按单元格逐格获取数据（含类型、公式或格式化值等结构化信息）以便程序处理时使用；传入表格与可选范围（A1 表示法，不传则全部），可指定取格式化值/原始值/公式，返回结构化单元格数组。若只想要纯文本可改用 +csv-get。"
+              ],
+              "source": "internal/cli/schema_hints/selection/sheet.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts."
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "ShortcutRegistry:sheet +read",
+        "cobra-help:dws sheet +read",
+        "internal/cli/schema_command_registry.json#sheet.shortcut_read",
+        "internal/cli/schema_hints/metadata/sheet.json",
+        "internal/cli/schema_hints/selection/sheet.json"
+      ],
+      "use_when": [
+        "当你需要按单元格逐格获取数据（含类型、公式或格式化值等结构化信息）以便程序处理时使用；传入表格与可选范围（A1 表示法，不传则全部），可指定取格式化值/原始值/公式，返回结构化单元格数组。若只想要纯文本可改用 +csv-get。"
+      ]
+    },
     "sheet add-dimension": {
       "agent_summary": "在工作表末尾追加空行或空列。",
       "agent_summary_source": "dws-agent-selection/sheet",

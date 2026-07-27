@@ -437,6 +437,393 @@
         "skills/mono/references/products/calendar.md",
         "live-dws-schema:calendar.update_calendar_event"
       ]
+    },
+    "calendar.shortcut_agenda": {
+      "agent_summary": "查询日程列表（不传时间默认查询今天）",
+      "use_when": [
+        "当你想了解某人（默认自己）在某段时间内的日程安排、看看今天/本周有哪些会时使用；可传 --start/--end 圈定时间范围、--calendar-id 指定日历，返回该区间内的日程列表（含日程 ID，可配合 +get 看详情）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +agenda",
+        "dws calendar +agenda --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-31T23:59:59+08:00\" --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_agenda",
+        "cobra-help:dws calendar +agenda",
+        "ShortcutRegistry:calendar +agenda"
+      ]
+    },
+    "calendar.shortcut_attendee_list": {
+      "agent_summary": "查看日程参会人",
+      "use_when": [
+        "当你想知道某个日程都有谁参加、各人的出席响应状态时使用；输入 --event 日程 ID，返回参会人列表（userId 及其接受/拒绝等状态）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +attendee-list --event EVENT_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_attendee_list",
+        "cobra-help:dws calendar +attendee-list",
+        "ShortcutRegistry:calendar +attendee-list"
+      ]
+    },
+    "calendar.shortcut_room_search": {
+      "agent_summary": "按名称模糊搜索会议室（不检查可用性）",
+      "use_when": [
+        "当你只知道会议室名字、想拿到它的 roomId 以便后续预定时使用；输入 --room-name 名称关键词（建议只填核心专名，去掉“会议室”等后缀），返回名称匹配的会议室列表。它只按名字找、不判断该时段是否空闲，查可用性请用 +room-find。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +room-search --room-name 永澄亭"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_room_search",
+        "cobra-help:dws calendar +room-search",
+        "ShortcutRegistry:calendar +room-search"
+      ]
+    },
+    "calendar.shortcut_room_groups": {
+      "agent_summary": "会议室分组列表",
+      "use_when": [
+        "当你想按楼层/园区等分组浏览会议室、或需要拿到 groupId 以便在 +room-find 里按分组过滤时使用；返回会议室分组列表，支持 --limit/--page 分页。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +room-groups"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_room_groups",
+        "cobra-help:dws calendar +room-groups",
+        "ShortcutRegistry:calendar +room-groups"
+      ]
+    },
+    "calendar.shortcut_freebusy": {
+      "agent_summary": "查询用户 / 会议室闲忙状态（--users 与 --rooms 至少其一）",
+      "use_when": [
+        "当你要在约会前确认某些人或会议室在指定时间段是否有空、避免冲突时使用；传入 --start/--end 时间段并至少给出 --users 或 --rooms 其一，返回各对象在该区间的忙/闲时段。只看忙闲结果、不看具体日程内容，需要系统给出建议时段可用 +suggestion。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +freebusy --users userId1,userId2 --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_freebusy",
+        "cobra-help:dws calendar +freebusy",
+        "ShortcutRegistry:calendar +freebusy"
+      ]
+    },
+    "calendar.shortcut_book_list": {
+      "agent_summary": "查询用户的日历本列表",
+      "use_when": [
+        "当你想知道自己有哪些日历本（主日历、项目日历、订阅日历等）、或需要拿到某个日历的 calendarId 以便在 +agenda/+create 中指定时使用；无需参数，返回全部日历本列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +book-list"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_book_list",
+        "cobra-help:dws calendar +book-list",
+        "ShortcutRegistry:calendar +book-list"
+      ]
+    },
+    "calendar.shortcut_book_search": {
+      "agent_summary": "按名称模糊搜索日历本",
+      "use_when": [
+        "当你只记得日历本名字的一部分、想据此找到对应的 calendarId 时使用；输入 --query 名称关键词，返回名称匹配的日历本列表，便于后续在其它命令里指定 --calendar-id。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +book-search --query \"项目\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_book_search",
+        "cobra-help:dws calendar +book-search",
+        "ShortcutRegistry:calendar +book-search"
+      ]
+    },
+    "calendar.shortcut_book": {
+      "agent_summary": "创建日程，并可按姓名邀请参会人（自动解析 userId，失败自动回滚删除日程）",
+      "use_when": [
+        "当你想快速排一个会/日程、并顺手把几位同事按姓名拉进来时使用；内部先建日程拿到 eventId，再把每个姓名解析成唯一 userId 批量加为参会人。如果加参会人失败，会自动删除刚建好的日程回滚，避免留下一个没人的空日程。会真实创建日程并发出参会邀请。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +book --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+        "dws calendar +book --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --with 张三,李四"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_book",
+        "cobra-help:dws calendar +book",
+        "ShortcutRegistry:calendar +book"
+      ]
+    },
+    "calendar.shortcut_cancel_event": {
+      "agent_summary": "取消（删除）一个已有日程（删除前先确认它真实存在）",
+      "use_when": [
+        "当你想取消/删除一个已经存在的日程时使用；内部先用 eventId 拉一次日程详情确认它真实存在并回显标题，再执行删除，避免因 eventId 写错而误删别的日程。如果 eventId 查不到会直接报错，不会盲目删除。这是高危写操作，会真实删除该日程，框架会二次确认。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +cancel-event --event EVENT_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_cancel_event",
+        "cobra-help:dws calendar +cancel-event",
+        "ShortcutRegistry:calendar +cancel-event"
+      ]
+    },
+    "calendar.shortcut_conflicts": {
+      "agent_summary": "检测我某天日程的时间冲突（重叠/双重预订，默认今天）",
+      "use_when": [
+        "当你想快速知道『我今天（或某天）的日程有没有时间冲突、撞车的会议』时使用；内部自动算出目标日期的时间范围（默认今天，可用 --in-days 指定几天后），列出当天全部日程，再在本地两两比对开始/结束时间，找出所有时间段重叠的日程对并报告。只读操作，不修改任何日程；没有冲突时明确告诉你「无冲突」。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +conflicts",
+        "dws calendar +conflicts --in-days 1"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_conflicts",
+        "cobra-help:dws calendar +conflicts",
+        "ShortcutRegistry:calendar +conflicts"
+      ]
+    },
+    "calendar.shortcut_free_slots": {
+      "agent_summary": "找我某天工作时段内的空闲时间段（默认今天 09:00-18:00）",
+      "use_when": [
+        "当你想知道『我今天（或某天）还有哪些时间是空的、可以安排会议/事情』时使用；内部列出目标日期（默认今天，--in-days 指定几天后）的全部日程，合并忙碌时段，再在工作时间范围内（默认 09:00-18:00，可用 --from/--to 指定起止小时）算出所有空闲窗口并给出每段的起止与时长。只读操作，不修改任何日程；用于快速定位可预约的空档。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +free-slots",
+        "dws calendar +free-slots --in-days 1 --from 9 --to 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_free_slots",
+        "cobra-help:dws calendar +free-slots",
+        "ShortcutRegistry:calendar +free-slots"
+      ]
+    },
+    "calendar.shortcut_free": {
+      "agent_summary": "按姓名查询某人在指定时间段内的忙闲状态（自动解析 userId）",
+      "use_when": [
+        "当你只知道对方姓名、想知道 TA 在某段时间内是空闲还是被日程占用（比如约会前先看看有没有空）而不想先手动查 userId 时使用；内部先按姓名搜通讯录解析出唯一 userId，姓名匹配到多人时会列出候选让你区分，再按时间范围查询忙闲。只读，不产生任何日程变更。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +free --who 张三 --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_free",
+        "cobra-help:dws calendar +free",
+        "ShortcutRegistry:calendar +free"
+      ]
+    },
+    "calendar.shortcut_invite": {
+      "agent_summary": "按姓名把参会人加入已有日程（自动解析 userId 后批量添加）",
+      "use_when": [
+        "当你已经有一个日程（知道 eventId），想按姓名把几位同事拉进来当参会人时使用；内部先把 --with 里每个姓名解析成唯一 userId，再一次性把他们全部加到 --event 指定的日程里。会真实修改日程并发出参会邀请。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +invite --event EVENT_ID --with 张三",
+        "dws calendar +invite --event EVENT_ID --with 张三,李四"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_invite",
+        "cobra-help:dws calendar +invite",
+        "ShortcutRegistry:calendar +invite"
+      ]
+    },
+    "calendar.shortcut_my_free": {
+      "agent_summary": "查我自己在某时间段的忙闲（默认今天，无需输入姓名）",
+      "use_when": [
+        "当你（或 AI agent）想知道『我自己什么时候有空/忙』、用于安排会议或回复邀约时使用；不用像 +free 那样传别人的姓名——内部自动解析当前用户的 userId，再查其忙闲时段。默认查今天（本地时区 00:00 到次日 00:00），也可用 --start/--end 指定 ISO8601 时间范围。只读操作，只查忙闲、不创建或修改任何日程；返回按时间排列的忙碌时段，空则表示这段时间全空。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +my-free",
+        "dws calendar +my-free --start 2026-07-10T09:00:00+08:00 --end 2026-07-10T18:00:00+08:00"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_my_free",
+        "cobra-help:dws calendar +my-free",
+        "ShortcutRegistry:calendar +my-free"
+      ]
+    },
+    "calendar.shortcut_next_event": {
+      "agent_summary": "查看接下来最近的一个日程（默认扫描未来 7 天）",
+      "use_when": [
+        "当你只想知道『我下一个日程是什么、什么时候开始』、而不想翻一整份日程列表时使用；内部以当前时间为起点、往后 7 天为范围，拉取主日历下的日程，按开始时间升序挑出最近的那一个并打印摘要（标题、开始/结束时间、地点）。若这 7 天内没有任何日程，会明确提示『近 7 天无日程』。只读，不做任何修改。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +next-event"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_next_event",
+        "cobra-help:dws calendar +next-event",
+        "ShortcutRegistry:calendar +next-event"
+      ]
+    },
+    "calendar.shortcut_reschedule": {
+      "agent_summary": "改一个已有日程的时间（只动开始/结束时间，其他字段不变）",
+      "use_when": [
+        "当你想把一个已经存在的日程改到新的时间段、又不想动标题/描述/参会人等其他内容时使用；内部先用 eventId 拉一次日程详情确认它真实存在，再只更新开始和结束时间。如果 eventId 查不到会直接报错，不会误改别的日程。会真实修改该日程的时间。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +reschedule --event EVENT_ID --start \"2026-03-10T15:00:00+08:00\" --end \"2026-03-10T16:00:00+08:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_reschedule",
+        "cobra-help:dws calendar +reschedule",
+        "ShortcutRegistry:calendar +reschedule"
+      ]
+    },
+    "calendar.shortcut_suggest_time": {
+      "agent_summary": "按姓名解析多位参与者，推荐大家都有空的可开会时间段（自动解析 userId）",
+      "use_when": [
+        "当你想为几个人凑一个大家都空闲的开会时间、但只知道他们的姓名而不想逐个手动查 userId 时使用；内部会把 --with 里的姓名逐个搜通讯录解析成唯一 userId（任何一个没匹配到或匹配到多人都会明确报出来，绝不瞎猜），再基于所有参与者的忙闲，在给定时间范围内推荐若干可用时段。只读，不创建任何日程。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +suggest-time --with 张三,李四 --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+        "dws calendar +suggest-time --with 张三,李四,王五 --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --duration 30"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_suggest_time",
+        "cobra-help:dws calendar +suggest-time",
+        "ShortcutRegistry:calendar +suggest-time"
+      ]
+    },
+    "calendar.shortcut_today": {
+      "agent_summary": "列出我今天的日程（自动计算今天的起止时间，无需手动填时间范围）",
+      "use_when": [
+        "当你想快速看看『我今天有哪些日程/会议安排』时使用；内部用本地时区自动把时间范围算成今天 00:00 到次日 00:00，转成毫秒时间戳，查询主日历（primary）下今天的全部日程。只读，不会创建或修改任何日程。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +today"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_today",
+        "cobra-help:dws calendar +today",
+        "ShortcutRegistry:calendar +today"
+      ]
+    },
+    "calendar.shortcut_tomorrow": {
+      "agent_summary": "列出我明天的日程（自动计算明天的起止时间，无需手动填时间范围）",
+      "use_when": [
+        "当你想快速看看『我明天有哪些日程/会议安排』、提前准备时使用；内部用本地时区自动把时间范围算成明天 00:00 到后天 00:00，转成毫秒时间戳，查询主日历（primary）下明天的全部日程，并投影出标题、开始时间、结束时间、地点、eventId。只读，不会创建或修改任何日程。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +tomorrow"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_tomorrow",
+        "cobra-help:dws calendar +tomorrow",
+        "ShortcutRegistry:calendar +tomorrow"
+      ]
+    },
+    "calendar.shortcut_week": {
+      "agent_summary": "列出我本周的日程（自动按周一为周首计算本周起止时间，无需手动填时间范围）",
+      "use_when": [
+        "当你想快速看看『我本周有哪些日程/会议安排』时使用；内部用本地时区、以周一为一周开始，自动把时间范围算成本周一 00:00 到下周一 00:00，转成毫秒时间戳，查询主日历（primary）下本周的全部日程，并投影出标题、开始时间、结束时间、eventId。只读，不会创建或修改任何日程。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws calendar +week"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#calendar.shortcut_week",
+        "cobra-help:dws calendar +week",
+        "ShortcutRegistry:calendar +week"
+      ]
     }
   },
   "products": {

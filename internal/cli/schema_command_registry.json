@@ -488,6 +488,122 @@
         {
           "canonical_path": "aitable.workflow_update",
           "cli_path": "aitable workflow update"
+        },
+        {
+          "canonical_path": "aitable.shortcut_base_list",
+          "cli_path": "aitable +base-list"
+        },
+        {
+          "canonical_path": "aitable.shortcut_base_search",
+          "cli_path": "aitable +base-search"
+        },
+        {
+          "canonical_path": "aitable.shortcut_base_get",
+          "cli_path": "aitable +base-get"
+        },
+        {
+          "canonical_path": "aitable.shortcut_table_get",
+          "cli_path": "aitable +table-get"
+        },
+        {
+          "canonical_path": "aitable.shortcut_field_get",
+          "cli_path": "aitable +field-get"
+        },
+        {
+          "canonical_path": "aitable.shortcut_record_query",
+          "cli_path": "aitable +record-query"
+        },
+        {
+          "canonical_path": "aitable.shortcut_record_query_empty",
+          "cli_path": "aitable +record-query-empty"
+        },
+        {
+          "canonical_path": "aitable.shortcut_record_history_list",
+          "cli_path": "aitable +record-history-list"
+        },
+        {
+          "canonical_path": "aitable.shortcut_record_share_url",
+          "cli_path": "aitable +record-share-url"
+        },
+        {
+          "canonical_path": "aitable.shortcut_template_search",
+          "cli_path": "aitable +template-search"
+        },
+        {
+          "canonical_path": "aitable.shortcut_view_get",
+          "cli_path": "aitable +view-get"
+        },
+        {
+          "canonical_path": "aitable.shortcut_view_get_lock",
+          "cli_path": "aitable +view-get-lock"
+        },
+        {
+          "canonical_path": "aitable.shortcut_view_get_frozen_cols",
+          "cli_path": "aitable +view-get-frozen-cols"
+        },
+        {
+          "canonical_path": "aitable.shortcut_view_get_row_height",
+          "cli_path": "aitable +view-get-row-height"
+        },
+        {
+          "canonical_path": "aitable.shortcut_form_list",
+          "cli_path": "aitable +form-list"
+        },
+        {
+          "canonical_path": "aitable.shortcut_form_field_list",
+          "cli_path": "aitable +form-field-list"
+        },
+        {
+          "canonical_path": "aitable.shortcut_form_share_get",
+          "cli_path": "aitable +form-share-get"
+        },
+        {
+          "canonical_path": "aitable.shortcut_dashboard_config_example",
+          "cli_path": "aitable +dashboard-config-example"
+        },
+        {
+          "canonical_path": "aitable.shortcut_dashboard_get",
+          "cli_path": "aitable +dashboard-get"
+        },
+        {
+          "canonical_path": "aitable.shortcut_chart_widgets_example",
+          "cli_path": "aitable +chart-widgets-example"
+        },
+        {
+          "canonical_path": "aitable.shortcut_chart_get",
+          "cli_path": "aitable +chart-get"
+        },
+        {
+          "canonical_path": "aitable.shortcut_role_list",
+          "cli_path": "aitable +role-list"
+        },
+        {
+          "canonical_path": "aitable.shortcut_section_list_empty",
+          "cli_path": "aitable +section-list-empty"
+        },
+        {
+          "canonical_path": "aitable.shortcut_section_list_nodes",
+          "cli_path": "aitable +section-list-nodes"
+        },
+        {
+          "canonical_path": "aitable.shortcut_find_record",
+          "cli_path": "aitable +find-record"
+        },
+        {
+          "canonical_path": "aitable.shortcut_list_tables",
+          "cli_path": "aitable +list-tables"
+        },
+        {
+          "canonical_path": "aitable.shortcut_record_share_links",
+          "cli_path": "aitable +record-share-links"
+        },
+        {
+          "canonical_path": "aitable.shortcut_resolve_base",
+          "cli_path": "aitable +resolve-base"
+        },
+        {
+          "canonical_path": "aitable.shortcut_resolve_table",
+          "cli_path": "aitable +resolve-table"
         }
       ]
     },
@@ -645,6 +761,82 @@
         {
           "canonical_path": "attendance.vacation_update_type",
           "cli_path": "attendance vacation update-type"
+        },
+        {
+          "canonical_path": "attendance.shortcut_check_result",
+          "cli_path": "attendance +check-result"
+        },
+        {
+          "canonical_path": "attendance.shortcut_check_record",
+          "cli_path": "attendance +check-record"
+        },
+        {
+          "canonical_path": "attendance.shortcut_list_approve",
+          "cli_path": "attendance +list-approve"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_approve_template",
+          "cli_path": "attendance +get-approve-template"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_schedule",
+          "cli_path": "attendance +get-schedule"
+        },
+        {
+          "canonical_path": "attendance.shortcut_search_class",
+          "cli_path": "attendance +search-class"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_adjustment_rule",
+          "cli_path": "attendance +get-adjustment-rule"
+        },
+        {
+          "canonical_path": "attendance.shortcut_search_adjustment_rule",
+          "cli_path": "attendance +search-adjustment-rule"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_overtime_rule",
+          "cli_path": "attendance +get-overtime-rule"
+        },
+        {
+          "canonical_path": "attendance.shortcut_search_overtime_rule",
+          "cli_path": "attendance +search-overtime-rule"
+        },
+        {
+          "canonical_path": "attendance.shortcut_search_group",
+          "cli_path": "attendance +search-group"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_summary",
+          "cli_path": "attendance +get-summary"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_self_setting",
+          "cli_path": "attendance +get-self-setting"
+        },
+        {
+          "canonical_path": "attendance.shortcut_query_report_data",
+          "cli_path": "attendance +query-report-data"
+        },
+        {
+          "canonical_path": "attendance.shortcut_list_leave_types",
+          "cli_path": "attendance +list-leave-types"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_leave_records",
+          "cli_path": "attendance +get-leave-records"
+        },
+        {
+          "canonical_path": "attendance.shortcut_get_checkin_record",
+          "cli_path": "attendance +get-checkin-record"
+        },
+        {
+          "canonical_path": "attendance.shortcut_my_attendance",
+          "cli_path": "attendance +my-attendance"
+        },
+        {
+          "canonical_path": "attendance.shortcut_this_month",
+          "cli_path": "attendance +this-month"
         }
       ]
     },
@@ -747,6 +939,86 @@
         {
           "canonical_path": "calendar.query_available_meeting_room",
           "cli_path": "calendar room search"
+        },
+        {
+          "canonical_path": "calendar.shortcut_agenda",
+          "cli_path": "calendar +agenda"
+        },
+        {
+          "canonical_path": "calendar.shortcut_attendee_list",
+          "cli_path": "calendar +attendee-list"
+        },
+        {
+          "canonical_path": "calendar.shortcut_room_search",
+          "cli_path": "calendar +room-search"
+        },
+        {
+          "canonical_path": "calendar.shortcut_room_groups",
+          "cli_path": "calendar +room-groups"
+        },
+        {
+          "canonical_path": "calendar.shortcut_freebusy",
+          "cli_path": "calendar +freebusy"
+        },
+        {
+          "canonical_path": "calendar.shortcut_book_list",
+          "cli_path": "calendar +book-list"
+        },
+        {
+          "canonical_path": "calendar.shortcut_book_search",
+          "cli_path": "calendar +book-search"
+        },
+        {
+          "canonical_path": "calendar.shortcut_book",
+          "cli_path": "calendar +book"
+        },
+        {
+          "canonical_path": "calendar.shortcut_cancel_event",
+          "cli_path": "calendar +cancel-event"
+        },
+        {
+          "canonical_path": "calendar.shortcut_conflicts",
+          "cli_path": "calendar +conflicts"
+        },
+        {
+          "canonical_path": "calendar.shortcut_free_slots",
+          "cli_path": "calendar +free-slots"
+        },
+        {
+          "canonical_path": "calendar.shortcut_free",
+          "cli_path": "calendar +free"
+        },
+        {
+          "canonical_path": "calendar.shortcut_invite",
+          "cli_path": "calendar +invite"
+        },
+        {
+          "canonical_path": "calendar.shortcut_my_free",
+          "cli_path": "calendar +my-free"
+        },
+        {
+          "canonical_path": "calendar.shortcut_next_event",
+          "cli_path": "calendar +next-event"
+        },
+        {
+          "canonical_path": "calendar.shortcut_reschedule",
+          "cli_path": "calendar +reschedule"
+        },
+        {
+          "canonical_path": "calendar.shortcut_suggest_time",
+          "cli_path": "calendar +suggest-time"
+        },
+        {
+          "canonical_path": "calendar.shortcut_today",
+          "cli_path": "calendar +today"
+        },
+        {
+          "canonical_path": "calendar.shortcut_tomorrow",
+          "cli_path": "calendar +tomorrow"
+        },
+        {
+          "canonical_path": "calendar.shortcut_week",
+          "cli_path": "calendar +week"
         }
       ]
     },
@@ -1064,6 +1336,174 @@
         {
           "canonical_path": "chat.upgrade_group_to_external",
           "cli_path": "chat group upgrade-to-external"
+        },
+        {
+          "canonical_path": "chat.shortcut_bot_search",
+          "cli_path": "chat +bot-search"
+        },
+        {
+          "canonical_path": "chat.shortcut_bot_find",
+          "cli_path": "chat +bot-find"
+        },
+        {
+          "canonical_path": "chat.shortcut_conversation_info",
+          "cli_path": "chat +conversation-info"
+        },
+        {
+          "canonical_path": "chat.shortcut_conversation_clear_all_red_point",
+          "cli_path": "chat +conversation-clear-all-red-point"
+        },
+        {
+          "canonical_path": "chat.shortcut_conversation_list",
+          "cli_path": "chat +conversation-list"
+        },
+        {
+          "canonical_path": "chat.shortcut_conversation_list_top",
+          "cli_path": "chat +conversation-list-top"
+        },
+        {
+          "canonical_path": "chat.shortcut_category_list",
+          "cli_path": "chat +category-list"
+        },
+        {
+          "canonical_path": "chat.shortcut_category_create",
+          "cli_path": "chat +category-create"
+        },
+        {
+          "canonical_path": "chat.shortcut_category_delete",
+          "cli_path": "chat +category-delete"
+        },
+        {
+          "canonical_path": "chat.shortcut_category_rename",
+          "cli_path": "chat +category-rename"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_search",
+          "cli_path": "chat +chat-search"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_invite_url",
+          "cli_path": "chat +chat-invite-url"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_dismiss",
+          "cli_path": "chat +chat-dismiss"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_set_history",
+          "cli_path": "chat +chat-set-history"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_update_nick",
+          "cli_path": "chat +chat-update-nick"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_update_alias",
+          "cli_path": "chat +chat-update-alias"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_list_mine",
+          "cli_path": "chat +chat-list-mine"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_list_all",
+          "cli_path": "chat +chat-list-all"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_list_join_requests",
+          "cli_path": "chat +chat-list-join-requests"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_bots",
+          "cli_path": "chat +chat-bots"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_set_admin",
+          "cli_path": "chat +chat-set-admin"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_mute",
+          "cli_path": "chat +chat-mute"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_role_list",
+          "cli_path": "chat +chat-role-list"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_role_add",
+          "cli_path": "chat +chat-role-add"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_role_update",
+          "cli_path": "chat +chat-role-update"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_role_set_user",
+          "cli_path": "chat +chat-role-set-user"
+        },
+        {
+          "canonical_path": "chat.shortcut_chat_role_query_user",
+          "cli_path": "chat +chat-role-query-user"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_send_by_webhook",
+          "cli_path": "chat +messages-send-by-webhook"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_list_direct",
+          "cli_path": "chat +messages-list-direct"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_list_unread_conversations",
+          "cli_path": "chat +messages-list-unread-conversations"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_mget",
+          "cli_path": "chat +messages-mget"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_query_send_status",
+          "cli_path": "chat +messages-query-send-status"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_read_status",
+          "cli_path": "chat +messages-read-status"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_update_card",
+          "cli_path": "chat +messages-update-card"
+        },
+        {
+          "canonical_path": "chat.shortcut_messages_list_pin",
+          "cli_path": "chat +messages-list-pin"
+        },
+        {
+          "canonical_path": "chat.shortcut_at_me",
+          "cli_path": "chat +at-me"
+        },
+        {
+          "canonical_path": "chat.shortcut_broadcast",
+          "cli_path": "chat +broadcast"
+        },
+        {
+          "canonical_path": "chat.shortcut_dm",
+          "cli_path": "chat +dm"
+        },
+        {
+          "canonical_path": "chat.shortcut_group_members",
+          "cli_path": "chat +group-members"
+        },
+        {
+          "canonical_path": "chat.shortcut_my_groups",
+          "cli_path": "chat +my-groups"
+        },
+        {
+          "canonical_path": "chat.shortcut_send_to_group",
+          "cli_path": "chat +send-to-group"
+        },
+        {
+          "canonical_path": "chat.shortcut_unread_chats",
+          "cli_path": "chat +unread-chats"
         }
       ]
     },
@@ -1149,6 +1589,62 @@
         {
           "canonical_path": "contact.self_user_profile_update",
           "cli_path": "contact user update-self"
+        },
+        {
+          "canonical_path": "contact.shortcut_list_followings",
+          "cli_path": "contact +list-followings"
+        },
+        {
+          "canonical_path": "contact.shortcut_search_user",
+          "cli_path": "contact +search-user"
+        },
+        {
+          "canonical_path": "contact.shortcut_search_mobile",
+          "cli_path": "contact +search-mobile"
+        },
+        {
+          "canonical_path": "contact.shortcut_list_roles",
+          "cli_path": "contact +list-roles"
+        },
+        {
+          "canonical_path": "contact.shortcut_list_role_members",
+          "cli_path": "contact +list-role-members"
+        },
+        {
+          "canonical_path": "contact.shortcut_list_sub_depts",
+          "cli_path": "contact +list-sub-depts"
+        },
+        {
+          "canonical_path": "contact.shortcut_list_dept_members",
+          "cli_path": "contact +list-dept-members"
+        },
+        {
+          "canonical_path": "contact.shortcut_by_mobile",
+          "cli_path": "contact +by-mobile"
+        },
+        {
+          "canonical_path": "contact.shortcut_dept_members",
+          "cli_path": "contact +dept-members"
+        },
+        {
+          "canonical_path": "contact.shortcut_lookup",
+          "cli_path": "contact +lookup"
+        },
+        {
+          "canonical_path": "contact.shortcut_org",
+          "cli_path": "contact +org"
+        },
+        {
+          "canonical_path": "contact.shortcut_resolve_dept",
+          "cli_path": "contact +resolve-dept"
+        },
+        {
+          "canonical_path": "contact.shortcut_team",
+          "cli_path": "contact +team"
+        },
+        {
+          "canonical_path": "contact.shortcut_me",
+          "cli_path": "contact +me"
         }
       ]
     },
@@ -1294,6 +1790,87 @@
       ]
     },
     {
+      "id": "devapp",
+      "tools": [
+        {
+          "canonical_path": "devapp.shortcut_list",
+          "cli_path": "devapp +list"
+        },
+        {
+          "canonical_path": "devapp.shortcut_get",
+          "cli_path": "devapp +get"
+        },
+        {
+          "canonical_path": "devapp.shortcut_create",
+          "cli_path": "devapp +create"
+        },
+        {
+          "canonical_path": "devapp.shortcut_update",
+          "cli_path": "devapp +update"
+        },
+        {
+          "canonical_path": "devapp.shortcut_delete",
+          "cli_path": "devapp +delete"
+        },
+        {
+          "canonical_path": "devapp.shortcut_enable",
+          "cli_path": "devapp +enable"
+        },
+        {
+          "canonical_path": "devapp.shortcut_disable",
+          "cli_path": "devapp +disable"
+        },
+        {
+          "canonical_path": "devapp.shortcut_webapp_get",
+          "cli_path": "devapp +webapp-get"
+        },
+        {
+          "canonical_path": "devapp.shortcut_webapp_config",
+          "cli_path": "devapp +webapp-config"
+        },
+        {
+          "canonical_path": "devapp.shortcut_permission_list",
+          "cli_path": "devapp +permission-list"
+        },
+        {
+          "canonical_path": "devapp.shortcut_member_list",
+          "cli_path": "devapp +member-list"
+        },
+        {
+          "canonical_path": "devapp.shortcut_member_add",
+          "cli_path": "devapp +member-add"
+        },
+        {
+          "canonical_path": "devapp.shortcut_member_remove",
+          "cli_path": "devapp +member-remove"
+        },
+        {
+          "canonical_path": "devapp.shortcut_robot_get",
+          "cli_path": "devapp +robot-get"
+        },
+        {
+          "canonical_path": "devapp.shortcut_event_list",
+          "cli_path": "devapp +event-list"
+        },
+        {
+          "canonical_path": "devapp.shortcut_version_list",
+          "cli_path": "devapp +version-list"
+        },
+        {
+          "canonical_path": "devapp.shortcut_version_get",
+          "cli_path": "devapp +version-get"
+        },
+        {
+          "canonical_path": "devapp.shortcut_version_check_approval",
+          "cli_path": "devapp +version-check-approval"
+        },
+        {
+          "canonical_path": "devapp.shortcut_version_status",
+          "cli_path": "devapp +version-status"
+        }
+      ]
+    },
+    {
       "id": "devdoc",
       "tools": [
         {
@@ -1312,6 +1889,22 @@
         {
           "canonical_path": "ding.send_ding_message",
           "cli_path": "ding message send"
+        },
+        {
+          "canonical_path": "ding.shortcut_list",
+          "cli_path": "ding +list"
+        },
+        {
+          "canonical_path": "ding.shortcut_receiver_status",
+          "cli_path": "ding +receiver-status"
+        },
+        {
+          "canonical_path": "ding.shortcut_send_personal",
+          "cli_path": "ding +send-personal"
+        },
+        {
+          "canonical_path": "ding.shortcut_recall_personal",
+          "cli_path": "ding +recall-personal"
         }
       ]
     },
@@ -1469,6 +2062,74 @@
         {
           "canonical_path": "doc.version_save",
           "cli_path": "doc version save"
+        },
+        {
+          "canonical_path": "doc.shortcut_search",
+          "cli_path": "doc +search"
+        },
+        {
+          "canonical_path": "doc.shortcut_list",
+          "cli_path": "doc +list"
+        },
+        {
+          "canonical_path": "doc.shortcut_copy",
+          "cli_path": "doc +copy"
+        },
+        {
+          "canonical_path": "doc.shortcut_move",
+          "cli_path": "doc +move"
+        },
+        {
+          "canonical_path": "doc.shortcut_comment_list",
+          "cli_path": "doc +comment-list"
+        },
+        {
+          "canonical_path": "doc.shortcut_comment_create",
+          "cli_path": "doc +comment-create"
+        },
+        {
+          "canonical_path": "doc.shortcut_comment_reply",
+          "cli_path": "doc +comment-reply"
+        },
+        {
+          "canonical_path": "doc.shortcut_export_submit",
+          "cli_path": "doc +export-submit"
+        },
+        {
+          "canonical_path": "doc.shortcut_export_get",
+          "cli_path": "doc +export-get"
+        },
+        {
+          "canonical_path": "doc.shortcut_version_save",
+          "cli_path": "doc +version-save"
+        },
+        {
+          "canonical_path": "doc.shortcut_version_list",
+          "cli_path": "doc +version-list"
+        },
+        {
+          "canonical_path": "doc.shortcut_version_revert",
+          "cli_path": "doc +version-revert"
+        },
+        {
+          "canonical_path": "doc.shortcut_template_list",
+          "cli_path": "doc +template-list"
+        },
+        {
+          "canonical_path": "doc.shortcut_template_search",
+          "cli_path": "doc +template-search"
+        },
+        {
+          "canonical_path": "doc.shortcut_doc_append",
+          "cli_path": "doc +doc-append"
+        },
+        {
+          "canonical_path": "doc.shortcut_find_doc",
+          "cli_path": "doc +find-doc"
+        },
+        {
+          "canonical_path": "doc.shortcut_share_doc",
+          "cli_path": "doc +share-doc"
         }
       ]
     },
@@ -1574,6 +2235,34 @@
         {
           "canonical_path": "drive.get_upload_info",
           "cli_path": "drive upload-info"
+        },
+        {
+          "canonical_path": "drive.shortcut_info",
+          "cli_path": "drive +info"
+        },
+        {
+          "canonical_path": "drive.shortcut_search",
+          "cli_path": "drive +search"
+        },
+        {
+          "canonical_path": "drive.shortcut_search_docs",
+          "cli_path": "drive +search-docs"
+        },
+        {
+          "canonical_path": "drive.shortcut_copy",
+          "cli_path": "drive +copy"
+        },
+        {
+          "canonical_path": "drive.shortcut_move",
+          "cli_path": "drive +move"
+        },
+        {
+          "canonical_path": "drive.shortcut_recent",
+          "cli_path": "drive +recent"
+        },
+        {
+          "canonical_path": "drive.shortcut_find_file",
+          "cli_path": "drive +find-file"
         }
       ]
     },
@@ -1786,6 +2475,46 @@
         {
           "canonical_path": "mail.search_mail_users",
           "cli_path": "mail user search"
+        },
+        {
+          "canonical_path": "mail.shortcut_thread_list",
+          "cli_path": "mail +thread-list"
+        },
+        {
+          "canonical_path": "mail.shortcut_folder_list",
+          "cli_path": "mail +folder-list"
+        },
+        {
+          "canonical_path": "mail.shortcut_tag_list",
+          "cli_path": "mail +tag-list"
+        },
+        {
+          "canonical_path": "mail.shortcut_user_search",
+          "cli_path": "mail +user-search"
+        },
+        {
+          "canonical_path": "mail.shortcut_template_list",
+          "cli_path": "mail +template-list"
+        },
+        {
+          "canonical_path": "mail.shortcut_contact_list",
+          "cli_path": "mail +contact-list"
+        },
+        {
+          "canonical_path": "mail.shortcut_find_mail_user",
+          "cli_path": "mail +find-mail-user"
+        },
+        {
+          "canonical_path": "mail.shortcut_recent_mail",
+          "cli_path": "mail +recent-mail"
+        },
+        {
+          "canonical_path": "mail.shortcut_search_mail",
+          "cli_path": "mail +search-mail"
+        },
+        {
+          "canonical_path": "mail.shortcut_unread_mail",
+          "cli_path": "mail +unread-mail"
         }
       ]
     },
@@ -1945,6 +2674,30 @@
         {
           "canonical_path": "minutes.create_upload_session",
           "cli_path": "minutes upload create"
+        },
+        {
+          "canonical_path": "minutes.shortcut_list_mine",
+          "cli_path": "minutes +list-mine"
+        },
+        {
+          "canonical_path": "minutes.shortcut_list_shared",
+          "cli_path": "minutes +list-shared"
+        },
+        {
+          "canonical_path": "minutes.shortcut_list_all",
+          "cli_path": "minutes +list-all"
+        },
+        {
+          "canonical_path": "minutes.shortcut_record_start",
+          "cli_path": "minutes +record-start"
+        },
+        {
+          "canonical_path": "minutes.shortcut_detail",
+          "cli_path": "minutes +detail"
+        },
+        {
+          "canonical_path": "minutes.shortcut_replace_batch",
+          "cli_path": "minutes +replace-batch"
         }
       ]
     },
@@ -2010,6 +2763,34 @@
         {
           "canonical_path": "oa.list_pending_tasks",
           "cli_path": "oa approval tasks"
+        },
+        {
+          "canonical_path": "oa.shortcut_list_pending",
+          "cli_path": "oa +list-pending"
+        },
+        {
+          "canonical_path": "oa.shortcut_list_forms",
+          "cli_path": "oa +list-forms"
+        },
+        {
+          "canonical_path": "oa.shortcut_search_forms",
+          "cli_path": "oa +search-forms"
+        },
+        {
+          "canonical_path": "oa.shortcut_list_executed",
+          "cli_path": "oa +list-executed"
+        },
+        {
+          "canonical_path": "oa.shortcut_list_submitted",
+          "cli_path": "oa +list-submitted"
+        },
+        {
+          "canonical_path": "oa.shortcut_list_cc",
+          "cli_path": "oa +list-cc"
+        },
+        {
+          "canonical_path": "oa.shortcut_my_initiated",
+          "cli_path": "oa +my-initiated"
         }
       ]
     },
@@ -2075,6 +2856,14 @@
         {
           "canonical_path": "report.get_available_report_templates",
           "cli_path": "report template list"
+        },
+        {
+          "canonical_path": "report.shortcut_inbox_list",
+          "cli_path": "report +inbox-list"
+        },
+        {
+          "canonical_path": "report.shortcut_outbox_list",
+          "cli_path": "report +outbox-list"
         }
       ]
     },
@@ -2402,6 +3191,14 @@
         {
           "canonical_path": "sheet.write_image",
           "cli_path": "sheet write-image"
+        },
+        {
+          "canonical_path": "sheet.shortcut_list_sheets",
+          "cli_path": "sheet +list-sheets"
+        },
+        {
+          "canonical_path": "sheet.shortcut_read",
+          "cli_path": "sheet +read"
         }
       ]
     },
@@ -2499,6 +3296,50 @@
         {
           "canonical_path": "todo.update_todo_tag",
           "cli_path": "todo tag update"
+        },
+        {
+          "canonical_path": "todo.shortcut_assign",
+          "cli_path": "todo +assign"
+        },
+        {
+          "canonical_path": "todo.shortcut_assign_multi",
+          "cli_path": "todo +assign-multi"
+        },
+        {
+          "canonical_path": "todo.shortcut_created_todos",
+          "cli_path": "todo +created-todos"
+        },
+        {
+          "canonical_path": "todo.shortcut_overdue",
+          "cli_path": "todo +overdue"
+        },
+        {
+          "canonical_path": "todo.shortcut_remind",
+          "cli_path": "todo +remind"
+        },
+        {
+          "canonical_path": "todo.shortcut_todo_done",
+          "cli_path": "todo +todo-done"
+        },
+        {
+          "canonical_path": "todo.shortcut_get_my_tasks",
+          "cli_path": "todo +get-my-tasks"
+        },
+        {
+          "canonical_path": "todo.shortcut_list_sub",
+          "cli_path": "todo +list-sub"
+        },
+        {
+          "canonical_path": "todo.shortcut_get",
+          "cli_path": "todo +get"
+        },
+        {
+          "canonical_path": "todo.shortcut_list_attachment",
+          "cli_path": "todo +list-attachment"
+        },
+        {
+          "canonical_path": "todo.shortcut_list_comment",
+          "cli_path": "todo +list-comment"
         }
       ]
     },
@@ -2564,6 +3405,10 @@
         {
           "canonical_path": "wiki.search_wikiSpaces",
           "cli_path": "wiki space search"
+        },
+        {
+          "canonical_path": "wiki.shortcut_space_search",
+          "cli_path": "wiki +space-search"
         }
       ]
     }

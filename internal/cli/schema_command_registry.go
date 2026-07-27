@@ -34,7 +34,7 @@ var embeddedSchemaCommandRegistrySchemaJSON []byte
 var (
 	commandRegistryProductIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 	commandRegistryCanonicalPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*\.[A-Za-z0-9][A-Za-z0-9_.-]*$`)
-	commandRegistryCLIPathToken     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
+	commandRegistryCLIPathToken     = regexp.MustCompile(`^(?:[A-Za-z0-9][A-Za-z0-9._:-]*|\+[A-Za-z0-9][A-Za-z0-9._:-]*)$`)
 )
 
 type schemaCommandRegistrySnapshot struct {

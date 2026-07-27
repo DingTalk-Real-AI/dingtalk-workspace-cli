@@ -431,6 +431,272 @@
         "Wukong-parity:3306c3307",
         "live-dws-schema:contact.self_user_profile_update#FAILED"
       ]
+    },
+    "contact.shortcut_list_followings": {
+      "agent_summary": "获取当前用户的特别关注列表",
+      "use_when": [
+        "当你想查看本人在通讯录里「特别关注」的联系人名单（例如常打交道的同事、上级）时使用；无需输入，返回关注对象的用户列表，可用于快速定位这些人的 userId 再发消息或排日程。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +list-followings"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_list_followings",
+        "cobra-help:dws contact +list-followings",
+        "ShortcutRegistry:contact +list-followings"
+      ]
+    },
+    "contact.shortcut_search_user": {
+      "agent_summary": "按关键词搜索通讯录用户",
+      "use_when": [
+        "当你只知道某人的姓名、花名或部分名字，需要把它解析成 userId 及部门等信息以便后续发消息、排日程或指派任务时使用；输入搜索关键词（--query），返回匹配的用户列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +search-user --query \"张三\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_search_user",
+        "cobra-help:dws contact +search-user",
+        "ShortcutRegistry:contact +search-user"
+      ]
+    },
+    "contact.shortcut_search_mobile": {
+      "agent_summary": "按手机号搜索通讯录用户",
+      "use_when": [
+        "当你手里只有某人的手机号、需要反查出对应的通讯录用户和 userId 时使用；输入手机号（--mobile），返回该手机号所属的用户信息，适合从电话或名片信息定位到具体员工。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +search-mobile --mobile 13800138000"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_search_mobile",
+        "cobra-help:dws contact +search-mobile",
+        "ShortcutRegistry:contact +search-mobile"
+      ]
+    },
+    "contact.shortcut_list_roles": {
+      "agent_summary": "获取企业所有角色（标签）列表",
+      "use_when": [
+        "当你想总览企业里都有哪些角色/员工标签（如「管理员」「财务」「销售」）及其角色 ID 时使用；无需输入，返回全量角色列表，常用于按角色圈定人群前先摸清有哪些角色可选。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +list-roles"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_list_roles",
+        "cobra-help:dws contact +list-roles",
+        "ShortcutRegistry:contact +list-roles"
+      ]
+    },
+    "contact.shortcut_list_role_members": {
+      "agent_summary": "查询角色下的成员列表",
+      "use_when": [
+        "当你已知某个角色 ID、想列出该角色（标签）下的全部成员以便群发通知或统计人群时使用；输入角色 ID（--id），返回该角色下的用户列表，通常先用 +search-role 拿到角色 ID 再调用。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +list-role-members --id 12345"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_list_role_members",
+        "cobra-help:dws contact +list-role-members",
+        "ShortcutRegistry:contact +list-role-members"
+      ]
+    },
+    "contact.shortcut_list_sub_depts": {
+      "agent_summary": "查看指定部门的子部门",
+      "use_when": [
+        "当你想逐层浏览组织架构、查看某个部门下一级的子部门时使用；输入父部门 ID（--dept，根部门为 1），返回其直属子部门列表，可用于自顶向下遍历部门树。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +list-sub-depts --dept 1"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_list_sub_depts",
+        "cobra-help:dws contact +list-sub-depts",
+        "ShortcutRegistry:contact +list-sub-depts"
+      ]
+    },
+    "contact.shortcut_list_dept_members": {
+      "agent_summary": "查看部门成员（仅本部门，不含下级）",
+      "use_when": [
+        "当你想列出一个或多个部门本级的员工（不含下级子部门）以便群发通知、统计或指派任务时使用；输入部门 ID 列表（--depts，逗号分隔），返回这些部门下的成员，如需含下级需自行遍历子部门。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +list-dept-members --depts 12345,67890"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_list_dept_members",
+        "cobra-help:dws contact +list-dept-members",
+        "ShortcutRegistry:contact +list-dept-members"
+      ]
+    },
+    "contact.shortcut_by_mobile": {
+      "agent_summary": "按手机号查询某人的完整资料（自动解析 userId 后取详情）",
+      "use_when": [
+        "当你只知道对方手机号、想一步拿到其完整资料（部门、职位、联系方式、是否管理员等）而不想先按手机号搜出 userId 再单独查详情时使用；内部先用手机号在通讯录里查出对应的 userId，若没有人绑定该手机号会明确报错，再用该 userId 取完整详情。这是纯只读操作，不会修改任何数据。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +by-mobile --mobile 13800138000"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_by_mobile",
+        "cobra-help:dws contact +by-mobile",
+        "ShortcutRegistry:contact +by-mobile"
+      ]
+    },
+    "contact.shortcut_dept_members": {
+      "agent_summary": "按部门名列出部门成员（自动解析 deptId）",
+      "use_when": [
+        "当你只知道某个部门的名称、想知道该部门里都有哪些成员时使用；内部先按部门名搜索出唯一的 deptId（匹配到 0 个或多个时不猜测，而是列出候选部门名与 deptId 让你选），再打印该部门的直接成员列表（仅本部门，不递归下级部门）。只读，不做任何修改。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +dept-members --dept 技术部"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_dept_members",
+        "cobra-help:dws contact +dept-members",
+        "ShortcutRegistry:contact +dept-members"
+      ]
+    },
+    "contact.shortcut_lookup": {
+      "agent_summary": "按姓名查询某人的完整资料（自动解析 userId 后取详情）",
+      "use_when": [
+        "当你只知道对方姓名、想一步拿到其完整资料（部门、职位、联系方式等）而不想先搜 userId 再查详情时使用；内部先按姓名搜通讯录解析出唯一 userId，再取详情，姓名匹配到多人时会列出候选让你区分。只读操作。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +lookup --name 张三"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_lookup",
+        "cobra-help:dws contact +lookup",
+        "ShortcutRegistry:contact +lookup"
+      ]
+    },
+    "contact.shortcut_org": {
+      "agent_summary": "按姓名查某人所在部门的详情（自动解析 userId 与 deptId）",
+      "use_when": [
+        "当你只知道某位同事的姓名、想知道 TA 所在部门（部门ID、名称、人数）时使用；内部先按姓名解析出唯一 userId，再取 TA 的组织信息拿到主部门 deptId，最后打印该部门的详情。只读，不做任何修改。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +org --name 张三"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_org",
+        "cobra-help:dws contact +org",
+        "ShortcutRegistry:contact +org"
+      ]
+    },
+    "contact.shortcut_resolve_dept": {
+      "agent_summary": "按名称搜索部门并解析出唯一 deptId（只读）",
+      "use_when": [
+        "当你只知道某个部门的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 deptId 时使用；内部按 --name 关键词调用 search_dept_by_keyword 搜索部门，再在本地投影出每个候选的 deptId 和 name。如果只命中一个部门就直接返回它的 deptId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何部门，也不会列出部门成员。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +resolve-dept --name 技术部"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_resolve_dept",
+        "cobra-help:dws contact +resolve-dept",
+        "ShortcutRegistry:contact +resolve-dept"
+      ]
+    },
+    "contact.shortcut_team": {
+      "agent_summary": "按姓名列出某人所在部门的成员（自动解析 userId 与 deptId）",
+      "use_when": [
+        "当你只知道某位同事的姓名、想知道 TA 所在部门里都有哪些成员时使用；内部先按姓名解析出唯一 userId，再取 TA 的组织信息拿到主部门 deptId，最后打印该部门的直接成员列表（仅本部门，不递归下级部门）。只读，不做任何修改。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +team --name 张三"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_team",
+        "cobra-help:dws contact +team",
+        "ShortcutRegistry:contact +team"
+      ]
+    },
+    "contact.shortcut_me": {
+      "agent_summary": "查看我自己的通讯录资料（姓名/userId/手机/部门/组织，干净投影）",
+      "use_when": [
+        "当你（或 AI agent）需要知道「我是谁」——我自己的 userId、姓名、所在部门、组织、手机号，用于后续按名解析他人前先确定自己身份、或填充发起人信息时使用；内部调用零参数的 get_current_user_profile（永远是「我」，无需传姓名），再把冗长的原始资料投影成 {name,userId,mobile,dept,org,email} 几个关键字段。这是纯只读操作，不修改任何资料。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws contact +me"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#contact.shortcut_me",
+        "cobra-help:dws contact +me",
+        "ShortcutRegistry:contact +me"
+      ]
     }
   },
   "products": {

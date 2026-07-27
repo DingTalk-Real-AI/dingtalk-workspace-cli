@@ -46,10 +46,27 @@ func TestCrossPlatformCoverageMountRegistersFlagsAndUse(t *testing.T) {
 		Command:     "+search-user",
 		Description: "search",
 		Flags: []Flag{
-			{Name: "query", Type: FlagString, Required: true},
+			{Name: "query", Type: FlagString, Required: true, Enum: []string{"name", "mobile"}},
 			{Name: "limit", Type: FlagInt, Default: "20"},
 			{Name: "verbose", Type: FlagBool},
-			{Name: "ids", Type: FlagStringSlice},
+			{Name: "ids", Type: FlagStringSlice, Default: "self,team"},
+			{Name: "mode", Type: FlagString},
+			{Name: "start", Type: FlagString},
+			{Name: "end", Type: FlagString},
+		},
+		Constraints: []Constraint{
+			{
+				Kind:  ConstraintExactlyOne,
+				Flags: []string{"query", "ids"},
+			},
+			{
+				Kind:  ConstraintAtLeastOne,
+				Flags: []string{"mode", "start"},
+			},
+			{
+				Kind:  ConstraintMutuallyExclusive,
+				Flags: []string{"start", "end"},
+			},
 		},
 	}
 	cmd := mount(s)
@@ -63,6 +80,53 @@ func TestCrossPlatformCoverageMountRegistersFlagsAndUse(t *testing.T) {
 	}
 	if v, _ := cmd.Flags().GetInt("limit"); v != 20 {
 		t.Errorf("limit default = %d, want 20", v)
+	}
+	if v, _ := cmd.Flags().GetStringSlice("ids"); strings.Join(v, ",") != "self,team" {
+		t.Errorf("ids default = %#v, want [self team]", v)
+	}
+	query := cmd.Flags().Lookup("query")
+	if got := query.Annotations["dws.schema.required"]; len(got) != 1 || got[0] != "true" {
+		t.Fatalf("required annotation = %#v", got)
+	}
+	if got := query.Annotations["x-cli-enum"]; strings.Join(got, ",") != "name,mobile" {
+		t.Fatalf("enum annotation = %#v", got)
+	}
+	if raw := cmd.Annotations["dws.schema.constraints"]; raw != `{"mutually_exclusive":[["query","ids"],["start","end"]],"require_one_of":[["query","ids"],["mode","start"]]}` {
+		t.Fatalf("constraints annotation = %q", raw)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaConstraintCollapsesHiddenAliases(t *testing.T) {
+	cmd := mount(Shortcut{
+		Service: "chat",
+		Command: "+search",
+		Flags: []Flag{
+			{Name: "query", Type: FlagString},
+			{Name: "keyword", Type: FlagString, Hidden: true},
+			{Name: "id", Type: FlagString},
+			{Name: "legacy-id", Type: FlagString, Hidden: true},
+		},
+		Constraints: []Constraint{
+			{
+				Kind:  ConstraintAtLeastOne,
+				Flags: []string{"query", "keyword"},
+			},
+			{
+				Kind:  ConstraintExactlyOne,
+				Flags: []string{"id", "legacy-id"},
+			},
+		},
+	})
+	query := cmd.Flags().Lookup("query")
+	if got := query.Annotations["dws.schema.required"]; len(got) != 1 || got[0] != "true" {
+		t.Fatalf("collapsed public requirement annotation = %#v", got)
+	}
+	id := cmd.Flags().Lookup("id")
+	if got := id.Annotations["dws.schema.required"]; len(got) != 1 || got[0] != "true" {
+		t.Fatalf("collapsed exact-one requirement annotation = %#v", got)
+	}
+	if raw := cmd.Annotations["dws.schema.constraints"]; raw != "" {
+		t.Fatalf("hidden compatibility alias leaked into public Schema constraints: %q", raw)
 	}
 }
 

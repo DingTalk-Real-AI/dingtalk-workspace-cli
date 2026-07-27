@@ -1591,6 +1591,44 @@
         "skills/mono/references/products/sheet.md",
         "dws-schema-live:sheet.write_image"
       ]
+    },
+    "sheet.shortcut_list_sheets": {
+      "agent_summary": "获取表格文档中全部工作表列表",
+      "use_when": [
+        "当你拿到一个表格文档、想先了解它里面有哪些工作表（sheet）以及各自的 sheetId 时使用，通常作为读写具体数据前的第一步；传入表格文档 ID 或 URL，返回工作表清单。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws sheet +list-sheets --node NODE_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.shortcut_list_sheets",
+        "cobra-help:dws sheet +list-sheets",
+        "ShortcutRegistry:sheet +list-sheets"
+      ]
+    },
+    "sheet.shortcut_read": {
+      "agent_summary": "读取工作表指定范围的结构化单元格数据",
+      "use_when": [
+        "当你需要按单元格逐格获取数据（含类型、公式或格式化值等结构化信息）以便程序处理时使用；传入表格与可选范围（A1 表示法，不传则全部），可指定取格式化值/原始值/公式，返回结构化单元格数组。若只想要纯文本可改用 +csv-get。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws sheet +read --node NODE_ID --sheet-id SHEET_ID --range \"A1:D10\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#sheet.shortcut_read",
+        "cobra-help:dws sheet +read",
+        "ShortcutRegistry:sheet +read"
+      ]
     }
   },
   "products": {

@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -219,6 +220,7 @@ func mount(s Shortcut) *cobra.Command {
 		cmd.Example = "  " + strings.Join(s.Tips, "\n  ")
 	}
 	registerFlags(cmd, s.Flags)
+	annotateRuntimeSchemaContract(cmd, s)
 
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		rt := &RuntimeContext{cmd: c, shortcut: s}
@@ -244,6 +246,58 @@ func mount(s Shortcut) *cobra.Command {
 	return cmd
 }
 
+// annotateRuntimeSchemaContract projects the declarative shortcut invocation
+// contract onto its real Cobra leaf. Stable identity still comes exclusively
+// from the reviewed CommandRegistry; these annotations only preserve parameter
+// and constraint facts that Cobra cannot represent by itself.
+func annotateRuntimeSchemaContract(cmd *cobra.Command, s Shortcut) {
+	publicFlags := make(map[string]bool, len(s.Flags))
+	requiredFlags := make([]string, 0)
+	for _, flag := range s.Flags {
+		if flag.Hidden {
+			continue
+		}
+		publicFlags[flag.Name] = true
+		if flag.Required {
+			requiredFlags = append(requiredFlags, flag.Name)
+		}
+		if len(flag.Enum) > 0 {
+			cli.AnnotateRuntimeFlagEnum(cmd, flag.Name, flag.Enum...)
+		}
+	}
+
+	var constraints cli.RuntimeSchemaConstraints
+	for _, constraint := range s.Constraints {
+		flags := make([]string, 0, len(constraint.Flags))
+		for _, flagName := range constraint.Flags {
+			if publicFlags[flagName] {
+				flags = append(flags, flagName)
+			}
+		}
+		switch constraint.Kind {
+		case ConstraintAtLeastOne:
+			if len(flags) == 1 {
+				requiredFlags = append(requiredFlags, flags[0])
+			} else if len(flags) > 1 {
+				constraints.RequireOneOf = append(constraints.RequireOneOf, flags)
+			}
+		case ConstraintExactlyOne:
+			if len(flags) == 1 {
+				requiredFlags = append(requiredFlags, flags[0])
+			} else if len(flags) > 1 {
+				constraints.RequireOneOf = append(constraints.RequireOneOf, flags)
+				constraints.MutuallyExclusive = append(constraints.MutuallyExclusive, flags)
+			}
+		case ConstraintMutuallyExclusive:
+			if len(flags) > 1 {
+				constraints.MutuallyExclusive = append(constraints.MutuallyExclusive, flags)
+			}
+		}
+	}
+	cli.AnnotateRuntimeRequiredFlags(cmd, requiredFlags...)
+	cli.AnnotateRuntimeConstraints(cmd, constraints)
+}
+
 // registerFlags declares each Flag on the command with its type/default/desc.
 func registerFlags(cmd *cobra.Command, flags []Flag) {
 	for _, f := range flags {
@@ -254,7 +308,11 @@ func registerFlags(cmd *cobra.Command, flags []Flag) {
 		case FlagInt:
 			cmd.Flags().Int(f.Name, atoiDefault(f.Default), desc)
 		case FlagStringSlice:
-			cmd.Flags().StringSlice(f.Name, nil, desc)
+			var defaults []string
+			if value := strings.TrimSpace(f.Default); value != "" {
+				defaults = strings.Split(value, ",")
+			}
+			cmd.Flags().StringSlice(f.Name, defaults, desc)
 		default: // FlagString and empty
 			cmd.Flags().String(f.Name, f.Default, desc)
 		}

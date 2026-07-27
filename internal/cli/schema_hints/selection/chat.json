@@ -1595,6 +1595,807 @@
         "Wukong-parity:3306c3307",
         "live-dws-schema:chat.upgrade_group_to_external#FAILED"
       ]
+    },
+    "chat.shortcut_bot_search": {
+      "agent_summary": "搜索当前用户自己创建的机器人",
+      "use_when": [
+        "当你要管理或复用自己创建的机器人（比如查到其 robotCode 以便让它进群或发消息）时使用；按机器人名称模糊搜索，只返回当前用户名下创建的机器人列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +bot-search --page 1 --name \"日报\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_bot_search",
+        "cobra-help:dws chat +bot-search",
+        "ShortcutRegistry:chat +bot-search"
+      ]
+    },
+    "chat.shortcut_bot_find": {
+      "agent_summary": "搜索全部可用机器人（含他人/官方，返回 openDingTalkId 可发单聊）",
+      "use_when": [
+        "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +bot-find --query \"日报\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_bot_find",
+        "cobra-help:dws chat +bot-find",
+        "ShortcutRegistry:chat +bot-find"
+      ]
+    },
+    "chat.shortcut_conversation_info": {
+      "agent_summary": "获取会话信息（群聊传 --group，单聊传 --open-dingtalk-id）",
+      "use_when": [
+        "当你已有群 openConversationId 或单聊对方 openDingTalkId、需要查看该会话的名称/类型/成员数等基础信息时使用；只读，群聊传 --group、单聊传 --open-dingtalk-id 二选一。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +conversation-info --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_conversation_info",
+        "cobra-help:dws chat +conversation-info",
+        "ShortcutRegistry:chat +conversation-info"
+      ]
+    },
+    "chat.shortcut_conversation_clear_all_red_point": {
+      "agent_summary": "清除所有会话红点（全部已读）",
+      "use_when": [
+        "当你想一键把全部会话标记为已读、清空所有红点时使用；会实际清除当前用户所有会话的红点，无需任何参数。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +conversation-clear-all-red-point"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_conversation_clear_all_red_point",
+        "cobra-help:dws chat +conversation-clear-all-red-point",
+        "ShortcutRegistry:chat +conversation-clear-all-red-point"
+      ]
+    },
+    "chat.shortcut_conversation_list": {
+      "agent_summary": "分页获取当前用户的全部会话列表（单聊+群聊）",
+      "use_when": [
+        "当你想遍历当前用户的所有会话（单聊+群聊）做统计、清理或批量处理时使用；只读分页返回，可用 --exclude-muted 排除已免打扰会话。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +conversation-list --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_conversation_list",
+        "cobra-help:dws chat +conversation-list",
+        "ShortcutRegistry:chat +conversation-list"
+      ]
+    },
+    "chat.shortcut_conversation_list_top": {
+      "agent_summary": "拉取置顶会话列表",
+      "use_when": [
+        "当你只想查看被置顶的那些会话时使用；只读分页返回置顶会话列表，可用 --exclude-muted 排除已免打扰会话。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +conversation-list-top --limit 1000"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_conversation_list_top",
+        "cobra-help:dws chat +conversation-list-top",
+        "ShortcutRegistry:chat +conversation-list-top"
+      ]
+    },
+    "chat.shortcut_category_list": {
+      "agent_summary": "获取用户自定义会话分组",
+      "use_when": [
+        "当你想查看当前用户自建了哪些会话分组（如'工作群''项目群'）时使用；只读返回分组列表及其 categoryId，供后续按分组拉会话或增删。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +category-list"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_category_list",
+        "cobra-help:dws chat +category-list",
+        "ShortcutRegistry:chat +category-list"
+      ]
+    },
+    "chat.shortcut_category_create": {
+      "agent_summary": "创建用户自定义会话分组",
+      "use_when": [
+        "当你想新建一个会话分组来归类会话时使用；会实际创建分组并返回其 ID，需传分组名称 --title。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +category-create --title \"工作群\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_category_create",
+        "cobra-help:dws chat +category-create",
+        "ShortcutRegistry:chat +category-create"
+      ]
+    },
+    "chat.shortcut_category_delete": {
+      "agent_summary": "删除用户自定义会话分组",
+      "use_when": [
+        "当你想删除某个自定义会话分组时使用；会实际删除分组（不影响其中会话本身），不可逆，需传 categoryId。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +category-delete --category-id <分组ID>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_category_delete",
+        "cobra-help:dws chat +category-delete",
+        "ShortcutRegistry:chat +category-delete"
+      ]
+    },
+    "chat.shortcut_category_rename": {
+      "agent_summary": "更新用户自定义会话分组的名称",
+      "use_when": [
+        "当你想重命名已有的自定义会话分组时使用；会实际更新分组名称，需传 categoryId 和新名称 --title。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +category-rename --category-id <分组ID> --title \"新名称\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_category_rename",
+        "cobra-help:dws chat +category-rename",
+        "ShortcutRegistry:chat +category-rename"
+      ]
+    },
+    "chat.shortcut_chat_search": {
+      "agent_summary": "按关键词搜索群聊",
+      "use_when": [
+        "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-search --query \"项目冲刺\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_search",
+        "cobra-help:dws chat +chat-search",
+        "ShortcutRegistry:chat +chat-search"
+      ]
+    },
+    "chat.shortcut_chat_invite_url": {
+      "agent_summary": "获取群邀请链接",
+      "use_when": [
+        "当你想拿到一条群邀请链接分享给别人加群时使用；只读生成链接，需传群 openConversationId，可用 --expires-seconds 设置有效期（0 表示永久）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-invite-url --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_invite_url",
+        "cobra-help:dws chat +chat-invite-url",
+        "ShortcutRegistry:chat +chat-invite-url"
+      ]
+    },
+    "chat.shortcut_chat_dismiss": {
+      "agent_summary": "解散群聊（不可逆，需群主权限）",
+      "use_when": [
+        "当你要彻底解散一个群时使用；会实际销毁群聊，不可逆且需群主权限，仅需传群 openConversationId，操作前务必确认。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-dismiss --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_dismiss",
+        "cobra-help:dws chat +chat-dismiss",
+        "ShortcutRegistry:chat +chat-dismiss"
+      ]
+    },
+    "chat.shortcut_chat_set_history": {
+      "agent_summary": "设置新成员入群可查看历史消息范围",
+      "use_when": [
+        "当你想控制新成员入群后能看到多少历史消息时使用；会实际修改群配置，需传群 openConversationId 和范围（FORBIDDEN 不可见 / RECENT_100 最近100条 / ALL 全部）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-set-history --group <openConversationId> --option RECENT_100"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_set_history",
+        "cobra-help:dws chat +chat-set-history",
+        "ShortcutRegistry:chat +chat-set-history"
+      ]
+    },
+    "chat.shortcut_chat_update_nick": {
+      "agent_summary": "设置当前用户在群内的群昵称",
+      "use_when": [
+        "当你想设置当前用户在某个群里显示的群昵称时使用；会实际更新本人在该群的昵称，需传群 openConversationId 和昵称。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-update-nick --group <openConversationId> --nick \"我的群昵称\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_update_nick",
+        "cobra-help:dws chat +chat-update-nick",
+        "ShortcutRegistry:chat +chat-update-nick"
+      ]
+    },
+    "chat.shortcut_chat_update_alias": {
+      "agent_summary": "设置群备注（仅自己可见）",
+      "use_when": [
+        "当你想给某个群设置仅自己可见的备注名以便区分同名群时使用；会实际保存本人对该群的备注，需传群 openConversationId 和备注标题。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-update-alias --group <openConversationId> --alias-title \"项目A群\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_update_alias",
+        "cobra-help:dws chat +chat-update-alias",
+        "ShortcutRegistry:chat +chat-update-alias"
+      ]
+    },
+    "chat.shortcut_chat_list_mine": {
+      "agent_summary": "拉取我创建/管理的群",
+      "use_when": [
+        "当你想查看自己作为群主或管理员在管理哪些群时使用；只读分页返回，可用 --role OWNER/ADMIN 按角色过滤。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-list-mine --role OWNER"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_list_mine",
+        "cobra-help:dws chat +chat-list-mine",
+        "ShortcutRegistry:chat +chat-list-mine"
+      ]
+    },
+    "chat.shortcut_chat_list_all": {
+      "agent_summary": "分页拉取我加入的所有群列表",
+      "use_when": [
+        "当你想遍历当前用户加入的所有群做统计或批量操作时使用；只读分页返回全部已加入的群列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-list-all --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_list_all",
+        "cobra-help:dws chat +chat-list-all",
+        "ShortcutRegistry:chat +chat-list-all"
+      ]
+    },
+    "chat.shortcut_chat_list_join_requests": {
+      "agent_summary": "分页拉取入群验证记录",
+      "use_when": [
+        "当你作为群主/管理员想查看待处理的入群申请时使用；只读分页返回入群验证记录（含 recordId、申请人与邀请人 ID），供后续用 chat-audit-join 审批。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-list-join-requests --limit 30"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_list_join_requests",
+        "cobra-help:dws chat +chat-list-join-requests",
+        "ShortcutRegistry:chat +chat-list-join-requests"
+      ]
+    },
+    "chat.shortcut_chat_bots": {
+      "agent_summary": "查看群内所有机器人",
+      "use_when": [
+        "当你想查看某个群里已添加了哪些机器人时使用；需传群 openConversationId，只读返回群内机器人列表（含 openBotId，供后续移除）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-bots --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_bots",
+        "cobra-help:dws chat +chat-bots",
+        "ShortcutRegistry:chat +chat-bots"
+      ]
+    },
+    "chat.shortcut_chat_set_admin": {
+      "agent_summary": "设置 / 取消群管理员",
+      "use_when": [
+        "当你想把某些成员设为或取消群管理员时使用；会实际变更成员角色，需传群 openConversationId 和成员 userId/openDingTalkId 列表，加 --off 取消管理员。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-set-admin --group <openConversationId> --users userId1,userId2"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_set_admin",
+        "cobra-help:dws chat +chat-set-admin",
+        "ShortcutRegistry:chat +chat-set-admin"
+      ]
+    },
+    "chat.shortcut_chat_mute": {
+      "agent_summary": "全员禁言 / 取消全员禁言",
+      "use_when": [
+        "当你想对整个群开启或取消全员禁言时使用；会实际切换群的全员禁言状态，需传群 openConversationId，加 --off 取消禁言。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-mute --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_mute",
+        "cobra-help:dws chat +chat-mute",
+        "ShortcutRegistry:chat +chat-mute"
+      ]
+    },
+    "chat.shortcut_chat_role_list": {
+      "agent_summary": "拉取会话的群身份列表",
+      "use_when": [
+        "当你想查看某群自定义的群身份（如'班长''值日'）都有哪些时使用；需传群 openConversationId，只读返回群身份列表及 openRoleId。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-role-list --group <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_role_list",
+        "cobra-help:dws chat +chat-role-list",
+        "ShortcutRegistry:chat +chat-role-list"
+      ]
+    },
+    "chat.shortcut_chat_role_add": {
+      "agent_summary": "添加群身份",
+      "use_when": [
+        "当你想在群里新增一个自定义群身份/头衔时使用；会实际创建群身份，需传群 openConversationId 和身份名称。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-role-add --group <openConversationId> --name \"管理员\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_role_add",
+        "cobra-help:dws chat +chat-role-add",
+        "ShortcutRegistry:chat +chat-role-add"
+      ]
+    },
+    "chat.shortcut_chat_role_update": {
+      "agent_summary": "更新群身份名称",
+      "use_when": [
+        "当你想重命名已有的群身份时使用；会实际更新身份名称，需传群 openConversationId、身份 openRoleId 和新名称。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-role-update --group <openConversationId> --role-id <openRoleId> --name \"新名称\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_role_update",
+        "cobra-help:dws chat +chat-role-update",
+        "ShortcutRegistry:chat +chat-role-update"
+      ]
+    },
+    "chat.shortcut_chat_role_set_user": {
+      "agent_summary": "设置用户的群身份（覆盖该用户的全部群身份）",
+      "use_when": [
+        "当你想为某成员整体设定其在群内的身份时使用；会实际改写该用户的群身份集合（覆盖其原有全部身份），需传群、用户和 openRoleId 列表（传空则清除全部）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-role-set-user --group <openConversationId> --user <userId> --role-ids roleId1,roleId2"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_role_set_user",
+        "cobra-help:dws chat +chat-role-set-user",
+        "ShortcutRegistry:chat +chat-role-set-user"
+      ]
+    },
+    "chat.shortcut_chat_role_query_user": {
+      "agent_summary": "查询群成员的群身份",
+      "use_when": [
+        "当你想查看某个群成员当前拥有哪些群身份时使用；只读，需传群 openConversationId 和用户 userId 或 openDingTalkId。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +chat-role-query-user --group <openConversationId> --user <userId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_chat_role_query_user",
+        "cobra-help:dws chat +chat-role-query-user",
+        "ShortcutRegistry:chat +chat-role-query-user"
+      ]
+    },
+    "chat.shortcut_messages_send_by_webhook": {
+      "agent_summary": "自定义机器人 Webhook 发送群消息",
+      "use_when": [
+        "当你只有自定义机器人的 Webhook token、想往其所在群推送消息时使用；会实际通过 Webhook 发群消息，需传 token、标题、正文，可 @手机号/userId 或 @所有人。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-send-by-webhook --token <token> --title \"告警\" --text \"CPU 超 90%\" --at-all"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_send_by_webhook",
+        "cobra-help:dws chat +messages-send-by-webhook",
+        "ShortcutRegistry:chat +messages-send-by-webhook"
+      ]
+    },
+    "chat.shortcut_messages_list_direct": {
+      "agent_summary": "拉取单聊会话消息",
+      "use_when": [
+        "当你想按时间拉取与某人单聊的历史消息时使用；只读，需传对方 userId 或 openDingTalkId 及起始时间，--forward 控制翻页方向。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-list-direct --user <userId> --time \"2025-03-01 00:00:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_list_direct",
+        "cobra-help:dws chat +messages-list-direct",
+        "ShortcutRegistry:chat +messages-list-direct"
+      ]
+    },
+    "chat.shortcut_messages_list_unread_conversations": {
+      "agent_summary": "获取有未读消息的会话列表",
+      "use_when": [
+        "当你想快速定位哪些会话还有未读消息时使用；只读返回有未读的会话列表，可用 --exclude-muted 排除已免打扰会话。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-list-unread-conversations --count 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_list_unread_conversations",
+        "cobra-help:dws chat +messages-list-unread-conversations",
+        "ShortcutRegistry:chat +messages-list-unread-conversations"
+      ]
+    },
+    "chat.shortcut_messages_mget": {
+      "agent_summary": "根据消息 ID 批量查询消息（最多 50 条）",
+      "use_when": [
+        "当你已有一批消息 openMsgId、需要批量取回它们的详细内容时使用；只读，一次最多查询 50 条。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-mget --msg-ids msgId1,msgId2"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_mget",
+        "cobra-help:dws chat +messages-mget",
+        "ShortcutRegistry:chat +messages-mget"
+      ]
+    },
+    "chat.shortcut_messages_query_send_status": {
+      "agent_summary": "查询消息发送状态",
+      "use_when": [
+        "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-query-send-status --open-task-id <openTaskId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_query_send_status",
+        "cobra-help:dws chat +messages-query-send-status",
+        "ShortcutRegistry:chat +messages-query-send-status"
+      ]
+    },
+    "chat.shortcut_messages_read_status": {
+      "agent_summary": "查询消息的已读/未读状态",
+      "use_when": [
+        "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_read_status",
+        "cobra-help:dws chat +messages-read-status",
+        "ShortcutRegistry:chat +messages-read-status"
+      ]
+    },
+    "chat.shortcut_messages_update_card": {
+      "agent_summary": "流式更新卡片内容（最后一次 --flow-status 应为 3）",
+      "use_when": [
+        "当你要向已发送的流式卡片持续追加/更新内容时使用；会实际更新卡片，需传 send-card 返回的 bizId、新内容及 flowStatus（最后一次应为 3 表示完成）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-update-card --biz-id <bizId> --content \"内容\" --flow-status 3"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_update_card",
+        "cobra-help:dws chat +messages-update-card",
+        "ShortcutRegistry:chat +messages-update-card"
+      ]
+    },
+    "chat.shortcut_messages_list_pin": {
+      "agent_summary": "拉取会话中钉住的消息列表",
+      "use_when": [
+        "当你想查看某会话里当前钉住的消息有哪些时使用；只读分页返回，需传会话 openConversationId。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +messages-list-pin --open-conversation-id <openConversationId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_messages_list_pin",
+        "cobra-help:dws chat +messages-list-pin",
+        "ShortcutRegistry:chat +messages-list-pin"
+      ]
+    },
+    "chat.shortcut_at_me": {
+      "agent_summary": "查最近 @我 的消息（自动算时间窗，投影发送人/时间/内容/会话）",
+      "use_when": [
+        "当你想快速看回最近谁在群里或单聊里 @了你、但不想手动把起止时间换算成毫秒、也不想记 list-mentions 的一堆参数时使用；内部按本地时区算出「最近 N 天」（默认 7 天，可用 --days 调整回溯天数）的时间窗，搜索这段时间内 @我 的消息，再在本地把每条消息投影成发送人、时间、内容、所在会话四个关键字段。这是纯只读操作，只做搜索与本地投影，不会发送、撤回或标记任何消息。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +at-me",
+        "dws chat +at-me --days 3"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_at_me",
+        "cobra-help:dws chat +at-me",
+        "ShortcutRegistry:chat +at-me"
+      ]
+    },
+    "chat.shortcut_broadcast": {
+      "agent_summary": "按姓名逐一给多个人群发同一条单聊消息（自动解析 userId、逐个发送）",
+      "use_when": [
+        "当你想把同一条通知一次性单聊发给多位同事、但只知道他们的姓名不想逐个查 userId 时使用；内部把姓名列表逐个解析成唯一用户后，用 openDingTalkId 对每个人单独发一条单聊消息，并汇总成功/失败人数。某个姓名匹配不到人或匹配到多人时，会跳过该人并在结尾报出，不影响其他人收到消息。会真实发出多条消息。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +broadcast --to \"张三,李四,王五\" --text \"今晚 8 点上线，请留意\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_broadcast",
+        "cobra-help:dws chat +broadcast",
+        "ShortcutRegistry:chat +broadcast"
+      ]
+    },
+    "chat.shortcut_dm": {
+      "agent_summary": "按姓名直接给某人发单聊消息（自动解析 userId）",
+      "use_when": [
+        "当你只知道对方姓名、想直接发一条单聊消息而不想先查 userId 时使用；内部先按姓名搜通讯录解析出唯一用户，并用其 openDingTalkId 发送，姓名匹配到多人时会列出候选让你区分。会真实发出消息。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +dm --to 张三 --text \"周报发我一下\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_dm",
+        "cobra-help:dws chat +dm",
+        "ShortcutRegistry:chat +dm"
+      ]
+    },
+    "chat.shortcut_group_members": {
+      "agent_summary": "按群名列出群成员（自动搜群解析 openConversationId）",
+      "use_when": [
+        "当你只知道群的名字、想看看这个群里有哪些成员，而不想先手动查群 ID 时使用；内部先按群名搜索群聊解析出唯一 openConversationId，再拉取该群的成员列表。群名匹配到多个群时会列出候选让你区分、绝不自行假定。只读，不改动任何数据。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +group-members --group 项目冲刺"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_group_members",
+        "cobra-help:dws chat +group-members",
+        "ShortcutRegistry:chat +group-members"
+      ]
+    },
+    "chat.shortcut_my_groups": {
+      "agent_summary": "列出我加入的群，可按类型过滤并投影关键字段",
+      "use_when": [
+        "当你想快速看一眼自己都加入了哪些群、以及每个群的会话ID、名称、群主和人数，而不想翻分页或盯着原始返回时使用；内部分页拉取你加入的群列表，把每个群防御式地投影成 会话id / 名称 / 群主 / 人数 / 类型 等关键字段，输出成干净的结果。可选 --type 在本地按群类型过滤（底层接口本身不带类型参数，故为客户端过滤）。这是只读操作，不会改动任何群或成员关系。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +my-groups",
+        "dws chat +my-groups --type group"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_my_groups",
+        "cobra-help:dws chat +my-groups",
+        "ShortcutRegistry:chat +my-groups"
+      ]
+    },
+    "chat.shortcut_send_to_group": {
+      "agent_summary": "按群名直接给群发消息（自动搜群解析 openConversationId）",
+      "use_when": [
+        "当你只知道群的名字、想直接往这个群里发一条消息而不想先手动查群 ID 时使用；内部先按群名搜索群聊解析出唯一 openConversationId 再发送，群名匹配到多个群时会列出候选让你区分、绝不自行假定。会真实发出群消息。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +send-to-group --group 项目冲刺 --text \"今天 5 点前提交进度\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_send_to_group",
+        "cobra-help:dws chat +send-to-group",
+        "ShortcutRegistry:chat +send-to-group"
+      ]
+    },
+    "chat.shortcut_unread_chats": {
+      "agent_summary": "列出我有未读消息的会话（投影会话名/未读数/会话ID）",
+      "use_when": [
+        "当你想快速看清自己当前有哪些会话还有未读消息、方便逐个处理时使用；内部调用未读会话列表接口，可用 --count 控制返回的会话条数（不传则用服务端默认值），用 --exclude-muted 排除你已设置免打扰的会话；再在本地把每个会话投影成会话名、未读数和会话 ID 三个关键字段。这是纯只读操作，只做列表与本地投影，不会把任何会话标记为已读或未读；若没有未读会话则返回空列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws chat +unread-chats",
+        "dws chat +unread-chats --count 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#chat.shortcut_unread_chats",
+        "cobra-help:dws chat +unread-chats",
+        "ShortcutRegistry:chat +unread-chats"
+      ]
     }
   },
   "products": {

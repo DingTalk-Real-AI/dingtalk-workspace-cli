@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **Shortcut Runtime Schema delivery** — publishes all 210 public built-in shortcuts as reviewed Agent-visible leaf tools across 16 product groups, with stable canonical identities, executable `+shortcut` CLI paths, parameter and cross-parameter constraints, selection guidance, interface metadata, and runtime-aligned safety/confirmation semantics. `dws shortcut list` remains the lightweight batch-discovery view, while leaf Schema now carries the complete Agent contract; declared string-slice defaults are also preserved consistently in Cobra and Schema.
+
 ## [1.0.55-beta.4] - 2026-07-27
 
 This beta validates the shortcut projection fixes for group bots, bot search,

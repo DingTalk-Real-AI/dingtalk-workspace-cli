@@ -172,6 +172,45 @@
         "structured-hint:internal/cli/schema_hints/imported/wukong.json#report.get_template_details_by_name",
         "live-dws-schema:report.get_template_details_by_name"
       ]
+    },
+    "report.shortcut_inbox_list": {
+      "agent_summary": "列出我收到的日报（按时间范围分页）",
+      "use_when": [
+        "当你要查看下属或同事发给自己的日报周报、想在某个时间段内浏览或审阅收到的汇报时使用；输入起止时间（ISO-8601），可按发送人 staffId 过滤，分页返回收到的日报列表及其 reportId，供后续 +entry-get 读正文。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws report +inbox-list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#report.shortcut_inbox_list",
+        "cobra-help:dws report +inbox-list",
+        "ShortcutRegistry:report +inbox-list"
+      ]
+    },
+    "report.shortcut_outbox_list": {
+      "agent_summary": "列出我发出的日报（可选时间/模版名过滤）",
+      "use_when": [
+        "当你要回顾自己写过、提交过的日报周报，比如确认某天是否已交、找回历史汇报内容或统计提交情况时使用；可按创建/修改时间范围和模版名过滤，分页返回自己发出的日报列表及 reportId，供后续 +entry-get 查看正文。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws report +outbox-list --cursor 0 --size 20",
+        "dws report +outbox-list --cursor 0 --size 20 --template-name \"日报\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#report.shortcut_outbox_list",
+        "cobra-help:dws report +outbox-list",
+        "ShortcutRegistry:report +outbox-list"
+      ]
     }
   },
   "products": {
