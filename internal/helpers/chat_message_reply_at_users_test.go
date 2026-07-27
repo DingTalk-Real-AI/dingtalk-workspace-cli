@@ -6,6 +6,7 @@ package helpers
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -114,5 +115,34 @@ func TestChatMessageReplyWithoutAtUsersOmitsMentionPayload(t *testing.T) {
 	}
 	if _, exists := caller.calls[0].args["atOpenDingTalkIds"]; exists {
 		t.Fatalf("atOpenDingTalkIds unexpectedly present: %#v", caller.calls[0].args)
+	}
+}
+
+func TestChatMessageReplyAtUsersResolutionFailureIsReported(t *testing.T) {
+	// The directory lookup succeeds but returns no mapping for the userId, so
+	// resolution fails and the reply must not be sent with an unresolved @.
+	caller := &wukongWeeklySyncCaller{responses: []string{`{"result":[]}`}}
+	_, _, err := executeWukongWeeklySyncCommand(
+		t,
+		"chat",
+		caller,
+		newChatCommand,
+		"message", "reply",
+		"--conversation-id", "cid",
+		"--ref-msg-id", "mid",
+		"--ref-sender", "D-sender",
+		"--text", "@u1 收到",
+		"--at-users", "u1",
+	)
+	if err == nil {
+		t.Fatalf("expected an error when --at-users cannot be resolved")
+	}
+	if !strings.Contains(err.Error(), "cannot resolve --at-users") {
+		t.Fatalf("error = %v, want it to mention cannot resolve --at-users", err)
+	}
+	for _, call := range caller.calls {
+		if call.tool == "send_personal_message" {
+			t.Fatalf("reply was sent despite unresolved --at-users: %#v", call.args)
+		}
 	}
 }
