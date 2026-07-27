@@ -68,6 +68,8 @@ var (
 		return p.refreshWithRefreshToken(ctx, data)
 	}
 	oauthSleep = time.Sleep
+	// oauthRandRead is the entropy source for login tokens. Injectable for tests.
+	oauthRandRead = rand.Read
 	// oauthRandomToken generates URL-safe random tokens for the OAuth state
 	// parameter and the loopback page token. Injectable for tests.
 	oauthRandomToken = generateOAuthRandomToken
@@ -76,7 +78,7 @@ var (
 // generateOAuthRandomToken returns a 128-bit crypto-random URL-safe token.
 func generateOAuthRandomToken() (string, error) {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
+	if _, err := oauthRandRead(b[:]); err != nil {
 		return "", fmt.Errorf("generating OAuth login token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil

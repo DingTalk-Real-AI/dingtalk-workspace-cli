@@ -345,6 +345,58 @@ func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
 // loopback-API protections: a callback with a missing/mismatched state must
 // never reach token exchange, the /api/* endpoints must reject requests
 // without the per-login page token, and sendApply must require POST.
+func TestCrossPlatformCoverageGenerateOAuthRandomToken(t *testing.T) {
+	first, err := generateOAuthRandomToken()
+	if err != nil || first == "" {
+		t.Fatalf("generateOAuthRandomToken = %q, %v", first, err)
+	}
+	second, err := generateOAuthRandomToken()
+	if err != nil || second == "" || second == first {
+		t.Fatalf("generateOAuthRandomToken uniqueness = %q vs %q, %v", first, second, err)
+	}
+
+	oldRandRead := oauthRandRead
+	oauthRandRead = func([]byte) (int, error) { return 0, errors.New("entropy") }
+	t.Cleanup(func() { oauthRandRead = oldRandRead })
+	if _, err := generateOAuthRandomToken(); err == nil || !strings.Contains(err.Error(), "entropy") {
+		t.Fatalf("generateOAuthRandomToken error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOAuthLoginRandomTokenFailure(t *testing.T) {
+	isolateOAuthPersistence(t)
+	SetClientID("client")
+	SetClientSecret("secret")
+	t.Cleanup(func() {
+		SetClientID("")
+		SetClientSecret("")
+	})
+	oldRandomToken := oauthRandomToken
+	t.Cleanup(func() { oauthRandomToken = oldRandomToken })
+
+	failAt := 1
+	calls := 0
+	oauthRandomToken = func() (string, error) {
+		calls++
+		if calls == failAt {
+			return "", errors.New("entropy")
+		}
+		return "token", nil
+	}
+
+	p := &OAuthProvider{configDir: t.TempDir(), Output: io.Discard}
+	if _, err := p.Login(context.Background(), true); err == nil || !strings.Contains(err.Error(), "entropy") {
+		t.Fatalf("login state failure = %v", err)
+	}
+
+	// First call succeeds (login state), second fails (page token).
+	calls = 0
+	failAt = 2
+	if _, err := p.Login(context.Background(), true); err == nil || !strings.Contains(err.Error(), "entropy") {
+		t.Fatalf("page token failure = %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageOAuthLoginCSRFGuards(t *testing.T) {
 	// CLI auth disabled renders the not-enabled page, which is the only page
 	// that must embed the page token for its own fetch calls.
