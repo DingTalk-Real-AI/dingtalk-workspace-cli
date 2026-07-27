@@ -1792,7 +1792,10 @@ func TestCrossPlatformCoverageDoctorCommandCoverage(t *testing.T) {
 
 	badConfig := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", badConfig)
-	if err := os.WriteFile(filepath.Join(badConfig, "mcp_url"), []byte("://bad"), 0o600); err != nil {
+	// Use an unreachable-but-valid URL: invalid overrides now fall back to the
+	// production MCP base URL, which must not make this failure-path check
+	// depend on outbound network access to the real service.
+	if err := os.WriteFile(filepath.Join(badConfig, "mcp_url"), []byte("https://127.0.0.1:1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := doctorCheckNetwork(context.Background(), io.Discard, false, time.Second); got.Status != statusFail {

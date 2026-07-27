@@ -74,11 +74,14 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
-	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(":"), 0o600); err != nil {
+	// Invalid mcp_url values now fall back to the production default, so an
+	// unreachable-but-valid address is used to cover the dial-failure branch
+	// without depending on outbound access to the real MCP service.
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte("https://127.0.0.1:1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := doctorCheckNetwork(context.Background(), buf, false, time.Second); got.Status != statusFail {
-		t.Fatalf("invalid network URL = %#v", got)
+		t.Fatalf("unreachable network URL = %#v", got)
 	}
 	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte("https://example.test"), 0o600); err != nil {
 		t.Fatal(err)

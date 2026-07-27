@@ -219,6 +219,50 @@ func TestGetMCPBaseURLUsesConfigFile(t *testing.T) {
 	}
 }
 
+func TestPlatformURLOverrideValidation(t *testing.T) {
+	cases := []struct {
+		name     string
+		value    string
+		wantURL  string
+		fallback bool
+	}{
+		{name: "https remote allowed", value: "https://pre-mcp-gw.dingtalk.com", wantURL: "https://pre-mcp-gw.dingtalk.com"},
+		{name: "http loopback ip allowed", value: "http://127.0.0.1:8080", wantURL: "http://127.0.0.1:8080"},
+		{name: "http localhost allowed", value: "http://localhost:9090", wantURL: "http://localhost:9090"},
+		{name: "http ipv6 loopback allowed", value: "http://[::1]:8080", wantURL: "http://[::1]:8080"},
+		{name: "http remote rejected", value: "http://evil.example.com", fallback: true},
+		{name: "http remote ip rejected", value: "http://203.0.113.10", fallback: true},
+		{name: "no scheme rejected", value: "mcp.dingtalk.com", fallback: true},
+		{name: "non-http scheme rejected", value: "file:///etc/passwd", fallback: true},
+		{name: "empty rejected", value: "   ", fallback: true},
+		{name: "garbage rejected", value: "http://%zz", fallback: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("DWS_CONFIG_DIR", dir)
+			if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(tc.value+"\n"), FilePerm); err != nil {
+				t.Fatalf("WriteFile(mcp_url) error = %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "terminal_url"), []byte(tc.value+"\n"), FilePerm); err != nil {
+				t.Fatalf("WriteFile(terminal_url) error = %v", err)
+			}
+			wantMCP := tc.wantURL
+			wantTerminal := tc.wantURL
+			if tc.fallback {
+				wantMCP = DefaultMCPBaseURL
+				wantTerminal = DefaultTerminalBaseURL
+			}
+			if got := GetMCPBaseURL(); got != wantMCP {
+				t.Fatalf("GetMCPBaseURL() = %q, want %q", got, wantMCP)
+			}
+			if got := GetTerminalBaseURL(); got != wantTerminal {
+				t.Fatalf("GetTerminalBaseURL() = %q, want %q", got, wantTerminal)
+			}
+		})
+	}
+}
+
 func TestMaxUploadFileSize(t *testing.T) {
 	t.Parallel()
 	var want int64 = 100 * 1024 * 1024

@@ -15,6 +15,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,7 +68,19 @@ var (
 		return p.refreshWithRefreshToken(ctx, data)
 	}
 	oauthSleep = time.Sleep
+	// oauthRandomToken generates URL-safe random tokens for the OAuth state
+	// parameter and the loopback page token. Injectable for tests.
+	oauthRandomToken = generateOAuthRandomToken
 )
+
+// generateOAuthRandomToken returns a 128-bit crypto-random URL-safe token.
+func generateOAuthRandomToken() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("generating OAuth login token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
+}
 
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
@@ -77,6 +91,13 @@ type OAuthProvider struct {
 	httpClient   *http.Client
 	NoBrowser    bool
 	TargetCorpID string
+	// loginState binds the browser authorization redirect to this login
+	// session (RFC 6749 §10.12 login-CSRF protection). pageToken guards the
+	// loopback /api/* endpoints against cross-site requests from malicious
+	// web pages while the callback server is listening. Both are generated
+	// fresh at the start of every Login call.
+	loginState string
+	pageToken  string
 	// IdentityEnricher resolves userId/userName/corpName while the freshly
 	// exchanged access token is still only in memory.
 	IdentityEnricher func(context.Context, *TokenData) error
@@ -184,6 +205,19 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		}
 	}
 
+	// Generate the per-login OAuth state (login-CSRF protection) and the
+	// loopback page token (CSRF protection for the local /api/* endpoints).
+	loginState, err := oauthRandomToken()
+	if err != nil {
+		return nil, err
+	}
+	p.loginState = loginState
+	pageToken, err := oauthRandomToken()
+	if err != nil {
+		return nil, err
+	}
+	p.pageToken = pageToken
+
 	// Find a free port for the callback server.
 	listener, err := oauthListen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -222,6 +256,21 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		callbackTokenMu         sync.Mutex
 	)
 
+	// requirePageToken rejects cross-site requests to the loopback API that
+	// did not come from the page served by this login session. The token is
+	// only embedded in the HTML page, which cross-origin pages cannot read
+	// due to the same-origin policy.
+	requirePageToken := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Query().Get("pageToken") == p.pageToken {
+			return true
+		}
+		logging.AuthDebug("auth.login.oauth.api.page_token_rejected", "callback_port", port, "path", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"success":false,"errorMsg":"forbidden"}`))
+		return false
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc(CallbackPath, func(w http.ResponseWriter, r *http.Request) {
 		// Get code first to check if this is a new authorization or page refresh
@@ -235,6 +284,20 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			"has_authorization_code", code != "",
 		)
 
+		// RFC 6749 §10.12: the authorization server returns the state we sent;
+		// a mismatch means the redirect was not triggered by this login session
+		// (login CSRF), so the code must never be exchanged. Requests without a
+		// code fall through to the regular missing-code handling so a failed or
+		// cancelled authorization still unblocks the waiting login.
+		stateOK := r.URL.Query().Get("state") == p.loginState
+		if code != "" && !stateOK {
+			logging.AuthDebug("auth.login.oauth.callback.state_mismatch", "callback_port", port)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = fmt.Fprint(w, i18n.T("授权状态校验失败，请从终端重新发起登录"))
+			return
+		}
+
 		// Check state and handle page refresh or concurrent requests
 		callbackTokenMu.Lock()
 		processedCode := callbackProcessedCode
@@ -247,7 +310,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			callbackTokenMu.Unlock()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if processedAuthDisabled {
-				_, _ = fmt.Fprint(w, notEnabledHTML)
+				_, _ = fmt.Fprint(w, renderCallbackPage(notEnabledHTML, p.pageToken))
 			} else {
 				_, _ = fmt.Fprint(w, successHTML)
 			}
@@ -262,12 +325,16 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			return
 		}
 
-		// Case 3: No code but we have a processed token - show cached page
-		if code == "" && hasToken {
+		// Case 3: No code but we have a processed token - show the cached page.
+		// The not-enabled page embeds the page token, so it is only served to
+		// requests that carry the session state (e.g. a browser refreshing the
+		// full post-redirect URL); anything else falls through to the
+		// missing-code error instead of leaking the token.
+		if code == "" && hasToken && stateOK {
 			callbackTokenMu.Unlock()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if processedAuthDisabled {
-				_, _ = fmt.Fprint(w, notEnabledHTML)
+				_, _ = fmt.Fprint(w, renderCallbackPage(notEnabledHTML, p.pageToken))
 			} else {
 				_, _ = fmt.Fprint(w, successHTML)
 			}
@@ -378,7 +445,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		case denialReason == "enterprise_not_authorized":
 			_, _ = fmt.Fprint(w, renderEnterpriseDeniedHTML(serverMsg))
 		default:
-			_, _ = fmt.Fprint(w, notEnabledHTML)
+			_, _ = fmt.Fprint(w, renderCallbackPage(notEnabledHTML, p.pageToken))
 		}
 		// Ensure response is flushed to client
 		if f, ok := w.(http.Flusher); ok {
@@ -394,6 +461,9 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	// API endpoint: get super admins
 	mux.HandleFunc("/api/superAdmin", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if !requirePageToken(w, r) {
+			return
+		}
 		callbackTokenMu.Lock()
 		token := callbackToken
 		callbackTokenMu.Unlock()
@@ -410,9 +480,19 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_, _ = w.Write(data)
 	})
 
-	// API endpoint: send CLI auth apply
+	// API endpoint: send CLI auth apply. POST-only: a state-changing action
+	// must not be triggerable by cross-site navigations or <img> requests.
 	mux.HandleFunc("/api/sendApply", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"method not allowed"}`))
+			return
+		}
+		if !requirePageToken(w, r) {
+			return
+		}
 		adminStaffID := r.URL.Query().Get("adminStaffId")
 		if adminStaffID == "" {
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"缺少 adminStaffId 参数"}`))
@@ -441,19 +521,34 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_, _ = w.Write(data)
 	})
 
-	// API endpoint: get current status (clientId, applySent, selectedAdminId)
+	// API endpoint: get current status (clientId, applySent, selectedAdminId).
+	// state is exposed so the in-page "switch organization" re-authorization
+	// link can carry the login-CSRF token of this session; the endpoint itself
+	// is page-token guarded and unreachable for cross-origin readers.
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if !requirePageToken(w, r) {
+			return
+		}
 		callbackTokenMu.Lock()
 		applySent := callbackApplySent
 		selectedAdminId := callbackSelectedAdminId
 		callbackTokenMu.Unlock()
-		_, _ = fmt.Fprintf(w, `{"clientId":"%s","applySent":%t,"selectedAdminId":"%s"}`, p.clientID, applySent, selectedAdminId)
+		data, _ := json.Marshal(map[string]any{
+			"clientId":        p.clientID,
+			"applySent":       applySent,
+			"selectedAdminId": selectedAdminId,
+			"state":           p.loginState,
+		})
+		_, _ = w.Write(data)
 	})
 
 	// API endpoint: check CLI auth enabled status
 	mux.HandleFunc("/api/cliAuthEnabled", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if !requirePageToken(w, r) {
+			return
+		}
 		callbackTokenMu.Lock()
 		token := callbackToken
 		callbackTokenMu.Unlock()
@@ -476,7 +571,17 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_, _ = fmt.Fprint(w, successHTML)
 	})
 
-	server := &http.Server{Handler: mux}
+	server := &http.Server{
+		Handler: mux,
+		// Bound slow-client attacks against the loopback listener: without
+		// timeouts a trickling connection could stall the whole login flow.
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		// The callback handler may perform token exchange plus retried status
+		// checks before responding; keep headroom above those budgets.
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
 	go func() {
 		if serveErr := server.Serve(listener); !errors.Is(serveErr, http.ErrServerClosed) {
 			select {
@@ -491,7 +596,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_ = server.Shutdown(shutCtx)
 	}()
 
-	authURL := buildAuthURL(p.clientID, redirectURI, p.TargetCorpID)
+	authURL := buildAuthURL(p.clientID, redirectURI, p.TargetCorpID, p.loginState)
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}

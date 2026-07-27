@@ -418,9 +418,12 @@ func TestParseMCPTokenResponseCorpNameFallbacks(t *testing.T) {
 }
 
 func TestBuildAuthURLIncludesTargetCorpID(t *testing.T) {
-	authURL := buildAuthURL("client-id", "http://127.0.0.1:1234/callback", "ding-target")
+	authURL := buildAuthURL("client-id", "http://127.0.0.1:1234/callback", "ding-target", "state-123")
 	if !strings.Contains(authURL, "corpId=ding-target") {
 		t.Fatalf("auth URL missing target corpId: %s", authURL)
+	}
+	if !strings.Contains(authURL, "state=state-123") {
+		t.Fatalf("auth URL missing state: %s", authURL)
 	}
 }
 

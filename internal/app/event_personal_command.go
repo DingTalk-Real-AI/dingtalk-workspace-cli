@@ -1004,5 +1004,12 @@ func configuredMCPBaseURL(configDir string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(data))
+	raw := strings.TrimSpace(string(data))
+	// Apply the same trust-root validation as config.GetMCPBaseURL: the MCP
+	// base URL receives user tokens, so non-HTTPS non-loopback overrides are
+	// ignored rather than honored.
+	if !config.IsAllowedPlatformURLOverride(raw) {
+		return ""
+	}
+	return raw
 }

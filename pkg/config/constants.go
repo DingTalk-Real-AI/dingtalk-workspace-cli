@@ -17,6 +17,8 @@
 package config
 
 import (
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,26 +193,58 @@ func DefaultConfigDir() string {
 //  1. ~/.dws/mcp_url file content (for custom environment)
 //  2. Default value (https://mcp.dingtalk.com)
 func GetMCPBaseURL() string {
-	mcpURLPath := filepath.Join(DefaultConfigDir(), "mcp_url")
-	if data, err := os.ReadFile(mcpURLPath); err == nil {
-		if u := strings.TrimSpace(string(data)); u != "" {
-			return u
-		}
-	}
-	return DefaultMCPBaseURL
+	return readPlatformURLOverride("mcp_url", DefaultMCPBaseURL)
 }
 
 // GetTerminalBaseURL returns the terminal base URL with priority:
 //  1. ~/.dws/terminal_url file content (for pre-release environment)
 //  2. Default value (https://open-dev.dingtalk.com)
 func GetTerminalBaseURL() string {
-	terminalURLPath := filepath.Join(DefaultConfigDir(), "terminal_url")
-	if data, err := os.ReadFile(terminalURLPath); err == nil {
-		if u := strings.TrimSpace(string(data)); u != "" {
-			return u
-		}
+	return readPlatformURLOverride("terminal_url", DefaultTerminalBaseURL)
+}
+
+// readPlatformURLOverride reads a platform base-URL override from the config
+// directory. The override file is a trust root: the MCP base URL receives
+// user access tokens and refresh tokens, so the value is accepted only when
+// it is HTTPS, or plain HTTP bound to a loopback host (local development).
+// Anything else is ignored and the production default applies.
+func readPlatformURLOverride(fileName, fallback string) string {
+	data, err := os.ReadFile(filepath.Join(DefaultConfigDir(), fileName))
+	if err != nil {
+		return fallback
 	}
-	return DefaultTerminalBaseURL
+	u := strings.TrimSpace(string(data))
+	if u == "" || !IsAllowedPlatformURLOverride(u) {
+		return fallback
+	}
+	return u
+}
+
+// IsAllowedPlatformURLOverride reports whether a platform base-URL override is
+// safe to honor: HTTPS to any host, or plain HTTP bound to a loopback host
+// (local development). Callers that read mcp_url/terminal_url outside of
+// GetMCPBaseURL/GetTerminalBaseURL must apply the same check.
+func IsAllowedPlatformURLOverride(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return parsed.Host != ""
+	case "http":
+		return isLoopbackHostname(parsed.Hostname())
+	default:
+		return false
+	}
+}
+
+func isLoopbackHostname(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // GetDeveloperSettingsURL returns the full URL to the organization developer
