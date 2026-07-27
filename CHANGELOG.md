@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **OAuth loopback login and credential handling hardening** — the browser login flow now sends an RFC 6749 `state` parameter and rejects callbacks whose state does not match the login session (login CSRF); the loopback `/api/*` endpoints require a per-login page token embedded only in the served page, the state-changing `/api/sendApply` endpoint is POST-only, and the callback server enforces read/write timeouts so trickling connections cannot stall login. MCP token-exchange errors no longer embed raw response bodies that could carry token material into terminals and logs, and `mcp_url`/`terminal_url` overrides are honored only for HTTPS or loopback HTTP addresses, falling back to production defaults otherwise.
+
 ## [1.0.55-beta.4] - 2026-07-27
 
 This beta validates the shortcut projection fixes for group bots, bot search,
