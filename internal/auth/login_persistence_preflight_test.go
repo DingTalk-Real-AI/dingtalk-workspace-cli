@@ -345,6 +345,10 @@ func installHalfMigratedBrowserLogin(
 		}
 		query := callbackURL.Query()
 		query.Set("code", "half-migrated-repair")
+		// Mirror the real authorization server: state is echoed back verbatim.
+		if state := parsed.Query().Get("state"); state != "" {
+			query.Set("state", state)
+		}
 		callbackURL.RawQuery = query.Encode()
 		request, err := http.NewRequest(http.MethodGet, callbackURL.String(), nil)
 		if err != nil {

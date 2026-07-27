@@ -330,14 +330,16 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 		ErrorMsg  string `json:"errorMsg,omitempty"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("parsing MCP token response: %w (body: %s)", err, string(body))
+		// Never embed the raw body: it may carry token material or PII that
+		// would end up in terminals, log files, and issue reports.
+		return nil, fmt.Errorf("parsing MCP token response: %w (body bytes: %d)", err, len(body))
 	}
 	// Check for error response
 	if resp.ErrorCode != "" || resp.ErrorMsg != "" {
 		return nil, &MCPTokenExchangeError{Code: resp.ErrorCode, Message: resp.ErrorMsg}
 	}
 	if resp.AccessToken == "" {
-		return nil, fmt.Errorf("MCP token response missing accessToken (body: %s)", string(body))
+		return nil, fmt.Errorf("MCP token response missing accessToken (body bytes: %d)", len(body))
 	}
 
 	now := time.Now()
@@ -370,7 +372,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
+func buildAuthURL(clientID, redirectURI, targetCorpID, state string) string {
 	params := url.Values{
 		"client_id":     {clientID},
 		"redirect_uri":  {redirectURI},
@@ -381,7 +383,21 @@ func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
 	if targetCorpID = strings.TrimSpace(targetCorpID); targetCorpID != "" {
 		params.Set("corpId", targetCorpID)
 	}
+	// RFC 6749 §10.12: bind the authorization redirect to this login session.
+	if state = strings.TrimSpace(state); state != "" {
+		params.Set("state", state)
+	}
 	return AuthorizeURL + "?" + params.Encode()
+}
+
+// callbackPageTokenPlaceholder is replaced with the per-login page token when
+// the loopback server serves the not-enabled page. Cross-origin pages cannot
+// read the token (same-origin policy), so guarding /api/* on it blocks
+// cross-site request forgery against the local callback server.
+const callbackPageTokenPlaceholder = "__DWS_PAGE_TOKEN__"
+
+func renderCallbackPage(pageHTML, pageToken string) string {
+	return strings.ReplaceAll(pageHTML, callbackPageTokenPlaceholder, pageToken)
 }
 
 const successHTML = `<!doctype html>
@@ -790,6 +806,7 @@ const notEnabledHTML = `<!doctype html>
       const errorMsg = document.getElementById("errorMsg");
       const backLink = document.getElementById("backLink");
 
+      const pageToken = "__DWS_PAGE_TOKEN__";
       let admins = [];
       let clientId = "";
       let applySent = false;
@@ -887,7 +904,7 @@ const notEnabledHTML = `<!doctype html>
 
       async function checkAuthStatus() {
         try {
-          const res = await fetch("/api/cliAuthEnabled");
+          const res = await fetch("/api/cliAuthEnabled?pageToken=" + encodeURIComponent(pageToken));
           const data = await res.json();
           if (data.success && data.result && data.result.cliAuthEnabled) {
             stopPolling();
@@ -900,7 +917,7 @@ const notEnabledHTML = `<!doctype html>
 
       async function loadAdmins() {
         try {
-          const res = await fetch("/api/superAdmin");
+          const res = await fetch("/api/superAdmin?pageToken=" + encodeURIComponent(pageToken));
           const data = await res.json();
           if (data.success && data.result && data.result.length > 0) {
             admins = data.result;
@@ -932,7 +949,7 @@ const notEnabledHTML = `<!doctype html>
 
       async function init() {
         try {
-          const statusRes = await fetch("/api/status");
+          const statusRes = await fetch("/api/status?pageToken=" + encodeURIComponent(pageToken));
           const status = await statusRes.json();
           clientId = status.clientId || "";
           applySent = status.applySent || false;
@@ -948,7 +965,8 @@ const notEnabledHTML = `<!doctype html>
               clientId +
               "&prompt=consent&redirect_uri=" +
               redirectUri +
-              "&response_type=code&scope=openid+corpid";
+              "&response_type=code&scope=openid+corpid" +
+              (status.state ? "&state=" + encodeURIComponent(status.state) : "");
           }
 
           if (applySent) {
@@ -985,7 +1003,8 @@ const notEnabledHTML = `<!doctype html>
         hideError();
         try {
           const res = await fetch(
-            "/api/sendApply?adminStaffId=" + encodeURIComponent(value)
+            "/api/sendApply?adminStaffId=" + encodeURIComponent(value) + "&pageToken=" + encodeURIComponent(pageToken),
+            { method: "POST" }
           );
           const data = await res.json();
           if (data.success && data.result) {

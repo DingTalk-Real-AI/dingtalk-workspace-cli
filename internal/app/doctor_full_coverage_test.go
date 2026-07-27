@@ -24,6 +24,7 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 	oldStatus := doctorAuthStatus
 	oldAccess := doctorAuthAccessToken
 	oldHTTP := doctorHTTPDo
+	oldNewRequest := doctorNewRequest
 	oldLatest := doctorFetchLatestRelease
 	oldNeeds := doctorNeedsUpgrade
 	oldRead := timingReadFile
@@ -33,6 +34,7 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 		doctorAuthStatus = oldStatus
 		doctorAuthAccessToken = oldAccess
 		doctorHTTPDo = oldHTTP
+		doctorNewRequest = oldNewRequest
 		doctorFetchLatestRelease = oldLatest
 		doctorNeedsUpgrade = oldNeeds
 		timingReadFile = oldRead
@@ -74,11 +76,14 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
-	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(":"), 0o600); err != nil {
+	// Invalid mcp_url values now fall back to the production default, so an
+	// unreachable-but-valid address is used to cover the dial-failure branch
+	// without depending on outbound access to the real MCP service.
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte("https://127.0.0.1:1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := doctorCheckNetwork(context.Background(), buf, false, time.Second); got.Status != statusFail {
-		t.Fatalf("invalid network URL = %#v", got)
+		t.Fatalf("unreachable network URL = %#v", got)
 	}
 	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte("https://example.test"), 0o600); err != nil {
 		t.Fatal(err)
@@ -87,6 +92,15 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 	if got := doctorCheckNetwork(context.Background(), buf, false, time.Second); got.Status != statusFail {
 		t.Fatalf("network failure = %#v", got)
 	}
+	// Keep the request-build failure branch covered: validated base URLs can
+	// no longer reach it through mcp_url, so it is exercised via injection.
+	doctorNewRequest = func(context.Context, string, string, io.Reader) (*http.Request, error) {
+		return nil, errors.New("bad request")
+	}
+	if got := doctorCheckNetwork(context.Background(), buf, false, time.Second); got.Status != statusFail {
+		t.Fatalf("request-build failure = %#v", got)
+	}
+	doctorNewRequest = oldNewRequest
 	doctorHTTPDo = func(*http.Client, *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok"))}, nil
 	}

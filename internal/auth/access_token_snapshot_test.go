@@ -59,7 +59,7 @@ func TestCrossPlatformCoverageOAuthProviderLoginReauthorizesAfterLoadFailureAndR
 		if err != nil {
 			return err
 		}
-		callbackURL := parsed.Query().Get("redirect_uri") + "?code=reauthorize"
+		callbackURL := parsed.Query().Get("redirect_uri") + "?code=reauthorize&state=" + url.QueryEscape(parsed.Query().Get("state"))
 		response, err := (&http.Client{Timeout: 5 * time.Second}).Get(callbackURL)
 		if err != nil {
 			return err

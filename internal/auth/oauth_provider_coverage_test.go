@@ -22,6 +22,11 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 )
 
+const (
+	fixtureLoginState = "test-login-state"
+	fixturePageToken  = "test-page-token"
+)
+
 type oauthLoginFixture struct {
 	configDir       string
 	callbackBase    string
@@ -117,6 +122,20 @@ func newOAuthLoginFixture(t *testing.T, status func(int32) CLIAuthStatus) *oauth
 		resetClientIDFromMCP()
 	})
 
+	// Deterministic login state / page token: Login generates the state first
+	// and the page token second, and the alternation keeps the roles correct
+	// even if a test drives more than one Login through this fixture.
+	oldRandomToken := oauthRandomToken
+	tokenCalls := 0
+	oauthRandomToken = func() (string, error) {
+		tokenCalls++
+		if tokenCalls%2 == 1 {
+			return fixtureLoginState, nil
+		}
+		return fixturePageToken, nil
+	}
+	t.Cleanup(func() { oauthRandomToken = oldRandomToken })
+
 	f := &oauthLoginFixture{
 		exchangeEntered: make(chan struct{}),
 		exchangeRelease: make(chan struct{}),
@@ -202,6 +221,21 @@ func httpGetBody(t *testing.T, rawURL string) (int, string) {
 	return result.status, result.body
 }
 
+func httpPostBody(t *testing.T, rawURL string) (int, string) {
+	t.Helper()
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Post(rawURL, "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST %s: %v", rawURL, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("POST %s read body: %v", rawURL, err)
+	}
+	return resp.StatusCode, string(data)
+}
+
 func getHTTPBody(rawURL string) oauthHTTPResult {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(rawURL)
@@ -223,17 +257,21 @@ func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
 
 	loginDone := startOAuthLogin(t, context.Background(), f)
 
-	for _, path := range []string{"/api/superAdmin", "/api/sendApply?adminStaffId=admin-1", "/api/cliAuthEnabled"} {
-		_, body := httpGetBody(t, f.callbackBase+path)
+	for _, path := range []string{"/api/superAdmin", "/api/cliAuthEnabled"} {
+		_, body := httpGetBody(t, f.callbackBase+path+"?pageToken="+fixturePageToken)
 		if !strings.Contains(body, "授权尚未完成") {
 			t.Fatalf("pre-auth %s = %q", path, body)
 		}
 	}
-	_, body := httpGetBody(t, f.callbackBase+"/api/sendApply")
+	_, body := httpPostBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin-1&pageToken="+fixturePageToken)
+	if !strings.Contains(body, "授权尚未完成") {
+		t.Fatalf("pre-auth sendApply = %q", body)
+	}
+	_, body = httpPostBody(t, f.callbackBase+"/api/sendApply?pageToken="+fixturePageToken)
 	if !strings.Contains(body, "adminStaffId") {
 		t.Fatalf("missing admin response = %q", body)
 	}
-	_, body = httpGetBody(t, f.callbackBase+"/api/status")
+	_, body = httpGetBody(t, f.callbackBase+"/api/status?pageToken="+fixturePageToken)
 	if !strings.Contains(body, "test-client") {
 		t.Fatalf("initial status = %q", body)
 	}
@@ -243,37 +281,37 @@ func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
 
 	callbackDone := make(chan oauthHTTPResult, 1)
 	go func() {
-		callbackDone <- getHTTPBody(f.callbackBase + CallbackPath + "?code=good")
+		callbackDone <- getHTTPBody(f.callbackBase + CallbackPath + "?code=good&state=" + fixtureLoginState)
 	}()
 	waitOAuthSignal(t, f.exchangeEntered, loginDone, "token exchange")
-	_, body = httpGetBody(t, f.callbackBase+CallbackPath+"?authCode=good")
+	_, body = httpGetBody(t, f.callbackBase+CallbackPath+"?authCode=good&state="+fixtureLoginState)
 	if !strings.Contains(body, "正在处理授权") {
 		t.Fatalf("concurrent callback = %q", body)
 	}
 	closeOAuthRelease(f.exchangeRelease)
 	waitOAuthSignal(t, f.statusEntered, loginDone, "CLI auth status check")
 
-	_, body = httpGetBody(t, f.callbackBase+CallbackPath+"?code=good")
+	_, body = httpGetBody(t, f.callbackBase+CallbackPath+"?code=good&state="+fixtureLoginState)
 	if !strings.Contains(body, "<html") {
 		t.Fatalf("cached callback = %q", body)
 	}
-	_, body = httpGetBody(t, f.callbackBase+CallbackPath)
+	_, body = httpGetBody(t, f.callbackBase+CallbackPath+"?state="+fixtureLoginState)
 	if !strings.Contains(body, "<html") {
 		t.Fatalf("cached no-code callback = %q", body)
 	}
-	_, body = httpGetBody(t, f.callbackBase+"/api/superAdmin")
+	_, body = httpGetBody(t, f.callbackBase+"/api/superAdmin?pageToken="+fixturePageToken)
 	if !strings.Contains(body, "admin-1") {
 		t.Fatalf("super admins = %q", body)
 	}
-	_, body = httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin-1")
+	_, body = httpPostBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin-1&pageToken="+fixturePageToken)
 	if !strings.Contains(body, "true") {
 		t.Fatalf("send apply = %q", body)
 	}
-	_, body = httpGetBody(t, f.callbackBase+"/api/status")
+	_, body = httpGetBody(t, f.callbackBase+"/api/status?pageToken="+fixturePageToken)
 	if !strings.Contains(body, "admin-1") || !strings.Contains(body, "true") {
 		t.Fatalf("updated status = %q", body)
 	}
-	_, body = httpGetBody(t, f.callbackBase+"/api/cliAuthEnabled")
+	_, body = httpGetBody(t, f.callbackBase+"/api/cliAuthEnabled?pageToken="+fixturePageToken)
 	if !strings.Contains(body, "cliAuthEnabled") {
 		t.Fatalf("auth enabled API = %q", body)
 	}
@@ -300,6 +338,146 @@ func TestCrossPlatformCoverageOAuthLoginCallbackAndAPIs(t *testing.T) {
 	}
 	if err := f.provider.Logout(); err != nil {
 		t.Fatalf("Logout: %v", err)
+	}
+}
+
+// TestCrossPlatformCoverageOAuthLoginCSRFGuards verifies the login-CSRF and
+// loopback-API protections: a callback with a missing/mismatched state must
+// never reach token exchange, the /api/* endpoints must reject requests
+// without the per-login page token, and sendApply must require POST.
+func TestCrossPlatformCoverageGenerateOAuthRandomToken(t *testing.T) {
+	first, err := generateOAuthRandomToken()
+	if err != nil || first == "" {
+		t.Fatalf("generateOAuthRandomToken = %q, %v", first, err)
+	}
+	second, err := generateOAuthRandomToken()
+	if err != nil || second == "" || second == first {
+		t.Fatalf("generateOAuthRandomToken uniqueness = %q vs %q, %v", first, second, err)
+	}
+
+	oldRandRead := oauthRandRead
+	oauthRandRead = func([]byte) (int, error) { return 0, errors.New("entropy") }
+	t.Cleanup(func() { oauthRandRead = oldRandRead })
+	if _, err := generateOAuthRandomToken(); err == nil || !strings.Contains(err.Error(), "entropy") {
+		t.Fatalf("generateOAuthRandomToken error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOAuthLoginRandomTokenFailure(t *testing.T) {
+	isolateOAuthPersistence(t)
+	SetClientID("client")
+	SetClientSecret("secret")
+	t.Cleanup(func() {
+		SetClientID("")
+		SetClientSecret("")
+	})
+	oldRandomToken := oauthRandomToken
+	t.Cleanup(func() { oauthRandomToken = oldRandomToken })
+
+	failAt := 1
+	calls := 0
+	oauthRandomToken = func() (string, error) {
+		calls++
+		if calls == failAt {
+			return "", errors.New("entropy")
+		}
+		return "token", nil
+	}
+
+	p := &OAuthProvider{configDir: t.TempDir(), Output: io.Discard}
+	if _, err := p.Login(context.Background(), true); err == nil || !strings.Contains(err.Error(), "entropy") {
+		t.Fatalf("login state failure = %v", err)
+	}
+
+	// First call succeeds (login state), second fails (page token).
+	calls = 0
+	failAt = 2
+	if _, err := p.Login(context.Background(), true); err == nil || !strings.Contains(err.Error(), "entropy") {
+		t.Fatalf("page token failure = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOAuthLoginCSRFGuards(t *testing.T) {
+	// CLI auth disabled renders the not-enabled page, which is the only page
+	// that must embed the page token for its own fetch calls.
+	f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
+		return CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: false}}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	loginDone := startOAuthLogin(t, ctx, f)
+
+	// A forged callback (login CSRF attempt) is rejected before exchange.
+	status, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=attacker-code&state=attacker-state")
+	if status != http.StatusBadRequest {
+		t.Fatalf("mismatched state status = %d body = %q", status, body)
+	}
+	select {
+	case <-f.exchangeEntered:
+		t.Fatal("token exchange reached with mismatched state")
+	default:
+	}
+	status, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=attacker-code")
+	if status != http.StatusBadRequest {
+		t.Fatalf("missing state status = %d", status)
+	}
+	select {
+	case <-f.exchangeEntered:
+		t.Fatal("token exchange reached with missing state")
+	default:
+	}
+
+	// Loopback API endpoints reject missing and wrong page tokens.
+	for _, path := range []string{"/api/superAdmin", "/api/cliAuthEnabled", "/api/status"} {
+		if status, _ := httpGetBody(t, f.callbackBase+path); status != http.StatusForbidden {
+			t.Fatalf("%s without pageToken status = %d", path, status)
+		}
+		if status, _ := httpGetBody(t, f.callbackBase+path+"?pageToken=wrong"); status != http.StatusForbidden {
+			t.Fatalf("%s with wrong pageToken status = %d", path, status)
+		}
+	}
+
+	// sendApply additionally requires POST and rejects cross-site GETs.
+	if status, _ := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin-1&pageToken="+fixturePageToken); status != http.StatusMethodNotAllowed {
+		t.Fatalf("sendApply GET status = %d", status)
+	}
+	if status, _ := httpPostBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin-1"); status != http.StatusForbidden {
+		t.Fatalf("sendApply POST without pageToken status = %d", status)
+	}
+
+	// The not-enabled page embeds the page token for its own fetch calls.
+	callbackDone := make(chan oauthHTTPResult, 1)
+	go func() {
+		callbackDone <- getHTTPBody(f.callbackBase + CallbackPath + "?code=good&state=" + fixtureLoginState)
+	}()
+	waitOAuthSignal(t, f.exchangeEntered, loginDone, "token exchange")
+	closeOAuthRelease(f.exchangeRelease)
+	waitOAuthSignal(t, f.statusEntered, loginDone, "CLI auth status check")
+	closeOAuthRelease(f.statusRelease)
+	select {
+	case callback := <-callbackDone:
+		if callback.err != nil {
+			t.Fatalf("callback: %v", callback.err)
+		}
+		if strings.Contains(callback.body, callbackPageTokenPlaceholder) {
+			t.Fatalf("callback page still contains the page-token placeholder")
+		}
+		if !strings.Contains(callback.body, fixturePageToken) {
+			t.Fatalf("not-enabled page does not embed the page token")
+		}
+	case <-time.After(oauthTestWaitTimeout):
+		t.Fatal("timed out waiting for OAuth callback")
+	}
+
+	// A wrong page token is still rejected after the callback completed.
+	if status, _ := httpGetBody(t, f.callbackBase+"/api/superAdmin?pageToken=wrong"); status != http.StatusForbidden {
+		t.Fatalf("post-callback wrong pageToken status = %d", status)
+	}
+
+	// The login keeps waiting for admin approval; cancel it to finish.
+	cancel()
+	if result := awaitOAuthLogin(t, loginDone); !errors.Is(result.err, context.Canceled) {
+		t.Fatalf("canceled login = %v", result.err)
 	}
 }
 
@@ -342,7 +520,7 @@ func TestOAuthForcedLoginIgnoresUnreadableUnrelatedProfile(t *testing.T) {
 	loginDone := startOAuthLogin(t, context.Background(), f)
 	callbackDone := make(chan oauthHTTPResult, 1)
 	go func() {
-		callbackDone <- getHTTPBody(f.callbackBase + CallbackPath + "?code=unrelated-safe")
+		callbackDone <- getHTTPBody(f.callbackBase + CallbackPath + "?code=unrelated-safe&state=" + fixtureLoginState)
 	}()
 	waitOAuthSignal(t, f.exchangeEntered, loginDone, "token exchange")
 	closeOAuthRelease(f.exchangeRelease)
@@ -532,13 +710,19 @@ func TestCrossPlatformCoverageOAuthPersistConfigEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageBuildOAuthAuthURLTarget(t *testing.T) {
-	raw := buildAuthURL("client", "http://localhost/callback", "corp")
+	raw := buildAuthURL("client", "http://localhost/callback", "corp", "test-state")
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if parsed.Query().Get("corpId") != "corp" {
 		t.Fatalf("auth URL = %q", raw)
+	}
+	if parsed.Query().Get("state") != "test-state" {
+		t.Fatalf("auth URL missing state = %q", raw)
+	}
+	if raw := buildAuthURL("client", "http://localhost/callback", "", "  "); strings.Contains(raw, "state=") {
+		t.Fatalf("empty state must be omitted = %q", raw)
 	}
 }
 
@@ -573,7 +757,7 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 			closeOAuthRelease(f.statusRelease)
 			f.provider.NoBrowser = false
 			done := startOAuthLogin(t, context.Background(), f)
-			_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=denied")
+			_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=denied&state="+fixtureLoginState)
 			if result := awaitOAuthLogin(t, done); result.err == nil {
 				t.Fatal("denied login succeeded")
 			}
@@ -588,7 +772,7 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		closeOAuthRelease(f.exchangeRelease)
 		closeOAuthRelease(f.statusRelease)
 		done := startOAuthLogin(t, context.Background(), f)
-		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=denied")
+		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=denied&state="+fixtureLoginState)
 		if result := awaitOAuthLogin(t, done); result.err == nil {
 			t.Fatal("channel-denied login succeeded")
 		}
@@ -602,7 +786,7 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		closeOAuthRelease(f.exchangeRelease)
 		closeOAuthRelease(f.statusRelease)
 		done := startOAuthLogin(t, context.Background(), f)
-		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending")
+		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending&state="+fixtureLoginState)
 		if result := awaitOAuthLogin(t, done); result.err == nil {
 			t.Fatal("approval timeout login succeeded")
 		}
@@ -616,7 +800,7 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		closeOAuthRelease(f.exchangeRelease)
 		closeOAuthRelease(f.statusRelease)
 		done := startOAuthLogin(t, context.Background(), f)
-		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending")
+		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending&state="+fixtureLoginState)
 		if result := awaitOAuthLogin(t, done); result.err != nil {
 			t.Fatalf("poll-enabled login failed: %v", result.err)
 		}
@@ -630,7 +814,7 @@ func TestCrossPlatformCoverageOAuthLoginDenialAndPolling(t *testing.T) {
 		closeOAuthRelease(f.statusRelease)
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startOAuthLogin(t, ctx, f)
-		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending")
+		_, _ = httpGetBody(t, f.callbackBase+CallbackPath+"?code=pending&state="+fixtureLoginState)
 		cancel()
 		if result := awaitOAuthLogin(t, done); result.err == nil {
 			t.Fatal("canceled pending login succeeded")
@@ -646,7 +830,7 @@ func TestCrossPlatformCoverageOAuthLoginExchangeFailure(t *testing.T) {
 	closeOAuthRelease(f.exchangeRelease)
 	closeOAuthRelease(f.statusRelease)
 	done := startOAuthLogin(t, context.Background(), f)
-	_, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=bad")
+	_, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=bad&state="+fixtureLoginState)
 	if !strings.Contains(body, "failed") {
 		t.Fatalf("exchange failure page = %q", body)
 	}
@@ -929,7 +1113,7 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		t.Helper()
 		bodyCh := make(chan oauthHTTPResult, 1)
 		go func() {
-			bodyCh <- getHTTPBody(f.callbackBase + CallbackPath + "?code=" + url.QueryEscape(code))
+			bodyCh <- getHTTPBody(f.callbackBase + CallbackPath + "?code=" + url.QueryEscape(code) + "&state=" + fixtureLoginState)
 		}()
 		waitOAuthSignal(t, f.exchangeEntered, done, "token exchange")
 		closeOAuthRelease(f.exchangeRelease)
@@ -959,13 +1143,13 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		if body := finishExchange(t, f, done, "first"); !strings.Contains(body, "<html") {
 			t.Fatalf("disabled callback body = %q", body)
 		}
-		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=first"); !strings.Contains(body, "<html") {
+		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=first&state="+fixtureLoginState); !strings.Contains(body, "<html") {
 			t.Fatalf("cached disabled callback = %q", body)
 		}
-		if _, body := httpGetBody(t, f.callbackBase+CallbackPath); !strings.Contains(body, "<html") {
+		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?state="+fixtureLoginState); !strings.Contains(body, "<html") {
 			t.Fatalf("cached disabled no-code callback = %q", body)
 		}
-		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=second"); !strings.Contains(body, "<html") {
+		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=second&state="+fixtureLoginState); !strings.Contains(body, "<html") {
 			t.Fatalf("switched callback = %q", body)
 		}
 		result := awaitOAuthLogin(t, done)
@@ -984,10 +1168,13 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
 		done := startOAuthLogin(t, ctx, f)
 		finishExchange(t, f, done, "errors")
-		for _, path := range []string{"/api/superAdmin", "/api/sendApply?adminStaffId=admin", "/api/cliAuthEnabled"} {
-			if _, body := httpGetBody(t, f.callbackBase+path); !strings.Contains(body, "hook failure") {
+		for _, path := range []string{"/api/superAdmin", "/api/cliAuthEnabled"} {
+			if _, body := httpGetBody(t, f.callbackBase+path+"?pageToken="+fixturePageToken); !strings.Contains(body, "hook failure") {
 				t.Fatalf("API error %s = %q", path, body)
 			}
+		}
+		if _, body := httpPostBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin&pageToken="+fixturePageToken); !strings.Contains(body, "hook failure") {
+			t.Fatalf("API error sendApply = %q", body)
 		}
 		cancel()
 		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
@@ -1009,7 +1196,7 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		f.provider.Output = &output
 		done := startOAuthLogin(t, ctx, f)
 		finishExchange(t, f, done, "apply")
-		if _, body := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin"); !strings.Contains(body, "true") {
+		if _, body := httpPostBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin&pageToken="+fixturePageToken); !strings.Contains(body, "true") {
 			t.Fatalf("apply response = %q", body)
 		}
 		time.Sleep(20 * time.Millisecond)

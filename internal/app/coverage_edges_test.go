@@ -37,6 +37,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	upgradepkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	tea "github.com/charmbracelet/bubbletea"
@@ -1542,6 +1543,14 @@ func TestCrossPlatformCoveragePersonalEventPureCoverage(t *testing.T) {
 	if configuredMCPBaseURL(emptyDir) != "https://mcp.test/" || personalEventMCPBaseURL(emptyDir) != "https://mcp.test" {
 		t.Fatal("configured MCP URL mismatch")
 	}
+	// Non-HTTPS non-loopback overrides are rejected by the shared trust-root
+	// validation and fall back to the production default.
+	if err := os.WriteFile(filepath.Join(emptyDir, "mcp_url"), []byte("http://evil.example.com"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if configuredMCPBaseURL(emptyDir) != "" || personalEventMCPBaseURL(emptyDir) != config.DefaultMCPBaseURL {
+		t.Fatal("invalid MCP URL override must be rejected")
+	}
 
 	var rendered bytes.Buffer
 	printPersonalStopResult(&rendered, []string{"sub"}, true, "stopped")
@@ -1792,7 +1801,10 @@ func TestCrossPlatformCoverageDoctorCommandCoverage(t *testing.T) {
 
 	badConfig := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", badConfig)
-	if err := os.WriteFile(filepath.Join(badConfig, "mcp_url"), []byte("://bad"), 0o600); err != nil {
+	// Use an unreachable-but-valid URL: invalid overrides now fall back to the
+	// production MCP base URL, which must not make this failure-path check
+	// depend on outbound network access to the real service.
+	if err := os.WriteFile(filepath.Join(badConfig, "mcp_url"), []byte("https://127.0.0.1:1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := doctorCheckNetwork(context.Background(), io.Discard, false, time.Second); got.Status != statusFail {
