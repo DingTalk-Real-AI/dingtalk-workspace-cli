@@ -219,7 +219,9 @@ func TestGetMCPBaseURLUsesConfigFile(t *testing.T) {
 	}
 }
 
-func TestPlatformURLOverrideValidation(t *testing.T) {
+// The name must keep the TestCrossPlatformCoverage prefix: the CI platform
+// coverage gate only executes tests matching that pattern.
+func TestCrossPlatformCoveragePlatformURLOverrideValidation(t *testing.T) {
 	cases := []struct {
 		name     string
 		value    string
