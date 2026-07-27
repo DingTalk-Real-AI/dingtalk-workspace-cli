@@ -35,6 +35,7 @@ var (
 	doctorAuthStatus         = (*authpkg.OAuthProvider).Status
 	doctorAuthAccessToken    = (*authpkg.OAuthProvider).GetAccessToken
 	doctorHTTPDo             = (*http.Client).Do
+	doctorNewRequest         = http.NewRequestWithContext
 	doctorFetchLatestRelease = func() (*upgrade.ReleaseInfo, error) { return upgrade.NewClient().FetchLatestRelease() }
 	doctorNeedsUpgrade       = upgrade.NeedsUpgrade
 )
@@ -256,7 +257,7 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, baseURL, nil)
+	req, err := doctorNewRequest(reqCtx, http.MethodGet, baseURL, nil)
 	if err != nil {
 		r := checkResult{
 			Name:    "network",

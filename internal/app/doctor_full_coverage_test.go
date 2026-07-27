@@ -24,6 +24,7 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 	oldStatus := doctorAuthStatus
 	oldAccess := doctorAuthAccessToken
 	oldHTTP := doctorHTTPDo
+	oldNewRequest := doctorNewRequest
 	oldLatest := doctorFetchLatestRelease
 	oldNeeds := doctorNeedsUpgrade
 	oldRead := timingReadFile
@@ -33,6 +34,7 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 		doctorAuthStatus = oldStatus
 		doctorAuthAccessToken = oldAccess
 		doctorHTTPDo = oldHTTP
+		doctorNewRequest = oldNewRequest
 		doctorFetchLatestRelease = oldLatest
 		doctorNeedsUpgrade = oldNeeds
 		timingReadFile = oldRead
@@ -90,6 +92,15 @@ func TestCrossPlatformCoverageDoctorRemainingCoverage(t *testing.T) {
 	if got := doctorCheckNetwork(context.Background(), buf, false, time.Second); got.Status != statusFail {
 		t.Fatalf("network failure = %#v", got)
 	}
+	// Keep the request-build failure branch covered: validated base URLs can
+	// no longer reach it through mcp_url, so it is exercised via injection.
+	doctorNewRequest = func(context.Context, string, string, io.Reader) (*http.Request, error) {
+		return nil, errors.New("bad request")
+	}
+	if got := doctorCheckNetwork(context.Background(), buf, false, time.Second); got.Status != statusFail {
+		t.Fatalf("request-build failure = %#v", got)
+	}
+	doctorNewRequest = oldNewRequest
 	doctorHTTPDo = func(*http.Client, *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok"))}, nil
 	}
