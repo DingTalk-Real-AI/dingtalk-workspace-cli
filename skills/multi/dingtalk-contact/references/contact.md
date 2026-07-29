@@ -9,7 +9,7 @@
 > - 用户说"创建企业 / 新建企业 / 开通企业 / 初始化企业"（**不含"账号"二字**）→ **`org create`**（创建企业组织本身）
 > - **判断口径**：先检查 query 是否含"账号"关键词；含则必须路由 `account create`，**禁止**路由 `org create`。
 >
-> **CRITICAL — 根部门**：钉钉根部门 `deptId=1`。`dept` 系列命令查根部门统一传 `--dept 1` 或 `--depts 1`，不要传 `self / me / root / 0`。
+> **CRITICAL — 根部门**：钉钉根部门 `deptId=1`。单部门命令查根部门通常传 `--dept 1`；`dept list-members` 传 `--ids 1`。`dept search` 精确命中企业根部门时可能返回 `deptId=-1` 哨兵，后续部门命令必须规范化为 `1`。不要传 `self / me / root / 0`。
 
 ## 命令总览
 
@@ -41,16 +41,15 @@ Example:
   dws contact user search --query "张三"
 Flags:
       --query string   搜索关键词 (必填)
-Returns: (顶层 `result` 为列表，每项包含以下字段)
+Returns: (列表，每项包含以下字段)
   name             string   成员姓名
   nick             string   成员昵称
-  flowerName       string   花名（无花名时为 null）
   userId           string   成员 ID（仅同事关系时返回）
   title            string   员工职位（仅同事关系时返回）
   openDingTalkId   string   当前用户视角下的目标用户唯一标识，不可跨用户共享；可用于发消息等好友关系场景的操作
 ```
 
-> **CAUTION:** 多人同名时禁止默认选第一个 — `user search` 不返回部门信息，须追加 `contact user get --ids userId1,userId2,...` 获取部门/职位后请用户确认。详见 [08-directory.md](./08-directory.md)「多命中」。
+> **CAUTION:** 多人同名时禁止默认选第一个 — `user search` 不返回部门信息，须追加 `contact user get --ids userId1,userId2,...` 获取部门/职位后请用户确认。详见 [08-directory.md](08-directory.md)「多命中」。
 
 #### 按手机号搜索用户
 ```
@@ -81,9 +80,9 @@ Usage:
 Example:
   dws contact user invite --org-user-name "张三" --org-user-mobile "13800138000" --depts '[{"deptId":1}]'
 Flags:
-      --org-user-name string    员工在企业内的名称 (必填)
-      --org-user-mobile string  员工手机号 (必填)
-      --depts string            员工所属部门列表 JSON 数组（可选），格式: [{"deptId":1}]
+      --org-user-name string   员工在企业内的名称 (必填)
+      --org-user-mobile string 员工手机号 (必填)
+      --depts string           员工所属部门列表 JSON 数组（可选），格式: [{"deptId":1}]
 Notes:
   - 通过手机号邀请单个员工加入当前企业
   - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
@@ -106,8 +105,9 @@ Flags:
       --master-user-id string  直属主管 userId（可选）
       --yes                    跳过二次确认（可选）
 Notes:
-  - 姓名、部门、直属主管至少修改一项
-  - 默认要求确认；自动化场景在已获得用户确认后显式传 --yes
+  - 至少需要一个修改项（--org-user-name、--depts 或 --master-user-id）
+  - 未加 --yes 时会交互式提示确认；脚本/自动化场景请显式带上 --yes
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
 ```
 
 #### 更新自己的 profile 信息
@@ -118,15 +118,18 @@ Aliases:
   update-self, update-me, update-self-profile, edit-self, modify-self
 Example:
   dws contact user update-self --nick "新昵称"
-  dws contact user update-self --avatar-file-id <fileId> --yes
+  dws contact user update-self --avatar-file-id "xxxxxx" --yes
+  dws contact user update-self --nick "新昵称" --avatar-file-id "xxxxxx" --yes
 Flags:
       --nick string            新昵称（可选）
       --avatar-file-id string  新头像在钉盘的 fileId（可选）
       --yes                    跳过二次确认（可选）
 Notes:
-  - 更新当前登录用户自己的昵称或头像，不修改员工组织信息
-  - 昵称、头像至少修改一项；头像 fileId 需先上传到钉盘取得
-  - 默认要求确认；自动化场景在已获得用户确认后显式传 --yes
+  - 更新当前登录用户自己的个人 profile 信息（昵称 / 头像），不是修改员工组织信息
+  - 至少需要一个修改项（--nick 或 --avatar-file-id）
+  - 头像 fileId 需要先上传头像到钉盘获取
+  - 未加 --yes 时会交互式提示确认；脚本/自动化场景请显式带上 --yes
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
 ```
 
 ### profile (用户档案 / 花名册)
@@ -142,8 +145,6 @@ Flags:
 ```
 
 查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列表。认证信息（corpId、optUserId）由系统自动注入，无需手动传入。
-
-> **前置条件：需操作人具备花名册管理权限。** 无权限时返回业务错误 `操作人无花名册管理权限`（非命令写法问题，不要改参数）。
 
 #### 查询员工花名册字段信息（个人档案）
 ```
@@ -161,8 +162,6 @@ Flags:
 花名册字段包含：试用/转正信息、个人/家庭信息、学历信息、银行卡/合同信息、紧急联系人和其他企业自定义信息。
 
 > **与 `contact user get` 的区别**：`user get` 返回组织管理信息（部门、主管、管理员权限），`user profile get` 返回个人档案信息（学历、家庭、银行卡等）。
->
-> **前置条件：需操作人具备花名册管理权限。** 无权限时返回业务错误 `操作人无花名册管理权限`（非命令写法问题，不要改参数）。
 
 ### dismission (离职员工)
 
@@ -189,9 +188,7 @@ Flags:
 查询离职员工列表，支持按员工姓名、离职日期范围、部门进行过滤。认证信息（corpId、optUserId）由系统自动注入，无需手动传入。
 `--start` 和 `--end` 必须同时设置或同时不设置，不允许只传其中一个。
 
-> **前置条件：需操作人具备已离职人员花名册管理权限。** 无权限时返回业务错误 `操作人无已离职人员花名册管理权限`（非命令写法问题，不要改参数）。
-
-### dept (部门查询)
+### dept (部门查询与管理)
 
 #### 搜索部门
 ```
@@ -201,9 +198,6 @@ Example:
   dws contact dept search --query "技术部"
 Flags:
       --query string   搜索关键词 (必填)
-Returns: (顶层 key 为 `deptList`，非 `result`，为列表，每项包含以下字段)
-  deptId           int      部门 ID
-  deptName         string   部门名称（命中关键词会用 <red>…</red> 高亮包裹，需自行去标签）
 ```
 
 #### 获取部门详情
@@ -244,18 +238,15 @@ Notes:
 Usage:
   dws contact dept list-members [flags]
 Example:
-  dws contact dept list-members --depts 12345,67890
-  dws contact dept list-members --depts 1              # 根部门
+  dws contact dept list-members --ids 12345,67890
+  dws contact dept list-members --ids 1              # 根部门
 Flags:
-      --depts string   部门 ID 列表，逗号分隔 (必填)
-Returns: (顶层 key 为 `deptUserList`，非 `result`，为列表，每项形如 { "userInfo": { "name": ..., "userId": ... } })
-  userInfo.name    string   成员姓名
-  userInfo.userId  string   成员 ID
+      --ids string   部门 ID 列表，逗号分隔 (必填)
 Notes:
-  - **钉钉根部门 `deptId=1`**；查根部门直属成员用 `--depts 1`
+  - **钉钉根部门 `deptId=1`**；查根部门直属成员用 `--ids 1`
   - 仅返回**本部门**直接成员，**不含下级部门**成员；需含下级请先 `dept list-children` 枚举子部门，再对子 deptId 分别/合并调用 `list-members`
-  - 受组织架构可见性控制；`--depts` 支持逗号分隔批量查询多个部门
-  - 跨层级成员展开见 [08-directory.md](./08-directory.md) 的 `cross-level-dept-members` recipe
+  - 受组织架构可见性控制；`--ids` 支持逗号分隔批量查询多个部门
+  - 跨层级成员展开见 [08-directory.md](08-directory.md) 的 `cross-level-dept-members` recipe
 ```
 
 #### 创建部门
@@ -263,16 +254,18 @@ Notes:
 Usage:
   dws contact dept create [flags]
 Example:
-  dws contact dept create --name "新产品部" --create-dept-group=true
-  dws contact dept create --name "研发一组" --parent 12345 --create-dept-group=false --yes
+  dws contact dept create --name "新产品部" --create-dept-group true
+  dws contact dept create --name "研发一组" --parent 12345 --create-dept-group false --yes
 Flags:
       --name string             部门名称 (必填)
-      --parent string           父部门 ID（可选，不传默认根部门）
-      --create-dept-group bool  是否创建部门群（必填，必须显式传 true 或 false）
+      --parent string           父部门 ID（可选），不传默认根部门
+      --create-dept-group bool  是否创建部门群（必填）
       --yes                     跳过二次确认（可选）
 Notes:
-  - 不传 --parent 时默认根部门 deptId=1
-  - 默认要求确认；自动化场景在已获得用户确认后显式传 --yes
+  - 父部门不传时默认钉钉根部门 deptId=1
+  - --create-dept-group 必须显式指定 true 或 false
+  - 未加 --yes 时会交互式提示确认；脚本/自动化场景请显式带上 --yes
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
 ```
 
 #### 更新部门
@@ -284,12 +277,14 @@ Example:
   dws contact dept update --dept 12345 --name "新名称" --parent 67890 --yes
 Flags:
       --dept string    部门 ID (必填)
-      --name string    新部门名称 (必填)
+      --name string    新部门名称（必填）
       --parent string  新父部门 ID（可选）
       --yes            跳过二次确认（可选）
 Notes:
-  - --dept 可由 dept search 或 dept list-children 获取
-  - 默认要求确认；自动化场景在已获得用户确认后显式传 --yes
+  - --dept 为要更新的部门 ID，可通过 dept search 或 dept list-children 获取
+  - --name 必填；--parent 可选，未指定时只更新部门名称
+  - 未加 --yes 时会交互式提示确认；脚本/自动化场景请显式带上 --yes
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
 ```
 
 ### label (角色查询)
@@ -305,7 +300,7 @@ Example:
 Flags:
   无
 Notes:
-  - 无需参数，返回当前企业全部角色，按 `groupName` 分组，每组 `labels[]` 里每个角色是 `{labelId, name}`（字段名是 `name`，不是 `labelName`）
+  - 无需参数，返回当前企业全部角色列表（labelId、labelName等）
   - 用于不知道准确角色名称时先浏览全部角色
   - 典型场景：用户说“企业所有主管/查所有管理员/财务人员有哪些”→ 先 label list 浏览全部角色，匹配目标角色后 label list-members 获取成员
 ```
@@ -384,43 +379,46 @@ Aliases:
 Example:
   dws contact account update --user-id user001 --org-user-name "张三"
   dws contact account update --user-id user001 --depts '[{"deptId":1}]'
-  dws contact account update --user-id user001 --nick "新昵称" --avatar-file-id <fileId> --yes
+  dws contact account update --user-id user001 --nick "新昵称" --avatar-file-id "xxxxxx" --yes
 Flags:
       --user-id string         被修改企业账号的 userId (必填)
       --org-user-name string   企业账号在企业内的员工姓名（可选）
       --depts string           部门列表 JSON 数组（可选），格式: [{"deptId":1}]
       --master-user-id string  直属主管 userId（可选）
-      --nick string            企业账号自身昵称（可选）
+      --nick string            企业账号自身昵称，用于 profile 展示（可选）
       --avatar-file-id string  企业账号头像在钉盘的 fileId（可选）
       --yes                    跳过二次确认（可选）
 Notes:
-  - 此命令修改企业账号，不用于普通员工；至少传一个修改项
-  - 头像 fileId 需先上传到钉盘取得
-  - 默认要求确认；自动化场景在已获得用户确认后显式传 --yes
+  - 更新指定企业账号用户的信息，不是修改普通员工信息
+  - 至少需要一个修改项（--org-user-name / --depts / --master-user-id / --nick / --avatar-file-id）
+  - 头像 fileId 需要先上传头像到钉盘获取
+  - 未加 --yes 时会交互式提示确认；脚本/自动化场景请显式带上 --yes
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
 ```
 
 ## 意图判断
 
-> **搜人首选 `aisearch person`**：凡是“找人/搜人/找同事/谁负责/上级/下级”均优先用 [aisearch person](../../dingtalk-aisearch/references/aisearch.md)，以下场景才用 contact。
+> **按搜索性质分流**：姓名模糊搜索、工号、部门、职责和上下级使用 [aisearch person](../../dingtalk-aisearch/references/aisearch.md)；完整手机号精确反查使用 `user search-mobile`；拿到 userId 后，以下详情、部门和角色场景再用 contact。
 
 用户说"我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami" → `user get-self`（无需参数；禁止用 `user get --ids me/self` 代替）
-用户需要 userId 给其他产品使用（发消息/建待办/约日程）→ `user search`（按名字）或 `user search-mobile`（按手机号）
+用户需要 userId 给其他产品使用（发消息/建待办/约日程）→ `aisearch person` 按对应维度搜索
+用户提供完整手机号并要求反查用户 → `user search-mobile --mobile "<完整手机号>"`
 用户说"查用户详情/部门/主管/管理员" → `user get`（需 userId，返回组织管理信息）
-用户说"修改员工/改员工姓名/调整员工部门或主管" → `user update`（需 userId；至少传一个修改项）
-用户说"改自己的昵称/头像/profile" → `user update-self`（昵称、头像至少一项）
-用户说"邀请员工/添加员工/加人/新员工入职/拉人进企业" → `user invite`（需手机号 + 企业内名称，部门可选）
+用户说"修改员工/更新员工/改员工姓名/改员工部门/换部门/改直属主管/换主管/调整员工信息" → `user update`（需 userId；姓名 / 部门 / 主管至少改一项）
+用户说"改昵称/改头像/更新我的资料/更新我的profile/更新我的个人信息/修改我的昵称" → `user update-self`（昵称 / 头像至少改一项；头像 fileId 需先上传钉盘）
+用户说"邀请员工/添加员工/批量邀请/加人/新员工入职/拉人进企业" → `user invite`（需手机号 + 企业内名称 + 部门）
 用户说"花名册字段/有哪些字段/字段列表" → `user profile fields`
 用户说"花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同" → `user profile get`（需 staffId，返回个人档案信息）
 用户说"离职员工/离职名单/离职人员/已离职" → `user dismission search`
 用户说"创建企业账号/新建企业账号/开通企业账号/专属账号/企业登录账号"（含"账号"）→ `account create`（需员工名称 + 登录号；手机号可选）
-用户说"更新企业账号/修改企业账号姓名、部门、主管、昵称或头像" → `account update`（需 userId；至少传一个修改项）
+用户说"更新企业账号/修改企业账号/改企业账号信息/改企业账号姓名/改企业账号部门/改企业账号主管/改企业账号昵称/改企业账号头像"（含"账号"且含"改/更新/修改"）→ `account update`（需 userId；至少改一项）
 用户说"创建企业/新建企业/开通企业/初始化企业"（不含"账号"）→ `org create`（需企业名称 + 创建者名称）
 用户说"找部门/哪个部门" → `dept search`
 用户说"部门详情/部门信息/部门多少人" → `dept get-info`（返回部门ID、部门名称、部门人数；需 deptId，若只有部门名称需先 `dept search`）
 用户说"子部门/下设部门/部门有哪些下级部门/枚举二级部门" → `dept list-children`（需父 deptId；只有部门名先 `dept search`）
 用户说"部门有谁/部门成员/人员名单" → `dept list-members`（需 deptId；**仅本部门不含下级**，含下级先 `dept list-children` 再合并查）
-用户说"创建/新建部门" → `dept create`（部门名必填；是否创建部门群必须显式选择）
-用户说"更新部门/改部门名/调整上级部门" → `dept update`（部门 ID 和新名称必填）
+用户说"创建部门/新建部门/添加部门/成立部门/建部门" → `dept create`（需部门名；父部门可选，默认根部门）
+用户说"更新部门/修改部门/改部门名/改部门名称/换部门名/改父部门/换上级部门" → `dept update`（需 deptId + name；parent 可选）
 用户查询涵盖"角色"（主管/管理员/财务/HR/总经理等任意角色名）→ 统一走 `contact label` 链路，按下方决策树选命令：
 - 不知道角色名 / 枚举所有角色 → `label list`
 - 已知角色名，查ID或成员 → 先 `label get --names <名>` 拿ID，查成员再调 `label list-members --id <ID>`；**精确匹配无结果时降级 `label list` 模糊匹配**
@@ -463,7 +461,7 @@ Notes:
 > - "我特别关注的人**最近发了什么消息**" → `chat message list-focused`（含"发""消息"）
 > - "我关注的人**最近都说了啥**" → `chat message list-focused`（含"说"）
 
-组合场景（多子部门、跨层级成员、强消歧）见 [08-directory.md](./08-directory.md)。
+组合场景（多子部门、跨层级成员、强消歧）见 [08-directory.md](08-directory.md)。
 
 ## 核心工作流
 
@@ -471,8 +469,8 @@ Notes:
 # 1. 查看自己的信息 — 提取 userId
 dws contact user get-self --format json
 
-# 2. 按名字搜索同事或好友 — 可提取 同事的userId，或好友的openDingTalkId
-dws contact user search --query "张三" --format json
+# 2. 按名字搜索人员 — 统一从 AI 搜问取得 userId/openDingTalkId
+dws aisearch person --keyword "张三" --dimension name --format json
 
 # 3. 查看部门结构 — 提取 deptId
 dws contact dept search --query "技术部" --format json
@@ -484,7 +482,7 @@ dws contact dept get-info --dept <deptId> --format json
 dws contact dept list-children --dept <父deptId> --format json
 
 # 6. 查看部门成员
-dws contact dept list-members --depts <deptId> --format json
+dws contact dept list-members --ids <deptId> --format json
 
 # 7. 获取企业所有角色列表 — 不知道角色名时先浏览
 dws contact label list --format json
@@ -516,25 +514,25 @@ dws contact user dismission search --depts 123456,789012 --hide-retirement=false
 dws contact org create --org-name "我的企业" --creator-username "张三" --format json
 
 # 16. 创建企业专属账号
-dws contact account create --org-user-name "张三" --login-id "zhangsan001" --format json
+dws contact account create --org-user-name "张三" --login-id "zhangsan001" --org-user-mobile "13800138000" --email "zhangsan@example.com" --dept-ids "1,2,3" --send-pwd-via-sms --format json
 
-# 17. 邀请员工加入企业
+# 17. 更新企业账号用户信息
+dws contact account update --user-id user001 --org-user-name "张三三" --depts '[{"deptId":1}]' --master-user-id manager001 --nick "新昵称" --avatar-file-id "xxxxxx" --yes --format json
+
+# 18. 邀请员工加入企业
 dws contact user invite --org-user-name "张三" --org-user-mobile "13800138000" --depts '[{"deptId":1}]' --format json
 
-# 18. 修改员工组织信息
-dws contact user update --user-id user001 --org-user-name "张三三" --depts '[{"deptId":1}]' --yes --format json
+# 19. 修改员工信息
+dws contact user update --user-id user001 --org-user-name "张三三" --depts '[{"deptId":1}]' --master-user-id manager001 --yes --format json
 
-# 19. 更新自己的昵称或头像
-dws contact user update-self --nick "新昵称" --yes --format json
+# 20. 更新自己的 profile 信息
+dws contact user update-self --nick "新昵称" --avatar-file-id "xxxxxx" --yes --format json
 
-# 20. 创建部门
-dws contact dept create --name "新产品部" --parent 1 --create-dept-group=true --yes --format json
+# 21. 创建部门
+dws contact dept create --name "新产品部" --parent 12345 --create-dept-group true --yes --format json
 
-# 21. 更新部门
-dws contact dept update --dept 12345 --name "新部门名" --yes --format json
-
-# 22. 更新企业账号信息
-dws contact account update --user-id user001 --nick "新昵称" --yes --format json
+# 22. 更新部门
+dws contact dept update --dept 12345 --name "新部门名" --parent 67890 --yes --format json
 ```
 
 ## 上下文传递表
@@ -545,18 +543,18 @@ dws contact account update --user-id user001 --nick "新昵称" --yes --format j
 | `user get-self/search` | `orgAuthEmail` | mail message send 的 --to/--cc (跨产品) |
 | `user get-self/search` | `userId` | profile get 的 --staff-id |
 | `user profile fields` | `fieldCode` | profile get 的 --fields |
-| `label list` | `labelId` / `name` | `label get --names` 或 `label list-members --id` |
+| `label list` | `labelId` / `labelName` | `label get --names` 或 `label list-members --id` |
 | `label get` | `labelId` | `label list-members` 的 --id |
-| `dept search/list-children/create` | `deptId` | dept get-info/list-children/list-members/update 的 --dept/--depts |
+| `dept search/list-children` | `deptId` | dept get-info/list-children/update 的 --dept；dept list-members 的 --ids |
 | `dept search/list-children` | `deptId` | dismission search 的 --depts |
-| `dept search/list-children` | `deptId` | user invite 的 --depts 或 account create 的 --dept-ids |
+| `dept create` | `deptId` | dept get-info/list-children/update 的 --dept；dept list-members 的 --ids |
 
 ## 注意事项
 
 - `user get-self` 是获取 userId 的最快方式，其他产品的 --users/--executor 都需要 userId
-- `user get --ids` 和 `dept list-members --depts` 都支持批量查询，逗号分隔
+- `user get --ids` 和 `dept list-members --ids` 都支持批量查询，逗号分隔
 - `user get` 返回组织管理信息（部门、主管、管理员权限），`user profile get` 返回个人档案信息（学历、家庭、银行卡等），注意区分
-- `user profile get` 的 `--staff-id` 可通过 `user get-self`、`user search` 或 `aisearch person` 获取
+- `user profile get` 的 `--staff-id` 可通过 `user get-self` 或 `aisearch person` 获取
 - `user profile get` 的 `--fields` 可通过 `user profile fields` 获取可用字段 code 列表；不填则查询所有可见字段
 - 建议先执行 `user profile fields` 获取可用字段列表，再根据需要的字段 code 执行 `user profile get`
 - `user dismission search` 的 `--start`/`--end` 必须同时设置或同时不设置，不允许只传其中一个
@@ -566,7 +564,8 @@ dws contact account update --user-id user001 --nick "新昵称" --yes --format j
 - `label get` 是精确匹配角色名称，不支持模糊搜索；支持逗号分隔同时查询多个角色名称
 - **`label get` 精确匹配无结果时的降级策略**：若 `label get --names "XX"` 返回空结果，必须降级调用 `label list` 获取全部角色列表，从中模糊匹配包含XX关键词的角色（如用户说"管理员"可匹配到"主管理员"和"子管理员"），再对匹配到的角色调用 `label list-members`
 - `label list-members` 需要先通过 `label list` 或 `label get` 获取 labelId，再用 --id 查询角色下的成员
-- `org create`、`account create/update`、`user invite/update/update-self`、`dept create/update` 都是写操作；执行前确认当前 profile、目标对象和修改字段。带确认保护的命令只在用户明确同意后追加 `--yes`
+- `user update-self` 用于更新当前用户自己的昵称/头像；头像 fileId 需先上传头像到钉盘获取
+- `account update` 用于更新企业账号用户信息；`--depts` 为 JSON 数组格式，头像 fileId 需先上传钉盘获取
 
 ## 自动化脚本
 

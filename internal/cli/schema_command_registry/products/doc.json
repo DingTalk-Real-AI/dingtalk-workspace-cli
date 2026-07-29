@@ -2,6 +2,74 @@
   "id": "doc",
   "tools": [
     {
+      "canonical_path": "doc.shortcut_comment_create",
+      "cli_path": "doc +comment-create"
+    },
+    {
+      "canonical_path": "doc.shortcut_comment_list",
+      "cli_path": "doc +comment-list"
+    },
+    {
+      "canonical_path": "doc.shortcut_comment_reply",
+      "cli_path": "doc +comment-reply"
+    },
+    {
+      "canonical_path": "doc.shortcut_copy",
+      "cli_path": "doc +copy"
+    },
+    {
+      "canonical_path": "doc.shortcut_doc_append",
+      "cli_path": "doc +doc-append"
+    },
+    {
+      "canonical_path": "doc.shortcut_export_get",
+      "cli_path": "doc +export-get"
+    },
+    {
+      "canonical_path": "doc.shortcut_export_submit",
+      "cli_path": "doc +export-submit"
+    },
+    {
+      "canonical_path": "doc.shortcut_find_doc",
+      "cli_path": "doc +find-doc"
+    },
+    {
+      "canonical_path": "doc.shortcut_list",
+      "cli_path": "doc +list"
+    },
+    {
+      "canonical_path": "doc.shortcut_move",
+      "cli_path": "doc +move"
+    },
+    {
+      "canonical_path": "doc.shortcut_search",
+      "cli_path": "doc +search"
+    },
+    {
+      "canonical_path": "doc.shortcut_share_doc",
+      "cli_path": "doc +share-doc"
+    },
+    {
+      "canonical_path": "doc.shortcut_template_list",
+      "cli_path": "doc +template-list"
+    },
+    {
+      "canonical_path": "doc.shortcut_template_search",
+      "cli_path": "doc +template-search"
+    },
+    {
+      "canonical_path": "doc.shortcut_version_list",
+      "cli_path": "doc +version-list"
+    },
+    {
+      "canonical_path": "doc.shortcut_version_revert",
+      "cli_path": "doc +version-revert"
+    },
+    {
+      "canonical_path": "doc.shortcut_version_save",
+      "cli_path": "doc +version-save"
+    },
+    {
       "canonical_path": "doc.delete_document_block",
       "cli_path": "doc block delete"
     },
@@ -122,6 +190,26 @@
       "cli_path": "doc search"
     },
     {
+      "canonical_path": "doc.style_background_clear",
+      "cli_path": "doc style background clear"
+    },
+    {
+      "canonical_path": "doc.style_background_set",
+      "cli_path": "doc style background set"
+    },
+    {
+      "canonical_path": "doc.style_cover_clear",
+      "cli_path": "doc style cover clear"
+    },
+    {
+      "canonical_path": "doc.style_cover_set",
+      "cli_path": "doc style cover set"
+    },
+    {
+      "canonical_path": "doc.get_document_style",
+      "cli_path": "doc style get"
+    },
+    {
       "canonical_path": "doc.template_apply",
       "cli_path": "doc template apply"
     },
@@ -152,74 +240,6 @@
     {
       "canonical_path": "doc.version_save",
       "cli_path": "doc version save"
-    },
-    {
-      "canonical_path": "doc.shortcut_search",
-      "cli_path": "doc +search"
-    },
-    {
-      "canonical_path": "doc.shortcut_list",
-      "cli_path": "doc +list"
-    },
-    {
-      "canonical_path": "doc.shortcut_copy",
-      "cli_path": "doc +copy"
-    },
-    {
-      "canonical_path": "doc.shortcut_move",
-      "cli_path": "doc +move"
-    },
-    {
-      "canonical_path": "doc.shortcut_comment_list",
-      "cli_path": "doc +comment-list"
-    },
-    {
-      "canonical_path": "doc.shortcut_comment_create",
-      "cli_path": "doc +comment-create"
-    },
-    {
-      "canonical_path": "doc.shortcut_comment_reply",
-      "cli_path": "doc +comment-reply"
-    },
-    {
-      "canonical_path": "doc.shortcut_export_submit",
-      "cli_path": "doc +export-submit"
-    },
-    {
-      "canonical_path": "doc.shortcut_export_get",
-      "cli_path": "doc +export-get"
-    },
-    {
-      "canonical_path": "doc.shortcut_version_save",
-      "cli_path": "doc +version-save"
-    },
-    {
-      "canonical_path": "doc.shortcut_version_list",
-      "cli_path": "doc +version-list"
-    },
-    {
-      "canonical_path": "doc.shortcut_version_revert",
-      "cli_path": "doc +version-revert"
-    },
-    {
-      "canonical_path": "doc.shortcut_template_list",
-      "cli_path": "doc +template-list"
-    },
-    {
-      "canonical_path": "doc.shortcut_template_search",
-      "cli_path": "doc +template-search"
-    },
-    {
-      "canonical_path": "doc.shortcut_doc_append",
-      "cli_path": "doc +doc-append"
-    },
-    {
-      "canonical_path": "doc.shortcut_find_doc",
-      "cli_path": "doc +find-doc"
-    },
-    {
-      "canonical_path": "doc.shortcut_share_doc",
-      "cli_path": "doc +share-doc"
     }
   ]
 }

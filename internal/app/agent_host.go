@@ -24,6 +24,7 @@ import (
 const (
 	envDWSAgentHost    = "DWS_AGENT_HOST"
 	headerDWSAgentHost = "x-dws-agent-host"
+	maxAgentHostBytes  = 64
 )
 
 var agentHostPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -32,22 +33,26 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        envDWSAgentHost,
 		Category:    configmeta.CategoryExternal,
-		Description: "调用 DWS 的 Agent 宿主标识；仅用于日志和 BI 观测",
-		Example:     "qwenwork_cloud",
+		Description: "调用 DWS 的 Agent 运行形态标识；服务端可结合产品用于观测和 PAT 兼容策略",
+		Example:     "cloud",
 	})
 }
 
-// parseAgentHost normalizes and validates the caller-provided observation
-// label. CR/LF is rejected before trimming so it can never be hidden at the
-// edge of a value. An unset or whitespace-only value means "do not emit".
+// parseAgentHost normalizes and validates the caller-declared runtime-form
+// signal. Only surrounding ASCII spaces and tabs are trimmed; other control
+// or Unicode whitespace remains visible to validation and is rejected. An
+// unset or ASCII-whitespace-only value means "do not emit".
 func parseAgentHost(raw string) (string, error) {
 	if strings.ContainsAny(raw, "\r\n") {
 		return "", invalidAgentHostError()
 	}
 
-	value := strings.TrimSpace(raw)
+	value := strings.Trim(raw, " \t")
 	if value == "" {
 		return "", nil
+	}
+	if len(value) > maxAgentHostBytes {
+		return "", invalidAgentHostError()
 	}
 	if !agentHostPattern.MatchString(value) {
 		return "", invalidAgentHostError()
@@ -59,7 +64,7 @@ func invalidAgentHostError() error {
 	// Do not include the raw environment value in the error: it is an
 	// untrusted caller-controlled string and may contain sensitive data.
 	return apperrors.NewValidation(
-		"DWS_AGENT_HOST must match ^[a-z0-9][a-z0-9_-]*$",
+		"DWS_AGENT_HOST must be at most 64 bytes and match ^[a-z0-9][a-z0-9_-]*$",
 		apperrors.WithReason("invalid_agent_host"),
 	)
 }

@@ -17080,6 +17080,264 @@
         "用户只提供数字群号且需要 openConversationId 时"
       ]
     },
+    "chat group get-mute-config": {
+      "agent_summary": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group get-mute-config --group \u003copenConversationId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat group get-mute-config --group \u003copenConversationId\u003e --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat group get-mute-config --group \u003copenConversationId\u003e --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户说 看下群里谁被禁言/禁言配置"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "用户说 看下群里谁被禁言/禁言配置"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.get_group_mute_config",
+        "cobra-help:dws chat group get-mute-config",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "wukong-develop:wukong/products"
+      ],
+      "use_when": [
+        "用户说 看下群里谁被禁言/禁言配置"
+      ]
+    },
     "chat group invite-url": {
       "agent_summary": "获取指定群聊的邀请链接",
       "agent_summary_source": "dws-agent-selection/chat",
@@ -23513,6 +23771,522 @@
       ],
       "use_when": [
         "群主明确要求保留现有会话并升级为可跨组织协作的外部群，且已确认不可逆影响"
+      ]
+    },
+    "chat group user-settings query": {
+      "agent_summary": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "管理员级群功能开关用 chat group update-settings"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group user-settings query --groups cid1,cid2 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "管理员级群功能开关用 chat group update-settings"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "管理员级群功能开关用 chat group update-settings"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat group user-settings query --groups cid1,cid2 --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat group user-settings query --groups cid1,cid2 --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户说 看下这些群我的置顶和免打扰设置"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "用户说 看下这些群我的置顶和免打扰设置"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.batch_query_group_chat_settings",
+        "cobra-help:dws chat group user-settings query",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "wukong-develop:wukong/products"
+      ],
+      "use_when": [
+        "用户说 看下这些群我的置顶和免打扰设置"
+      ]
+    },
+    "chat group user-settings set": {
+      "agent_summary": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "单个群昵称优先 chat group update-nick"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group user-settings set --items '[{\"openConversationId\":\"cid1\",\"top\":true,\"mute\":false}]' --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "单个群昵称优先 chat group update-nick"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "单个群昵称优先 chat group update-nick"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat group user-settings set --items '[{\"openConversationId\":\"cid1\",\"top\":true,\"mute\":false}]' --format json"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat group user-settings set --items '[{\"openConversationId\":\"cid1\",\"top\":true,\"mute\":false}]' --format json"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "medium",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed"
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "用户说 把这些群都设为免打扰/置顶"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "candidates": [
+            {
+              "value": [
+                "用户说 把这些群都设为免打扰/置顶"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "risk": "medium",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.batch_update_group_chat_settings",
+        "cobra-help:dws chat group user-settings set",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "wukong-develop:wukong/products"
+      ],
+      "use_when": [
+        "用户说 把这些群都设为免打扰/置顶"
       ]
     },
     "chat group-mute": {
@@ -37527,6 +38301,296 @@
       ],
       "use_when": [
         "已有 message send-card 真实返回的 bizId，并需要追加内容或结束流式输出时；最后一次更新使用完成状态"
+      ]
+    },
+    "chat message update-text-emotion": {
+      "agent_summary": "把消息上已有的文字表情原地替换为新的文字表情",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "消息上还没有文字表情时使用 chat message add-text-emotion",
+        "只需清除文字表情时使用 chat message remove-text-emotion"
+      ],
+      "confirmation": "not_required",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat message update-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --old-emotion-id \u003coldEmotionId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "把消息上已有的文字表情原地替换为新的文字表情",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "candidates": [
+            {
+              "value": "把消息上已有的文字表情原地替换为新的文字表情",
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "消息上还没有文字表情时使用 chat message add-text-emotion",
+            "只需清除文字表情时使用 chat message remove-text-emotion"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "candidates": [
+            {
+              "value": [
+                "消息上还没有文字表情时使用 chat message add-text-emotion",
+                "只需清除文字表情时使用 chat message remove-text-emotion"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            },
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "effect": {
+          "value": "write",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            },
+            {
+              "value": "write",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws chat message update-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --old-emotion-id \u003coldEmotionId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "candidates": [
+            {
+              "value": [
+                "dws chat message update-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --old-emotion-id \u003coldEmotionId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            },
+            {
+              "value": "unknown",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "composite",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": "composite",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            }
+          ]
+        },
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet.",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call."
+            },
+            {
+              "value": "medium",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": false
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
+          ],
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "candidates": [
+            {
+              "value": [
+                "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
+              ],
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet.",
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws chat message update-text-emotion",
+        "dws-wukong:30f13f02",
+        "dws-wukong:bcf56ccf",
+        "dws-wukong:d6831318",
+        "github:hugozhu/dingtalk-opencode-tag#85",
+        "internal/cli/schema_command_registry/products/chat.json#chat.update_text_emotion",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "live-dws-schema:im.update_text_emotion#FAILED_NOT_AUTHENTICATED",
+        "skills/mono/references/products/chat.md"
+      ],
+      "use_when": [
+        "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
       ]
     },
     "chat mute": {

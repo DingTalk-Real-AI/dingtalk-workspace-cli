@@ -5,13 +5,50 @@
 | Variable | Purpose / 用途 |
 |---------|---------|
 | `DWS_CONFIG_DIR` | Override default config directory / 覆盖默认配置目录 |
-| `DWS_AGENT_HOST` | Optional Agent host observation label sent as `x-dws-agent-host` (for example `qwenwork_cloud`). Values are trimmed and must match `^[a-z0-9][a-z0-9_-]*$`; unset values are omitted. Used only for logs and BI, never for authentication or routing. / 可选 Agent 宿主观测标识，经裁剪并校验后作为 `x-dws-agent-host` 发送；仅用于日志与 BI，不参与鉴权或路由 |
+| `DWS_AGENT_PRODUCT` | Optional, caller-declared Agent product sent through the existing HTTP `claw-type` header (for example `qwenwork`). Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[A-Za-z0-9][A-Za-z0-9_-]*$`. Unset or empty values preserve the edition default (`openClaw` in the open-source build). / 可选、由调用方声明的 Agent 产品标识，经校验后覆盖 HTTP `claw-type` 请求头；未设置或为空时保持当前发行版默认值 |
+| `DWS_AGENT_HOST` | Optional, caller-declared Agent runtime form sent as `x-dws-agent-host` (for example `cloud` or `desktop`). Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[a-z0-9][a-z0-9_-]*$`; unset values are omitted. / 可选、由调用方声明的 Agent 运行形态，经校验后作为 `x-dws-agent-host` 发送；未设置时省略 |
 | `DWS_<PRODUCT>_MCP_URL` | Override a product MCP endpoint for local development / 本地开发时覆盖指定产品 MCP endpoint |
 | `DWS_CLIENT_ID` | OAuth client ID (DingTalk AppKey) |
 | `DWS_CLIENT_SECRET` | OAuth client secret (DingTalk AppSecret) |
 | `DWS_TRUSTED_DOMAINS` | Comma-separated trusted domains for bearer token (default: `*.dingtalk.com`). `*` for dev only / Bearer token 允许发送的域名白名单，默认 `*.dingtalk.com`，仅开发环境可设为 `*` |
 | `DWS_ALLOW_HTTP_ENDPOINTS` | Set `1` to allow HTTP for loopback during dev / 设为 `1` 允许回环地址 HTTP，仅用于开发调试 |
 | `DWS_DISABLE_KEYCHAIN` | macOS only. Set `1` to skip system Keychain for the encryption key and use file-based storage (same scheme as Linux). For sandboxed runtimes (e.g. Codex App) that block Keychain APIs. Weakens at-rest protection — DEK and ciphertext live in the same directory. / 仅 macOS。设为 `1` 时跳过系统 Keychain，密钥以文件形式存储（与 Linux 一致）。用于 Keychain API 被拦截的沙盒环境（如 Codex App）。代价是 DEK 与密文同目录，保护强度低于默认方案 |
+
+### Agent Product and Host trust model / Agent 产品与运行形态的信任模型
+
+`DWS_AGENT_PRODUCT` and `DWS_AGENT_HOST` are caller-declared selection and
+observation signals. They are not credentials, attestations, or proof of the
+calling host's identity. DingTalk services may record them for logs/BI and may
+combine supported values with separately authenticated context for PAT
+compatibility, PAT identity/source derivation, or Discovery eligibility. A
+service must allowlist supported values and must never grant access, bypass
+authentication, or skip authorization solely because either Header claims a
+particular product or runtime form. They are not used to select ordinary MCP
+tool endpoints.
+
+`DWS_AGENT_PRODUCT` controls only the HTTP `claw-type` Header. The similarly
+named `clawType` tool argument on IM send operations is an independent
+message-display axis used for the “Send from AI” label. It remains controlled
+by the active edition's `ClawTypeValue` and `--ai-tag`; changing
+`DWS_AGENT_PRODUCT` does not change that message label.
+
+For QwenWork, report the dimensions separately:
+
+```bash
+DWS_AGENT_PRODUCT=qwenwork
+DWS_AGENT_HOST=cloud       # or desktop
+```
+
+Do not set arbitrary product values that the target service has not explicitly
+enabled. Older combined Host labels such as `qwenwork_cloud` still satisfy the
+generic syntax for compatibility, but new integrations should use the
+two-dimensional convention above.
+
+`DWS_AGENT_PRODUCT` 和 `DWS_AGENT_HOST` 均由调用方声明，不是认证凭据，也不能证明
+真实宿主身份。服务端可以在独立认证上下文中将受支持值用于日志/BI、PAT 兼容策略、
+PAT 身份/来源派生或 Discovery 准入，但不得仅凭这两个 Header 放权、绕过认证或跳过
+授权。HTTP `claw-type` 与 IM 消息发送参数 `clawType` 是两个独立维度；后者仅控制
+“Send from AI”展示，仍由发行版 `ClawTypeValue` 和 `--ai-tag` 决定。
 
 ## Exit Codes / 退出码
 

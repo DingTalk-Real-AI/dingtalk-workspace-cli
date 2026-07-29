@@ -2995,6 +2995,87 @@
         "cobra-help:dws chat +unread-chats",
         "ShortcutRegistry:chat +unread-chats"
       ]
+    },
+    "chat.update_text_emotion": {
+      "agent_summary": "把消息上已有的文字表情原地替换为新的文字表情",
+      "use_when": [
+        "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
+      ],
+      "avoid_when": [
+        "消息上还没有文字表情时使用 chat message add-text-emotion",
+        "只需清除文字表情时使用 chat message remove-text-emotion"
+      ],
+      "examples": [
+        "dws chat message update-text-emotion --conversation-id <openConversationId> --msg-id <openMessageId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"
+      ],
+      "reviewed": true,
+      "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+      "source_refs": [
+        "internal/cli/schema_command_registry/products/chat.json#chat.update_text_emotion",
+        "cobra-help:dws chat message update-text-emotion",
+        "dws-wukong:d6831318",
+        "dws-wukong:bcf56ccf",
+        "dws-wukong:30f13f02",
+        "github:hugozhu/dingtalk-opencode-tag#85",
+        "live-dws-schema:im.update_text_emotion#FAILED_NOT_AUTHENTICATED"
+      ]
+    },
+    "chat.get_group_mute_config": {
+      "agent_summary": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）",
+      "use_when": [
+        "用户说 看下群里谁被禁言/禁言配置"
+      ],
+      "avoid_when": [
+        "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+      ],
+      "examples": [
+        "dws chat group get-mute-config --group <openConversationId> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.get_group_mute_config",
+        "cobra-help:dws chat group get-mute-config",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "chat.batch_query_group_chat_settings": {
+      "agent_summary": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+      "use_when": [
+        "用户说 看下这些群我的置顶和免打扰设置"
+      ],
+      "avoid_when": [
+        "管理员级群功能开关用 chat group update-settings"
+      ],
+      "examples": [
+        "dws chat group user-settings query --groups cid1,cid2 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.batch_query_group_chat_settings",
+        "cobra-help:dws chat group user-settings query",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "chat.batch_update_group_chat_settings": {
+      "agent_summary": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+      "use_when": [
+        "用户说 把这些群都设为免打扰/置顶"
+      ],
+      "avoid_when": [
+        "单个群昵称优先 chat group update-nick"
+      ],
+      "examples": [
+        "dws chat group user-settings set --items '[{\"openConversationId\":\"cid1\",\"top\":true,\"mute\":false}]' --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=chat.batch_update_group_chat_settings",
+        "cobra-help:dws chat group user-settings set",
+        "wukong-develop:wukong/products"
+      ]
     }
   },
   "products": {

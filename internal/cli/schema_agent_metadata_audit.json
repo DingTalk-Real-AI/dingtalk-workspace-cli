@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:02469ab80c5db473ec76bdbfc92375415c36ece34245d405bf0ab20640b2e292",
-  "surface_hash": "sha256:02b1fb94e6d850bf90063b35e5959e6072f9f5f4fbde57eb9d68c42f81346a63",
+  "source_hash": "sha256:67d47c8825d6c95f898e41484e8ae35818d9d5712369e63f1f870c35f252e405",
+  "surface_hash": "sha256:7e52c21569728ce895510615893c80f2581626a7cec34247959d70ce6a1a052b",
   "source_files": 160,
   "hint_files": 54,
   "hint_products": 43,
-  "hint_tools": 1838,
+  "hint_tools": 1892,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -29,13 +29,13 @@
   "coverage": {
     "surface_products": 26,
     "products_with_metadata": 26,
-    "surface_tools": 843,
-    "tools_with_metadata": 843,
-    "tools_with_agent_summary": 843,
-    "tools_with_use_when": 843,
-    "tools_with_avoid_when": 843,
-    "tools_with_examples": 843,
-    "tools_with_interface_mode": 843,
+    "surface_tools": 870,
+    "tools_with_metadata": 870,
+    "tools_with_agent_summary": 870,
+    "tools_with_use_when": 870,
+    "tools_with_avoid_when": 870,
+    "tools_with_examples": 870,
+    "tools_with_interface_mode": 870,
     "unmatched_skill_tools": 96,
     "unreviewed_skill_tools": 11
   },
@@ -904,7 +904,7 @@
     {
       "tool_path": "chat group members",
       "source": "skills/mono/references/products/chat.md",
-      "line": 1855,
+      "line": 1871,
       "candidates": [
         "chat group members add",
         "chat group members add-bot",
@@ -918,7 +918,7 @@
     {
       "tool_path": "chat group notice create/edit/get/list",
       "source": "skills/mono/references/products/chat.md",
-      "line": 1908,
+      "line": 1924,
       "candidates": [
         "chat group notice create",
         "chat group notice edit",

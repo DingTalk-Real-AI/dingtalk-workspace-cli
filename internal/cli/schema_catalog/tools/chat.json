@@ -6359,6 +6359,840 @@
         "已从 list-join-validations 取得真实记录、申请人和邀请人 ID，需要执行 AuditApprove 或 AuditDelete 时"
       ]
     },
+    "chat.batch_query_group_chat_settings": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=chat.batch_query_group_chat_settings",
+        "cobra-help:dws chat group user-settings query",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "管理员级群功能开关用 chat group update-settings"
+      ],
+      "canonical_path": "chat.batch_query_group_chat_settings",
+      "cli_name": "query",
+      "cli_path": "chat group user-settings query",
+      "confirmation": "not_required",
+      "description": "批量查询当前用户的群会话设置",
+      "display": "群聊 / 消息 / 机器人",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group user-settings query --groups cid1,cid2 --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "管理员级群功能开关用 chat group update-settings"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "管理员级群功能开关用 chat group update-settings"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "chat group user-settings query",
+              "value": "chat.batch_query_group_chat_settings"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "chat group user-settings query",
+          "value": "chat.batch_query_group_chat_settings"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "批量查询当前用户的群会话设置"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "批量查询当前用户的群会话设置"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "read"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "dws chat group user-settings query --groups cid1,cid2 --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "dws chat group user-settings query --groups cid1,cid2 --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "批量查询当前用户的群会话设置"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "批量查询当前用户的群会话设置"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "用户说 看下这些群我的置顶和免打扰设置"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "用户说 看下这些群我的置顶和免打扰设置"
+          ]
+        }
+      },
+      "group": "group.user-settings",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "batch_query_group_chat_settings",
+      "parameter_count": 1,
+      "parameters": {
+        "groups": {
+          "description": "群会话 openConversationId 列表，逗号分隔，最多 100 个 (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "群会话 openConversationId 列表，逗号分隔，最多 100 个 (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "群会话 openConversationId 列表，逗号分隔，最多 100 个 (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: chat.batch_query_group_chat_settings has no singular pinned interface_ref; --groups is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "groups"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: chat.batch_query_group_chat_settings has no singular pinned interface_ref; --groups is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "chat.batch_query_group_chat_settings",
+      "primary_cli_path": "chat group user-settings query",
+      "product_id": "chat",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "批量查询当前用户的群会话设置",
+      "use_when": [
+        "用户说 看下这些群我的置顶和免打扰设置"
+      ]
+    },
+    "chat.batch_update_group_chat_settings": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=chat.batch_update_group_chat_settings",
+        "cobra-help:dws chat group user-settings set",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "单个群昵称优先 chat group update-nick"
+      ],
+      "canonical_path": "chat.batch_update_group_chat_settings",
+      "cli_name": "set",
+      "cli_path": "chat group user-settings set",
+      "confirmation": "not_required",
+      "description": "批量更新当前用户的群会话设置",
+      "display": "群聊 / 消息 / 机器人",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group user-settings set --items '[{\"openConversationId\":\"cid1\",\"top\":true,\"mute\":false}]' --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "单个群昵称优先 chat group update-nick"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "单个群昵称优先 chat group update-nick"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "chat group user-settings set",
+              "value": "chat.batch_update_group_chat_settings"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "chat group user-settings set",
+          "value": "chat.batch_update_group_chat_settings"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "批量更新当前用户的群会话设置"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "批量更新当前用户的群会话设置"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "dws chat group user-settings set --items '[{\"openConversationId\":\"cid1\",\"top\":true,\"mute\":false}]' --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "dws chat group user-settings set --items '[{\"openConversationId\":\"cid1\",\"top\":true,\"mute\":false}]' --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "medium"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "medium"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "批量更新当前用户的群会话设置"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "批量更新当前用户的群会话设置"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "用户说 把这些群都设为免打扰/置顶"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "用户说 把这些群都设为免打扰/置顶"
+          ]
+        }
+      },
+      "group": "group.user-settings",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "batch_update_group_chat_settings",
+      "parameter_count": 1,
+      "parameters": {
+        "items": {
+          "description": "JSON 数组，每项 {\"openConversationId\":\"cid\",\"top\":bool,\"mute\":bool,\"groupNick\":\"...\",\"groupAlias\":\"...\"} (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "JSON 数组，每项 {\"openConversationId\":\"cid\",\"top\":bool,\"mute\":bool,\"groupNick\":\"...\",\"groupAlias\":\"...\"} (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "JSON 数组，每项 {\"openConversationId\":\"cid\",\"top\":bool,\"mute\":bool,\"groupNick\":\"...\",\"groupAlias\":\"...\"} (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: chat.batch_update_group_chat_settings has no singular pinned interface_ref; --items is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "items"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: chat.batch_update_group_chat_settings has no singular pinned interface_ref; --items is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "chat.batch_update_group_chat_settings",
+      "primary_cli_path": "chat group user-settings set",
+      "product_id": "chat",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "reviewed_command_registry",
+      "title": "批量更新当前用户的群会话设置",
+      "use_when": [
+        "用户说 把这些群都设为免打扰/置顶"
+      ]
+    },
     "chat.clear_all_red_point": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
@@ -20339,6 +21173,423 @@
       "title": "获取群邀请链接",
       "use_when": [
         "需要生成群邀请链接或设置有效期时"
+      ]
+    },
+    "chat.get_group_mute_config": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=chat.get_group_mute_config",
+        "cobra-help:dws chat group get-mute-config",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+      ],
+      "canonical_path": "chat.get_group_mute_config",
+      "cli_name": "get-mute-config",
+      "cli_path": "chat group get-mute-config",
+      "confirmation": "not_required",
+      "description": "查询指定群的用户禁言配置，包括单独禁言黑名单、全员禁言白名单及相关操作时间。\n返回的是原始配置记录，不等同于当前被禁言成员列表；全员禁言开关也不在本命令的返回范围内。",
+      "display": "群聊 / 消息 / 机器人",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat group get-mute-config --group \u003copenConversationId\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "chat group get-mute-config",
+              "value": "chat.get_group_mute_config"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "chat group get-mute-config",
+          "value": "chat.get_group_mute_config"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "查询指定群的用户禁言配置，包括单独禁言黑名单、全员禁言白名单及相关操作时间。\n返回的是原始配置记录，不等同于当前被禁言成员列表；全员禁言开关也不在本命令的返回范围内。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "查询指定群的用户禁言配置，包括单独禁言黑名单、全员禁言白名单及相关操作时间。\n返回的是原始配置记录，不等同于当前被禁言成员列表；全员禁言开关也不在本命令的返回范围内。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "read"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "dws chat group get-mute-config --group \u003copenConversationId\u003e --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "dws chat group get-mute-config --group \u003copenConversationId\u003e --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/chat marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "查询群用户禁言配置"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "查询群用户禁言配置"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "用户说 看下群里谁被禁言/禁言配置"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "用户说 看下群里谁被禁言/禁言配置"
+          ]
+        }
+      },
+      "group": "group",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "get_group_mute_config",
+      "parameter_count": 1,
+      "parameters": {
+        "group": {
+          "description": "群聊 openConversationId (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "群聊 openConversationId (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "群聊 openConversationId (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: chat.get_group_mute_config has no singular pinned interface_ref; --group is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "group"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: chat.get_group_mute_config has no singular pinned interface_ref; --group is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "chat.get_group_mute_config",
+      "primary_cli_path": "chat group get-mute-config",
+      "product_id": "chat",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "查询群用户禁言配置",
+      "use_when": [
+        "用户说 看下群里谁被禁言/禁言配置"
       ]
     },
     "chat.get_group_notice": {
@@ -58505,7 +59756,7 @@
       "is_alias": false,
       "metadata_source": "embedded-mcp-metadata",
       "name": "send_personal_message",
-      "parameter_count": 12,
+      "parameter_count": 17,
       "parameters": {
         "ai-tag": {
           "default": "true",
@@ -58841,6 +60092,97 @@
           "required": false,
           "type": "string"
         },
+        "contact-id": {
+          "description": "联系人名片 openDingTalkId（msgType=profile 时必填）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "联系人名片 openDingTalkId（msgType=profile 时必填）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "联系人名片 openDingTalkId（msgType=profile 时必填）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "serialized into the aggregate content payload",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "contactId"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "serialized into the aggregate content payload",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
         "file-path": {
           "description": "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）",
           "field_provenance": {
@@ -59063,6 +60405,370 @@
           "required": false,
           "type": "string"
         },
+        "latitude": {
+          "description": "位置消息纬度（msgType=location 时必填）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "位置消息纬度（msgType=location 时必填）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "位置消息纬度（msgType=location 时必填）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "serialized into the aggregate content payload",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "latitude"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "serialized into the aggregate content payload",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
+        "location-name": {
+          "description": "位置消息地址名称（msgType=location 时必填）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "位置消息地址名称（msgType=location 时必填）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "位置消息地址名称（msgType=location 时必填）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "serialized into the aggregate content payload",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "locationName"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "serialized into the aggregate content payload",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
+        "longitude": {
+          "description": "位置消息经度（msgType=location 时必填）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "位置消息经度（msgType=location 时必填）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "位置消息经度（msgType=location 时必填）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "serialized into the aggregate content payload",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "longitude"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "serialized into the aggregate content payload",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
+        "map-thumbnail-url": {
+          "description": "位置消息地图缩略图 mediaId，形如 @mediaId（msgType=location 时必填）",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "位置消息地图缩略图 mediaId，形如 @mediaId（msgType=location 时必填）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "位置消息地图缩略图 mediaId，形如 @mediaId（msgType=location 时必填）"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "serialized into the aggregate content payload",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "mapThumbnailUrl"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "serialized into the aggregate content payload",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
         "media-id": {
           "description": "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）",
           "example": "@lADP_schema_smoke",
@@ -59183,7 +60889,7 @@
           "type": "string"
         },
         "msg-type": {
-          "description": "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）",
+          "description": "富媒体消息类型: image/file/audio/video/location/profile（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）",
           "enum": [
             "image",
             "file",
@@ -59197,7 +60903,7 @@
                   "precedence": "cobra_contract",
                   "selected": true,
                   "source": "cobra_usage",
-                  "value": "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）"
+                  "value": "富媒体消息类型: image/file/audio/video/location/profile（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）"
                 },
                 {
                   "precedence": "mcp_metadata",
@@ -59215,7 +60921,7 @@
               "precedence": "cobra_contract",
               "resolution": "highest_precedence",
               "source": "cobra_usage",
-              "value": "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）"
+              "value": "富媒体消息类型: image/file/audio/video/location/profile（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）"
             },
             "enum": {
               "candidates": [
@@ -99130,6 +100836,1624 @@
       "title": "流式更新卡片内容",
       "use_when": [
         "已有 message send-card 真实返回的 bizId，并需要追加内容或结束流式输出时；最后一次更新使用完成状态"
+      ]
+    },
+    "chat.update_text_emotion": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "cobra-help:dws chat message update-text-emotion",
+        "dws-wukong:30f13f02",
+        "dws-wukong:bcf56ccf",
+        "dws-wukong:d6831318",
+        "github:hugozhu/dingtalk-opencode-tag#85",
+        "internal/cli/schema_command_registry/products/chat.json#chat.update_text_emotion",
+        "internal/cli/schema_hints/metadata/chat.json",
+        "internal/cli/schema_hints/selection/chat.json",
+        "live-dws-schema:im.update_text_emotion#FAILED_NOT_AUTHENTICATED",
+        "skills/mono/references/products/chat.md"
+      ],
+      "agent_summary": "把消息上已有的文字表情原地替换为新的文字表情",
+      "agent_summary_source": "dws-agent-selection/chat",
+      "availability": "available",
+      "avoid_when": [
+        "消息上还没有文字表情时使用 chat message add-text-emotion",
+        "只需清除文字表情时使用 chat message remove-text-emotion"
+      ],
+      "canonical_path": "chat.update_text_emotion",
+      "cli_name": "update-text-emotion",
+      "cli_path": "chat message update-text-emotion",
+      "confirmation": "not_required",
+      "constraints": {
+        "require_one_of": [
+          [
+            "conversation-id",
+            "group",
+            "id",
+            "chat"
+          ]
+        ]
+      },
+      "description": "更新消息的文字表情回应",
+      "display": "群聊 / 消息 / 机器人",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws chat message update-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --old-emotion-id \u003coldEmotionId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": "把消息上已有的文字表情原地替换为新的文字表情"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": "把消息上已有的文字表情原地替换为新的文字表情"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "消息上还没有文字表情时使用 chat message add-text-emotion",
+                "只需清除文字表情时使用 chat message remove-text-emotion"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "消息上还没有文字表情时使用 chat message add-text-emotion",
+            "只需清除文字表情时使用 chat message remove-text-emotion"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "chat message update-text-emotion",
+              "value": "chat.update_text_emotion"
+            },
+            {
+              "precedence": "reviewed_manual",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": false,
+              "source": "reviewed_manual_hint",
+              "source_ref": "chat message update-text-emotion",
+              "value": "chat.update_text_emotion"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "chat message update-text-emotion",
+          "value": "chat.update_text_emotion"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "not_required"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "更新消息的文字表情回应"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "更新消息的文字表情回应"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "write"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "command-verb",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "dws chat message update-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --old-emotion-id \u003coldEmotionId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "dws chat message update-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e --old-emotion-id \u003coldEmotionId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "idempotent"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "unknown"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/chat.json",
+              "value": "low"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "effect-default",
+              "value": "medium"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+          "source": "internal/cli/schema_hints/metadata/chat.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "更新消息的文字表情回应"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "更新消息的文字表情回应"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/chat.json",
+              "value": [
+                "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 issue #85 的原地状态更新场景、Wukong 30f13f02 的真实 Cobra/MCP 映射和开源实现复核；选择语义不改变执行、安全或参数事实。",
+          "source": "internal/cli/schema_hints/selection/chat.json",
+          "value": [
+            "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
+          ]
+        }
+      },
+      "group": "message",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet.",
+      "is_alias": false,
+      "name": "update_text_emotion",
+      "parameter_count": 10,
+      "parameters": {
+        "background-id": {
+          "cli_required": true,
+          "description": "新文字表情的背景 ID",
+          "field_provenance": {
+            "cli_required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_hard_required",
+                  "value": true
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_hard_required",
+              "value": true
+            },
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "新文字表情的背景 ID"
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_usage",
+                  "value": "新背景 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "新文字表情的背景 ID"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "backgroundId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "backgroundId"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "backgroundId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_hard_required",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "backgroundId",
+          "required": true,
+          "type": "string"
+        },
+        "chat": {
+          "description": "--conversation-id 的别名",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "--conversation-id 的别名"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "--conversation-id 的别名"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "openConversationId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "chat"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "openConversationId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "command_constraint",
+                  "selected": false,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "openConversationId",
+          "required": false,
+          "type": "string"
+        },
+        "conversation-id": {
+          "description": "会话 openConversationId；与 --group、--id、--chat 四选一",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "会话 openConversationId；与 --group、--id、--chat 四选一"
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_usage",
+                  "value": "会话 openConversationId (必填，支持单聊/群聊)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "会话 openConversationId；与 --group、--id、--chat 四选一"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "openConversationId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "conversationId"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "openConversationId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "command_constraint",
+                  "selected": false,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "openConversationId",
+          "required": false,
+          "type": "string"
+        },
+        "emotion-id": {
+          "cli_required": true,
+          "description": "新的文字表情 ID，可通过 create-text-emotion 获取",
+          "field_provenance": {
+            "cli_required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_hard_required",
+                  "value": true
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_hard_required",
+              "value": true
+            },
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "新的文字表情 ID，可通过 create-text-emotion 获取"
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_usage",
+                  "value": "新表情 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "新的文字表情 ID，可通过 create-text-emotion 获取"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "emotionId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "emotionId"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "emotionId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_hard_required",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "emotionId",
+          "required": true,
+          "type": "string"
+        },
+        "emotion-name": {
+          "cli_required": true,
+          "description": "新的文字表情名称",
+          "field_provenance": {
+            "cli_required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_hard_required",
+                  "value": true
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_hard_required",
+              "value": true
+            },
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "新的文字表情名称"
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_usage",
+                  "value": "新表情名称 (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "新的文字表情名称"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "emotionName"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "emotionName"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "emotionName"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_hard_required",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "emotionName",
+          "required": true,
+          "type": "string"
+        },
+        "group": {
+          "description": "--conversation-id 的别名",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "--conversation-id 的别名"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "--conversation-id 的别名"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "openConversationId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "group"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "openConversationId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "command_constraint",
+                  "selected": false,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "openConversationId",
+          "required": false,
+          "type": "string"
+        },
+        "id": {
+          "description": "--conversation-id 的别名",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "--conversation-id 的别名"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "--conversation-id 的别名"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "openConversationId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "id"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "openConversationId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "command_constraint",
+                  "selected": false,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "openConversationId",
+          "required": false,
+          "type": "string"
+        },
+        "msg-id": {
+          "cli_required": true,
+          "description": "需要原地更新文字表情的消息 openMsgId",
+          "field_provenance": {
+            "cli_required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_hard_required",
+                  "value": true
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_hard_required",
+              "value": true
+            },
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "需要原地更新文字表情的消息 openMsgId"
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_usage",
+                  "value": "消息 openMsgId (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "需要原地更新文字表情的消息 openMsgId"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "openMsgId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "msgId"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "openMsgId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_hard_required",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "openMsgId",
+          "required": true,
+          "type": "string"
+        },
+        "old-emotion-id": {
+          "cli_required": true,
+          "description": "消息上当前文字表情的 emotionId",
+          "field_provenance": {
+            "cli_required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_hard_required",
+                  "value": true
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_hard_required",
+              "value": true
+            },
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "消息上当前文字表情的 emotionId"
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_usage",
+                  "value": "待更新的原表情 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "消息上当前文字表情的 emotionId"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "oldEmotionId"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "oldEmotionId"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "oldEmotionId"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_hard_required",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "oldEmotionId",
+          "required": true,
+          "type": "string"
+        },
+        "text": {
+          "cli_required": true,
+          "description": "新的文字表情内容",
+          "field_provenance": {
+            "cli_required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_hard_required",
+                  "value": true
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_hard_required",
+              "value": true
+            },
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "新的文字表情内容"
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_usage",
+                  "value": "新文字内容 (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "新的文字表情内容"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": "text"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "text"
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": "text"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": true
+                },
+                {
+                  "precedence": "cobra_contract",
+                  "selected": false,
+                  "source": "cobra_hard_required",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+              "source": "reviewed_manual_hint",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "property": "text",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "chat.update_text_emotion",
+      "primary_cli_path": "chat message update-text-emotion",
+      "product_id": "chat",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "更新消息的文字表情回应",
+      "use_when": [
+        "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
       ]
     },
     "chat.update_user_group_alias": {

@@ -1,10 +1,9 @@
 ---
 name: dingtalk-chat
-description: 钉钉群聊与消息。Use when 用户提到 发消息/编辑或撤回已发送消息/单聊/群聊/建群/普通群升级外部群/群昵称/会话分组/群成员管理/@消息/收藏消息/机器人群发/Webhook通知/发图片或文件到群。Distinct from dingtalk-ding(紧急DING消息/短信/电话)、dingtalk-mail(邮件)、dingtalk-edu-group(班级群)。命令前缀：dws chat。
-cli_version: ">=0.2.14"
+description: 钉钉群聊与消息。Use when 用户提到 发消息/单聊/群聊/建群/拉人进群/改群名/搜索群/群成员管理/@消息/撤回消息/机器人群发/Webhook通知/发图片或文件到群/标记未读/清除红点/置顶消息/全部群列表。不做紧急 DING/短信/电话（走 dingtalk-misc）、邮件（走 dingtalk-mail）、班级群（走 dingtalk-misc）。命令前缀：dws chat。
 metadata:
+  cli_version: ">=0.2.14"
   category: product
-  stability: experimental
   requires:
     bins:
       - dws
@@ -12,14 +11,9 @@ metadata:
 
 # 钉钉群聊 / 消息 Skill
 
-> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。全部 dingtalk-* skill 已通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
+## 前置条件 — 执行操作前必读
 
-> **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
-
-<!-- SAFETY_PREAMBLE_INJECT -->
-
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
-
+> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dws-shared`](../dws-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
 
 > 命令参考：[chat.md](references/chat.md)；表情：[chat-emoji-list.md](references/chat-emoji-list.md)；剧本：[01-messaging.md](references/01-messaging.md)。
 
@@ -78,18 +72,18 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "发消息给张三" | `dws chat message send --open-dingtalk-id <id> --title "<标题>" --text "<内容>"` |
-| "发到XX群" | `dws chat search --query "<群名>"` → `dws chat message send --group <openConversationId> --title "<标题>" --text "<内容>"` |
+| "发消息给张三" | `dws chat message send --open-dingtalk-id <id> --text "<内容>"` |
+| "发到XX群" | `dws chat search --query "<群名>"` → `dws chat message send --group <openConversationId> --text "<内容>"` |
 | "建群" / "拉人进群" | `dws chat group create` / `dws chat group members add` |
 | "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove`（先确认群和成员；踢群主会被 CLI 拦截，需先 `transfer-owner`）|
 | "@我消息" | `dws chat message list-mentions` |
-| "查群聊记录" | `dws chat message list` |
+| "查群聊记录" | `dws chat search --query "<群名>"` → `dws chat message list --group <openConversationId> --time "<yyyy-MM-dd HH:mm:ss>" --direction older` |
 | "收藏/取消收藏这条消息" | `dws chat message add-favorite` / `dws chat message remove-favorite`（均需 `openMessageId` 和 `openConversationId`）|
 | "查看我收藏的消息" | `dws chat message list-favorites`（默认 `--cursor 0 --size 20`）|
 | "用机器人发消息" | `dws chat message send-by-bot --robot-code <code> --group <id> --title "<标题>" --text "<内容>"` |
 | "Webhook 推一条" | `dws chat message send-by-webhook --token <token> --title "<标题>" --text "<内容>"` |
 | "编辑 / 修改已发送消息" | `dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "<新内容>"` |
-| "撤回我发的消息" | `dws chat message recall`（撤回当前用户发送的消息）|
+| "撤回我发的消息" | `dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>` |
 | "撤回机器人消息" | `dws chat message recall-by-bot --robot-code <code> --group <openConversationId> --keys <processQueryKey>`（撤回机器人发的）|
 | "把普通群升级为外部群" | `dws chat group upgrade-to-external --group <openConversationId> --dry-run`，确认后加 `--yes` |
 | "清除我的群昵称" | `dws chat group update-nick --group <openConversationId>`（省略 `--nick`） |
@@ -110,8 +104,8 @@ metadata:
 | "引用回复/转发/合并转发" | `dws chat message reply` / `forward` / `combine-forward` / `forward-topic` |
 | "置顶/钉住消息" | `dws chat message set-top-msg` / `set-pin-msg`；对应取消命令为 `unset-*` |
 | "会话免打扰/隐藏/标记已读" | `dws chat mute` / `hide` / `mark-read` / `mark-unread` |
-
-> **注**：`chat message send` 的 `--title` 可选（不传时用正文首行作标题）；`send-by-bot` / `send-by-webhook` 的 `--title` 必填。
+| "标记未读 / 清除红点 / 全部已读" | `dws chat mark-unread` / `dws chat clear-red-point` / `dws chat clear-all-red-point` |
+| "我加入的所有群 / 全部群列表" | `dws chat group list-all` |
 
 ## 命令树（Tree Structure）
 
@@ -131,7 +125,7 @@ dingtalk-chat
 │   ├── query-send-status / read-status
 │   ├── add-favorite / remove-favorite / list-favorites
 │   ├── add-emoji / remove-emoji
-│   ├── add-text-emotion / remove-text-emotion / create-text-emotion
+│   ├── add-text-emotion / remove-text-emotion / create-text-emotion / update-text-emotion
 │   ├── list-emotion-replies
 │   ├── set-top-msg / unset-top-msg
 │   ├── set-pin-msg / unset-pin-msg / list-pin-msg
@@ -140,6 +134,7 @@ dingtalk-chat
 │   ├── create / rename / dismiss / quit / transfer-owner
 │   ├── get-by-group-id / invite-url / share-invite
 │   ├── update-icon / update-settings / update-alias / update-nick
+│   ├── get-mute-config / user-settings query / user-settings set
 │   ├── upgrade-to-external / set-history / set-admin
 │   ├── bots / list-my-groups / list-all
 │   ├── list-join-validations / audit-join-validation
@@ -203,9 +198,82 @@ dingtalk-chat
 - 群 ID 无效：用 `chat search` 重新取得真实 `openConversationId`。
 - 权限不足、机器人无法加群、搜索仍无结果或目标有歧义：停止并报告用户，不猜测 ID、不反复试错。
 
+## 标准 SOP（必遵流程）
+
+> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 ID。每条命令必须带 `--format json`，执行后必须按"解析"步取真实字段（`openDingTalkId` / `openConversationId` / `openMessageId`）。
+
+### SOP-1 发消息（send-message）
+
+**触发**：发消息/单聊/通知某人/发到群里。
+
+1. **解析收件人（必须）**：人名 → 先 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `openDingTalkId`（优先）或 `userId`；群名 → 先 `dws chat search --query "<群名>" --format json` 取 `openConversationId`。
+2. **执行（必须）**：单聊 `dws chat message send --open-dingtalk-id <openDingTalkId> --text "<内容>" --format json`（只有拿不到 `openDingTalkId` 时才用 `--user <userId>`）；群聊 `dws chat message send --group <openConversationId> --text "<内容>" --format json`。
+3. **验证（必须）**：发送接口成功时可能只返回 `result.openTaskId`，它可用于确认提交成功，但**不是撤回所需消息 ID**。需要撤回时必须按 SOP-7 用带 `--time` 的 `message list` 回查，取得真实 `openMessageId`；返回非 `success` 必须如实报错，不要谎报已发。
+
+**禁止**：把人名/群名直接当 ID 传入、跳过 `aisearch person`/`chat search` 解析、跳过 `--format json`、未发送成功就答复"已发送"。
+
+### SOP-2 建群（create-group）
+
+**触发**：建群/拉人进群/新建讨论组。
+
+1. **解析成员（必须）**：对每个成员 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`，多人英文逗号拼接。
+2. **执行（必须）**：`dws chat group create --name "<群名>" --users <userId1,userId2,...> --format json`；外部群加 `--type EXTERNAL`，话题圈加 `--thread`。
+3. **验证（必须）**：从返回取 `openConversationId`，可用 `dws chat search --query "<群名>" --format json` 复核。
+
+**禁止**：跳过成员 userId 解析直接传姓名、编造 `openConversationId`。
+
+### SOP-3 Webhook 推送（send-by-webhook）
+
+**触发**：用机器人群 webhook 推一条消息。
+
+1. **执行（必须）**：`dws chat message send-by-webhook --token <webhookToken> --title "<标题>" --text "<内容>" --format json`。
+2. **@ 人（必须）**：需要 @ 时，`--text` 中**必须**先包含对应 `@userId` / `@手机号` / `@10`，再配合 `--at-users` / `--at-mobiles` / `--at-all`；否则 @ 不生效。
+
+**禁止**：只传 `--at-users` 而 `--text` 里不含 `@<标识>`。
+
+### SOP-4 共同群查询（search-common-group）
+
+**触发**："我和 XX 的共同群"。
+
+1. **取昵称（必须）**：先 `dws contact user get-self --format json` 取自己昵称；对方昵称从历史/上下文取，拿不到必须先问用户。
+2. **执行（必须）**：`dws chat search-common --nicks "<昵称1>,<昵称2>" --limit 20 --cursor 0 --format json`；`hasMore=true` 时**必须**用 `nextCursor` 翻页，不要停在第一页。
+
+**禁止**：跳过昵称解析、忽略 `hasMore` 不翻页。
+
+### SOP-5 红点 / 未读管理（manage-red-point）
+
+**触发**：标记未读/清除红点/全部已读。
+
+1. **执行（必须）**：标记某会话未读 `dws chat mark-unread --conversation-id <openConversationId> --format json`；清除某会话红点 `dws chat clear-red-point --conversation-id <openConversationId> --format json`；全部已读 `dws chat clear-all-red-point --format json`。
+2. **取会话 ID（必须）**：`openConversationId` 拿不准时先 `dws chat group list-all --format json` 或 `dws chat search --query "<群名>" --format json`，**禁止**编造。
+
+**禁止**：未确认会话就批量"全部已读"（破坏性，必须先与用户确认）。
+
+### SOP-6 特别关注消息（focus-messages）
+
+**触发**："特别关注的人最近发了什么/聊了什么"。
+
+1. **执行（必须）**：`dws chat message list-focused --limit 50 --format json`，直接基于返回答复。
+2. **边界（必须）**：只有用户终点是"我关注了谁"这种**人员列表**时，才切 `dingtalk-contact` 关系查询。
+
+**禁止**：用普通 `message list` 冒充 focused、把人员列表需求硬塞进 chat。
+
+### SOP-7 拉取 / 撤回消息（list-or-recall-message）
+
+**触发**：查某个群或单聊的聊天记录、撤回某条消息。
+
+1. **定位会话（必须）**：群名先 `dws chat search --query "<群名>" --format json` 取 `openConversationId`；单聊对象先解析真实 `userId` 或 `openDingTalkId`。
+2. **拉取消息（必须）**：`dws chat message list --group <openConversationId> --time "<yyyy-MM-dd HH:mm:ss>" --direction older --format json`；单聊将 `--group` 换成 `--user` 或 `--open-dingtalk-id`。`--time` 是必填参数，必须来自用户时间范围或明确收敛后的边界。
+3. **撤回（必须）**：仅在用户明确要求撤回时，从消息列表 `result.messages[].openMessageId` 取真实 ID，执行 `dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId> --format json`。
+
+**禁止**：省略 `--time`、用发送返回的 `clientMsgId` 代替 `openMessageId`、只传 `--client-msg-id`、编造会话或消息 ID。
+
 ## 跨产品协作
 
 - 收件人是人名 → 先用 `dingtalk-contact` 或 `dingtalk-aisearch` 拿 `openDingTalkId` / `userId`
 - 要发本地图片/文件 → 直接用 `dws chat message send --msg-type file --file-path <本地路径>`；图片会作为可下载的文件附件发送，不会内联渲染。只有上游已提供有效 mediaId 时才用 `--msg-type image --media-id`，DWS CLI 不能把本地文件转换成 mediaId
 - 紧急升级（应用内/短信/电话）→ 切到 `dingtalk-ding`
 - 发邮件 → 切到 `dingtalk-mail`
+## 局部意图与短流程
+
+- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。

@@ -1629,6 +1629,177 @@
         "cobra-help:dws sheet +read",
         "ShortcutRegistry:sheet +read"
       ]
+    },
+    "sheet.version_save": {
+      "agent_summary": "手动保存表格版本快照",
+      "use_when": [
+        "用户说 保存版本/存个快照，目标是在线表格"
+      ],
+      "avoid_when": [
+        "回滚用 version revert；查看历史用 version list"
+      ],
+      "examples": [
+        "dws sheet version save --node <SHEET_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.version_save",
+        "cobra-help:dws sheet version save",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.version_list": {
+      "agent_summary": "查看表格历史版本列表",
+      "use_when": [
+        "用户说 看历史版本/版本列表，目标是在线表格"
+      ],
+      "avoid_when": [
+        "回滚用 version revert"
+      ],
+      "examples": [
+        "dws sheet version list --node <SHEET_ID> --limit 10 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.version_list",
+        "cobra-help:dws sheet version list",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.version_revert": {
+      "agent_summary": "回滚表格到指定历史版本",
+      "use_when": [
+        "用户说 回滚到某个版本/恢复到之前的表格"
+      ],
+      "avoid_when": [
+        "普通文件回滚用 drive revert；在线文档用 doc version revert"
+      ],
+      "examples": [
+        "dws sheet version revert --node <SHEET_ID> --version 3 --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.version_revert",
+        "cobra-help:dws sheet version revert",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.formula_verify": {
+      "agent_summary": "扫描表格公式单元格并按错误类型聚合返回错误数量与位置",
+      "use_when": [
+        "用户说 校验公式/检查公式错误/公式错误扫描"
+      ],
+      "avoid_when": [
+        "读取公式文本用 range read --value-render-option formula"
+      ],
+      "examples": [
+        "dws sheet formula-verify --node <NODE_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.formula_verify",
+        "cobra-help:dws sheet formula-verify",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.list_sheet_comments": {
+      "agent_summary": "查询表格单元格评论列表，支持分页与按解决状态过滤",
+      "use_when": [
+        "用户说 看某格的评论/表格里有哪些批注"
+      ],
+      "avoid_when": [
+        "新建评论用 comment create"
+      ],
+      "examples": [
+        "dws sheet comment list --node <SHEET_ID> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.list_sheet_comments",
+        "cobra-help:dws sheet comment list",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.create_sheet_comment": {
+      "agent_summary": "在指定单元格上创建评论，可 @ 用户",
+      "use_when": [
+        "用户说 给单元格加评论/批注/@某人讨论这个数据"
+      ],
+      "avoid_when": [
+        "回复已有评论用 comment reply；不要把评论写进单元格值"
+      ],
+      "examples": [
+        "dws sheet comment create --node <SHEET_ID> --sheet-id Sheet1 --range A2 --content \"这个数字有问题\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.create_sheet_comment",
+        "cobra-help:dws sheet comment create",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.reply_sheet_comment": {
+      "agent_summary": "回复指定单元格评论，支持表情贴图回复",
+      "use_when": [
+        "用户说 回复这条评论"
+      ],
+      "avoid_when": [
+        "修改评论内容用 comment update"
+      ],
+      "examples": [
+        "dws sheet comment reply --node <SHEET_ID> --comment-key <COMMENT_KEY> --content \"已核实\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.reply_sheet_comment",
+        "cobra-help:dws sheet comment reply",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.update_sheet_comment": {
+      "agent_summary": "更新单元格评论内容",
+      "use_when": [
+        "用户说 改一下这条评论"
+      ],
+      "avoid_when": [
+        "回复评论用 comment reply"
+      ],
+      "examples": [
+        "dws sheet comment update --node <SHEET_ID> --comment-key <COMMENT_KEY> --content \"已修正\" --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.update_sheet_comment",
+        "cobra-help:dws sheet comment update",
+        "wukong-develop:wukong/products"
+      ]
+    },
+    "sheet.delete_sheet_comment": {
+      "agent_summary": "删除单元格评论（不可恢复）",
+      "use_when": [
+        "用户明确要求删除某条评论"
+      ],
+      "avoid_when": [
+        "标记解决不等于删除"
+      ],
+      "examples": [
+        "dws sheet comment delete --node <SHEET_ID> --comment-key <COMMENT_KEY> --format json"
+      ],
+      "reviewed": true,
+      "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+      "source_refs": [
+        "CommandRegistry:canonical_path=sheet.delete_sheet_comment",
+        "cobra-help:dws sheet comment delete",
+        "wukong-develop:wukong/products"
+      ]
     }
   },
   "products": {

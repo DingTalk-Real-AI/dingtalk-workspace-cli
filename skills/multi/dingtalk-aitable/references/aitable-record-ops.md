@@ -38,7 +38,7 @@ dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --limit 50 --
 
 ## 添加记录
 
-**必须先执行 `table get` 获取 fieldId，再写入。cells 的 key 必须是 fieldId（如 fldXXX），不是字段名。**
+**必须先执行 `field get` 获取 fieldId，再写入。cells 的 key 必须是 fieldId（如 fldXXX），不是字段名。**
 
 ```bash
 # 单条
@@ -58,6 +58,8 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 ```json
 {"data": {"newRecordIds": ["rec-new-001", "rec-new-002"]}}
 ```
+
+从 `data.newRecordIds[]` 提取新记录 ID，并立即执行 `record query --record-ids <id1,id2,...>` 回读写入结果；不要只看命令退出码。
 
 ### --records 格式常见错误
 
@@ -85,7 +87,7 @@ dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \
   --format json
 ```
 
-只需传入需修改的字段，未传入的保持原值。
+更新响应中的成功记录 ID 位于 `data.recordIds[]`。只需传入需修改的字段，未传入的保持原值；响应不返回“受影响字段”，必须再执行 `record query --record-ids <id1,id2,...>` 回读确认。
 
 ## 删除记录
 
@@ -132,4 +134,4 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 - 公式字段、引用字段
 - 自动编号字段
 
-执行 `table get` 后识别字段类型，跳过只读字段。
+执行 `field get` 后识别字段类型，跳过只读字段。

@@ -21,6 +21,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -32,12 +33,14 @@ func TestParseAgentHost(t *testing.T) {
 		want string
 	}{
 		{name: "unset", raw: "", want: ""},
-		{name: "whitespace only", raw: " \t\u3000", want: ""},
-		{name: "cloud", raw: "qwenwork_cloud", want: "qwenwork_cloud"},
-		{name: "desktop", raw: "qwenwork_desktop", want: "qwenwork_desktop"},
-		{name: "trim", raw: " \tqwenwork_cloud\t ", want: "qwenwork_cloud"},
+		{name: "ASCII whitespace only", raw: " \t ", want: ""},
+		{name: "cloud", raw: "cloud", want: "cloud"},
+		{name: "desktop", raw: "desktop", want: "desktop"},
+		{name: "legacy combined label remains valid", raw: "qwenwork_cloud", want: "qwenwork_cloud"},
+		{name: "trim", raw: " \tcloud\t ", want: "cloud"},
 		{name: "generic", raw: "host-2_alpha", want: "host-2_alpha"},
 		{name: "leading digit", raw: "2nd_host", want: "2nd_host"},
+		{name: "maximum length", raw: strings.Repeat("a", maxAgentHostBytes), want: strings.Repeat("a", maxAgentHostBytes)},
 	}
 	for _, tc := range valid {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,6 +67,12 @@ func TestParseAgentHost(t *testing.T) {
 		{name: "leading dash", raw: "-qwenwork"},
 		{name: "leading underscore", raw: "_qwenwork"},
 		{name: "control character", raw: "qwenwork\x00cloud"},
+		{name: "vertical tab", raw: "\vcloud"},
+		{name: "form feed", raw: "cloud\f"},
+		{name: "next line", raw: "cloud\u0085"},
+		{name: "non-breaking space", raw: "\u00a0cloud"},
+		{name: "ideographic space", raw: "cloud\u3000"},
+		{name: "too long", raw: strings.Repeat("a", maxAgentHostBytes+1)},
 	}
 	for _, tc := range invalid {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,6 +100,7 @@ func TestParseAgentHost(t *testing.T) {
 func TestResolveIdentityHeadersAddsAgentHostBeforeEditionMerge(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv(envDWSAgentHost, " qwenwork_desktop ")
+	t.Setenv(agentproduct.EnvName, "")
 	t.Setenv(envDWSChannel, "channel-test")
 	t.Setenv(envDingtalkAgent, "agent-test")
 	t.Setenv(authpkg.AgentCodeEnv, "agent-code-test")

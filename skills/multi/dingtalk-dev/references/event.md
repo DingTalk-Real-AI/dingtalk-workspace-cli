@@ -14,6 +14,7 @@
 - 批量或全量订阅前，先把候选 `eventCode` 列给用户确认，再 `--dry-run` → `--yes`。
 - 返回看 `events[].subscribed` 和 `pushType=STREAM`（事件走 Stream 长连推送；connect 与事件订阅的关系见下方「Stream 长连」）。
 - `subscribe/unsubscribe` 的 `--event-codes` 必填，返回 `success/operation/unifiedAppId/eventCodes/needsPublish/versionRequiredAction`；失败时补 `errorCode/errorMsg/reason/retryable/action`。
+- `subscribe/unsubscribe` 返回 `needsPublish=true` 或非空 `versionRequiredAction` 时，按 [version.md](version.md) 继续 `version create → check-approval → publish → status`；进入 `RELEASE` 后重新 `event list`，确认目标 `events[].subscribed` 与本次操作一致。进入审核态则报告待审批；需要选择审批人时停下让用户选择。
 - 如果订阅失败、返回提示长链接未在线（是泛化错误：`reason=business_error`、`message` 含「长链接未在线」、`server_error_code=-1`；没有 STREAM_NOT_CONNECTED 这类结构化错误码，也没有 action 字段），先执行 `dev connect` 建联，再重试订阅。
 
 ## Stream 长连：connect 与事件订阅的关系

@@ -7,8 +7,8 @@ minutes 模块的命令是**两级或三级结构**，不同层级之间不能�
 > **默认 scope 规则**：`dws minutes list` 后**必须**跟 scope 子命令。若用户未明确指定查询范围，**一律默认补 `all`**（查询我可访问的所有听记 = 我创建的 + 他人共享给我的，覆盖面最广）。
 >
 > **`list` 不带 scope 的陷阱（0519 P2 Golden Case 提炼）**：
-> - 裸 `dws minutes list`（不跟 mine/shared/all）**不会返回任何听记数据**——它只打印该命令的帮助/用法信息（Usage、Available Commands: all/mine/shared、Flags），等于什么都没查到
-> - 必须带 scope 子命令（`dws minutes list all` / `list mine` / `list shared`）才会真正返回听记列表
+> - 裸 `dws minutes list`（不跟 mine/shared/all）虽然不会报错，但返回结果**不完整**（仅返回最近少量条目，约 913 字节）
+> - `dws minutes list all` 才能返回完整列表（约 3362 字节）
 > - **AI 严禁使用裸 `dws minutes list`**，必须始终带 scope 子命令
 > - 如果 LLM 不确定用哪个 scope，**一律用 `all`**
 >
@@ -18,6 +18,15 @@ minutes 模块的命令是**两级或三级结构**，不同层级之间不能�
 > - `all` = 我可访问的**所有**听记（mine + shared 的并集，范围最广）
 >
 > **关键区分**：用户说"我可访问的"/"我能看到的"/"我有权限的"/"所有听记" → 选 `all`（不是 `mine`！）；用户说"我自己创建的"/"我发起的"/"我录的" → 才选 `mine`。
+>
+> **P2 真实 badcase（必读，最高频误判）**：用户 query「**我能访问的所有听记列表**」/「**我有权限的听记**」/「**帮我看一下我能看到的所有听记**」时，LLM 把"我能访问的""我"误推理成 `list mine`，导致只返回我自己创建的，遗漏他人共享给我的听记，**判定不通过**。
+> - 牢记口诀：**`mine` = 我创建的（窄）；`all` = 我可见的全部（宽，= mine ∪ shared）**。
+> - 只要 query 里出现"**访问/权限/可见/能看到/所有**"等覆盖范围语义词，**无条件选 `all`**，绝不能因为句子里有"我"就退化成 `mine`。
+> - 反例对照：
+>   - 错误：`我能访问的所有听记` → `dws minutes list mine`（只查我创建的，漏掉共享的）
+>   - 正确：`我能访问的所有听记` → `dws minutes list all --format json`
+>   - 错误：`我有权限的听记帮我看一下` → `dws minutes list mine`
+>   - 正确：`我有权限的听记帮我看一下` → `dws minutes list all --format json`
 
 ```
 dws minutes
@@ -26,7 +35,7 @@ dws minutes
 │   ├── shared [--query] [--start] [--end] [--max] [--next-token]     # 仅查询他人共享给我的听记（不含我自己创建的）
 │   └── all [--query] [--start] [--end] [--max] [--next-token]        # 查询我可访问的所有听记（= mine ∪ shared，覆盖面最广，默认 scope）
 ├── get <subcommand>                 # 获取听记详情（get 后必须跟子命令名）
-│   ├── info --id <uuid>             # 获取听记基础信息（标题、时长、开始时间、taskUuid、访问链接；不含参会人）
+│   ├── info --id <uuid>             # 获取听记基础信息（标题、时长、参与人、状态等）
 │   ├── summary --id <uuid>          # 获取听记 AI 摘要（结构化纪要）
 │   ├── transcription --id <uuid>    # 获取听记语音转写原文（逐字稿，支持分页）
 │   ├── keywords --id <uuid>         # 获取听记关键词
@@ -57,9 +66,12 @@ dws minutes
 │   ├── create --file-name "..." --file-size <n>   # 创建上传会话，获取上传地址
 │   ├── complete --session-id <sid>                # 确认上传完成
 │   └── cancel --session-id <sid>                  # 取消上传会话
-└── permission <subcommand>          # 权限管理（添加/移除听记成员权限）
-    ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]   # 添加成员权限
-    └── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>   # 移除成员权限
+├── permission <subcommand>          # 权限管理（添加/移除听记成员权限）
+│   ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]   # 添加成员权限
+│   └── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>   # 移除成员权限
+└── tag <subcommand>                 # 听记标签/分组管理（标签在听记页面手动创建）
+    ├── list                         # 查询我的听记标签/分组列表（返回 tagId 和标签名称）
+    └── query --tag-id <tagId> [--limit] [--cursor]   # 根据标签ID查询该标签下的听记列表
 ```
 
 **高频错误命令 vs 正确命令对照（真实 badcase 提炼）：**
@@ -69,15 +81,15 @@ dws minutes
 | `dws minutes info --id <uuid>` | `info` 不是顶层子命令，应在 `get` 下 | `dws minutes get info --id <uuid>` |
 | `dws minutes summary --id <uuid>` | `summary` 不是顶层子命令，应在 `get` 下 | `dws minutes get summary --id <uuid>` |
 | `dws minutes transcription --id <uuid>` | `transcription` 不是顶层子命令，应在 `get` 下 | `dws minutes get transcription --id <uuid>` |
-| `dws minutes get --uuid <uuid>` | `get` 后缺少子命令（info/summary/transcription 等） | `dws minutes get summary --id <uuid>` |
-| `dws minutes get --task-uuid <uuid>` | 同上，`get` 后缺子命令。注意：`--task-uuid` 在子命令层是合法别名，但 `get` 层级不认识它 | `dws minutes get info --id <uuid>` |
+| `minutes get --uuid <uuid>` | `get` 后缺少子命令（info/summary/transcription 等） | `dws minutes get summary --id <uuid>` |
+| `minutes get --task-uuid <uuid>` | 同上，`get` 后缺子命令。注意：`--task-uuid` 在子命令层是合法别名，但 `get` 层级不认识它 | `dws minutes get info --id <uuid>` |
 | `dws minutes detail --id <uuid>` | `detail` 不是合法子命令——**不存在此命令**。LLM 高频幻觉 | `dws minutes get info --id <uuid>` |
-| `dws minutes list --start "2026-04-01"` | `list` 后缺少 scope（mine/shared/all），**缺省时默认补 `all`** | `dws minutes list all --start "2026-04-01"` |
+| `minutes list --start "2026-04-01"` | `list` 后缺少 scope（mine/shared/all），**缺省时默认补 `all`** | `dws minutes list all --start "2026-04-01"` |
 | `dws minutes list all --start-time "..."` | 参数名是 `--start` 不是 `--start-time` | `dws minutes list all --start "2026-04-01"` |
 | `dws minutes list all --end-time "..."` | 参数名是 `--end` 不是 `--end-time` | `dws minutes list all --end "2026-04-30"` |
-| `dws minutes list --page-size 10` | `--page-size` 不存在，分页用 `--max`；且 `list` 后缺 scope | `dws minutes list mine --max 10` |
-| `dws minutes list --date-range 2026-05-04 2026-05-10` | `--date-range` 不存在，时间范围用 `--start` + `--end` 两个参数；且 `list` 后缺 scope | `dws minutes list mine --start "2026-05-04T00:00:00+08:00" --end "2026-05-10T23:59:59+08:00"` |
-| `dws minutes list mine --limit 10` | 不报错——`--limit` 已注册为 `--max` 的合法别名，两者完全等价（`--limit 3` 与 `--max 3` 返回相同条数） | `dws minutes list mine --max 10`（或 `--limit 10`，二选一即可） |
+| `minutes list --page-size 10` | `--page-size` 不存在，分页用 `--max`；且 `list` 后缺 scope | `dws minutes list mine --max 10` |
+| `minutes list --date-range 2026-05-04 2026-05-10` | `--date-range` 不存在，时间范围用 `--start` + `--end` 两个参数；且 `list` 后缺 scope | `dws minutes list mine --start "2026-05-04T00:00:00+08:00" --end "2026-05-10T23:59:59+08:00"` |
+| `dws minutes list mine --limit 10` | `--limit` 尚未注册（跨产品规约 Primary 为 `--limit`，但 minutes CLI 当前只接受 `--max`）。**待 alias 注册后两者等价** | `dws minutes list mine --max 10` |
 | `dws minutes upload create --json '{"fileName":...}'` | `--json` 不存在，cli 不接受 JSON 作为输入格式 | `dws minutes upload create --file-name "xxx.mp3" --file-size 61565431` |
 | `dws minutes upload create -f json '{"fileName":...}'` | `-f json` / `--format json` 是**输出格式**控制，不是输入参数 | `dws minutes upload create --file-name "xxx.mp3" --file-size 61565431 --format json` |
 | `dws minutes get transcription --id <uuid> \| head -c 2000` | Windows 沙箱无 `head` 命令，**严禁使用 shell 管道截断** | `dws minutes get transcription --id <uuid> --format json`（由 AI 在内存中截断处理） |
@@ -86,11 +98,11 @@ dws minutes
 | `dws minutes get transcription --id <uuid>` 只调用一次就"总结整篇听记" | **单次调用最多返回 50 段**，不翻页就只能看到前 1/3~1/8 的内容 | **必须自动循环翻页**：检查返回中的 `nextToken`，非空则继续调用 `--next-token <token>`，直到拉完（详见「转写接口分页机制」） |
 | `dws minutes get summary --id A & dws minutes get summary --id B & wait` | Windows cmd 下 `&` 是命令分隔符不是 background，`wait` 不存在 | 逐条串行调用，或让 AI 在内存中合并结果；**严禁使用 shell 并行/管道/重定向** |
 | `dws minutes get transcription --id <uuid> --next-token <token>` 报 unknown flag | **不会报错**——`--next-token` 是 `get transcription` 的合法参数（见命令总览） | 确保写法正确：`dws minutes get transcription --id <uuid> --next-token <token> --format json` |
-| `dws minutes get transcription --id <uuid> --page-token <token>` | `--page-token` 不存在，正确参数名是 `--next-token` | `dws minutes get transcription --id <uuid> --next-token <token>` |
+| `minutes get transcription --id <uuid> --page-token <token>` | `--page-token` 不存在，正确参数名是 `--next-token` | `dws minutes get transcription --id <uuid> --next-token <token>` |
 | `dws minutes transcribe --url <听记url>` | `transcribe` 不是合法子命令，`--url` 参数也不存在。LLM 凭印象编造 | 先从 URL 提取 taskUuid（见「URL → taskUuid 自动提取规则」），再 `dws minutes get transcription --id <taskUuid> --format json` |
 | `dws minutes get transcription --url <听记url>` | `--url` 参数不存在，`--id` 只接受纯 taskUuid | 同上：从 URL 提取 taskUuid 后用 `--id` |
 | `dws minutes summary --uuid <uuid>` | `summary` 不是顶层子命令（应在 `get` 下），且顶层不识别 `--uuid`。**0519 高频错误** | `dws minutes get summary --id <uuid>` |
-| `dws minutes list`（不跟 scope） | `list` 后**必须**跟 scope（mine/shared/all）。裸 `list` 只打印帮助信息，不返回任何听记数据 | `dws minutes list all`（默认 scope） |
+| `dws minutes list`（不跟 scope） | `list` 后**必须**跟 scope（mine/shared/all）。裸 `list` 返回结果不完整且行为未文档化 | `dws minutes list all`（默认 scope） |
 | `dws report inbox --format json`（无时间窗口） | `inbox` 是兼容入口，等价于 `inbox list`；仍必须带 `--start` / `--end` | `dws report inbox list --start "2026-05-06T00:00:00+08:00" --end "2026-05-13T23:59:59+08:00" --format json` |
 | `dws report inbox list --format json`（不带 --start） | inbox list **必须**带 `--start` / `--end` 参数，否则报 "flag --start is required" | `dws report inbox list --start "2026-05-06T00:00:00+08:00" --end "2026-05-13T23:59:59+08:00" --format json` |
 
@@ -102,27 +114,75 @@ dws minutes
 >
 > | 语义 | 规约 Primary | minutes 当前 CLI 实际参数 | alias 注册状态 | 说明 |
 > |------|-------------|------------------------|--------------|------|
-> | 单页大小 (Group 13) | `--limit` | `--max`（`--limit` 为合法别名） | `--limit` 已注册 | minutes 推荐 `--max`，但 `--limit` 也可用，两者等价 |
+> | 单页大小 (Group 13) | `--limit` | `--max` | `--limit` 未注册 | minutes 用 `--max`，其他模块用 `--limit`。**跨模块切换时注意差异** |
 > | 续页标识 (Group 14) | `--cursor` | `--next-token` | `--next-token` 在 alias 池中 | minutes 用 `--next-token`，合法 alias |
 > | 搜索关键词 (Group 11) | `--query` | `--query` | 已对齐 | 无差异 |
 > | 起始时间 (Group 15) | `--start` | `--start` | 已对齐 | 无差异 |
 > | 结束时间 (Group 16) | `--end` | `--end` | 已对齐 | 无差异 |
 >
 > **跨模块参数名差异速查（防止混用）：**
-> - 分页大小：minutes 推荐 `--max`（`--limit` 也是合法别名，等价），aitable/calendar/chat/drive 用 `--limit`
+> - 分页大小：minutes 用 `--max`，aitable/calendar/chat/drive 用 `--limit`
 > - 续页标识：minutes 用 `--next-token`，aitable/drive/doc 用 `--cursor`
 > - 起止时间：minutes/report 用 `--start`/`--end`，calendar 用 `--start-time`/`--end-time`（跨模块最高频错误）
 
 **铁律：禁止编造 taskUuid（0512 P0 Golden Case 提炼）**
 
-用户未直接提供 taskUuid / URL 时，**必须**先调用 `dws minutes list mine`（或 `list all`）获取列表，从返回结果中按标题/参会人/时间匹配选出正确条目，再用其 taskUuid 调用后续命令。**绝不允许凭空编造 hex 字符串作为 --id 的值。**
+用户未直接提供 taskUuid / URL 时，**必须**先调用 `dws minutes list all`（默认 scope）获取列表，从返回结果中按标题/参会人/时间匹配选出正确条目，再用其 taskUuid 调用后续命令。**绝不允许凭空编造 hex 字符串作为 --id 的值。**
+
+> **【0529 P2 Golden Case 提炼】按标题/关键词定位某篇听记时，scope 必须用 `all`，严禁用 `mine`：**
+> - 真实 badcase：用户「帮我分别看看『4 月评测自动化周报』和『评测系统重构分工』的 AI 摘要」，LLM 用 `dws minutes list mine --query "..."` 搜索 → 因这两篇是**他人共享给我的听记**（不在 `mine` 范围）→ 返回为空 → 误判"找不到该听记"。而用户手动在客户端能搜到（客户端搜的是全部可见听记）→ 表现为"手动找得到、任务执行找不到"。
+> - **根因**：`mine` 仅含我自己创建的听记，`all` = 我可访问的全部（mine ∪ shared）。按标题定位时**无法预知**目标听记是我创建的还是别人共享的，因此**只能用 `all`** 才不会漏。
+> - **铁律**：凡是"按标题/关键词/参会人/时间去定位某篇（或某几篇）听记"的场景，**一律 `dws minutes list all --query "<关键词>"`**，绝不能因为铁律里出现"我的听记"就退化成 `list mine`。
 
 典型错误链路：
 ```
 用户: "帮我看一下上次和 Tony 开会的听记摘要"
-错误: LLM 直接编造: dws minutes get summary --id "7632756964..."  -- 这个 id 是捏造的
-正确: 先 dws minutes list mine → 从结果按标题/参会人匹配 → 再 get summary --id <真实id>
+错误1: LLM 直接编造: dws minutes get summary --id "7632756964..."  -- 这个 id 是捏造的
+错误2: LLM 用 dws minutes list mine 搜索 -- 若该听记是他人共享的则搜不到，误报"找不到"
+正确: 先 dws minutes list all --query "Tony" → 从结果按标题/参会人匹配 → 再 get summary --id <真实id>
 ```
+
+**「分别看 N 篇」多篇定位场景（0529 P2 提炼）：**
+
+> 用户一次性要求查看多篇听记（如"分别看看 A 周报和 B 分工的摘要"）时：
+> 1. **优先一次 `dws minutes list all` 拉全列表**（必要时按 `--query` 各自的关键词或不带 query 拉全后在内存中匹配），分别匹配出 A、B 两篇的 taskUuid
+> 2. 对每个 taskUuid **逐一串行**调用 `get summary`（严禁 shell `&` 并行 / `|` 管道）
+> 3. 若某一篇匹配不到，先用**更宽松的关键词**或**不带 query 的 `list all`** 再确认一次，仍找不到才告知用户该篇未定位到，并列出已找到的近似标题供用户确认——**严禁一篇搜不到就直接判定"听记不存在"**
+
+**选对象铁律：list/搜索拿到结果后，必须按语义精准锁定目标听记（0605 P2 EDD badcase 提炼）**
+
+> 这是历史任务中**最高频、最致命**的一类失败：命令写得完全正确，但**选错了听记对象**，导致后续所有 get summary / keywords / update 操作全部作用在错误条目上，整任务判定不通过。即使 LLM 评分给到 30~55，只要选错对象就是"核心目标未达成"。
+>
+> **铁律 S1 —— 跨组织/多组织汇总时，组织与听记的对应关系绝不能张冠李戴：**
+> - 真实 badcase（用例 20260513_dws_minutes_0028「跨组织听记汇总」）：用户「帮我看看我所有听记」，list 返回多个组织下的听记，模型把「龙赓一家人」组织下的「12月文档切片讨论」误识别为「晨会427」，把「云购电商测试」下的「评测系统重构分工」误识别为「DWS功能对齐与评测优化」，6 个 CRITICAL 检查点错 4 个。
+> - **根因**：list 返回的每条听记都带有 `organizationName` / `orgName`（或所属组织/空间）字段，模型未逐条核对组织归属，凭标题相似度乱配。
+> - **做法**：跨组织汇总时，**必须**以 list 返回里每条记录的 `taskUuid` + `title` + `organizationName` 三元组为准，逐条原样引用，**严禁**对标题做"近似改写""脑补归并"。展示时按组织分组，组织名和听记标题都**逐字照抄** list 返回值，不得自创或张冠李戴。
+>
+> **铁律 S2 —— "最近一次/最新/上一次某类会议"必须用结构化字段判断，不能凭标题猜：**
+> - 真实 badcase（用例 0026「周会回顾整理」）：用户「帮我找一下最近一次周会的听记」，应命中「4月9日周会纪要」（2026-04-09），模型却选了「2026-06-02 17:33 录音」这条普通录音。
+> - **根因**：模型把"最近"简单理解成"列表里时间最新的那条"，忽略了"周会"这个**主题限定词**——普通录音不是周会。
+> - **做法**：解析"最近一次 + <主题词>"时，先用 `--query "<主题词>"`（如 `周会`）做服务端过滤缩小候选，再在候选里按 `createTime` / 开始时间字段取最新的一条。**主题限定优先级高于时间**：先满足"是这类会议"，再在其中比"最近"。绝不能在全量列表里只挑时间最新而忽略主题是否匹配。
+>
+> **铁律 S3 —— 比较"最长/时长最长"听记时，必须读 `durationMicros` 实际字段，不能凭自己声称的时长：**
+> - 真实 badcase（用例 0030「批量听记信息整理」）：模型口头声称最长的是「【内部会议】测试报告与多模型适配进展」（约12分钟），实际操作的 taskUuid 却对应「4月评测自动化周报」（约4分5秒），而真正 `durationMicros=737927000`（约12分钟）的「【内部会议】评测流程与报告优化」未被识别。
+> - **做法**：凡涉及"最长/最短/时长排序"，**必须**从 list 或 `get info` 返回的 `durationMicros`（微秒）字段做数值比较，取最大值对应的 `taskUuid`，**严禁**凭自然语言印象或标题臆断时长。口头结论与实际操作的 taskUuid 必须自洽——说哪条最长，就操作哪条。
+>
+> **铁律 S4 —— 目标听记内容为空/获取失败时，绝不允许擅自切换到另一条听记：**
+> - 真实 badcase（用例 0020「搜索+摘要+关键词」）：用户「帮我找一下关于'模型'的听记」，模型搜到第一条后，get summary/keywords 返回内容为空，便**自作主张换成另一条听记**展示关键词，违反「三次操作目标听记一致」的 CRITICAL 检查点。
+> - **做法**：一旦锁定目标 taskUuid，后续 get summary / keywords / transcription / update **必须始终复用同一个 taskUuid**。若某项内容为空或接口失败，应**如实告知用户"该听记的摘要/关键词暂为空"**，并询问是否查看其它字段或换一条，**绝不能在用户不知情的情况下偷偷切换对象**。另外，`--query "模型"` 搜索后要核对返回标题确实与"模型"主题相关，无关结果应说明而非强行展示。
+>
+> **铁律 S5 —— 模糊日期（"X月X日XX"）匹配不到时，要放宽到邻近日期再确认，不能直接报"找不到"：**
+> - 真实 badcase（用例 0030）：用户提到「4月9日周会纪要」，实际该听记创建于 4.14，模型严格按 4-09 精确匹配导致找不到。人工判定理由：未找到周会纪要，可能是因为4月9日周会纪要实际创建日期是4.14日。
+> - **根因**：用户给的日期常是"会议主题里的日期"而非"听记实际创建日期"，二者可能错位数天甚至一周以上。
+> - **做法**：按标题关键词（如"周会纪要"）`--query` 搜索为主，日期仅作辅助排序。**三级回退搜索策略**：
+>   1. **首选**：`dws minutes list all --query "<主题关键词>" --format json`（不带日期，纯关键词搜）→ 在结果中按时间匹配最接近用户提到的日期的条目
+>   2. **次选**（结果过多时缩小范围）：加 `--start`/`--end` 但**放宽到 ±7 天**，如用户说"4月9日" → `--start "2026-04-02T00:00:00+08:00" --end "2026-04-16T23:59:59+08:00"`
+>   3. **兜底**（仍无结果）：去掉日期相关词，只用核心主题词搜索（如"周会"），列出近期候选请用户确认
+> - **严禁**：① 按精确日期匹配不到就直接报"找不到"终止任务；② 只搜一次就放弃；③ 不列候选就判定"不存在"
+>
+> **铁律 S6 —— 用户给了标题但没给 taskUuid 时，必须先 list/搜索定位，禁止直接拿"记忆里的 id"操作：**
+> - 真实 badcase（用例 0012「修改听记标题」）：用户「把'1月22日废弃片段'这条听记标题改成'1月22日短会片段'」，模型跳过 list/搜索，直接用一个已知 ID 执行 `update title`，不符合流程规范（即使最终改对了也判不通过）。
+> - **做法**：只要用户是用**标题/关键词**指代听记（而非直接粘贴 taskUuid 或 URL），就**必须**先 `dws minutes list all --query "<标题关键词>"` 定位出唯一 taskUuid，再执行 update/get。**严禁**凭上下文记忆或猜测直接填 `--id` 跳过定位步骤。这与"禁止编造 taskUuid"铁律一脉相承：没有经过本轮 list/搜索确认的 id 一律不可信。
 
 **意图→命令决策表（0512 P0 Golden Case 提炼）：**
 
@@ -131,11 +191,60 @@ dws minutes
 | 总结、摘要、重点、概述、主要内容、按模板整理 | `get summary` | 返回结构化摘要 |
 | 逐字稿、全文、原文、完整记录、转写、录音文字 | `get transcription` | 返回完整转写原文 |
 | "帮我看/总结某次会议"（未给 id） | 先 `list all`（默认） | 按标题/时间匹配后再 get |
-| "我可访问的听记"/"我能看到的"/"我有权限的"/"所有听记" | `list all` | **不是 `list mine`！** `all` = 我可访问的全部（mine + shared），`mine` 仅限我自己创建的 |
+| "我能访问的所有听记列表"/"我可访问的听记"/"我能看到的"/"我有权限的"/"所有听记" | `list all` | **不是 `list mine`！P2 真实 badcase**：query 里有"我能访问的""我有权限的"就被误判成 `mine`。只要出现"访问/权限/可见/能看到/所有"等覆盖范围词，无条件走 `all`，不能因为有"我"字退化成 `mine`。`all` = 我可访问的全部（mine + shared），`mine` 仅限我自己创建的 |
 | "我的听记"（模糊表述） | `list all` | "我的"通常指用户可见的全部听记，默认走 `all`；仅当明确说"我创建/发起的"时才 `mine` |
 | "我自己创建的听记"/"我发起的听记"/"我录的听记" | `list mine` | 明确限定创建者是自己时才走 `mine` |
 | "上上周/两周前的会议" | `list all --start --end` | 需正确计算时间范围 |
 | 添加参会者、批量添加参会者、添加成员、批量添加成员、加参会人 | `permission add` | 听记无独立"添加成员"接口，统一走权限接口 |
+| "聚焦原话/逐字/根据听记内容/沟通细节/具体讨论了什么" | 先 `list all` → 再 `get transcription`（翻页拉全） | **禁止仅凭 summary 出稿**，必须拉转写原文。见下方「转写原文硬约束」 |
+
+**转写原文硬约束（0609 P0 点踩 case 提炼，trace: 457c3f0）：**
+
+> 用户诉求涉及「聚焦原话 / 逐字 / 根据听记内容 / 沟通细节 / 具体讨论了什么 / 原始发言」等**需要还原真实发言**的关键词时：
+> 1. **必须先调 `dws minutes get transcription --id <uuid> --format json`** 翻页拉全完整转写原文，基于原文提炼输出
+> 2. **严禁**仅凭 `get summary` 的 AI 二手摘要换皮成泛化套话——summary 是结构化摘要，不含原始发言细节
+> 3. 通话类听记（时长较短）也不能跳过转写——"通话短、摘要够用"不是省略转写的理由
+>
+> **真实 badcase**：用户要聚焦沟通内容，模型以「通话短摘要够用」为由跳过 `get transcription`，只拿 AI 二手摘要换皮成泛化套话 → 点踩。
+
+**数据源下钻硬约束（0609 P0 点踩 case 提炼，trace: 76f1d42）：**
+
+> 周报 / 汇报 / 多源汇总等需要从听记提取内容的场景：
+> 1. 听记维度**必须** `get summary`（或 `get transcription`）读纪要正文，**严禁只取标题列表**当作"已读取内容"
+> 2. 听记 scope **一律用 `all`**（周报场景可能涉及他人共享的会议听记）
+> 3. 某维度数据为空时，**换时间窗重试**（如扩大 ±3 天）或**如实标注缺失**，不得静默跳过
+> 4. 交付前做**完整性自检**：每个用户要求的数据源维度（听记/日历/聊天/文档）是否都已实际调用并获取到内容
+>
+> **真实 badcase**：把「列出数据源清单」当成「读取内容」，听记只取标题不调 `get summary`，文档不 `doc read`，群聊空不兜底，周报严重不完整 → 点踩。
+
+**聊天消息中听记链接解析规则（0609 P1 点踩 case 提炼，trace: 7b8e002）：**
+
+> 从聊天消息（`dws chat message list`）中遇到听记链接时：
+> 1. **识别听记链接特征**：URL 中包含 `flash_minutes_detail` 或 `SHANJI` 路径、或包含 `minutesId` / `taskUuid` 参数
+> 2. **自动解析 `minutesId`**（即 `taskUuid`）→ 调 `dws minutes get summary --id <taskUuid>` 或 `get transcription` 读纪要正文
+> 3. **严禁**把听记链接降级成普通关键词——链接里有完整的 `taskUuid`，应直接用它获取内容
+> 4. 日报 / 周报场景，若聊天中有日会听记链接但未解析读取，属于**取数没跟到底**，交付物缺失
+>
+> **真实 badcase**：群里日会是听记链接（带 minutesId），却从不调 `dws minutes get` 读纪要正文，把日会降级成关键词，日报缺失也不用 `report` 兜底 → 点踩。
+
+**忠实性硬约束（0609 P1 点踩 case 提炼，trace: 14e3365）：**
+
+> 基于听记数据生成长文（周报/汇报/纪要整理）时：
+> 1. **源数据无某要素（行动项/责任人/数字）时，禁止凭空生成对应内容**——听记 AI 建议 ≠ 带责任人的 ActionItems
+> 2. 统计字段（文档数 / 会议数 / ActionItem 数）**必须基于实际取数结果计数**，不得编造
+> 3. 交付前做**「证据-断言对齐」校验**：稿中每条核心断言须有源数据支撑，与实际取数对账
+>
+> **真实 badcase**：取数全成功，但写周报时把听记 AI 建议篡改成带责任人的 ActionItems、虚报文档数（7 vs 10），无忠实性护栏 → 点踩。
+
+**多数据源全覆盖约束（0609 P1 点踩 case 提炼，trace: f3197dd）：**
+
+> 用户枚举多个数据源（如「数据源包含：日历、聊天、听记、文档」）时：
+> 1. **每个来源都必须生成对应工具调用**：`calendar event list` + `chat message list` + `minutes list all` → `get summary/transcription` + `doc search/read`
+> 2. **瞬时错误（超时/网络抖动）自动重试**（最多 2 次），不得一次失败即放弃该数据源
+> 3. 最终交付物**如实声明各来源取数情况**：成功获取了哪些、哪些因超时/权限失败被跳过
+> 4. **严禁**用训练记忆 / 常识填充失败数据源的空缺——编造无来源的精确数字是最严重的幻觉
+>
+> **真实 badcase**：用户点名 4 类数据源，chat/minutes 命令现成却完全没调，日历超时即放弃，残缺日志当全量交付还编精确数字 → 点踩。
 
 **多步流程错误传播规则（0512/0514 P0 Golden Case 提炼）：**
 
@@ -260,8 +369,8 @@ dws minutes
 > | `missing required flag(s): --session-id` | cancel 命令必须传 session-id | 从之前 upload create 的返回中提取 session-id；若丢失则暂无法取消 |
 >
 > **上传流程三步走**（AI 必须按此顺序执行，不可跳步）：
-> 1. `dws minutes upload create --file-name "xxx.mp3" --file-size <字节数> --format json` → 获取 `sessionId` + `presignedUrl`
-> 2. 将文件通过 `presignedUrl` 直传（由客户端侧完成，AI 不介入）
+> 1. `dws minutes upload create --file-name "xxx.mp3" --file-size <字节数> --format json` → 获取 `sessionId` + `uploadUrl`
+> 2. 将文件通过 `uploadUrl` 直传（由客户端侧完成，AI 不介入）
 > 3. `dws minutes upload complete --session-id <sid> --format json` → 确认上传完成
 >
 > **注意**：`--file-size` 单位是**字节**（不是 KB/MB），AI 不要帮用户估算大小，应让用户确认文件实际字节数。
@@ -306,9 +415,12 @@ dws minutes
 │   ├── create --file-name "..." --file-size <n>
 │   ├── complete --session-id <sid>
 │   └── cancel --session-id <sid>
-└── permission <subcommand>
-    ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]
-    └── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>
+├── permission <subcommand>
+│   ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]
+│   └── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>
+└── tag <subcommand>
+    ├── list
+    └── query --tag-id <tagId> [--limit] [--cursor]
 ```
 
 ## 命令总览
@@ -380,7 +492,7 @@ Flags:
       --id string   听记 taskUuid (必填)，取值逻辑参考 ## 注意事项
 ```
 
-返回字段（result 内）: `duration`(时长, 秒)、`startTime`(开始时间, 毫秒时间戳)、`endTime`(结束时间, 仅较长会议返回, 短录音无此字段)、`taskUuid`(听记 ID)、`title`(听记标题)、`url`(听记访问链接)。注意: **不返回创建人(creator)字段**。
+返回字段: 创建人、开始时间、截止时间、听记标题、听记访问链接URL
 
 **发言人列表输出规范（查询详情后必须执行）**：
 
@@ -410,7 +522,7 @@ Flags:
    > 4. **跳过** — 暂不处理发言人识别
 
    根据用户选择分别处理：
-   - 选 1 → 进入 `minutes-speaker-summarize` recipe 的智能推断流程（见 [10-minutes-speaker-match.md](../best_practices/10-minutes-speaker-match.md)）
+   - 选 1 → 进入 `minutes-speaker-summarize` recipe 的智能推断流程（见 [10-minutes-speaker-match.md](10-minutes-speaker-match.md)）。**智能匹配核心：同时发起三路查询、不串行等待**：① 人员+组织架构 `dws aisearch person --keyword <姓名> --dimension name` → userId，再用 `dws contact user get --ids <userId>` 补部门/职级；② 聊天记录 `dws chat message list` → 工作内容/语言风格/职责线索；③ 本人文档 `dws doc search --keyword <姓名>` 前 3 篇 → 角色精确信号。**判定**：通讯录+聊天两路一致即可确认角色（通常无需查文档），仅一路或矛盾时补查文档兜底、两路以上一致才下结论；部门名 ≠ 角色。**文档角色对照**：PRD/需求/商业化方案→产品经理，视觉规范/原型/交互评审→产品设计师，技术方案/架构→研发，分析报告/底表→数据分析师。**置信度分支**：> 70% 输出匹配结果并执行替换，< 70% 不输出、请用户补充信息或改用手动设置
    - 选 2 → 请用户提供日程链接或参会人姓名列表：
      - 有日程链接 → 从链接提取 eventId → `dws calendar participant list --event <eventId>` 获取参与人 → 与转写发言人数量/顺序对照匹配 → 展示匹配结果请用户确认 → 确认后逐条执行 `speaker replace`
      - 有参会人名单（用户直接列出姓名）→ 与转写中匿名发言人做数量对照 → 结合发言内容/角色推断匹配 → 展示匹配结果请用户确认 → 确认后逐条执行 `speaker replace`
@@ -615,7 +727,7 @@ AI 基于已拉取的转写数据，**本地完成**聚类与摘要（无需新�
 > **铁律 2：严禁用 AI 摘要里的"参与人/参会人"字段判断某人是否参会**
 > - AI 摘要中的"参与人"字段往往**只截取最显著的 1-2 个名字**（通常是创建人或发言最多的人），**不是完整参会人列表**
 > - "AI 摘要参与人只有故愚 → 灵麦没参会" 是典型的错误推理链
-> - 如果一定要列出参会人，只能从 `get transcription` 的转写发言人（`speakerName`/`speakerId`）汇总——`get info` / `get batch` **均不返回** `participants` 结构化字段（get info 只返回 duration/startTime/taskUuid/title/url，get batch 只返回 creatorNick/creatorUnionId/status 等），别指望从它们拿参会名单
+> - 如果一定要列出参会人，应使用 `dws minutes get info` / `get batch` 返回的 `participants` 字段，而不是摘要文本里的描述
 >
 > **铁律 3：通讯录查询是 Step 4 的强制起点，不依赖 Step 3 是否成功**
 > - Step 2 一旦返回"未命中真名标注"，**Step 3 与 Step 4 ① 必须并发触发**，不要等 Step 3 失败再补查
@@ -664,7 +776,7 @@ Step 7: 引导用户替换发言人（调用 speaker replace 写回听记）
 > - **未命中真名标注 ≠ 目标人物没参会**——绝大多数听记的发言人都是匿名编号，"未命中"是**默认场景**，恰恰是发言人识别功能要解决的问题
 > - **不要在转写文本里 grep 目标人名**作为存在性判断——花名/真名通常不会出现在 TA 自己的发言里（参见铁律 1）
 > - **不要把 `dws minutes get summary` 摘要文本里写到的"参与人"当作完整参会列表**——AI 摘要里的"参与人"字段只截取最显著的 1-2 个名字，不是完整名册（参见铁律 2）
-> - 听记各接口都拿不到权威的完整参会名册：`get info` / `get batch` **均不返回** `participants` 字段，转写发言人列表又常是匿名编号。因此**几乎无法**仅凭听记数据下"目标人物没参会"的结论；只有当转写发言人已全部实名标注且不含目标、且 `dws contact user search` 也搜不到该人时，才可谨慎告知"未在可见发言人中找到该人"
+> - 唯一能下"目标人物没参会"结论的场景是：`get info` / `get batch` 返回的结构化 `participants` 字段里**完整列出参会人且不含目标**，且 `dws aisearch person` 也搜不到该人 → 才允许告知用户"该人不在参会列表"
 
 ##### Step 3: 转写原文内推断（优先）
 
@@ -697,7 +809,7 @@ Step 7: 引导用户替换发言人（调用 speaker replace 写回听记）
 
 | 路径 | 命令 | 得到什么 |
 |------|------|----------|
-| ① 通讯录组织架构 | `dws contact user search --keyword "目标人名"` → 部门/职级/上级/真名 | 职能大类（技术/产品/设计/管理）+ 是否存在该人 |
+| ① 人员与组织架构 | `dws aisearch person --keyword "目标人名" --dimension name` → userId，再用 `dws contact user get --ids <userId>` 补详情 | 职能大类（技术/产品/设计/管理）+ 是否存在该人 |
 | ② 本人创建的文档 | `dws doc search --keyword "目标人名/真名"` 至少获取 3 篇标题 | 角色精确信号（PM写PRD、研发写技术方案、设计师写视觉规范）|
 | ③ 近期日程类型 | `dws calendar event list` | 职能边界（参加什么类型的会）|
 | ④ 聊天记录 | `dws chat message list` 获取与目标人的近期 IM 消息 | 语言风格/工作内容/职责线索 |
@@ -773,7 +885,7 @@ Step 7: 引导用户替换发言人（调用 speaker replace 写回听记）
 > "目前这篇听记中 [人名] 的发言仍显示为『发言人X』。要我帮你把听记里的『发言人X』全部替换为『[人名]』吗？替换后纪要和待办中的发言人也会同步更新。
 > 确认后我会执行：`dws minutes speaker replace --id <taskUuid> --from "发言人X" --to "[人名]"`"
 
-- 用户确认 → **先主动调用通讯录模糊查询** `dws contact user search --query "[人名]" --format json` 获取该人员的 userId（长整型 dingUid）：
+- 用户确认 → **先统一搜人** `dws aisearch person --keyword "[人名]" --dimension name --format json` 获取该人员的 userId（长整型 dingUid）：
   - 唯一匹配 → 告知用户匹配结果，确认后执行 `dws minutes speaker replace --id <taskUuid> --from "发言人X" --to "[人名]" --target-uid <userId> --format json`
   - 多个匹配 → 列出候选（姓名+部门+userId）让用户选择后执行
   - 无匹配 → 提示用户未在通讯录中找到此人，执行不带 `--target-uid` 的替换：`dws minutes speaker replace --id <taskUuid> --from "发言人X" --to "[人名]" --format json`
@@ -810,7 +922,12 @@ Flags:
       --ids string   听记 taskUuid 列表，逗号分隔 (必填)
 ```
 
-返回字段: `result.minutesDetails` 数组，每项含 `title`(标题)、`durationMicros`(时长, 微秒)、`startTime`(开始时间, 毫秒)、`taskUuid`、`status`(状态)、`creatorNick`(创建人昵称)、`creatorUnionId`、`size`、`bizType`、`isDeleted`。**不返回参会人列表**。
+返回字段: 听记标题、时长、参与人列表、创建时间、taskUuid、听记状态
+
+**批量查询容错铁律（0030 P2 badcase 提炼）：**
+> - `get batch` 部分条目权限失败时，**展示成功条目的完整信息 + 列出失败条目的 id 与错误原因**，不要因部分失败就整批放弃改为逐个查询
+> - `get batch` 整体报错（如接口级权限/参数问题）时，**降级为逐个 `get info`**，但必须在最终输出中说明"批量接口不可用，已逐个查询"，且所有条目都必须尝试
+> - **严禁**：① 部分失败就整批丢弃改逐个查，不展示已成功的数据；② 某一条失败就放弃后续条目；③ 降级后不说明降级原因
 
 ### 修改听记标题
 ```
@@ -1207,6 +1324,41 @@ Flags:
 - 如果成员是听记的创建者（所有者），无法通过此命令移除其权限
 - 建议在移除前先确认成员的当前权限，避免误操作
 
+### 查询我的听记标签/分组列表
+```
+Usage:
+  dws minutes tag list
+```
+
+查询当前用户在听记页面手动创建的所有标签或分组列表。无需传入额外参数，系统自动识别当前用户身份。
+返回所有标签/分组的列表，每条记录包含 tagId 和标签名称。获取到 tagId 后，可使用 `dws minutes tag query --tag-id <tagId>` 查询该标签下的听记列表。
+
+**注意事项：**
+- 标签/分组在听记页面手动创建，此命令仅提供查询能力
+- 返回的 tagId 用于后续 `tag query` 命令的 `--tag-id` 参数
+
+### 根据标签ID查询听记列表
+```
+Usage:
+  dws minutes tag query [flags]
+Example:
+  dws minutes tag query --tag-id <tagId>
+  dws minutes tag query --tag-id <tagId> --limit 20
+  dws minutes tag query --tag-id <tagId> --limit 10 --cursor <nextToken>
+Flags:
+      --tag-id string     标签/分组 ID，可通过 tag list 获取 (必填)
+      --limit float       每页数据条数 (默认 10)
+      --cursor string     分页 token (首页留空)
+```
+
+根据用户的标签或分组 ID 查询该标签下的听记列表。支持分页查询。
+tagId 可通过 `dws minutes tag list` 获取。
+
+**注意事项：**
+- `--tag-id` 必填，值来自 `dws minutes tag list` 返回的 tagId
+- 支持分页，使用 `--cursor` 传入上一次返回的 nextToken
+- 标签/分组在听记页面手动创建，不支持通过 CLI 创建标签
+
 ## 意图判断
 
 ### 发起听记
@@ -1304,7 +1456,7 @@ Flags:
 
 1. 用户提供目标姓名（如"张三"）后，**AI 主动调用通讯录模糊查询**：
    ```
-   dws contact user search --query "张三" --format json
+   dws aisearch person --keyword "张三" --dimension name --format json
    ```
 2. 从返回结果中提取匹配的人员列表，每条包含 `userId`（长整型数字，即 dingUid）和姓名：
    - **唯一匹配** → 直接向用户确认："通讯录中找到『张三（userId: 123456789）』，确认将发言人替换为此人并关联通讯录身份？"
@@ -1320,7 +1472,7 @@ Flags:
    - **无匹配** → 提示用户："通讯录中未找到『张三』，可以直接替换发言人名称（不关联通讯录身份），或提供更精确的姓名重新查询。直接替换？[是] [重新查询]"
 3. 获取到 userId 后，在 `speaker replace` 中附加 `--target-uid <userId>`，实现发言人关联通讯录身份
 
-> **注意**：`dws contact user search` 返回的 `userId` 是**长整型数字**（如 `123456789`），这就是 `--target-uid` 需要的值。不要与 `staffId`、`unionId` 等其他 ID 混淆。
+> **注意**：`dws aisearch person` 返回的 `userId` 是**长整型数字**（如 `123456789`），这就是 `--target-uid` 需要的值。不要与 `staffId`、`unionId` 等其他 ID 混淆。
 
 **发言人映射模式识别（高频场景）：**
 
@@ -1335,7 +1487,7 @@ Flags:
 **AI 识别到上述模式时，必须执行以下流程：**
 
 1. **解析映射关系**：提取所有 `源发言人 → 目标姓名` 的配对
-2. **批量通讯录查询**：对每个目标姓名调用 `dws contact user search --query "<姓名>" --format json`，获取 userId（dingUid）。将查询结果汇总后一并向用户确认
+2. **批量人员查询**：对每个目标姓名调用 `dws aisearch person --keyword "<姓名>" --dimension name --format json`，获取 userId（dingUid）。将查询结果汇总后一并向用户确认
 3. **向用户确认**：展示解析结果（含通讯录匹配）并请求确认，格式如下：
 
 > 我识别到以下发言人对应关系，并已从通讯录中匹配到对应人员：
@@ -1580,12 +1732,33 @@ Flags:
 - 用户提到"添加参会者/加参会者/批量添加参会者/添加成员/加成员/批量添加成员/加参会人/添加参会人"等成员语义 → `permission add`（听记没有独立的"添加成员"接口，**统一走权限接口**）
 - 用户提到"移除/取消/删除/不让...看"等移除权限语义 → `permission remove`
 - 如果用户未指定权限类型，默认使用 `--policy 4`（可查看/下载/编辑）
-- 如果用户未提供 member-uids，需要先引导用户提供目标成员的钉钉 UID（可通过 `dws contact user search --query "姓名"` 查询）
+- 如果用户未提供 member-uids，需要先引导用户提供目标成员的钉钉 UID（可通过 `dws aisearch person --keyword "姓名" --dimension name` 查询）
 
 **典型执行链路：**
 1. 用户说"把张三加到这个听记中" → AI 需获取张三的 UID
-2. 调用 `dws contact user search --query "张三" --format json` 获取 UID
+2. 调用 `dws aisearch person --keyword "张三" --dimension name --format json` 获取 UID
 3. 调用 `dws minutes permission add --ids <taskUuid> --member-uids <uid> --policy 4 --format json`
+
+### 听记标签/分组查询
+用户说"我的听记标签/听记分组/听记有哪些标签/有哪些分组" → `tag list`
+用户说"查看某个标签下的听记/这个标签下有哪些听记/按标签查听记" → `tag query`
+
+**自然语言示例：**
+- "我的听记有哪些标签"
+- "帮我看看听记的分组列表"
+- "查一下'周会'标签下有哪些听记"
+- "按标签筛选听记"
+
+**路由规则：**
+- 用户提到"标签列表/分组列表/有哪些标签/有哪些分组" → `tag list`
+- 用户提到"按标签查/某个标签下的听记/标签筛选" → 先 `tag list` 获取 tagId，再 `tag query --tag-id <tagId>`
+- 如果用户直接提供了 tagId → 直接 `tag query --tag-id <tagId>`
+- 如果用户提供标签名称而非 tagId → 先 `tag list` 查找对应 tagId，再 `tag query`
+
+**典型执行链路：**
+1. 用户说"帮我看看'周会'标签下的听记" → AI 先获取标签列表
+2. 调用 `dws minutes tag list --format json` → 从返回中按名称匹配找到 tagId
+3. 调用 `dws minutes tag query --tag-id <tagId> --format json`
 
 ### 修改听记标题
 用户说"改听记标题/重命名听记/修改标题" → `update title`
@@ -1801,7 +1974,7 @@ dws minutes list mine --query "技术方案" --format json
 
 loop:
   调用 get transcription --id <uuid> [--next-token 当前token]
-  
+
   if stdout 为空 or 返回无效:
     if 当前token == 上一次token:
       连续空响应计数 += 1
@@ -1812,18 +1985,18 @@ loop:
       连续空响应计数 = 1
     上一次token = 当前token
     continue
-  
+
   连续空响应计数 = 0
   拼合本页转写文本到已累积文本
-  
+
   if len(已累积文本) > 12000:
     暂停翻页
     询问用户："当前已拉取约 N 字符，已达上限，是否继续？"
     if 用户拒绝: break
-  
+
   if 返回中无 nextToken 或 nextToken 为空:
     break（最后一页）
-  
+
   上一次token = 当前token
   当前token = 返回的 nextToken
 ```
@@ -1866,7 +2039,7 @@ loop:
 
 | 错误类型 | 错误信息特征 | 恢复动作 | 严禁行为 |
 |----------|-------------|----------|----------|
-| 命令结构错误 | `unknown command "info"` / `unknown command "get"` (后无子命令) / `error[validation]: unknown flag: --start` (在 `list` 而非 `list mine/shared/all` 上) | **立即参照本文档顶部"命令层级结构"纠正**。常见错误：① `dws minutes info` → 应为 `dws minutes get info`；② `dws minutes get --id` → `get` 后缺子命令，应为 `get info/summary/transcription` 等；③ `dws minutes list --start` → `list` 后缺 scope，应为 `list mine/shared/all --start` | 严禁在命令结构报错后只换参数名不修正命令层级；严禁把 `get` 当作独立命令使用（后面必须跟 info/summary/transcription/keywords/todos/audio/batch） |
+| 命令结构错误 | `unknown command "info"` / `unknown command "get"` (后无子命令) / `error[validation]: unknown flag: --start` (在 `list` 而非 `list mine/shared/all` 上) | **立即参照本文档顶部"命令层级结构"纠正**。常见错误：① `dws minutes info` → 应为 `dws minutes get info`；② `minutes get --id` → `get` 后缺子命令，应为 `get info/summary/transcription` 等；③ `minutes list --start` → `list` 后缺 scope，应为 `list mine/shared/all --start` | 严禁在命令结构报错后只换参数名不修正命令层级；严禁把 `get` 当作独立命令使用（后面必须跟 info/summary/transcription/keywords/todos/audio/batch） |
 | 参数名错误 | `unknown flag: --task-uuid` / `unknown flag: --uuid` / `unknown flag: --start-time` / `unknown flag: --end-time` | 立即调用 `dws minutes <子命令> --help` 查询正确参数名；minutes 模块统一用 `--id`，时间统一用 `--start` / `--end`（不是 `--start-time` / `--end-time`） | 严禁用同一个错误的参数名重试；严禁在不同子命令间尝试 --uuid / --task-uuid / --id 三种名称反复试错；严禁凭记忆猜测参数名，必须查 --help |
 | UUID 无效 | `taskUuid is invalid` / `dingOpenErrcode=300` | **第一时间切换策略**：调用 `dws minutes list mine --max 10 --format json` 获取真实可用的 uuid 列表，让用户选择或自动匹配最相关的一条。**真实案例中模型用同一个错 uuid 重试了 20 次全部失败——这是 minutes 模块失败率最高的错误模式，必须零容忍** | 严禁用同一个无效 uuid 重试哪怕 1 次（errcode=300 是不可重试错误）；严禁从历史对话/文档/链接中猜测 uuid；严禁从十六进制编码字符串里截取部分数字拼凑新 uuid；严禁不切 list 就放弃 |
 | 命令返回空 stdout | `get summary` / `get transcription` 返回空内容（stdout 为空，error_msg 也为空） | 1) 先调用 `dws minutes get info --id <uuid> --format json` 确认听记是否存在且状态正常；2) 如果 info 也为空或报错，说明 uuid 本身有问题，回退到 list 命令重新获取 | 严禁在 stdout 为空时重复调用同一命令超过 2 次；严禁把空返回当作"没有内容"直接告知用户而不做任何排查 |
@@ -1913,8 +2086,8 @@ loop:
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [minutes_recent_summary.py](../../scripts/minutes_recent_summary.py) | 获取最近听记的 AI 摘要并合并 | `python minutes_recent_summary.py --max 5` |
-| [minutes_extract_todos.py](../../scripts/minutes_extract_todos.py) | 从听记中提取待办事项汇总 | `python minutes_extract_todos.py --max 5` |
+| [minutes_recent_summary.py](../scripts/minutes_recent_summary.py) | 获取最近听记的 AI 摘要并合并 | `python minutes_recent_summary.py --max 5` |
+| [minutes_extract_todos.py](../scripts/minutes_extract_todos.py) | 从听记中提取待办事项汇总 | `python minutes_extract_todos.py --max 5` |
 
 ## 反例 / 回归案例
 
@@ -2015,6 +2188,28 @@ https://shanji.dingtalk.com/app/transcribes/76327569643236343831373737345f363438
    - **超过 12000 字符** → 暂停，提示用户："当前已拉取约 X 字符的转写内容，已达到单次处理上限。是否继续拉取后续内容？"
 4. 用户确认继续 → 接着翻页；用户拒绝 → 停止翻页，基于已拉取内容进行分析展示
 
+> **【铁律·转写覆盖校验：用户指定了时间区间/时间点时，必须拉到该区间再分析，没拉到要准确提示】（202606 P0 真实 badcase 实锤）**
+>
+> **真实事故**：用户对一篇 1 小时+ 的长听记说「总结里面 57:52 → 01:05:44 的内容，形成关键三件事」。`get transcription` 每页只返回 50 段，必须靠 `nextToken` 顺序翻页。模型只翻了 4 页、转写**只拉到 31:09 就停了**（撞上 12000 字符上限 / react 步数预算），**根本没拉到 57:52 那段**，却拿着"前 31 分钟"的内容硬凑用户要的"57 分钟那段"，总结完全驴唇不对马嘴。事后换更强模型继续翻页到 63:53、覆盖了目标区间才答对——**但这不是模型能力问题，是取数没拉到目标区间**。
+>
+> **根因**：`get transcription` 是**从头顺序分页**的，转写段落带 `startTime`/`endTime`（**毫秒**）时间戳。用户要的区间靠后时，必须一直翻页到该区间才能拿到对应原文。顺序翻页中途因字符上限/步数预算停止 = **目标区间的转写根本没进上下文**。
+>
+> **铁律（用户的请求里含具体时间区间/时间点，如 "57:52~01:05:44"、"最后 10 分钟"、"开头那段"、"第 N 分钟讲了啥"时，必须执行）：**
+>
+> 1. **解析目标区间**：把用户的 `mm:ss` / `hh:mm:ss` 换算成毫秒（如 `57:52` = (57×60+52)×1000 = 3472000ms，`01:05:44` = 3944000ms）。
+> 2. **翻页时按段落 `endTime` 判断是否已覆盖目标区间**：每翻一页，看本页段落的 `endTime` 最大值。**只有当已拉取段落的 `endTime` ≥ 用户区间上界（或 `hasNext=false` 即已到末尾）时，才算"覆盖到了"，才能停止翻页进入分析。**
+> 3. **目标区间靠后时优先用倒序/定向减少翻页**：若用户只要靠后的一段（如"最后 10 分钟"），优先用 `--direction 1`（倒序）从尾部拉，减少翻页轮数；不要从 0:00 一页页顺序翻到 50 分钟。
+> 4. **撞到字符上限但还没覆盖目标区间时，提示词必须"准确"——明确告知"已拉到哪、目标区间还没拉到、二选一怎么办"，严禁拿没覆盖的内容硬总结**：
+>    > "这篇听记较长，我目前已拉取到约 **31:09** 处的转写（约 X 字符，已达单次处理上限），但你要的 **57:52 ~ 01:05:44** 这一段**还在后面、尚未拉取到**。请选择：① 我继续翻页直到拉到该区间再总结；② 缩小一下你要的时间范围。在拉到目标区间之前，我不会用前面的内容硬凑总结。"
+> 5. **翻页耗尽（`hasNext=false`）仍未到达用户区间**（说明用户给的时间点超过了听记总时长）→ **准确提示**：
+>    > "这篇听记总时长约 **X 分钟**（转写到 X 处结束），但你要的 **57:52** 已经超出了听记的实际长度，没有对应内容。是不是时间点记错了？或者你要的是听记里的哪一段？"
+>
+> **绝对禁止（本条是 P0 红线）：**
+> - **[禁止]** 用户指定了时间区间，却只拉了前几页（没覆盖目标区间）就开始总结——这是本次事故的直接原因
+> - **[禁止]** 拿"已拉到的前半段内容"冒充"用户要的后半段区间"硬凑答案，且**不告诉用户实际只拉到了哪里**
+> - **[禁止]** 因字符上限/步数预算停止翻页时，只说"已达上限是否继续"却**不说明"目标区间还没拉到"**——用户无法判断继续与否，提示等于无效
+> - **[禁止]** 因为"换个更强的模型就答对了"而把问题归因为模型能力——真正要修的是**取数完整性（是否覆盖用户请求的时间区间）+ 覆盖校验 + 准确提示**，取数修对后普通模型也能答对
+
 ### 案例 4：拉完转写后只输出时间线原文，未引导发言人聚类与替换
 
 **用户输入：**
@@ -2071,7 +2266,7 @@ https://shanji.dingtalk.com/app/transcribes/76327569643231383535353939365f343638
 5. 用户确认 → **Step 6 结构化总结输出**：提取发言人2 的全部发言，输出张三的核心观点、关键决策、待办等
 6. **Step 7 引导替换发言人**（必须执行）：
    > "目前这篇听记中张三的发言仍显示为『发言人2』。要我帮你把听记里的『发言人2』全部替换为『张三』吗？替换后纪要和待办中的发言人也会同步更新。"
-7. 用户确认 → **先通讯录查询获取 dingUid**：调用 `dws contact user search --query "张三" --format json`
+7. 用户确认 → **先统一搜人获取 dingUid**：调用 `dws aisearch person --keyword "张三" --dimension name --format json`
    - 唯一匹配（如返回 userId=123456789）→ 执行 `dws minutes speaker replace --id <taskUuid> --from "发言人2" --to "张三" --target-uid 123456789 --format json`
    - 多个匹配 → 列出候选（姓名+部门+userId）让用户选择后执行
    - 无匹配 → 提示用户通讯录未找到，执行不带 `--target-uid` 的替换：`dws minutes speaker replace --id <taskUuid> --from "发言人2" --to "张三" --format json`
@@ -2116,8 +2311,8 @@ https://shanji.dingtalk.com/app/transcribes/<taskUuid> 分析下木兰讲了什�
 
 | 路径 | 命令 | 结果 |
 |------|------|------|
-| ① 通讯录组织架构 | `dws contact user search --keyword "木兰"` | 木兰 = **王佳明**，X 事业群-X 事业部-X-X-**产品设计部**，上级临渊（王临一）|
-| ② 文档产出 | `dws doc search --keyword "王佳明"`（按需）| 多为设计稿/原型，进一步印证设计师角色 |
+| ① 人员与组织架构 | `dws aisearch person --keyword "木兰" --dimension name` → `dws contact user get --ids <userId>` | 木兰 = **王佳明**，X 事业群-X 事业部-X-X-**产品设计部**，上级临渊（王临一）|
+| ② 文档产出 | `dws drive search --query "王佳明"`（按需）| 多为设计稿/原型，进一步印证设计师角色 |
 
 **Step 5：定向匹配 + 置信度判断**
 
@@ -2221,7 +2416,7 @@ Step 2 **[禁止]** 看到全是匿名编号 → 没有继续走 Step 3-4，反�
 |--------|------------|------|
 | 在转写文本里 grep "木兰" 字符串作为存在性判断 | 铁律 1 | 99% 听记的发言人都是匿名编号，搜不到字面是默认场景，根本不构成"没参会"的证据 |
 | 用 AI 摘要的"参与人=拾光"推断"木兰没参会" | 铁律 2 | AI 摘要"参与人"字段只截取最显著的 1-2 人，**不是**完整参会名册 |
-| 全程没调用过一次 `dws contact user search --keyword "木兰"` | 铁律 3 | 通讯录查询是 Step 4 的必跑项，单次调用就能拿到"木兰=王佳明，产品设计部" |
+| 全程没调用过一次 `dws aisearch person --keyword "木兰" --dimension name` | 铁律 3 | 人员搜索是 Step 4 的必跑项，拿到 userId 后再由 contact 补详情 |
 | 一旦字面搜不到就放弃身份推断，把任务甩给用户 | 铁律 4 | 这恰恰把发言人识别功能的核心价值（把匿名编号映射到真实人）完全抹掉了 |
 
 **[正确] 应该这样执行（与案例 6 一致）：**
@@ -2229,7 +2424,7 @@ Step 2 **[禁止]** 看到全是匿名编号 → 没有继续走 Step 3-4，反�
 1. **Step 1**：从 URL 提取 taskUuid → `dws minutes get transcription` 自动翻页拉全部
 2. **Step 2**：检查 `speakerNick` 字段是否含"木兰"——发现全是匿名编号 → **不要在转写文本里 grep "木兰"，立即并发触发 Step 3 + Step 4 ①**
 3. **Step 3**（与 Step 4 ① 并发）：在转写里做发言人画像（每位发言人的发言量、主题、互斥线索）
-4. **Step 4 ①**（与 Step 3 并发，必跑）：`dws contact user search --keyword "木兰"` → 拿到"木兰=王佳明，产品设计部，上级临渊"
+4. **Step 4 ①**（与 Step 3 并发，必跑）：`dws aisearch person --keyword "木兰" --dimension name` → userId，再 `dws contact user get --ids <userId>` 补部门等详情
 5. **Step 5**：把"产品设计部 + 设计师角色"信号回投到画像 → 锁定发言人1（UI/交互设计视角高度匹配）+ 与拾光的同部门协作信号 → 置信度 ≈ 75% → 走分支 A
 6. **Step 5 用户确认**：展示发言人1 的代表性片段请用户确认
 7. **Step 6**：四段式结构化总结（核心观点/关注点/Action Item/立场态度）
@@ -2239,13 +2434,13 @@ Step 2 **[禁止]** 看到全是匿名编号 → 没有继续走 Step 3-4，反�
 
 1. **"在转写里搜不到目标人名"绝不构成"没参会"的证据**：花名/真名通常不出现在 TA 自己的发言里，这是默认场景而非例外。99% 的听记发言人都是匿名编号——这正是发言人识别功能要解决的问题。
 
-2. **AI 摘要的"参与人"字段是低保真信号，不能作为参会判断依据**：`get summary` 返回的是 AI 生成的自然语言摘要，里面提到的"参与人"通常只是最显著的 1-2 人。而 `get info` / `get batch` **均不返回**结构化 `participants` 字段，无法从中拿完整参会列表；能拿到的只有 `get transcription` 的转写发言人（常为匿名编号）。
+2. **AI 摘要的"参与人"字段是低保真信号，不能作为参会判断依据**：`get summary` 返回的是 AI 生成的自然语言摘要，里面提到的"参与人"通常只是最显著的 1-2 人；要拿完整参会列表，应使用 `get info` / `get batch` 返回的结构化 `participants` 字段。
 
-3. **`dws contact user search` 是 Step 4 ① 的必跑项，单次调用就能突破死局**：本案例的整个失败链路只要有 1 次通讯录查询就能立即扭转——拿到"木兰=王佳明，产品设计部"后，Step 5 的角色匹配就有了锚点，再也不会得出"没参会"的错误结论。
+3. **`dws aisearch person` 是 Step 4 ① 的必跑项**：先找到人员并取得 userId，再用 `dws contact user get` 补部门等详情；拿到"木兰=王佳明，产品设计部"后，Step 5 的角色匹配才有可靠锚点。
 
 4. **想说"找不到 X"前的四个自检问题**（任何一个回答"没"都禁止给"找不到"结论）：
-   - 通讯录查了吗？(`dws contact user search --keyword "X"`)
-   - 文档查了吗？(`dws doc search --keyword "X"`)
+   - 人员搜了吗？(`dws aisearch person --keyword "X" --dimension name`)
+   - 文档查了吗？(`dws drive search --query "X"`)
    - 聊天记录查了吗？(`dws chat message list`)
    - 基于角色在转写里做模式匹配了吗？（设计师 vs 研发 vs 管理者的发言特征）
 
@@ -2254,141 +2449,67 @@ Step 2 **[禁止]** 看到全是匿名编号 → 没有继续走 Step 3-4，反�
 **绝对禁止：**
 - **[禁止]** Step 2 看到匿名编号后，直接在转写文本里 grep 目标人名 → 没找到就退出
 - **[禁止]** 用 `get summary` 摘要里写到的"参与人"判断某人是否参会
-- **[禁止]** 全流程不调用 `dws contact user search` 就给出"找不到 X"的结论
+- **[禁止]** 全流程不调用 `dws aisearch person` 就给出"找不到 X"的结论
 - **[禁止]** 把身份推断的责任甩回给用户："请你告诉我哪位是木兰" / "请去客户端看参会人"——发言人识别功能的存在意义就是 AI 来做这件事
 
-### 案例 8：听记/纪要类 query 不走 dws 技能（基础评测集 16 例 badcase 复盘）
 
-> 这是一组**最高频的失败模式**——用户提出听记/纪要/会议总结/待办提取/链接解析等典型 dws 场景请求，AI 却用 `session_search` / `memory_search` / `activity:search` / `browser_use` / `read_file` / 直接反问 等"伪替代"路径绕过 dws 技能，导致核心链路 0 命中。下面把基础评测集（minutes-base, evalrun_4ab46f8da846）中**全部 16 个该模式失败 query 完整列出**，遇到形似输入请直接对照本案例处理。
+### 案例 9：长听记按时间区间总结，转写没翻页到目标区间就硬总结 → 答非所问（202606 P0 实锤复盘）
 
-#### 一、五类典型 badcase 模式（按失败动作归类）
+> 这是一次**有 SLS 日志实锤根因**的真实事故：同一篇 1 小时+ 的长听记、同一个"总结某时间区间"的诉求，弱档位答错、强档位答对，但根因**不是模型能力，而是转写没拉到用户要的时间区间**。本案例用于固化"转写覆盖校验"铁律（详见案例 3 末尾的铁律）。
 
-**模式 A：模糊/省略型 query → AI 直接反问要细节，不主动 list**
+**用户输入：**
+```
+总结里面 57:52 开始到 01:05:44 的内容给我，形成关键的三件事及拆解
+https://shanji.dingtalk.com/app/transcribes/<taskUuid>   （一篇时长 1 小时+ 的会议听记）
+```
 
-涉及 query：
+**[错误] 真实失败链路（SLS 日志实锤）：**
 
-| case_id | 用户原始 query |
-|---------|----------------|
-| `dws_minutes_hotquery_0049` | 按关键词搜索我的听记 |
-| `dws_minutes_hotquery_0057` | 查列表+看摘要 |
-| `dws_minutes_hotquery_0063` | 周会回顾整理 |
-| `dws_minutes_hotquery_0064` | 评测工作复盘 |
-| `dws_minutes_hotquery_0042` | 把所有听记内容添加到汇报中 |
+```
+Step 1 [完成] 从 URL 提取 taskUuid → get transcription 拉第 1 页（50 段，到 8:59）
+   ↓
+Step 2 [完成] 续翻第 2 页（到 19:23）、第 3 页（到 26:34）、第 4 页（到 31:09）
+   ↓
+Step 3 [禁止] 翻到 31:09 时撞上字符上限 / 步数预算 → 停止翻页
+   ↓
+错误动作：手里只有 0:02 ~ 31:09 的转写，但用户要的是 57:52 ~ 01:05:44
+   ↓
+错误结论：在"前 31 分钟"的内容里硬找"57 分钟那段"，拼出一个"关键三件事"
+   ↓
+后果：总结的内容和用户要的那段完全对不上，用户评"总结的一般"，被迫换更强模型重做
+```
 
-**典型错误动作**：`tool_calls = []`，AI 回复"请告诉我具体的关键词/时间范围/会议名"就停下，等待用户补充。
+> **强档位为什么"答对了"**：换档位重做时，翻页继续推进到了 **63:53**，**覆盖了 57:52~01:05:44 整段**，所以答对了——**对的是"把转写翻到了目标区间"，不是"模型更聪明"**。SLS 日志清晰记录了两轮的翻页进度：弱档位止于 31:09（漏掉目标区间），强档位推进到 63:53（覆盖目标区间）。
 
-**模式 B：用 `session_search` / `memory_search` 搜索历史会话假装"找过了"**
+**这条链路的核心错误：**
 
-涉及 query：
+| 反模式 | 后果 |
+|--------|------|
+| 用户给了明确时间区间（57:52~01:05:44），却没翻页到该区间就停 | 目标区间的转写**根本没进上下文**，总结无源可依 |
+| 拿"前 31 分钟"的内容冒充"用户要的 57 分钟那段" | 答非所问，且用户不知道 AI 其实只拉到了 31:09 |
+| 撞字符上限时只想着"是否继续"，没意识到"目标区间还没拉到" | 即使提示了"是否继续"也没说清"为什么必须继续"，提示无效 |
+| 答错后归因为"模型不行、换强模型" | 真正要修的是取数覆盖校验，归因错了优化方向就错了 |
 
-| case_id | 用户原始 query |
-|---------|----------------|
-| `dws_minutes_hotquery_0003` | 帮我查一下最近一次会议的纪要内容 |
-| `dws_minutes_hotquery_0017` | 总结下我的会议 |
-| `dws_minutes_hotquery_0020` | 我昨天那个会的重点帮我提炼一下 |
-| `dws_minutes_hotquery_0027` | 把最近一次会议的待办整理出来 |
+**[正确] 应该这样执行：**
 
-**典型错误动作**：调用 `session_search` 搜以前的对话记录，把以前 AI 自己生成过的"会议纪要文件描述"当作真实数据复述出来；从未触发 `dws minutes list / get summary / get todos`。
+1. **解析目标区间**：`57:52` → 3472000ms，`01:05:44` → 3944000ms。
+2. **从 URL 提取 taskUuid** → `dws minutes get transcription --id <taskUuid> --format json` 拉第一页，拿 `nextToken` 和本页段落 `endTime` 最大值。
+3. **按 `endTime` 校验覆盖**：每翻一页，检查"已拉取段落的 `endTime` 最大值"是否 ≥ 3944000ms（目标区间上界）。
+   - 未达到 且 `hasNext=true` → **继续翻页**（即使中途超过 12000 字符，也要明确告知用户"目标区间还在后面、需继续翻页"，而不是停下硬总结）。
+   - 已达到 / `hasNext=false` → 停止翻页，进入分析。
+4. **截取目标区间**：从拉取到的全部段落里，筛出 `startTime`/`endTime` 落在 [3472000, 3944000] 的段落，**只对这一段**做"关键三件事 + 拆解"。
+5. **若翻页耗尽仍没到 57:52**（听记总时长 < 57:52）→ 准确提示："这篇听记总时长约 X 分钟，你要的 57:52 超出了实际长度，是不是时间点记错了？"
+6. **若因字符上限暂停且尚未覆盖目标区间** → 准确提示（见案例 3 铁律第 4 条的话术），让用户在"继续翻页 / 缩小范围"间选择，**绝不拿没覆盖的内容硬总结**。
 
-**模式 C：用 `activity:search` / web 搜索把"找听记"做成"搜网页"**
+**本案例固化的关键经验（强制吸收）：**
 
-涉及 query：
+1. **用户给了时间区间 = 必须翻页到该区间才能总结**：`get transcription` 是从头顺序分页的，区间靠后就得一直翻到那里。中途停 = 目标区间没进上下文。
+2. **"撞字符上限"不是停止翻页的理由，"已覆盖目标区间"才是**：用户明确指定区间时，覆盖校验优先于字符上限——没覆盖就得继续翻（或准确提示用户），不能闷头停。
+3. **答错后先查"取数是否拉全"，再怀疑模型**：本案例换强模型答对是假象，真因是取数覆盖。遇到"总结不准"的长听记 case，第一反应应是"目标区间的转写拉到了吗"。
+4. **提示必须准确到"已拉到哪 / 目标区间在不在"**：模糊的"是否继续拉取"对用户无意义；必须告诉用户"已拉到 31:09，你要的 57:52 还没拉到"。
 
-| case_id | 用户原始 query |
-|---------|----------------|
-| `dws_minutes_hotquery_0025` | 调取某某项目讨论的两个听记内容 |
-| `dws_minutes_hotquery_0060` | 搜索+摘要+关键词 |
-
-**典型错误动作**：调用 `activity:search` 搜公网，返回的是"钉钉 AI 听记产品介绍"页面，与用户的私人听记数据毫不相关。
-
-**模式 D：钉钉听记/文档 URL 走 `browser_use` / `read_file` 而非 `dws`**
-
-涉及 query：
-
-| case_id | 用户原始 query |
-|---------|----------------|
-| `dws_minutes_hotquery_0045` | `https://shanji.dingtalk.com/meeting/minutes?taskUuid=sample004` |
-| `dws_minutes_hotquery_0046` | `https://alidocs.dingtalk.com/i/nodes/sampleDocNode01` 帮我读取这个文档内容 |
-| `dws_minutes_hotquery_0047` | 这个听记链接你能打开看内容吗 `https://shanji.dingtalk.com/meeting/minutes?taskUuid=sample006` |
-
-**典型错误动作**：`browser_use` 打开页面遇到登录墙就回复"需要登录"；或 `read_file` 当本地文件读 → 失败 → 把锅甩给用户。完全没有意识到 dws 技能本身已携带账号态，能直接通过 taskUuid/dentryUuid 拿到内容。
-
-**模式 E：多源数据生成日报/汇报/总结/报告，听记侧 0 调用**
-
-涉及 query：
-
-| case_id | 用户原始 query |
-|---------|----------------|
-| `dws_minutes_hotquery_0040` | 根据今天的聊天记录和听记总结工作日报 |
-| `dws_minutes_hotquery_0005` | 把会议纪要写入钉钉文档 |
-| `minutes-001` (P0) | 从悟空的商业模式分析，重新写一下市场感知报告 |
-| `minutes-002` (P0) | 最新文档啥也没有啊，我要你根据我的工作情况总结，分成问题应收、异常事故处理、ai相关工作和其他几部分总结 |
-| `minutes-004` (P0) | 你这个好像只是基于日程，我要的是我的对话，发出去的文字，私聊，群聊，日程，会议，文档修改等相关的所有动作，参考这个生成日报，并且把这个封装成日报skill |
-
-**典型错误动作**：识别出"日报/报告/总结/写文档"场景后，只想着调用周报技能 / 文档写入技能，**完全跳过听记数据获取**这一步。更隐蔽的变体是：用户 query 中**没有出现"听记"二字**（如"根据工作情况总结"、"重新写市场感知报告"），但任务的完成**实际依赖会议讨论内容**，AI 却完全没有意识到需要从听记中采集素材，结果输出空洞的报告或反问"请告诉我会议纪要内容"。
-
-**P0 case 暴露的三种变体（必须全部识别）：**
-- **变体 1（minutes-001）**：用户要写报告，报告素材来源于历史会议讨论 → AI 没识别出需要查听记
-- **变体 2（minutes-002）**：用户要分类总结工作，且明确说"文档啥也没有" → AI 没切到听记作为替代数据源
-- **变体 3（minutes-004）**：用户明确抱怨"只是基于日程"并点名要求"会议"等多数据源 → AI 仍然只用日程数据
-
-#### 二、五类共性反模式（必须全部识别为禁止动作）
-
-| 反模式 | 错误根因 | 正确做法 |
-|--------|----------|----------|
-| **R1：模糊请求 → 反问要细节** | AI 把"信息不足"当成必须澄清的前置条件 | 听记类模糊请求 → **默认先调用 `dws minutes list mine --max 10 --format json`** 把最近的听记列出来，让用户从列表里挑，而不是反问关键词 |
-| **R2：用 `session_search`/`memory_search` 替代 dws** | AI 把"历史会话里聊过的纪要描述"误认为是真实数据源 | 历史会话只能回忆"以前我们聊过什么"，**不是真实听记数据**。听记数据**必须**从 `dws minutes` 实时拉取 |
-| **R3：用 `activity:search` 通用 web 搜索听记** | 把"听记"理解成公网信息 | 听记是用户私人钉钉数据，**只能**通过 `dws minutes list/get` 获取，公网搜不到也不该搜 |
-| **R4：钉钉 URL 走 browser_use/read_file** | 把钉钉 URL 当成普通网页 | 钉钉听记 URL（`shanji.dingtalk.com/meeting/minutes?taskUuid=xxx` 或 `shanji.dingtalk.com/app/transcribes/xxx`）→ **提取 taskUuid → 走 `dws minutes get summary/get transcription`**；钉钉文档 URL（`alidocs.dingtalk.com/i/nodes/xxx`）→ **提取 dentryUuid → 走 `dws doc read`** |
-| **R5：日报/汇报/总结/报告场景跳过听记数据采集** | 只看到"日报/报告/总结"就直奔输出端，忘了用户指定的（或隐含的）数据源包含会议/听记。**不仅限于用户说了"听记"二字的场景**——"根据我的工作情况总结"（minutes-002）、"重新写一下市场感知报告"（minutes-001）、"我要的是我的对话...会议...生成日报"（minutes-004）都属于此类 | query 中出现"总结/报告/汇报/日报/周报/工作情况/商业分析/市场感知/复盘"等产出类关键词时，必须自检：**用户的产出是否依赖会议讨论内容？** 如果是 → **第一步必须** `dws minutes list mine` 拿听记 → `get summary` 逐篇拉摘要 → 再汇总。详见「间接意图识别」章节 |
-
-#### 三、五类 badcase 的统一正确链路（速查表）
-
-| 用户 query 形态 | 第一步必跑命令 | 关键说明 |
-|------------------|------------------|----------|
-| 模糊请求："总结下我的会议" / "周会回顾整理" / "查列表+看摘要" / "评测工作复盘" / "按关键词搜索我的听记" | `dws minutes list mine --max 10 --format json` | 拿到最近听记列表后，对前 1~3 篇 `get summary`，引导用户挑选目标 |
-| 含时间词："最近一次/昨天/本周/上周的会议" | `dws minutes list mine --start <ISO> --end <ISO> --max 20 --format json` | 时间范围按用户描述折算，不要让用户自己提供日期 |
-| 含主题/项目关键词："某某项目讨论" / "搜索+摘要+关键词" | `dws minutes list all --query "<关键词>" --max 20 --format json` | 用 `--query` 而不是 `activity:search` |
-| 钉钉听记 URL（`shanji.dingtalk.com/...?taskUuid=xxx`） | `dws minutes get summary --id <taskUuid> --format json` | 从 URL 提取 taskUuid，禁用 browser_use |
-| 钉钉文档 URL（`alidocs.dingtalk.com/i/nodes/xxx`） | `dws doc read --node <url 或 dentryUuid> --format json` | 走 doc 技能而非 read_file/browser_use |
-| 多篇听记对比："对比一下这几个听记 [URL1] [URL2]" | 对每个 URL 分别 `dws minutes get summary --id <uuid> --format json` | 失败的 URL 给出明确说明，不要把锅全甩给用户 |
-| 日报/汇报含"听记"/"会议纪要"关键词 | 先 `dws minutes list mine --start <今日 0 点> --max 20`，再对每篇 `get summary`，最后才汇总 | 听记数据采集是必跑前置，不能直接跳到周报技能 |
-| 报告/分析类（query 未显式提"听记"但依赖会议讨论素材）："重新写一下市场感知报告" / "帮我生成商业分析" | `dws minutes list all --query "<主题关键词>" --max 20 --format json` → 逐篇 `get summary` 提取素材 | 详见「间接意图识别」，用户的报告素材来源于历史会议讨论 |
-| 分类工作总结（query 未显式提"听记"但需要工作记录）："根据我的工作情况总结，分成…几部分" / "文档啥也没有，根据工作情况总结" | `dws minutes list mine --start <起始日期> --end <截止日期> --format json` → 逐篇 `get summary` → 按分类维度归类 | 文档不足时听记是唯一剩余数据源；详见「间接意图识别」 |
-| 多源聚合（用户抱怨数据源不全或点名要求会议数据）："只是基于日程，我要的是对话+会议+文档等所有动作" / "聊天记录和听记总结日报" | 听记侧必跑 `dws minutes list mine --start <起始日期> --end <截止日期>` → `get summary`，再并行采集其他源 | 用户点名要了"会议"就不能省略听记采集 |
-| 待办提取："最近一次会议的待办" | `dws minutes list mine --max 1` → `dws minutes get todos --id <taskUuid>` | 用 `get todos`，不要自己从转写里硬抠 |
-| 写入钉钉文档："把会议纪要写入钉钉文档" | 先 `dws minutes get summary --id <uuid>` 拿到内容 → 再 `dws doc create` / `dws doc update` 写入 | 听记数据采集 + 文档写入是两步，缺一不可 |
-
-#### 四、绝对禁止（任何一条触发即视为严重失败）
-
-- **[禁止]** 听记/纪要/会议类请求 → `tool_calls = []` 直接反问要细节（任何模糊请求至少要先 `dws minutes list mine` 跑一次，让用户在列表里挑）
-- **[禁止]** 用 `session_search` / `memory_search` 搜以前的会话记录当作"真实听记数据"复述给用户——历史会话不是数据源
-- **[禁止]** 用 `activity:search` / web 搜索找用户私人听记——听记是私域数据，公网搜不到
-- **[禁止]** 钉钉听记 URL（`shanji.dingtalk.com/meeting/minutes?taskUuid=xxx` / `shanji.dingtalk.com/app/transcribes/xxx`）走 `browser_use` 打开页面——必须提取 taskUuid 走 `dws minutes get`
-- **[禁止]** 钉钉文档 URL（`alidocs.dingtalk.com/i/nodes/xxx`）走 `read_file` / `browser_use`——必须走 `dws doc read`
-- **[禁止]** 遇到登录墙 / URL 无效就只回复"需要登录" / "请提供正确 URL" 然后停下——必须 fallback 到 `dws minutes list mine` 让用户从自己的听记列表里挑替代项
-- **[禁止]** 日报/周报/汇报/总结/报告场景，任务产出依赖会议讨论内容，却跳过 `dws minutes` 数据采集——**不限于 query 中出现"听记"二字的场景**，"根据工作情况总结"（minutes-002）、"重新写市场感知报告"（minutes-001）等间接意图同样适用
-- **[禁止]** "把会议纪要写入钉钉文档"类请求只调文档写入工具不调 `dws minutes get summary`——会议纪要内容必须先实时获取，不能让用户自己粘贴
-- **[禁止]** `taskUuid is invalid` 报错后用同一个无效 uuid 重试（哪怕 1 次）——必须立即切换到 `dws minutes list mine` 获取真实 uuid
-- **[禁止]** 从历史对话、文档内容、十六进制编码字符串中猜测或拼凑 uuid——uuid **只能**来自 `list mine/shared/all` 返回或用户提供的听记 URL
-- **[禁止]** 使用错误的命令层级结构：`dws minutes info`（应为 `get info`）、`dws minutes get`（缺子命令）、`dws minutes list --start`（缺 scope）——参照文档顶部"命令层级结构"
-- **[禁止]** 工具调用缺少 `--format json` 参数——所有 `dws` 命令都应带上以便结构化解析
-
-#### 五、自检清单（执行前 5 秒强制走一遍）
-
-收到任何含以下信号词的 query 时，**第一个动作必须是 `dws minutes` 或 `dws doc`，否则视为走错链路**：
-
-> **直接信号词**（query 中直接提到听记相关概念）：
-> "听记 / 纪要 / 摘要 / 转写 / 录音 / 会议 / 周会 / 日会 / 评审会 / 复盘 / 回顾 / 待办 / Action Item / 关键词 / 我的会 / 昨天那个会 / 上周的会 / 共享听记 / shanji.dingtalk.com / alidocs.dingtalk.com"
-
-> **间接信号词**（query 未提"听记"但任务产出依赖会议讨论内容，需要额外判断——详见「间接意图识别」章节）：
-> "报告 / 市场感知 / 商业分析 / 工作情况总结 / 分类总结 / 日报 / 周报 / 月报 / 工作汇报 / 文档啥也没有 / 只是基于日程 / 所有动作 / 封装成 skill"
-> **判断标准**：用户的产出是否依赖"会议上说了什么/讨论了什么"？如果是 → 听记采集是必跑前置步骤
-
-强制问自己 5 个问题（任何一个回答"否"都禁止开始执行）：
-
-1. 我接下来的第一个 tool call 是 `dws minutes ...` 或 `dws doc ...` 吗？
-2. 我有没有在用 `session_search` / `memory_search` / `activity:search` / `browser_use` / `read_file` 替代 dws？
-3. 用户给了钉钉 URL 时，我有没有从 URL 提取 taskUuid/dentryUuid 后走 dws，而不是 browser_use？
-4. 用户的请求模糊（如"总结下我的会议"）时，我是先 `dws minutes list mine` 列出来，还是反问要细节？
-5. 用户要写报告/总结/日报但没提"听记"时，我有没有判断"任务产出是否依赖会议讨论内容"？如果依赖 → 听记采集不能省略（参见间接意图识别三条铁律）
+**绝对禁止：**
+- **[禁止]** 用户指定了时间区间，却没翻页到该区间（按 `endTime` 校验）就开始总结
+- **[禁止]** 拿"已拉到的前半段"冒充"用户要的后半段区间"硬凑答案，且不告知用户实际只拉到了哪里
+- **[禁止]** 因字符上限/步数预算停止翻页时，只说"已达上限是否继续"而不说明"目标区间尚未拉到"
+- **[禁止]** 把"总结不准"归因为模型能力、直接建议换模型——先核对取数是否覆盖了用户请求的时间区间

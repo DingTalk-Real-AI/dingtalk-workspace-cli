@@ -27,11 +27,11 @@ import (
 //
 // Decision rule:
 //   - Host-owned is triggered iff DINGTALK_DWS_AGENTCODE is non-empty.
-//   - When triggered, `clawType` in the emitted hostControl block MUST
-//     be the exact value the CLI actually injects on the wire into the
-//     `claw-type` HTTP header. The open-source build pins that to
-//     edition.DefaultOSSClawType ("openClaw") unconditionally — there
-//     is no per-spawn env override.
+//   - When triggered, `clawType` in the emitted hostControl block MUST be the
+//     exact value the CLI actually injects on the wire. Each edition supplies
+//     its existing default and an optional valid DWS_AGENT_PRODUCT overrides
+//     it. Invalid input falls back here for library compatibility; root command
+//     execution rejects it before network access.
 //   - When DINGTALK_DWS_AGENTCODE is empty the provider returns "" so
 //     HostControlBlock yields nil and no hostControl block is emitted.
 func init() {
@@ -48,15 +48,16 @@ func hostControlProviderFromEnv() string {
 	return effectiveClawType()
 }
 
-// effectiveClawType returns the literal value that MergeHeaders will
-// inject into outbound `claw-type` headers. Going through the edition
-// hook (instead of a hard-coded constant) keeps this site correct for
-// downstream editions that override MergeHeaders.
+// effectiveClawType resolves the literal value injected into outbound
+// `claw-type` headers without invoking credential hooks from PAT error
+// serialization. MergeHeaders implementations that set claw-type must satisfy
+// the edition contract that this value is independent of the base map.
 func effectiveClawType() string {
-	if h := edition.Get(); h != nil && h.MergeHeaders != nil {
-		if v, ok := h.MergeHeaders(map[string]string{})["claw-type"]; ok && v != "" {
-			return v
+	headers := make(map[string]string)
+	if h := edition.Get(); h != nil {
+		if h.MergeHeaders != nil {
+			headers = h.MergeHeaders(headers)
 		}
 	}
-	return edition.DefaultOSSClawType
+	return resolveEffectiveAgentProduct(headers)
 }

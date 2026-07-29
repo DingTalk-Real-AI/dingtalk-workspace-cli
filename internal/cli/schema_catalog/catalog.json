@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "surface_hash": "sha256:02b1fb94e6d850bf90063b35e5959e6072f9f5f4fbde57eb9d68c42f81346a63",
-  "source_hash": "sha256:ec1a4c79aebc00f65e91b7f11b6ba058b6135d9b01015d1afd754d9b86aebefb",
+  "surface_hash": "sha256:7e52c21569728ce895510615893c80f2581626a7cec34247959d70ce6a1a052b",
+  "source_hash": "sha256:00f7e1e6542cdd7271a8f0983f400250329d587f3d0633a36ac86354dc9217cd",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:02469ab80c5db473ec76bdbfc92375415c36ece34245d405bf0ab20640b2e292",
-      "surface_hash": "sha256:02b1fb94e6d850bf90063b35e5959e6072f9f5f4fbde57eb9d68c42f81346a63",
+      "source_hash": "sha256:67d47c8825d6c95f898e41484e8ae35818d9d5712369e63f1f870c35f252e405",
+      "surface_hash": "sha256:7e52c21569728ce895510615893c80f2581626a7cec34247959d70ce6a1a052b",
       "surface_products": 26,
-      "surface_tools": 843,
-      "tools_with_agent_summary": 843,
-      "tools_with_metadata": 843,
+      "surface_tools": 870,
+      "tools_with_agent_summary": 870,
+      "tools_with_metadata": 870,
       "unmatched_skill_tools": 96,
       "version": 1
     },
@@ -7722,7 +7722,7 @@
         "id": "chat",
         "name": "群聊 / 消息 / 机器人",
         "runtime": true,
-        "tool_count": 150,
+        "tool_count": 154,
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
@@ -7959,6 +7959,60 @@
             "title": "审批入群验证（通过、拒绝、删除）",
             "use_when": [
               "已从 list-join-validations 取得真实记录、申请人和邀请人 ID，需要执行 AuditApprove 或 AuditDelete 时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "管理员级群功能开关用 chat group update-settings"
+            ],
+            "canonical_path": "chat.batch_query_group_chat_settings",
+            "cli_name": "query",
+            "cli_path": "chat group user-settings query",
+            "confirmation": "not_required",
+            "description": "批量查询当前用户的群会话设置",
+            "effect": "read",
+            "group": "group.user-settings",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "batch_query_group_chat_settings",
+            "primary_cli_path": "chat group user-settings query",
+            "reviewed": true,
+            "risk": "low",
+            "title": "批量查询当前用户的群会话设置",
+            "use_when": [
+              "用户说 看下这些群我的置顶和免打扰设置"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "批量更新当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "单个群昵称优先 chat group update-nick"
+            ],
+            "canonical_path": "chat.batch_update_group_chat_settings",
+            "cli_name": "set",
+            "cli_path": "chat group user-settings set",
+            "confirmation": "not_required",
+            "description": "批量更新当前用户的群会话设置",
+            "effect": "write",
+            "group": "group.user-settings",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "batch_update_group_chat_settings",
+            "primary_cli_path": "chat group user-settings set",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "批量更新当前用户的群会话设置",
+            "use_when": [
+              "用户说 把这些群都设为免打扰/置顶"
             ]
           },
           {
@@ -8570,6 +8624,33 @@
             "title": "获取群邀请链接",
             "use_when": [
               "需要生成群邀请链接或设置有效期时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "查询群用户禁言配置（禁言黑名单/全员禁言白名单）",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "设置全员禁言用 chat group-mute；禁言个人用 chat group-mute-member"
+            ],
+            "canonical_path": "chat.get_group_mute_config",
+            "cli_name": "get-mute-config",
+            "cli_path": "chat group get-mute-config",
+            "confirmation": "not_required",
+            "description": "查询指定群的用户禁言配置，包括单独禁言黑名单、全员禁言白名单及相关操作时间。\n返回的是原始配置记录，不等同于当前被禁言成员列表；全员禁言开关也不在本命令的返回范围内。",
+            "effect": "read",
+            "group": "group",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "get_group_mute_config",
+            "primary_cli_path": "chat group get-mute-config",
+            "reviewed": true,
+            "risk": "low",
+            "title": "查询群用户禁言配置",
+            "use_when": [
+              "用户说 看下群里谁被禁言/禁言配置"
             ]
           },
           {
@@ -11941,6 +12022,34 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把消息上已有的文字表情原地替换为新的文字表情",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "消息上还没有文字表情时使用 chat message add-text-emotion",
+              "只需清除文字表情时使用 chat message remove-text-emotion"
+            ],
+            "canonical_path": "chat.update_text_emotion",
+            "cli_name": "update-text-emotion",
+            "cli_path": "chat message update-text-emotion",
+            "confirmation": "not_required",
+            "description": "更新消息的文字表情回应",
+            "effect": "write",
+            "group": "message",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet.",
+            "name": "update_text_emotion",
+            "primary_cli_path": "chat message update-text-emotion",
+            "reviewed": true,
+            "risk": "low",
+            "title": "更新消息的文字表情回应",
+            "use_when": [
+              "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "设置仅当前用户可见的群备注",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -15038,7 +15147,7 @@
         "id": "doc",
         "name": "钉钉文档管理",
         "runtime": true,
-        "tool_count": 55,
+        "tool_count": 60,
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
@@ -15485,6 +15594,33 @@
             "use_when": [
               "用户要查看文档/节点元信息（标题、类型、创建者、权限）时",
               "准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "读取文档当前封面与背景配置（只读）",
+            "agent_summary_source": "dws-agent-selection/doc",
+            "availability": "available",
+            "avoid_when": [
+              "修改用 cover set / background set"
+            ],
+            "canonical_path": "doc.get_document_style",
+            "cli_name": "get",
+            "cli_path": "doc style get",
+            "confirmation": "not_required",
+            "description": "读取钉钉文档当前的封面与背景配置（只读，单接口收口 get_document_style）。",
+            "effect": "read",
+            "group": "style",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "get_document_style",
+            "primary_cli_path": "doc style get",
+            "reviewed": true,
+            "risk": "low",
+            "title": "读取文档封面/背景 (只读)",
+            "use_when": [
+              "用户说 看下文档现在的封面/背景"
             ]
           },
           {
@@ -16338,6 +16474,114 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "清除钉钉文档背景",
+            "agent_summary_source": "dws-agent-selection/doc",
+            "availability": "available",
+            "avoid_when": [
+              "设置背景用 background set"
+            ],
+            "canonical_path": "doc.style_background_clear",
+            "cli_name": "clear",
+            "cli_path": "doc style background clear",
+            "confirmation": "not_required",
+            "description": "清除文档背景",
+            "effect": "write",
+            "group": "style.background",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "style_background_clear",
+            "primary_cli_path": "doc style background clear",
+            "reviewed": true,
+            "risk": "low",
+            "title": "清除文档背景",
+            "use_when": [
+              "用户说 去掉文档背景色"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "设置钉钉文档背景纯色（#RRGGBB）",
+            "agent_summary_source": "dws-agent-selection/doc",
+            "availability": "available",
+            "avoid_when": [
+              "背景不支持图片；封面用 cover set"
+            ],
+            "canonical_path": "doc.style_background_set",
+            "cli_name": "set",
+            "cli_path": "doc style background set",
+            "confirmation": "not_required",
+            "description": "为钉钉文档设置背景纯色（--color）。背景仅支持纯色，不支持背景图片上传（对齐前端能力）。",
+            "effect": "write",
+            "group": "style.background",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "style_background_set",
+            "primary_cli_path": "doc style background set",
+            "reviewed": true,
+            "risk": "low",
+            "title": "设置文档背景纯色",
+            "use_when": [
+              "用户说 给文档设置背景色"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "移除钉钉文档封面",
+            "agent_summary_source": "dws-agent-selection/doc",
+            "availability": "available",
+            "avoid_when": [
+              "设置封面用 cover set"
+            ],
+            "canonical_path": "doc.style_cover_clear",
+            "cli_name": "clear",
+            "cli_path": "doc style cover clear",
+            "confirmation": "not_required",
+            "description": "移除文档封面",
+            "effect": "write",
+            "group": "style.cover",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "style_cover_clear",
+            "primary_cli_path": "doc style cover clear",
+            "reviewed": true,
+            "risk": "low",
+            "title": "移除文档封面",
+            "use_when": [
+              "用户说 去掉文档封面"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "设置钉钉文档顶部封面图（外链或本地图片上传）",
+            "agent_summary_source": "dws-agent-selection/doc",
+            "availability": "available",
+            "avoid_when": [
+              "读取当前封面用 doc style get；移除封面用 cover clear"
+            ],
+            "canonical_path": "doc.style_cover_set",
+            "cli_name": "set",
+            "cli_path": "doc style cover set",
+            "confirmation": "not_required",
+            "description": "为钉钉文档设置顶部封面图，可指定竖直显示位置。图片来源二选一：--image 外链或 --file 本地文件。",
+            "effect": "write",
+            "group": "style.cover",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "style_cover_set",
+            "primary_cli_path": "doc style cover set",
+            "reviewed": true,
+            "risk": "low",
+            "title": "设置文档封面",
+            "use_when": [
+              "用户说 给文档设置封面/换个封面图"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "使用指定模板创建新文档",
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
@@ -16729,7 +16973,7 @@
         "id": "drive",
         "name": "钉盘文件管理",
         "runtime": true,
-        "tool_count": 32,
+        "tool_count": 41,
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
@@ -16763,6 +17007,33 @@
             "use_when": [
               "给单篇文档/文件夹/文件做节点级授权（USER + 角色 MANAGER/EDITOR/DOWNLOADER/READER）时",
               "用户说把某篇文档分享给某人看/可编辑时（含「我的文档」下的节点）"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "向审批人发起文档权限申请（会真实通知审批人）",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "先用 apply-info 查可申请角色与审批人；未经用户确认不得自行提交"
+            ],
+            "canonical_path": "drive.apply_permission",
+            "cli_name": "apply",
+            "cli_path": "drive permission apply",
+            "confirmation": "user_required",
+            "description": "向指定节点的审批人发起权限申请。建议先用 apply-info 获取可申请角色与审批人。\n\n注意: 本命令会真实通知审批人，Agent 必须先获得用户明确同意后再执行。",
+            "effect": "write",
+            "group": "permission",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "apply_permission",
+            "primary_cli_path": "drive permission apply",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "发起权限申请",
+            "use_when": [
+              "用户确认要为无权限文档发起权限申请"
             ]
           },
           {
@@ -16962,6 +17233,61 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "下载钉盘普通文件的指定历史版本到本地（两步下载：取签名 URL 后 HTTP GET）",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "下载最新版本用 drive download",
+              "在线文档（adoc）历史版本用 doc version 系列命令",
+              "在线表格（axls）历史版本用 sheet version 系列命令"
+            ],
+            "canonical_path": "drive.download_file_version",
+            "cli_name": "download-version",
+            "cli_path": "drive download-version",
+            "confirmation": "not_required",
+            "description": "下载钉盘文件的指定历史版本到本地（两步下载流程）。\n\n仅适用于普通文件（如 pdf、docx、xlsx、png 等）：\n  钉钉在线文档（adoc）请使用 dws doc version 系列命令\n  钉钉在线表格（axls）请使用 dws sheet version 系列命令\n\n流程:\n  1. 获取历史版本下载 URL 和签名请求头 (download_file_version)\n  2. HTTP GET 下载文件二进制内容到本地\n\n版本号从 dws drive list --node \u003cdentryUuid\u003e --versions 获取。",
+            "effect": "read",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "download_file_version",
+            "primary_cli_path": "drive download-version",
+            "reviewed": true,
+            "risk": "low",
+            "title": "下载文件历史版本到本地",
+            "use_when": [
+              "用户要下载文件的历史版本/旧版本",
+              "版本号已通过 drive list --versions 获取"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "获取节点封面图片地址（文档首图/图片缩略图/类型图标）",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "设置文档封面用 doc style cover set"
+            ],
+            "canonical_path": "drive.get_cover",
+            "cli_name": "cover",
+            "cli_path": "drive cover",
+            "confirmation": "not_required",
+            "description": "获取节点封面地址",
+            "effect": "read",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "get_cover",
+            "primary_cli_path": "drive cover",
+            "reviewed": true,
+            "risk": "low",
+            "title": "获取节点封面地址",
+            "use_when": [
+              "用户说 封面/封面图/缩略图/预览图"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "获取文件元数据信息",
             "agent_summary_source": "dws-agent-selection/drive",
             "availability": "available",
@@ -17018,6 +17344,33 @@
             "title": "获取节点统计信息",
             "use_when": [
               "用户要查看节点阅读/编辑/评论/点赞/预览/下载等统计维度时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "获取当前用户的收藏列表，支持分页与按内容类型筛选",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "操作单个收藏用 mark_star/unmark_star"
+            ],
+            "canonical_path": "drive.get_star_list",
+            "cli_name": "list",
+            "cli_path": "drive star list",
+            "confirmation": "not_required",
+            "description": "获取收藏列表",
+            "effect": "read",
+            "group": "star",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "get_star_list",
+            "primary_cli_path": "drive star list",
+            "reviewed": true,
+            "risk": "low",
+            "title": "获取收藏列表",
+            "use_when": [
+              "用户说 我的收藏/收藏列表/收藏了哪些文档"
             ]
           },
           {
@@ -17143,6 +17496,33 @@
             "title": "获取钉盘空间列表 (deprecated → dws wiki space list --type orgSpace/mySpace)",
             "use_when": [
               "兼容入口：枚举钉盘企业空间或「我的文件」空间以拿 spaceId/rootFolderId 时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "收藏文档/文件到当前用户收藏列表",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "取消收藏用 unmark_star；查看收藏列表用 get_star_list"
+            ],
+            "canonical_path": "drive.mark_star",
+            "cli_name": "add",
+            "cli_path": "drive star add",
+            "confirmation": "not_required",
+            "description": "收藏文档",
+            "effect": "write",
+            "group": "star",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "mark_star",
+            "primary_cli_path": "drive star add",
+            "reviewed": true,
+            "risk": "low",
+            "title": "收藏文档",
+            "use_when": [
+              "用户说 收藏这个文档/加个收藏/标星"
             ]
           },
           {
@@ -17330,6 +17710,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "查询节点可申请的权限角色列表与审批人列表",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "实际发起申请用 apply_permission"
+            ],
+            "canonical_path": "drive.query_permission_apply_info",
+            "cli_name": "apply-info",
+            "cli_path": "drive permission apply-info",
+            "confirmation": "not_required",
+            "description": "查询节点可申请的角色与审批人",
+            "effect": "read",
+            "group": "permission",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "query_permission_apply_info",
+            "primary_cli_path": "drive permission apply-info",
+            "reviewed": true,
+            "risk": "low",
+            "title": "查询节点可申请的角色与审批人",
+            "use_when": [
+              "无权限访问文档时，先查可申请角色与审批人"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "获取当前用户最近访问或编辑过的文档列表",
             "agent_summary_source": "dws-agent-selection/drive",
             "availability": "available",
@@ -17442,6 +17849,32 @@
             "title": "重命名文件/文档",
             "use_when": [
               "用户要重命名钉盘/文档空间中的文件、文档或文件夹时；实际执行会读取节点类型和当前扩展名，仅去掉完全匹配的一层后缀"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "回滚普通文件到指定历史版本（生成新最新版本，历史不丢失）",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "在线文档回滚用 doc version revert；在线表格用 sheet version revert"
+            ],
+            "canonical_path": "drive.revert_file_version",
+            "cli_name": "revert",
+            "cli_path": "drive revert",
+            "confirmation": "user_required",
+            "description": "将指定文件回滚到某个历史版本。仅支持普通文件（Word、Excel、PDF、图片等）。\n在线文档请用 dws doc version revert，在线表格请用 dws sheet version revert。",
+            "effect": "write",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "revert_file_version",
+            "primary_cli_path": "drive revert",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "[危险] 回滚文件到指定历史版本",
+            "use_when": [
+              "用户说 回滚版本/恢复到某个版本/版本回退，且目标是普通文件"
             ]
           },
           {
@@ -17658,6 +18091,60 @@
             "title": "搜索文档空间文档",
             "use_when": [
               "当你只记得文档标题或关键词、想在文档空间/知识库中检索在线文档（区别于 +search 检索钉盘文件）时使用；输入 query 关键词，返回匹配的文档及其节点信息。"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "转交文档或知识库所有者给指定用户（不可逆）",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "普通协作权限变更用 permission add/update/remove"
+            ],
+            "canonical_path": "drive.transfer_owner",
+            "cli_name": "transfer-owner",
+            "cli_path": "drive permission transfer-owner",
+            "confirmation": "user_required",
+            "description": "转交文档或知识库的所有者给指定用户。此操作不可逆，执行前需要确认。\n\n--node 和 --workspace 二选一。转交后原所有者保留角色由 --reserve-role 指定。\n使用 --yes 跳过确认时，--reserve-role 和 --recursive 必须显式指定。",
+            "effect": "write",
+            "group": "permission",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "transfer_owner",
+            "primary_cli_path": "drive permission transfer-owner",
+            "reviewed": true,
+            "risk": "high",
+            "title": "[危险] 转交所有者",
+            "use_when": [
+              "用户明确要求转交文档/知识库所有权"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "将文档/文件从当前用户收藏列表移除",
+            "agent_summary_source": "dws-agent-selection/drive",
+            "availability": "available",
+            "avoid_when": [
+              "添加收藏用 mark_star"
+            ],
+            "canonical_path": "drive.unmark_star",
+            "cli_name": "remove",
+            "cli_path": "drive star remove",
+            "confirmation": "not_required",
+            "description": "取消收藏文档",
+            "effect": "write",
+            "group": "star",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "unmark_star",
+            "primary_cli_path": "drive star remove",
+            "reviewed": true,
+            "risk": "low",
+            "title": "取消收藏文档",
+            "use_when": [
+              "用户说 取消收藏/去掉收藏/不收藏了"
             ]
           },
           {
@@ -22528,7 +23015,7 @@
         "id": "sheet",
         "name": "钉钉表格管理",
         "runtime": true,
-        "tool_count": 81,
+        "tool_count": 90,
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
@@ -22967,6 +23454,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "在指定单元格上创建评论，可 @ 用户",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "回复已有评论用 comment reply；不要把评论写进单元格值"
+            ],
+            "canonical_path": "sheet.create_sheet_comment",
+            "cli_name": "create",
+            "cli_path": "sheet comment create",
+            "confirmation": "not_required",
+            "description": "创建单元格评论",
+            "effect": "write",
+            "group": "comment",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "create_sheet_comment",
+            "primary_cli_path": "sheet comment create",
+            "reviewed": true,
+            "risk": "low",
+            "title": "创建单元格评论",
+            "use_when": [
+              "用户说 给单元格加评论/批注/@某人讨论这个数据"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "创建钉钉在线电子表格文档（axls），返回 nodeId。",
             "agent_summary_source": "dws-agent-selection/sheet",
             "availability": "available",
@@ -23237,6 +23751,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "删除单元格评论（不可恢复）",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "标记解决不等于删除"
+            ],
+            "canonical_path": "sheet.delete_sheet_comment",
+            "cli_name": "delete",
+            "cli_path": "sheet comment delete",
+            "confirmation": "user_required",
+            "description": "删除单元格评论",
+            "effect": "write",
+            "group": "comment",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "delete_sheet_comment",
+            "primary_cli_path": "sheet comment delete",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "删除单元格评论",
+            "use_when": [
+              "用户明确要求删除某条评论"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "按源区域对目标区域做自动填充（复制或序列）。",
             "agent_summary_source": "dws-agent-selection/sheet",
             "availability": "available",
@@ -23485,6 +24026,32 @@
             "title": "在工作表中搜索单元格内容",
             "use_when": [
               "要查找包含某文本或公式的单元格位置时，必须用服务端 find"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "扫描表格公式单元格并按错误类型聚合返回错误数量与位置",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "读取公式文本用 range read --value-render-option formula"
+            ],
+            "canonical_path": "sheet.formula_verify",
+            "cli_name": "formula-verify",
+            "cli_path": "sheet formula-verify",
+            "confirmation": "not_required",
+            "description": "扫描钉钉电子表格中已落表的公式单元格，按计算结果错误类型聚合返回错误数量、位置和样本。\n\n不指定 --sheet-id / --range / --targets 时默认扫描整本表格的全部工作表。",
+            "effect": "read",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "formula_verify",
+            "primary_cli_path": "sheet formula-verify",
+            "reviewed": true,
+            "risk": "low",
+            "title": "校验表格公式错误",
+            "use_when": [
+              "用户说 校验公式/检查公式错误/公式错误扫描"
             ]
           },
           {
@@ -23927,6 +24494,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "查询表格单元格评论列表，支持分页与按解决状态过滤",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "新建评论用 comment create"
+            ],
+            "canonical_path": "sheet.list_sheet_comments",
+            "cli_name": "list",
+            "cli_path": "sheet comment list",
+            "confirmation": "not_required",
+            "description": "查询表格评论列表",
+            "effect": "read",
+            "group": "comment",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "list_sheet_comments",
+            "primary_cli_path": "sheet comment list",
+            "reviewed": true,
+            "risk": "low",
+            "title": "查询表格评论列表",
+            "use_when": [
+              "用户说 看某格的评论/表格里有哪些批注"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "上传附件到表格并返回 resourceUrl（浮动图片前置步骤）。",
             "agent_summary_source": "dws-agent-selection/sheet",
             "availability": "available",
@@ -24249,6 +24843,33 @@
             "title": "查找替换/批量替换/精确匹配替换/正则替换文本",
             "use_when": [
               "要把工作表中匹配文本批量替换为另一文本时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "回复指定单元格评论，支持表情贴图回复",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "修改评论内容用 comment update"
+            ],
+            "canonical_path": "sheet.reply_sheet_comment",
+            "cli_name": "reply",
+            "cli_path": "sheet comment reply",
+            "confirmation": "not_required",
+            "description": "回复单元格评论",
+            "effect": "write",
+            "group": "comment",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "reply_sheet_comment",
+            "primary_cli_path": "sheet comment reply",
+            "reviewed": true,
+            "risk": "low",
+            "title": "回复单元格评论",
+            "use_when": [
+              "用户说 回复这条评论"
             ]
           },
           {
@@ -24887,6 +25508,114 @@
             "title": "更新工作表属性",
             "use_when": [
               "要重命名工作表、调整页签顺序、隐藏/显示、冻结行列或改标签颜色时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "更新单元格评论内容",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "回复评论用 comment reply"
+            ],
+            "canonical_path": "sheet.update_sheet_comment",
+            "cli_name": "update",
+            "cli_path": "sheet comment update",
+            "confirmation": "not_required",
+            "description": "更新单元格评论",
+            "effect": "write",
+            "group": "comment",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "update_sheet_comment",
+            "primary_cli_path": "sheet comment update",
+            "reviewed": true,
+            "risk": "low",
+            "title": "更新单元格评论",
+            "use_when": [
+              "用户说 改一下这条评论"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "查看表格历史版本列表",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "回滚用 version revert"
+            ],
+            "canonical_path": "sheet.version_list",
+            "cli_name": "list",
+            "cli_path": "sheet version list",
+            "confirmation": "not_required",
+            "description": "查看表格历史版本列表",
+            "effect": "read",
+            "group": "version",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "version_list",
+            "primary_cli_path": "sheet version list",
+            "reviewed": true,
+            "risk": "low",
+            "title": "查看表格历史版本列表",
+            "use_when": [
+              "用户说 看历史版本/版本列表，目标是在线表格"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "回滚表格到指定历史版本",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "普通文件回滚用 drive revert；在线文档用 doc version revert"
+            ],
+            "canonical_path": "sheet.version_revert",
+            "cli_name": "revert",
+            "cli_path": "sheet version revert",
+            "confirmation": "user_required",
+            "description": "[危险] 回滚表格到指定版本",
+            "effect": "write",
+            "group": "version",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "version_revert",
+            "primary_cli_path": "sheet version revert",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "[危险] 回滚表格到指定版本",
+            "use_when": [
+              "用户说 回滚到某个版本/恢复到之前的表格"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "手动保存表格版本快照",
+            "agent_summary_source": "dws-agent-selection/sheet",
+            "availability": "available",
+            "avoid_when": [
+              "回滚用 version revert；查看历史用 version list"
+            ],
+            "canonical_path": "sheet.version_save",
+            "cli_name": "save",
+            "cli_path": "sheet version save",
+            "confirmation": "not_required",
+            "description": "手动保存表格版本快照",
+            "effect": "write",
+            "group": "version",
+            "idempotency": "non_idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+            "name": "version_save",
+            "primary_cli_path": "sheet version save",
+            "reviewed": true,
+            "risk": "low",
+            "title": "手动保存表格版本快照",
+            "use_when": [
+              "用户说 保存版本/存个快照，目标是在线表格"
             ]
           },
           {
@@ -26585,6 +27314,6 @@
       }
     ],
     "source": "embedded-command-catalog",
-    "tool_count": 843
+    "tool_count": 870
   }
 }

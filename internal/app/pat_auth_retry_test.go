@@ -30,6 +30,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 )
 
 func TestIsPatScopeError_MissingScope(t *testing.T) {
@@ -1006,10 +1007,11 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
 	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE.
 	// DINGTALK_AGENT is set to demonstrate it does NOT leak into
-	// hostControl.clawType — the open-source build pins that to the
-	// literal edition.DefaultOSSClawType value ("openClaw").
+	// hostControl.clawType. With no DWS_AGENT_PRODUCT override the
+	// open-source edition default remains "openClaw".
 	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
 	t.Setenv("DINGTALK_AGENT", "sales-copilot")
+	t.Setenv(agentproduct.EnvName, "")
 
 	mock := &mockRunner{
 		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
@@ -1053,7 +1055,7 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	}
 	hostControl, _ := data["hostControl"].(map[string]any)
 	if got, _ := hostControl["clawType"].(string); got != "openClaw" {
-		t.Fatalf("hostControl.clawType = %q, want openClaw (hard-wired by open-source edition)", got)
+		t.Fatalf("hostControl.clawType = %q, want openClaw (open-source edition default)", got)
 	}
 	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
 		t.Fatalf("hostControl.callbackOwner = %q, want host", got)

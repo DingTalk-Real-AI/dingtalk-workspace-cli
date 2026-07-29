@@ -7,7 +7,7 @@
 | "创建一个新表格 (Base)" | `base create` | 不是 `table create` |
 | "在表格里加一个数据表" | `table create` | 不是 `base create` |
 | "看看表格里有哪些表" | `base get` | 不是 `field get` |
-| "看看表里有哪些列" | `field get` / `table get` | 不是 `base get` |
+| "看看表里有哪些列" | `field get` | 不是 `base get` |
 | "搜索表格" (找 Base) | `base search` | 不是 `record query` |
 | "搜索记录" (查表内数据) | `record query` | 不是 `base search` |
 | "删掉这个数据表" | `table delete` | 不是 `record delete` |
@@ -74,7 +74,7 @@ dws aitable table create --base-id <BASE_ID> --name "产品图片" \
 
 ## 只读字段 (不可写入)
 
-以下类型的字段不可写入, 执行 `field get` / `table get` 后识别并跳过:
+以下类型的字段不可写入, 执行 `field get` 后识别并跳过:
 - 创建时间 / 修改时间 (系统自动)
 - 创建人 / 修改人 (系统自动)
 - 自动编号
@@ -83,7 +83,7 @@ dws aitable table create --base-id <BASE_ID> --name "产品图片" \
 
 ## 记录写入格式（record create / record update）
 
-> 各字段类型的完整写入/读取格式规范请参考：[aitable-cell-value.md](./products/aitable/aitable-cell-value.md)
+> 各字段类型的完整写入/读取格式规范请参考：[aitable-cell-value.md](./aitable/aitable-cell-value.md)
 >
 > 该文件是 cellValue 格式的 **source of truth**，包含所有字段类型的详细示例和注意事项。
 

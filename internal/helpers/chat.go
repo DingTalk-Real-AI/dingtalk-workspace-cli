@@ -1612,8 +1612,23 @@ func newChatCommand() *cobra.Command {
 						contentJSON = fmt.Sprintf(`{"dentryId":%d,"spaceId":%d,"fileName":"%s","fileType":"%s","filePath":"%s","fileSize":%d}`,
 							dentryId, spaceId, fileName, fileType, filePath, fileSize)
 					}
+				case "location":
+					latitude, _ := cmd.Flags().GetString("latitude")
+					longitude, _ := cmd.Flags().GetString("longitude")
+					locationName, _ := cmd.Flags().GetString("location-name")
+					mapThumbnailUrl, _ := cmd.Flags().GetString("map-thumbnail-url")
+					if latitude == "" || longitude == "" || locationName == "" || mapThumbnailUrl == "" {
+						return fmt.Errorf("--latitude, --longitude, --location-name, --map-thumbnail-url are all required for msgType=location")
+					}
+					contentJSON = fmt.Sprintf(`{"locationName":"%s","longitude":"%s","latitude":"%s","mapThumbnailUrl":"%s"}`, locationName, longitude, latitude, mapThumbnailUrl)
+				case "profile":
+					contactID, _ := cmd.Flags().GetString("contact-id")
+					if contactID == "" {
+						return fmt.Errorf("--contact-id is required for msgType=profile")
+					}
+					contentJSON = fmt.Sprintf(`{"openDingTalkId":"%s"}`, contactID)
 				default:
-					return fmt.Errorf("unsupported --msg-type: %s (supported: image, file, audio, video)", msgType)
+					return fmt.Errorf("unsupported --msg-type: %s (supported: image, file, audio, video, location, profile)", msgType)
 				}
 
 				params := map[string]any{
@@ -2214,8 +2229,10 @@ func newChatCommand() *cobra.Command {
 			}
 			if cmd.Flags().Changed("only-robot") {
 				toolArgs["onlyRobotMessages"], _ = cmd.Flags().GetBool("only-robot")
+			} else if cmd.Flags().Changed("only-robot-messages") {
+				toolArgs["onlyRobotMessages"], _ = cmd.Flags().GetBool("only-robot-messages")
 			}
-			if v, _ := cmd.Flags().GetString("conversation-type"); v != "" {
+			if v := flagOrFallback(cmd, "conversation-type", "search-conv-type"); v != "" {
 				toolArgs["searchConvType"] = v
 			}
 
@@ -2522,7 +2539,12 @@ func newChatCommand() *cobra.Command {
 	chatMessageSendCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效，可选）,设置时，消息内容中一定要包含对应的占位符<@all>")
 	chatMessageSendCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）,设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>")
 	chatMessageSendCmd.Flags().String("media-id", "", "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）")
-	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）")
+	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video/location/profile（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）")
+	chatMessageSendCmd.Flags().String("latitude", "", "位置消息纬度（msgType=location 时必填）")
+	chatMessageSendCmd.Flags().String("longitude", "", "位置消息经度（msgType=location 时必填）")
+	chatMessageSendCmd.Flags().String("location-name", "", "位置消息地址名称（msgType=location 时必填）")
+	chatMessageSendCmd.Flags().String("map-thumbnail-url", "", "位置消息地图缩略图 mediaId，形如 @mediaId（msgType=location 时必填）")
+	chatMessageSendCmd.Flags().String("contact-id", "", "联系人名片 openDingTalkId（msgType=profile 时必填）")
 	chatMessageSendCmd.Flags().Int64("dentry-id", 0, "文件 dentryId（与 --space-id 成对传入时跳过自动上传）")
 	chatMessageSendCmd.Flags().Int64("space-id", 0, "空间 ID（与 --dentry-id 成对传入时跳过自动上传）")
 	chatMessageSendCmd.Flags().String("file-name", "", "文件名")
@@ -2716,7 +2738,11 @@ func newChatCommand() *cobra.Command {
 	_ = chatMessageSearchAdvancedCmd.Flags().MarkHidden("group")
 	chatMessageSearchAdvancedCmd.Flags().String("message-type", "", "下层消息类型过滤值（可选，以当前 IM Schema 支持值为准）")
 	chatMessageSearchAdvancedCmd.Flags().Bool("only-robot", false, "只搜索机器人消息（可选；显式传 false 时也会传给下层）")
+	chatMessageSearchAdvancedCmd.Flags().Bool("only-robot-messages", false, "--only-robot 的别名")
+	_ = chatMessageSearchAdvancedCmd.Flags().MarkHidden("only-robot-messages")
 	chatMessageSearchAdvancedCmd.Flags().String("conversation-type", "", "下层会话类型过滤值（可选，以当前 IM Schema 支持值为准）")
+	chatMessageSearchAdvancedCmd.Flags().String("search-conv-type", "", "--conversation-type 的别名")
+	_ = chatMessageSearchAdvancedCmd.Flags().MarkHidden("search-conv-type")
 	chatMessageSearchAdvancedCmd.Flags().String("start", "", "开始时间，ISO-8601 格式（可选）")
 	chatMessageSearchAdvancedCmd.Flags().String("end", "", "结束时间，ISO-8601 格式（可选）")
 	chatMessageSearchAdvancedCmd.Flags().String("cursor", "0", "分页游标（默认 \"0\"）")
@@ -3216,6 +3242,40 @@ func newChatCommand() *cobra.Command {
 	chatMessageRemoveTextEmotionCmd.Flags().String("text", "", "文字内容 (必填)")
 	chatMessageRemoveTextEmotionCmd.Flags().String("background-id", "", "背景 ID (必填)")
 
+	chatMessageUpdateTextEmotionCmd := &cobra.Command{
+		Use:     "update-text-emotion",
+		Short:   "更新消息的文字表情回应",
+		Example: `  dws chat message update-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+				return err
+			}
+			return callMCPToolOnServer("im", "update_text_emotion", map[string]any{
+				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMsgId":          mustGetFlag(cmd, "msg-id"),
+				"oldEmotionId":       mustGetFlag(cmd, "old-emotion-id"),
+				"emotionId":          mustGetFlag(cmd, "emotion-id"),
+				"emotionName":        mustGetFlag(cmd, "emotion-name"),
+				"text":               mustGetFlag(cmd, "text"),
+				"backgroundId":       mustGetFlag(cmd, "background-id"),
+			})
+		},
+	}
+	chatMessageUpdateTextEmotionCmd.Flags().String("conversation-id", "", "会话 openConversationId (必填，支持单聊/群聊)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("group", "", "--conversation-id 的别名")
+	chatMessageUpdateTextEmotionCmd.Flags().String("id", "", "--conversation-id 的别名")
+	chatMessageUpdateTextEmotionCmd.Flags().String("chat", "", "--conversation-id 的别名")
+	chatMessageUpdateTextEmotionCmd.Flags().String("msg-id", "", "消息 openMsgId (必填)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("old-emotion-id", "", "待更新的原表情 ID (必填)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("emotion-id", "", "新表情 ID (必填)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("emotion-name", "", "新表情名称 (必填)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("text", "", "新文字内容 (必填)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("background-id", "", "新背景 ID (必填)")
+	chatMessageUpdateTextEmotionCmd.MarkFlagsOneRequired("conversation-id", "group", "id", "chat")
+	for _, name := range []string{"msg-id", "old-emotion-id", "emotion-id", "emotion-name", "text", "background-id"} {
+		_ = chatMessageUpdateTextEmotionCmd.MarkFlagRequired(name)
+	}
+
 	// ── 创建文字表情（获取 emotionId）──────────────────────
 
 	chatMessageCreateTextEmotionCmd := &cobra.Command{
@@ -3445,7 +3505,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageDownloadMediaCmd.Flags().String("output", "", "本地保存路径，文件或目录 (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("output")
 
-	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageEditCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageUpdateCardCmd, chatMessageDownloadMediaCmd)
+	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageUpdateTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageEditCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageUpdateCardCmd, chatMessageDownloadMediaCmd)
 	chatBotCmd.AddCommand(chatBotSearchCmd)
 	chatCategoryCmd.AddCommand(chatCategoryListCmd, chatCategoryConvsCmd, chatCategoryCreateCmd, chatCategoryDeleteCmd, chatCategoryRenameCmd, chatCategoryAddConvCmd, chatCategoryRemoveConvCmd, chatCategoryListByConvCmd, chatCategoryBatchInfoCmd)
 	chatGroupCmd.AddCommand(chatGroupInfoByIdCmd)
@@ -3761,6 +3821,25 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatSetTopCmd.Flags().String("conversation-id", "", "会话 openConversationId (必填，支持单聊/群聊)")
 	_ = chatSetTopCmd.MarkFlagRequired("conversation-id")
 	chatSetTopCmd.Flags().Bool("off", false, "取消置顶（不传则设置置顶）")
+
+	// ── group get-mute-config: 查询群用户禁言配置 ───────────────
+	chatGroupGetMuteConfigCmd := &cobra.Command{
+		Use:   "get-mute-config",
+		Short: "查询群用户禁言配置",
+		Long: `查询指定群的用户禁言配置，包括单独禁言黑名单、全员禁言白名单及相关操作时间。
+返回的是原始配置记录，不等同于当前被禁言成员列表；全员禁言开关也不在本命令的返回范围内。`,
+		Example: `  dws chat group get-mute-config --group <openConversationId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group"); err != nil {
+				return err
+			}
+			return callMCPToolOnServer("im", "get_group_mute_config", map[string]any{
+				"openConversationId": mustGetFlag(cmd, "group"),
+			})
+		},
+	}
+	chatGroupGetMuteConfigCmd.Flags().String("group", "", "群聊 openConversationId (必填)")
+	chatGroupCmd.AddCommand(chatGroupGetMuteConfigCmd)
 
 	// ── group-mute: 全员禁言 ───────────────────────────────
 
@@ -5340,6 +5419,68 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatTextCmd.AddCommand(chatTextTranslateCmd)
 
 	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd, chatGroupUpgradeToExternalCmd)
+
+	// ── chat group user-settings ──
+	chatGroupUserSettingsCmd := &cobra.Command{
+		Use:   "user-settings",
+		Short: "批量查询或更新当前用户的群会话设置",
+		RunE:  groupRunE,
+	}
+	chatGroupUserSettingsQueryCmd := &cobra.Command{
+		Use:     "query",
+		Short:   "批量查询当前用户的群会话设置",
+		Example: `  dws chat group user-settings query --groups cid1,cid2`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "groups"); err != nil {
+				return err
+			}
+			convIds := parseCSVValues(mustGetFlag(cmd, "groups"))
+			if len(convIds) == 0 {
+				return fmt.Errorf("--groups must not be empty")
+			}
+			if len(convIds) > 100 {
+				return fmt.Errorf("--groups batch size %d exceeds limit 100", len(convIds))
+			}
+			return callMCPToolOnServer("im", "batch_query_group_chat_settings", map[string]any{
+				"openConversationIds": convIds,
+			})
+		},
+	}
+	chatGroupUserSettingsQueryCmd.Flags().String("groups", "", "群会话 openConversationId 列表，逗号分隔，最多 100 个 (必填)")
+	chatGroupUserSettingsSetCmd := &cobra.Command{
+		Use:     "set",
+		Short:   "批量更新当前用户的群会话设置",
+		Example: `  dws chat group user-settings set --items '[{"openConversationId":"cid1","top":true,"mute":false}]'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "items"); err != nil {
+				return err
+			}
+			itemsJSON := mustGetFlag(cmd, "items")
+			var items []map[string]any
+			if err := json.Unmarshal([]byte(itemsJSON), &items); err != nil {
+				return fmt.Errorf("--items JSON parse error: %w", err)
+			}
+			if len(items) == 0 {
+				return fmt.Errorf("--items must not be empty")
+			}
+			if len(items) > 100 {
+				return fmt.Errorf("--items batch size %d exceeds limit 100", len(items))
+			}
+			// 每项必须携带非空 openConversationId，缺失时 fail-fast，避免下发无效批量更新。
+			for i, item := range items {
+				cid, _ := item["openConversationId"].(string)
+				if strings.TrimSpace(cid) == "" {
+					return fmt.Errorf("--items[%d] 缺少非空 openConversationId", i)
+				}
+			}
+			return callMCPToolOnServer("im", "batch_update_group_chat_settings", map[string]any{
+				"items": items,
+			})
+		},
+	}
+	chatGroupUserSettingsSetCmd.Flags().String("items", "", `JSON 数组，每项 {"openConversationId":"cid","top":bool,"mute":bool,"groupNick":"...","groupAlias":"..."} (必填)`)
+	chatGroupUserSettingsCmd.AddCommand(chatGroupUserSettingsQueryCmd, chatGroupUserSettingsSetCmd)
+	chatGroupCmd.AddCommand(chatGroupUserSettingsCmd)
 	chatGroupMembersCmd.AddCommand(chatGroupMembersRemoveBotCmd, chatGroupMembersListByIdsCmd)
 	chatBotCmd.AddCommand(chatBotFindCmd)
 	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)

@@ -17,6 +17,17 @@
       "availability": "available",
       "reviewed": true
     },
+    "drive.apply_permission": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
     "drive.commit_upload": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -64,6 +75,28 @@
       "availability": "available",
       "reviewed": true
     },
+    "drive.download_file_version": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "drive.get_cover": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
     "drive.get_file_info": {
       "interface_mode": "mcp",
       "availability": "available",
@@ -74,6 +107,17 @@
       "availability": "available",
       "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true
+    },
+    "drive.get_star_list": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
     },
     "drive.get_upload_info": {
       "interface_mode": "mcp",
@@ -99,6 +143,17 @@
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
+    },
+    "drive.mark_star": {
+      "effect": "write",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
     },
     "drive.move_document": {
       "interface_ref": {
@@ -164,6 +219,17 @@
       "reviewed": true,
       "runtime_gate": "confirm_dangerous"
     },
+    "drive.query_permission_apply_info": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
     "drive.recent": {
       "effect": "read",
       "risk": "low",
@@ -212,28 +278,46 @@
       "review_reason": "The reviewed CLI reads node metadata before mutation and strips only the exact current extension for non-folder nodes, avoiding both duplicate extensions and dotted-folder corruption without a suffix whitelist.",
       "cli_path": "drive rename"
     },
+    "drive.revert_file_version": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "non_idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "confirm_delete"
+    },
     "drive.search_files": {
       "interface_mode": "mcp",
       "availability": "available",
       "reviewed": true
     },
-    "drive.upload": {
+    "drive.shortcut_copy": {
       "effect": "write",
       "risk": "medium",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
       "reviewed": true,
-      "parameters": {
-        "node": {
-          "property": "nodeId",
-          "required": false
-        }
-      },
-      "review_reason": "The reviewed helper preserves the stable command-level Schema contract for ordinary uploads; --node switches to overwrite mode and the runtime still requires explicit confirmation unless --yes is supplied.",
-      "cli_path": "drive upload",
+      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+      "cli_path": "drive +copy",
+      "runtime_gate": "typed_yes"
+    },
+    "drive.shortcut_find_file": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "reviewed": true,
+      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+      "cli_path": "drive +find-file",
       "runtime_gate": "none"
     },
     "drive.shortcut_info": {
@@ -247,6 +331,32 @@
       "reviewed": true,
       "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
       "cli_path": "drive +info",
+      "runtime_gate": "none"
+    },
+    "drive.shortcut_move": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "reviewed": true,
+      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+      "cli_path": "drive +move",
+      "runtime_gate": "typed_yes"
+    },
+    "drive.shortcut_recent": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "reviewed": true,
+      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+      "cli_path": "drive +recent",
       "runtime_gate": "none"
     },
     "drive.shortcut_search": {
@@ -275,56 +385,45 @@
       "cli_path": "drive +search-docs",
       "runtime_gate": "none"
     },
-    "drive.shortcut_copy": {
+    "drive.transfer_owner": {
       "effect": "write",
-      "risk": "medium",
+      "risk": "high",
       "confirmation": "user_required",
-      "idempotency": "unknown",
+      "idempotency": "non_idempotent",
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
-      "cli_path": "drive +copy",
-      "runtime_gate": "typed_yes"
+      "runtime_gate": "confirm_delete"
     },
-    "drive.shortcut_move": {
+    "drive.unmark_star": {
       "effect": "write",
-      "risk": "medium",
-      "confirmation": "user_required",
-      "idempotency": "unknown",
-      "interface_mode": "composite",
-      "availability": "available",
-      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
-      "reviewed": true,
-      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
-      "cli_path": "drive +move",
-      "runtime_gate": "typed_yes"
-    },
-    "drive.shortcut_recent": {
-      "effect": "read",
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
-      "cli_path": "drive +recent",
       "runtime_gate": "none"
     },
-    "drive.shortcut_find_file": {
-      "effect": "read",
-      "risk": "low",
+    "drive.upload": {
+      "effect": "write",
+      "risk": "medium",
       "confirmation": "not_required",
-      "idempotency": "idempotent",
+      "idempotency": "unknown",
       "interface_mode": "composite",
       "availability": "available",
-      "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+      "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
       "reviewed": true,
-      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
-      "cli_path": "drive +find-file",
+      "parameters": {
+        "node": {
+          "property": "nodeId",
+          "required": false
+        }
+      },
+      "review_reason": "The reviewed helper preserves the stable command-level Schema contract for ordinary uploads; --node switches to overwrite mode and the runtime still requires explicit confirmation unless --yes is supplied.",
+      "cli_path": "drive upload",
       "runtime_gate": "none"
     }
   }

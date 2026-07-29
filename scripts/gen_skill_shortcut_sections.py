@@ -25,19 +25,19 @@ MONO_SKILL = ROOT / "skills" / "mono" / "SKILL.md"
 
 SERVICE_TO_SKILL = {
     "aitable": ROOT / "skills" / "multi" / "dingtalk-aitable" / "SKILL.md",
-    "attendance": ROOT / "skills" / "multi" / "dingtalk-attendance" / "SKILL.md",
+    "attendance": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "attendance.md",
     "calendar": ROOT / "skills" / "multi" / "dingtalk-calendar" / "SKILL.md",
     "chat": ROOT / "skills" / "multi" / "dingtalk-chat" / "SKILL.md",
     "contact": ROOT / "skills" / "multi" / "dingtalk-contact" / "SKILL.md",
     "devapp": ROOT / "skills" / "multi" / "dingtalk-dev" / "SKILL.md",
-    "ding": ROOT / "skills" / "multi" / "dingtalk-ding" / "SKILL.md",
+    "ding": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "ding.md",
     "doc": ROOT / "skills" / "multi" / "dingtalk-doc" / "SKILL.md",
     "drive": ROOT / "skills" / "multi" / "dingtalk-drive" / "SKILL.md",
     "mail": ROOT / "skills" / "multi" / "dingtalk-mail" / "SKILL.md",
     "minutes": ROOT / "skills" / "multi" / "dingtalk-minutes" / "SKILL.md",
-    "oa": ROOT / "skills" / "multi" / "dingtalk-oa" / "SKILL.md",
-    "report": ROOT / "skills" / "multi" / "dingtalk-report" / "SKILL.md",
-    "sheet": ROOT / "skills" / "multi" / "dingtalk-sheet" / "SKILL.md",
+    "oa": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "oa.md",
+    "report": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "report.md",
+    "sheet": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "sheet.md",
     "todo": ROOT / "skills" / "multi" / "dingtalk-todo" / "SKILL.md",
     "wiki": ROOT / "skills" / "multi" / "dingtalk-wiki" / "SKILL.md",
 }
@@ -88,7 +88,9 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
     rows = []
     for service, count in sorted(counts.items()):
         path = SERVICE_TO_SKILL.get(service)
-        skill = path.parent.name if path else "—"
+        skill = "—"
+        if path:
+            skill = next((part for part in path.parts if part.startswith("dingtalk-")), path.parent.name)
         rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws shortcut list --service {md_escape(service)} --format json` |")
     body = "\n".join(rows)
     return f"""{MONO_START}

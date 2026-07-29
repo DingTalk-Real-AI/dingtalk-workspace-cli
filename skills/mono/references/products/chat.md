@@ -1060,6 +1060,22 @@ Flags:
       --background-id string   背景 ID (必填)
 ```
 
+#### 原地更新消息的文字表情回应
+```
+Usage:
+  dws chat message update-text-emotion [flags]
+Example:
+  dws chat message update-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name "处理中" --text "处理中 2 分钟" --background-id im_bg_5
+Flags:
+      --conversation-id string   会话 openConversationId (必填，支持单聊/群聊，别名: --group / --id / --chat)
+      --msg-id string            消息 openMsgId (必填)
+      --old-emotion-id string    待替换的原表情 ID (必填)
+      --emotion-id string        新表情 ID (必填，通过 create-text-emotion 获取)
+      --emotion-name string      新表情名称 (必填)
+      --text string              新文字内容 (必填)
+      --background-id string     新背景 ID (必填)
+```
+
 #### 移除消息的文字表情回应
 ```
 Usage:
@@ -1911,6 +1927,7 @@ Flags:
 用户说"emoji回应/表情回应/给消息加表情" → `chat message add-emoji`
 用户说"取消emoji回应/移除表情回应" → `chat message remove-emoji`
 用户说"文字表情回应/添加文字表情" → `chat message add-text-emotion`
+用户说"修改文字表情回应/更新消息状态文字" → `chat message update-text-emotion`
 用户说"取消文字表情回应/移除文字表情" → `chat message remove-text-emotion`
 用户说"创建文字表情/新建文字表情" → `chat message create-text-emotion`
 用户说"免打扰/消息免打扰/静音/开启免打扰/关闭免打扰" → `chat mute`
@@ -1973,7 +1990,7 @@ Flags:
 - `chat message list-by-ids` — 根据消息 ID 批量查询消息（最多 50 条）
 - `chat message add-emoji` / `remove-emoji` — 对消息添加/移除 emoji 表情回应
 - `chat message list-emotion-replies` — 批量拉取消息的表情回复和文字回复
-- `chat message add-text-emotion` / `remove-text-emotion` — 对消息添加/移除文字表情回应
+- `chat message add-text-emotion` / `update-text-emotion` / `remove-text-emotion` — 对消息添加、原地更新或移除文字表情回应
 - `chat message create-text-emotion` — 创建文字表情模板，返回 emotionId 供 add-text-emotion 使用
 - `chat category list` — 获取用户自定义会话分组列表
 - `chat category list-conversations` — 拉取指定分组下的会话列表

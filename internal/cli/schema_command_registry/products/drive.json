@@ -2,6 +2,34 @@
   "id": "drive",
   "tools": [
     {
+      "canonical_path": "drive.shortcut_copy",
+      "cli_path": "drive +copy"
+    },
+    {
+      "canonical_path": "drive.shortcut_find_file",
+      "cli_path": "drive +find-file"
+    },
+    {
+      "canonical_path": "drive.shortcut_info",
+      "cli_path": "drive +info"
+    },
+    {
+      "canonical_path": "drive.shortcut_move",
+      "cli_path": "drive +move"
+    },
+    {
+      "canonical_path": "drive.shortcut_recent",
+      "cli_path": "drive +recent"
+    },
+    {
+      "canonical_path": "drive.shortcut_search",
+      "cli_path": "drive +search"
+    },
+    {
+      "canonical_path": "drive.shortcut_search_docs",
+      "cli_path": "drive +search-docs"
+    },
+    {
       "canonical_path": "drive.commit_upload",
       "cli_path": "drive commit"
     },
@@ -10,12 +38,20 @@
       "cli_path": "drive copy"
     },
     {
+      "canonical_path": "drive.get_cover",
+      "cli_path": "drive cover"
+    },
+    {
       "canonical_path": "drive.delete_document",
       "cli_path": "drive delete"
     },
     {
       "canonical_path": "drive.download_file",
       "cli_path": "drive download"
+    },
+    {
+      "canonical_path": "drive.download_file_version",
+      "cli_path": "drive download-version"
     },
     {
       "canonical_path": "drive.get_file_info",
@@ -42,12 +78,24 @@
       "cli_path": "drive permission add"
     },
     {
+      "canonical_path": "drive.apply_permission",
+      "cli_path": "drive permission apply"
+    },
+    {
+      "canonical_path": "drive.query_permission_apply_info",
+      "cli_path": "drive permission apply-info"
+    },
+    {
       "canonical_path": "drive.list_permission",
       "cli_path": "drive permission list"
     },
     {
       "canonical_path": "drive.permission_remove",
       "cli_path": "drive permission remove"
+    },
+    {
+      "canonical_path": "drive.transfer_owner",
+      "cli_path": "drive permission transfer-owner"
     },
     {
       "canonical_path": "drive.permission_update",
@@ -82,12 +130,28 @@
       "cli_path": "drive rename"
     },
     {
+      "canonical_path": "drive.revert_file_version",
+      "cli_path": "drive revert"
+    },
+    {
       "canonical_path": "drive.search_files",
       "cli_path": "drive search"
     },
     {
       "canonical_path": "drive.create_shortcut",
       "cli_path": "drive shortcut"
+    },
+    {
+      "canonical_path": "drive.mark_star",
+      "cli_path": "drive star add"
+    },
+    {
+      "canonical_path": "drive.get_star_list",
+      "cli_path": "drive star list"
+    },
+    {
+      "canonical_path": "drive.unmark_star",
+      "cli_path": "drive star remove"
     },
     {
       "canonical_path": "drive.get_node_stats",
@@ -100,34 +164,6 @@
     {
       "canonical_path": "drive.get_upload_info",
       "cli_path": "drive upload-info"
-    },
-    {
-      "canonical_path": "drive.shortcut_info",
-      "cli_path": "drive +info"
-    },
-    {
-      "canonical_path": "drive.shortcut_search",
-      "cli_path": "drive +search"
-    },
-    {
-      "canonical_path": "drive.shortcut_search_docs",
-      "cli_path": "drive +search-docs"
-    },
-    {
-      "canonical_path": "drive.shortcut_copy",
-      "cli_path": "drive +copy"
-    },
-    {
-      "canonical_path": "drive.shortcut_move",
-      "cli_path": "drive +move"
-    },
-    {
-      "canonical_path": "drive.shortcut_recent",
-      "cli_path": "drive +recent"
-    },
-    {
-      "canonical_path": "drive.shortcut_find_file",
-      "cli_path": "drive +find-file"
     }
   ]
 }

@@ -94,5 +94,5 @@ dws doc media download --node <DOC_ID> --resource-id <RESOURCE_ID>
 
 - [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令族）
 - [`./doc-block.md`](./doc-block.md)（block list 取 attachment 的 resourceId）
-- [`../drive.md`](../drive.md)（独立文件上传：`dws drive upload`）
+- [`../drive.md`](../../../dingtalk-drive/references/drive.md)（独立文件上传：`dws drive upload`）
 - [`./style/doc-style-guideline.md` §4.9 附件与图片](./style/doc-style-guideline.md)（图示与附件使用规范）

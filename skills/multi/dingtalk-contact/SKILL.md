@@ -1,10 +1,9 @@
 ---
 name: dingtalk-contact
-description: 钉钉通讯录查询与组织管理（用户、部门、角色、花名册、离职员工、企业与企业账号）。Use when 用户说 查部门/我的信息/按 userId 查/修改员工或自己的资料/创建或更新部门/创建或更新企业账号/邀请员工。Distinct from dingtalk-aisearch(模糊搜人首选：找同事/查上下级/谁负责)。命令前缀：dws contact。
-cli_version: ">=0.2.14"
+description: 钉钉通讯录精确查询。Use when 已有 userId 后查详情、部门、职位或邮箱，按完整手机号反查用户，或查询自己、部门成员及角色。姓名模糊搜索、工号、职责、上下级走 dingtalk-aisearch，拿到 userId 后用本 skill 补详情。命令前缀：dws contact。
 metadata:
+  cli_version: ">=0.2.14"
   category: product
-  stability: experimental
   requires:
     bins:
       - dws
@@ -12,14 +11,9 @@ metadata:
 
 # 钉钉通讯录 Skill
 
-> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。全部 dingtalk-* skill 已通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
+## 前置条件 — 执行操作前必读
 
-> **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
-
-<!-- SAFETY_PREAMBLE_INJECT -->
-
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
-
+> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dws-shared`](../dws-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
 
 > 命令参考：[contact.md](references/contact.md)；剧本：[08-directory.md](references/08-directory.md)。
 
@@ -52,34 +46,78 @@ metadata:
 |--------|------|
 | "查我自己的信息" | `dws contact user get-self` |
 | "按 userId 查详情" | `dws contact user get --ids <userId1>,<userId2>,...`（多个并行） |
+| "完整手机号反查用户" | `dws contact user search-mobile --mobile <手机号>` |
 | "按部门名拉成员" | `python scripts/contact_dept_members.py --query "<部门名>"` |
 | "搜部门" | `dws contact dept search --query "<关键词>"` |
-| "部门成员列表" | `dws contact dept list-members --depts <deptId>` |
-| "离职员工/离职名单/已离职" | `dws contact user dismission search`（可加 `--name` / `--start` + `--end` / `--depts`） |
-| "花名册/员工档案/学历/银行卡/合同" | `dws contact user profile get --staff-id <STAFF_ID>`（先 `profile fields` 查字段） |
-| "创建企业/新建企业/初始化企业" | `dws contact org create --org-name "<企业名>" --creator-username "<创建者名称>"` |
-| "创建企业账号/专属账号/企业登录账号" | `dws contact account create --org-user-name "<姓名>" --login-id "<登录号>"` |
-| "邀请员工/添加员工/新员工入职" | `dws contact user invite --org-user-name "<姓名>" --org-user-mobile "<手机号>"` |
-| "修改员工姓名/部门/直属主管" | `dws contact user update --user-id <userId> ...` |
-| "修改自己的昵称/头像" | `dws contact user update-self --nick "<昵称>"` / `--avatar-file-id <fileId>` |
-| "创建部门" | `dws contact dept create --name "<部门名>" --create-dept-group=true\|false` |
-| "修改部门名称/上级部门" | `dws contact dept update --dept <deptId> --name "<新名称>" [--parent <deptId>]` |
-| "更新企业账号资料" | `dws contact account update --user-id <userId> ...` |
+| "部门成员列表" | `dws contact dept list-members --ids <deptId>` |
+| "列出企业角色 / 有哪些角色" | `dws contact label list` |
+| "按角色名查角色ID" | `dws contact label get --names "<角色名>"` |
+| "查某角色下有哪些成员" | `dws contact label list-members --id <labelId>` |
 
-## 评测高频硬约束
+## 标准 SOP（必遵流程）
+
+> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 userId。每条命令必须带 `--format json`。姓名模糊搜索、工号、职责与上下级走 `dingtalk-aisearch`；完整手机号精确反查走 contact；拿到 userId 后由 contact 补详情。
+
+### SOP-1 搜人（search-person）
+
+**触发**：按姓名/工号/部门/职责/上下级找人，或用手机号线索做语义搜索。
+
+1. **切 aisearch（必须）**：`dws aisearch person --keyword "<关键词>" --dimension <维度> --format json`（姓名→`name`、工号→`jobNumber`、手机号语义线索→`phone`、负责人→`duty`、部门→`department`、上下级→`supervisor`/`subordinate`）。
+2. **解析（必须）**：从结果取 `userId`、`title`；**多人同名禁止默认选第一个**，必须批量 `dws contact user get --ids <id1,id2,...> --format json` 拿部门/职位后让用户确认。
+3. **补详情（必须）**：要完整部门/职位/邮箱/主管时 `dws contact user get --ids <userId> --format json`。
+
+**禁止**：用 `contact user search` 做姓名或工号搜索、默认取首个候选、编造人员字段。完整手机号精确反查是 `search-mobile` 的唯一搜索例外。
+
+### SOP-1A 完整手机号精确反查（search-person-by-mobile）
+
+**触发**：用户提供完整手机号并要求确认是谁或取得 userId。
+
+1. **执行（必须）**：`dws contact user search-mobile --mobile "<完整手机号>" --format json`。
+2. **补详情（按需）**：从结果取 `userId`，需要部门、职位或邮箱时继续 `dws contact user get --ids <userId> --format json`。
+
+**禁止**：把完整手机号精确反查改走姓名搜索，或在未返回 userId 时猜测人员。
+
+### SOP-2 精确查人/补详情（search-user）
+
+**触发**：已有 userId 要查完整详情，或要拿 userId 给下游（发消息/建待办/约日程）。
+
+1. **拿 userId（必须）**：`dws aisearch person --keyword "<姓名>" --dimension name --format json` → `userId`；多命中必须列候选请用户确认。
+2. **查详情（必须）**：`dws contact user get --ids <userId> --format json`，按返回字段（`orgEmployeeModel` 下部门/职位/邮箱）答复。
+
+**禁止**：用模糊关键词直接调 `contact user search` 凑数、编造未返回字段。
+
+### SOP-3 查自己（get-contact-self）
+
+**触发**：我的信息/我的 userId/我的部门。
+
+1. **执行（必须）**：`dws contact user get-self --format json`，取 `orgEmployeeModel.userId` / `orgUserName` / `depts[].deptName` / 主管等。
+
+**禁止**：把自己 userId 写死或猜测。
+
+### SOP-4 查部门 / 角色（dept-and-relation）
+
+**触发**：部门列表/部门成员/角色/角色成员。
+
+1. **执行（必须）**：搜部门 `dws contact dept search --query "<部门名>" --format json`；某部门下子部门 `dws contact dept list-children --dept <父部门ID> --format json`；部门成员 `dws contact dept list-members --ids <部门ID>[,<部门ID2>...] --format json`；部门详情 `dws contact dept get-info --dept <部门ID> --format json`。角色：`dws contact label list` / `dws contact label get --names "<角色名>"` / `dws contact label list-members --id <labelId>`。搜索企业根部门时服务端可能返回 `deptId=-1` 哨兵，后续 `list-children` / `list-members` / `get-info` 必须规范化为真实根部门 `deptId=1`。
+2. **补详情（必须）**：拿到 userId 后用 `contact user get --ids` 补部门/职位；上下级关系优先经 `dingtalk-aisearch` 的 `supervisor`/`subordinate` 维度。
+
+**禁止**：使用不存在的 `contact dept list`（已废弃/歧义）、编造 deptId/labelId、跳过 aisearch 维度直接猜上下级。
+
+## 高频硬约束
 
 - 通讯录问题必须调用 `dws contact` 或 `dws aisearch` 获取实时结果；严禁只读 `USER.md`、环境身份或静态上下文后直接回答。
 - 查自己用 `dws contact user get-self --format json`，不要把 `me/self/current` 当作 `userId` 传给 `user get`。
-- 精确找人、按工号、按手机号：先用 `dws aisearch person --keyword "<完整输入>" --dimension name/jobNumber/phone --format json` 或对应 `contact user search/search-mobile`；拿到 `userId` 后必须 `dws contact user get --ids <userId> --format json` 补部门/职位/邮箱。
+- 姓名模糊搜索、工号反查、职责或上下级搜索走 `dws aisearch person`；完整手机号精确反查走 `dws contact user search-mobile --mobile "<手机号>" --format json`。拿到 `userId` 后按需 `dws contact user get --ids <userId> --format json` 补部门/职位/邮箱。
 - 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --keyword "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
-- "创建企业账号"必须优先匹配长模式 `account create`，不要误路由为 `org create`。
-- `user update` 至少修改姓名、部门、直属主管之一；`user update-self` 至少修改昵称、头像之一；`account update` 至少传一个修改项。
-- `dept create` 必须显式选择是否创建部门群；`dept update` 必须同时提供部门 ID 与新名称。
-- `org create`、`account create/update`、`user invite/update/update-self`、`dept create/update` 都是写操作；执行前确认当前企业、目标对象和字段，获得明确同意后才加 `--yes`。
+- 用户查询企业角色、角色ID、角色成员，或“管理员/财务/HR/主管”等角色类型人员时，走 `contact label list/get/list-members`；不要用 `dept list-members` 筛字段替代。
 
 ## 跨产品协作
 
-- 模糊找人（姓名 / 上下级 / 谁负责 / 工号 / 手机号）→ 切到 `dingtalk-aisearch`
+- 姓名模糊搜索、上下级、谁负责、工号反查、手机号语义搜索 → `dingtalk-aisearch`
+- 完整手机号精确反查 → `dws contact user search-mobile`
 - 拿到 email 发邮件 → 切到 `dingtalk-mail`
 - 拿到 userId 发消息 → 切到 `dingtalk-chat`
+## 局部意图与短流程
+
+- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。

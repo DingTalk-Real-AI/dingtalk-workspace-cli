@@ -1736,6 +1736,101 @@
       "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
       "cli_path": "chat +unread-chats",
       "runtime_gate": "none"
+    },
+    "chat.update_text_emotion": {
+      "effect": "write",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: the executable CLI calls im/update_text_emotion, which is proven by dws-wukong develop@30f13f02 but absent from the pinned MCP metadata snapshot; no pinned interface_ref can represent the command yet.",
+      "reviewed": true,
+      "parameters": {
+        "background-id": {
+          "property": "backgroundId",
+          "description": "新文字表情的背景 ID",
+          "required": true
+        },
+        "chat": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "conversation-id": {
+          "property": "openConversationId",
+          "description": "会话 openConversationId；与 --group、--id、--chat 四选一",
+          "required": false
+        },
+        "emotion-id": {
+          "property": "emotionId",
+          "description": "新的文字表情 ID，可通过 create-text-emotion 获取",
+          "required": true
+        },
+        "emotion-name": {
+          "property": "emotionName",
+          "description": "新的文字表情名称",
+          "required": true
+        },
+        "group": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "id": {
+          "property": "openConversationId",
+          "required": false
+        },
+        "msg-id": {
+          "property": "openMsgId",
+          "description": "需要原地更新文字表情的消息 openMsgId",
+          "required": true
+        },
+        "old-emotion-id": {
+          "property": "oldEmotionId",
+          "description": "消息上当前文字表情的 emotionId",
+          "required": true
+        },
+        "text": {
+          "property": "text",
+          "description": "新的文字表情内容",
+          "required": true
+        }
+      },
+      "review_reason": "Ported from dws-wukong commits d6831318 and bcf56ccf, merged at 30f13f02. The four conversation locators alias one property; the other six business parameters are required by Cobra before the single im/update_text_emotion call.",
+      "cli_path": "chat message update-text-emotion",
+      "runtime_gate": "none"
+    },
+    "chat.get_group_mute_config": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.batch_query_group_chat_settings": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
+    },
+    "chat.batch_update_group_chat_settings": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "reviewed": true,
+      "runtime_gate": "none"
     }
   }
 }

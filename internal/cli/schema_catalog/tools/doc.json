@@ -10505,6 +10505,423 @@
         "准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时"
       ]
     },
+    "doc.get_document_style": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=doc.get_document_style",
+        "cobra-help:dws doc style get",
+        "internal/cli/schema_hints/metadata/doc.json",
+        "internal/cli/schema_hints/selection/doc.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "读取文档当前封面与背景配置（只读）",
+      "agent_summary_source": "dws-agent-selection/doc",
+      "availability": "available",
+      "avoid_when": [
+        "修改用 cover set / background set"
+      ],
+      "canonical_path": "doc.get_document_style",
+      "cli_name": "get",
+      "cli_path": "doc style get",
+      "confirmation": "not_required",
+      "description": "读取钉钉文档当前的封面与背景配置（只读，单接口收口 get_document_style）。",
+      "display": "钉钉文档管理",
+      "effect": "read",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws doc style get --node \u003cDOC_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": "读取文档当前封面与背景配置（只读）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": "读取文档当前封面与背景配置（只读）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "修改用 cover set / background set"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "修改用 cover set / background set"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "doc style get",
+              "value": "doc.get_document_style"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "doc style get",
+          "value": "doc.get_document_style"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取钉钉文档当前的封面与背景配置（只读，单接口收口 get_document_style）。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取钉钉文档当前的封面与背景配置（只读，单接口收口 get_document_style）。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "read"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "dws doc style get --node \u003cDOC_ID\u003e --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "dws doc style get --node \u003cDOC_ID\u003e --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "读取文档封面/背景 (只读)"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "读取文档封面/背景 (只读)"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "用户说 看下文档现在的封面/背景"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "用户说 看下文档现在的封面/背景"
+          ]
+        }
+      },
+      "group": "style",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "get_document_style",
+      "parameter_count": 1,
+      "parameters": {
+        "node": {
+          "description": "目标文档标识，支持 URL 或 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "目标文档标识，支持 URL 或 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "目标文档标识，支持 URL 或 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.get_document_style has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "node"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.get_document_style has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "doc.get_document_style",
+      "primary_cli_path": "doc style get",
+      "product_id": "doc",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "读取文档封面/背景 (只读)",
+      "use_when": [
+        "用户说 看下文档现在的封面/背景"
+      ]
+    },
     "doc.import_get": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
@@ -32753,6 +33170,2051 @@
       "title": "手动保存文档版本快照",
       "use_when": [
         "当你在做重大改动前后、想手动打一个可回滚的版本存档点时使用；输入 node，会实际为该文档保存一个当前内容的历史版本快照。"
+      ]
+    },
+    "doc.style_background_clear": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=doc.style_background_clear",
+        "cobra-help:dws doc style background clear",
+        "internal/cli/schema_hints/metadata/doc.json",
+        "internal/cli/schema_hints/selection/doc.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "清除钉钉文档背景",
+      "agent_summary_source": "dws-agent-selection/doc",
+      "availability": "available",
+      "avoid_when": [
+        "设置背景用 background set"
+      ],
+      "canonical_path": "doc.style_background_clear",
+      "cli_name": "clear",
+      "cli_path": "doc style background clear",
+      "confirmation": "not_required",
+      "description": "清除文档背景",
+      "display": "钉钉文档管理",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws doc style background clear --node \u003cDOC_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": "清除钉钉文档背景"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": "清除钉钉文档背景"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "设置背景用 background set"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "设置背景用 background set"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "doc style background clear",
+              "value": "doc.style_background_clear"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "doc style background clear",
+          "value": "doc.style_background_clear"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "清除文档背景"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "清除文档背景"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "dws doc style background clear --node \u003cDOC_ID\u003e --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "dws doc style background clear --node \u003cDOC_ID\u003e --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "清除文档背景"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "清除文档背景"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "用户说 去掉文档背景色"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "用户说 去掉文档背景色"
+          ]
+        }
+      },
+      "group": "style.background",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "style_background_clear",
+      "parameter_count": 1,
+      "parameters": {
+        "node": {
+          "description": "目标文档标识，支持 URL 或 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "目标文档标识，支持 URL 或 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "目标文档标识，支持 URL 或 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_background_clear has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "node"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_background_clear has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "doc.style_background_clear",
+      "primary_cli_path": "doc style background clear",
+      "product_id": "doc",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "清除文档背景",
+      "use_when": [
+        "用户说 去掉文档背景色"
+      ]
+    },
+    "doc.style_background_set": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=doc.style_background_set",
+        "cobra-help:dws doc style background set",
+        "internal/cli/schema_hints/metadata/doc.json",
+        "internal/cli/schema_hints/selection/doc.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "设置钉钉文档背景纯色（#RRGGBB）",
+      "agent_summary_source": "dws-agent-selection/doc",
+      "availability": "available",
+      "avoid_when": [
+        "背景不支持图片；封面用 cover set"
+      ],
+      "canonical_path": "doc.style_background_set",
+      "cli_name": "set",
+      "cli_path": "doc style background set",
+      "confirmation": "not_required",
+      "description": "为钉钉文档设置背景纯色（--color）。背景仅支持纯色，不支持背景图片上传（对齐前端能力）。",
+      "display": "钉钉文档管理",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws doc style background set --node \u003cDOC_ID\u003e --color \"#E8F2FE\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": "设置钉钉文档背景纯色（#RRGGBB）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": "设置钉钉文档背景纯色（#RRGGBB）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "背景不支持图片；封面用 cover set"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "背景不支持图片；封面用 cover set"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "doc style background set",
+              "value": "doc.style_background_set"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "doc style background set",
+          "value": "doc.style_background_set"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "为钉钉文档设置背景纯色（--color）。背景仅支持纯色，不支持背景图片上传（对齐前端能力）。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "为钉钉文档设置背景纯色（--color）。背景仅支持纯色，不支持背景图片上传（对齐前端能力）。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "dws doc style background set --node \u003cDOC_ID\u003e --color \"#E8F2FE\" --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "dws doc style background set --node \u003cDOC_ID\u003e --color \"#E8F2FE\" --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "设置文档背景纯色"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "设置文档背景纯色"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "用户说 给文档设置背景色"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "用户说 给文档设置背景色"
+          ]
+        }
+      },
+      "group": "style.background",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "style_background_set",
+      "parameter_count": 2,
+      "parameters": {
+        "color": {
+          "description": "背景纯色，如 #E8F2FE (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "背景纯色，如 #E8F2FE (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "背景纯色，如 #E8F2FE (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_background_set has no singular pinned interface_ref; --color is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "color"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_background_set has no singular pinned interface_ref; --color is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        },
+        "node": {
+          "description": "目标文档标识，支持 URL 或 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "目标文档标识，支持 URL 或 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "目标文档标识，支持 URL 或 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_background_set has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "node"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_background_set has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "doc.style_background_set",
+      "primary_cli_path": "doc style background set",
+      "product_id": "doc",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "设置文档背景纯色",
+      "use_when": [
+        "用户说 给文档设置背景色"
+      ]
+    },
+    "doc.style_cover_clear": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=doc.style_cover_clear",
+        "cobra-help:dws doc style cover clear",
+        "internal/cli/schema_hints/metadata/doc.json",
+        "internal/cli/schema_hints/selection/doc.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "移除钉钉文档封面",
+      "agent_summary_source": "dws-agent-selection/doc",
+      "availability": "available",
+      "avoid_when": [
+        "设置封面用 cover set"
+      ],
+      "canonical_path": "doc.style_cover_clear",
+      "cli_name": "clear",
+      "cli_path": "doc style cover clear",
+      "confirmation": "not_required",
+      "description": "移除文档封面",
+      "display": "钉钉文档管理",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws doc style cover clear --node \u003cDOC_ID\u003e --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": "移除钉钉文档封面"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": "移除钉钉文档封面"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "设置封面用 cover set"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "设置封面用 cover set"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "doc style cover clear",
+              "value": "doc.style_cover_clear"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "doc style cover clear",
+          "value": "doc.style_cover_clear"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "移除文档封面"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "移除文档封面"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "dws doc style cover clear --node \u003cDOC_ID\u003e --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "dws doc style cover clear --node \u003cDOC_ID\u003e --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "移除文档封面"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "移除文档封面"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "用户说 去掉文档封面"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "用户说 去掉文档封面"
+          ]
+        }
+      },
+      "group": "style.cover",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "style_cover_clear",
+      "parameter_count": 1,
+      "parameters": {
+        "node": {
+          "description": "目标文档标识，支持 URL 或 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "目标文档标识，支持 URL 或 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "目标文档标识，支持 URL 或 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_cover_clear has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "node"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_cover_clear has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "doc.style_cover_clear",
+      "primary_cli_path": "doc style cover clear",
+      "product_id": "doc",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "移除文档封面",
+      "use_when": [
+        "用户说 去掉文档封面"
+      ]
+    },
+    "doc.style_cover_set": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=doc.style_cover_set",
+        "cobra-help:dws doc style cover set",
+        "internal/cli/schema_hints/metadata/doc.json",
+        "internal/cli/schema_hints/selection/doc.json",
+        "wukong-develop:wukong/products"
+      ],
+      "agent_summary": "设置钉钉文档顶部封面图（外链或本地图片上传）",
+      "agent_summary_source": "dws-agent-selection/doc",
+      "availability": "available",
+      "avoid_when": [
+        "读取当前封面用 doc style get；移除封面用 cover clear"
+      ],
+      "canonical_path": "doc.style_cover_set",
+      "cli_name": "set",
+      "cli_path": "doc style cover set",
+      "confirmation": "not_required",
+      "description": "为钉钉文档设置顶部封面图，可指定竖直显示位置。图片来源二选一：--image 外链或 --file 本地文件。",
+      "display": "钉钉文档管理",
+      "effect": "write",
+      "effect_source": "agent-hint",
+      "examples": [
+        "dws doc style cover set --node \u003cDOC_ID\u003e --image https://img.example.com/cover.png --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": "设置钉钉文档顶部封面图（外链或本地图片上传）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": "设置钉钉文档顶部封面图（外链或本地图片上传）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "读取当前封面用 doc style get；移除封面用 cover clear"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "读取当前封面用 doc style get；移除封面用 cover clear"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "doc style cover set",
+              "value": "doc.style_cover_set"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "doc style cover set",
+          "value": "doc.style_cover_set"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "为钉钉文档设置顶部封面图，可指定竖直显示位置。图片来源二选一：--image 外链或 --file 本地文件。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "为钉钉文档设置顶部封面图，可指定竖直显示位置。图片来源二选一：--image 外链或 --file 本地文件。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "write"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "write"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "dws doc style cover set --node \u003cDOC_ID\u003e --image https://img.example.com/cover.png --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "dws doc style cover set --node \u003cDOC_ID\u003e --image https://img.example.com/cover.png --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "composite"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "composite"
+        },
+        "interface_reason": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": null
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": null
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/doc.json",
+              "value": "low"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/doc marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/doc.json",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "设置文档封面"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "设置文档封面"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/doc.json",
+              "value": [
+                "用户说 给文档设置封面/换个封面图"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
+          "source": "internal/cli/schema_hints/selection/doc.json",
+          "value": [
+            "用户说 给文档设置封面/换个封面图"
+          ]
+        }
+      },
+      "group": "style.cover",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+      "is_alias": false,
+      "name": "style_cover_set",
+      "parameter_count": 4,
+      "parameters": {
+        "file": {
+          "description": "本地图片文件路径 (与 --image 互斥)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "本地图片文件路径 (与 --image 互斥)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "本地图片文件路径 (与 --image 互斥)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --file is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "file"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --file is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
+        "image": {
+          "description": "封面图片 URL (外链会自动转存为内部地址)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "封面图片 URL (外链会自动转存为内部地址)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "封面图片 URL (外链会自动转存为内部地址)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --image is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "image"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --image is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": false,
+          "type": "string"
+        },
+        "node": {
+          "description": "目标文档标识，支持 URL 或 ID (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "目标文档标识，支持 URL 或 ID (必填)"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "目标文档标识，支持 URL 或 ID (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "node"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --node is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "usage_required_inference",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "required": true,
+          "type": "string"
+        },
+        "position": {
+          "default": "0.5",
+          "description": "封面竖直位置 [0,1]，默认 0.5",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "封面竖直位置 [0,1]，默认 0.5"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "封面竖直位置 [0,1]，默认 0.5"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_mapping_exclusion",
+                  "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --position is a CLI wrapper input and does not publish a direct interface property.",
+                  "selected": true,
+                  "source": "reviewed_mapping_exclusion",
+                  "value": ""
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "position"
+                }
+              ],
+              "precedence": "reviewed_mapping_exclusion",
+              "resolution": "highest_precedence",
+              "review_reason": "Reviewed unpinned adapter: doc.style_cover_set has no singular pinned interface_ref; --position is a CLI wrapper input and does not publish a direct interface property.",
+              "source": "reviewed_mapping_exclusion",
+              "value": ""
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "number"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "number"
+            }
+          },
+          "required": false,
+          "type": "number"
+        }
+      },
+      "path": "doc.style_cover_set",
+      "primary_cli_path": "doc style cover set",
+      "product_id": "doc",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "设置文档封面",
+      "use_when": [
+        "用户说 给文档设置封面/换个封面图"
       ]
     },
     "doc.template_apply": {

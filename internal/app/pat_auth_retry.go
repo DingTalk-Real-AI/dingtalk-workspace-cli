@@ -570,7 +570,8 @@ func handlePatAuthCheck(
 	// or when flowId is absent, the CLI returns machine-readable JSON to
 	// stderr and leaves UI/polling/retry to the host. `claw-type` is NOT
 	// used for this decision — it is only forwarded on the wire via
-	// edition.MergeHeaders and surfaced in hostControl for traceability.
+	// the edition default / DWS_AGENT_PRODUCT override and surfaced in
+	// hostControl for traceability.
 	if hostOwnedPAT || patData.Data.FlowID == "" {
 		if hostOwnedPAT {
 			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON)}

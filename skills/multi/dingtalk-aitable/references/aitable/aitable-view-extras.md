@@ -54,7 +54,7 @@ dws aitable view update frozen-cols --view-id VIEW_ID --count 0
 
 # 查询当前冻结列数
 dws aitable view get frozen-cols --view-id VIEW_ID --format json
-# → {"data": {..., "count": 1}}    未显式设置时整个 count 键缺失（不是返回 null）
+# → {"data": {..., "count": 1}}    count 为 null 表示视图未显式设置
 ```
 
 `--count` 必须 ≥ 0；负数会被拒绝。
@@ -69,7 +69,7 @@ dws aitable view update row-height --view-id VIEW_ID --cell-height 56
 
 # 查询当前行高
 dws aitable view get row-height --view-id VIEW_ID --format json
-# → {"data": {..., "cellHeight": 56}}    未显式设置时整个 cellHeight 键缺失（不是返回 null；前端按 32 渲染）
+# → {"data": {..., "cellHeight": 56}}    cellHeight 为 null 表示视图未显式设置（前端按 32 渲染）
 ```
 
 ## 数据高亮规则（条件填色，仅 Grid）
