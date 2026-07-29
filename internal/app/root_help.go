@@ -43,10 +43,46 @@ func configureRootHelp(root *cobra.Command) {
 		if cmd != root {
 			defaultHelpFunc(cmd, args)
 			cli.RenderSafetyAnnotation(cmd)
+			renderChatAgentSelectionHint(cmd)
 			return
 		}
 		renderRootHelp(root)
 	})
+}
+
+// renderChatAgentSelectionHint exposes the reviewed Chat selection contract in
+// command help without reintroducing a second product-local guidance map.
+// Selection prose remains authored in schema_hints/selection/chat.json and is
+// consumed through the repository-wide ResolveMeta API.
+func renderChatAgentSelectionHint(cmd *cobra.Command) {
+	if cmd == nil || cmd.Root() == nil {
+		return
+	}
+	cliPath := strings.TrimSpace(strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" "))
+	meta, ok := cli.ResolveMeta(cliPath)
+	if !ok || meta.Identity.ProductID != "chat" {
+		return
+	}
+	selection := meta.Selection
+	if selection.AgentSummary == "" && len(selection.UseWhen) == 0 && len(selection.AvoidWhen) == 0 {
+		return
+	}
+
+	w := cmd.ErrOrStderr()
+	_, _ = fmt.Fprintln(w, "Agent guidance:")
+	if selection.AgentSummary != "" {
+		_, _ = fmt.Fprintf(w, "  Outcome: %s\n", selection.AgentSummary)
+	}
+	for _, scenario := range selection.UseWhen {
+		_, _ = fmt.Fprintf(w, "  Use when: %s\n", scenario)
+	}
+	for _, scenario := range selection.AvoidWhen {
+		_, _ = fmt.Fprintf(w, "  Avoid when: %s\n", scenario)
+	}
+	for _, example := range selection.Examples {
+		_, _ = fmt.Fprintf(w, "  Example: %s\n", example)
+	}
+	_, _ = fmt.Fprintln(w, "  Output: Agent execution should add --format json.")
 }
 
 func renderRootHelp(root *cobra.Command) {

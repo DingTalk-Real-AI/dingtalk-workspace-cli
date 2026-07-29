@@ -17,9 +17,27 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
+
+func validateChatMessageMediaSelection(mediaID, msgType string, cmd *cobra.Command) error {
+	if mediaID == "" || msgType != "" {
+		return nil
+	}
+	return apperrors.NewValidation(
+		"检测到 --media-id，但未指定 --msg-type image；已阻止把 --text 中的文件名作为普通文字发送",
+		apperrors.WithReason("ambiguous_media_message"),
+		apperrors.WithHint("发送图片时补充 --msg-type image 并保留 --media-id；发送 PDF/DOCX/XLSX 等本地文件时移除 --media-id，改用 --msg-type file --file-path <本地文件>。"),
+		apperrors.WithActions(
+			"发送图片：补充 --msg-type image",
+			"发送文件：改用 --msg-type file --file-path <本地文件>",
+			"只发送文字：移除 --media-id",
+		),
+		apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
+	)
+}
 
 func resolveMessageForward(cmd *cobra.Command, defaultForward bool) (bool, error) {
 	forwardStr, _ := cmd.Flags().GetString("forward")
@@ -55,11 +73,20 @@ const maxConversationCategoryTitleRunes = 15
 func validatedConversationCategoryTitle(raw string) (string, error) {
 	title := strings.TrimSpace(raw)
 	if title == "" {
-		return "", apperrors.NewValidation("--title 不能为空")
+		return "", apperrors.NewValidation(
+			"--title 不能为空",
+			apperrors.WithReason("invalid_category_title"),
+			apperrors.WithHint("请提供 1 到 15 个字符的分组标题，并保持用户指定原文。"),
+			apperrors.WithActions("补充非空 --title", "运行当前命令 --help 查看示例"),
+		)
 	}
-	if utf8.RuneCountInString(title) > maxConversationCategoryTitleRunes {
-		return "", apperrors.NewValidation(fmt.Sprintf(
-			"--title 最多 %d 个字符", maxConversationCategoryTitleRunes))
+	if count := utf8.RuneCountInString(title); count > maxConversationCategoryTitleRunes {
+		return "", apperrors.NewValidation(
+			fmt.Sprintf("--title 当前 %d 个字符，最多 %d 个字符", count, maxConversationCategoryTitleRunes),
+			apperrors.WithReason("category_title_too_long"),
+			apperrors.WithHint("不得静默截断、缩写或改写用户指定名称；请让用户提供合法标题后重试。"),
+			apperrors.WithActions("请用户将标题缩短到 15 个字符以内", "使用用户确认后的标题原文重试"),
+		)
 	}
 	return title, nil
 }
@@ -1516,6 +1543,9 @@ func newChatCommand() *cobra.Command {
 
 			mediaId, _ := cmd.Flags().GetString("media-id")
 			msgType, _ := cmd.Flags().GetString("msg-type")
+			if err := validateChatMessageMediaSelection(mediaId, msgType, cmd); err != nil {
+				return err
+			}
 			clawType := ""
 			aiTag, _ := cmd.Flags().GetBool("ai-tag")
 			if aiTag {

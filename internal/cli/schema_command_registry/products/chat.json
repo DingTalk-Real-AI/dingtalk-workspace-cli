@@ -314,6 +314,126 @@
       "cli_path": "chat group upgrade-to-external"
     },
     {
+      "canonical_path": "chat.add_conv_to_categories",
+      "cli_path": "chat category add-conv"
+    },
+    {
+      "canonical_path": "chat.create_conv_category",
+      "cli_path": "chat category create"
+    },
+    {
+      "canonical_path": "chat.delete_conv_category",
+      "cli_path": "chat category delete"
+    },
+    {
+      "canonical_path": "chat.remove_conv_from_categories",
+      "cli_path": "chat category remove-conv"
+    },
+    {
+      "canonical_path": "chat.rename_conv_category",
+      "cli_path": "chat category rename"
+    },
+    {
+      "canonical_path": "chat.grant_permission",
+      "cli_path": "chat chmod"
+    },
+    {
+      "canonical_path": "chat.clear_all_red_point",
+      "cli_path": "chat clear-all-red-point"
+    },
+    {
+      "canonical_path": "chat.clear_conversation_messages",
+      "cli_path": "chat clear-messages"
+    },
+    {
+      "canonical_path": "chat.clear_conversation_red_point",
+      "cli_path": "chat clear-red-point"
+    },
+    {
+      "canonical_path": "chat.grant_cross_org_data_access",
+      "cli_path": "chat data-auth cross-org"
+    },
+    {
+      "canonical_path": "chat.audit_join_group",
+      "cli_path": "chat group audit-join-validation"
+    },
+    {
+      "canonical_path": "chat.list_my_groups_pagination",
+      "cli_path": "chat group list-all"
+    },
+    {
+      "canonical_path": "chat.list_apply_join_group_records",
+      "cli_path": "chat group list-join-validations"
+    },
+    {
+      "canonical_path": "chat.list_group_member_by_ids",
+      "cli_path": "chat group members list-by-ids"
+    },
+    {
+      "canonical_path": "chat.create_group_notice",
+      "cli_path": "chat group notice create"
+    },
+    {
+      "canonical_path": "chat.edit_group_notice",
+      "cli_path": "chat group notice edit"
+    },
+    {
+      "canonical_path": "chat.get_group_notice",
+      "cli_path": "chat group notice get"
+    },
+    {
+      "canonical_path": "chat.list_group_notices",
+      "cli_path": "chat group notice list"
+    },
+    {
+      "canonical_path": "chat.share_group_invite_url",
+      "cli_path": "chat group share-invite"
+    },
+    {
+      "canonical_path": "chat.update_user_group_alias",
+      "cli_path": "chat group update-alias"
+    },
+    {
+      "canonical_path": "chat.hide_conversation",
+      "cli_path": "chat hide"
+    },
+    {
+      "canonical_path": "chat.list_all_conversations",
+      "cli_path": "chat list-all-conversations"
+    },
+    {
+      "canonical_path": "chat.mark_message_read",
+      "cli_path": "chat mark-read"
+    },
+    {
+      "canonical_path": "chat.mark_conversation_unread",
+      "cli_path": "chat mark-unread"
+    },
+    {
+      "canonical_path": "chat.list_message_emotion_replies",
+      "cli_path": "chat message list-emotion-replies"
+    },
+    {
+      "canonical_path": "chat.set_top_message",
+      "cli_path": "chat message set-top-msg"
+    },
+    {
+      "canonical_path": "chat.unset_top_message",
+      "cli_path": "chat message unset-top-msg"
+    },
+    {
+      "canonical_path": "chat.update_at_all_notification_off",
+      "cli_path": "chat mute-at-all"
+    },
+    {
+      "canonical_path": "chat.update_red_env_notification_off",
+      "cli_path": "chat mute-red-envelope"
+    },
+    {
+      "canonical_path": "chat.translate",
+      "cli_path": "chat text translate"
+    },
+    {
       "canonical_path": "chat.shortcut_bot_search",
       "cli_path": "chat +bot-search"
     },

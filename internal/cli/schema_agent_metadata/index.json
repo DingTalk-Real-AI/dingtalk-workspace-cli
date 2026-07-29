@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "source_hash": "sha256:1fed2a8bc5328212fdf646c3e68d465a2a440b2d303c1ad120981e06c97da487",
-  "surface_hash": "sha256:4cf8460240b19f896c3a330c69982cbb5f57aa8576cdf30373172082eea893ed",
+  "source_hash": "sha256:02469ab80c5db473ec76bdbfc92375415c36ece34245d405bf0ab20640b2e292",
+  "surface_hash": "sha256:02b1fb94e6d850bf90063b35e5959e6072f9f5f4fbde57eb9d68c42f81346a63",
   "coverage": {
     "surface_products": 26,
     "products_with_metadata": 26,
-    "surface_tools": 813,
-    "tools_with_metadata": 813,
-    "tools_with_agent_summary": 813,
-    "tools_with_use_when": 813,
-    "tools_with_avoid_when": 813,
-    "tools_with_examples": 813,
-    "tools_with_interface_mode": 813,
-    "unmatched_skill_tools": 122,
+    "surface_tools": 843,
+    "tools_with_metadata": 843,
+    "tools_with_agent_summary": 843,
+    "tools_with_use_when": 843,
+    "tools_with_avoid_when": 843,
+    "tools_with_examples": 843,
+    "tools_with_interface_mode": 843,
+    "unmatched_skill_tools": 96,
     "unreviewed_skill_tools": 11
   },
   "products": {

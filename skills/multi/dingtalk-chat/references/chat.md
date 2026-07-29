@@ -2214,6 +2214,7 @@ Flags:
 |------|------|------|
 | [chat_export_messages.py](../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
 | [chat_history_with_user.py](../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
+| [bot_broadcast.py](../scripts/bot_broadcast.py) | 使用同一机器人向多个群批量发送消息 | `python bot_broadcast.py --robot-code <code> --chats <id1>,<id2> --title "通知" --text "内容"` |
 
 ## 相关产品
 

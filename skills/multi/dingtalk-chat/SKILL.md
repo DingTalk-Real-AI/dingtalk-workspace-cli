@@ -81,7 +81,7 @@ metadata:
 | "发消息给张三" | `dws chat message send --open-dingtalk-id <id> --title "<标题>" --text "<内容>"` |
 | "发到XX群" | `dws chat search --query "<群名>"` → `dws chat message send --group <openConversationId> --title "<标题>" --text "<内容>"` |
 | "建群" / "拉人进群" | `dws chat group create` / `dws chat group members add` |
-| "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove --yes`（踢人不可逆，确认目标后加 --yes；踢群主会被 CLI 拦截，需先 `transfer-owner`）|
+| "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove`（先确认群和成员；踢群主会被 CLI 拦截，需先 `transfer-owner`）|
 | "@我消息" | `dws chat message list-mentions` |
 | "查群聊记录" | `dws chat message list` |
 | "收藏/取消收藏这条消息" | `dws chat message add-favorite` / `dws chat message remove-favorite`（均需 `openMessageId` 和 `openConversationId`）|
@@ -95,8 +95,88 @@ metadata:
 | "清除我的群昵称" | `dws chat group update-nick --group <openConversationId>`（省略 `--nick`） |
 | "这个会话属于哪些分组" | `dws chat category list-by-conv --group <openConversationId>` |
 | "批量查询分组信息" | `dws chat category batch-info --category-ids <id1>,<id2>` |
+| "查群聊记录（含翻页/导出）" | `python scripts/chat_export_messages.py --query "<群名>" --time "<时间>"` |
+| "查和某人的聊天记录" | `python scripts/chat_history_with_user.py --name "<姓名>" --time "<时间>"` |
+| "机器人多群群发" | `python scripts/bot_broadcast.py --robot-code <code> --chats <id1>,<id2> --title "<标题>" --text "<内容>"` |
+| "查某人发的消息" | `dws chat message list-by-sender --sender-user-id <userId> --start <ISO> --end <ISO>` |
+| "特别关注人的消息" | `dws chat message list-focused --limit 50` |
+| "查共同群" | `dws chat search-common --nicks "<昵称1>,<昵称2>" --match-mode AND` |
+| "退群" / "解散群" | `dws chat group quit --group <openConversationId>` / `dws chat group dismiss --group <openConversationId> --yes` |
+| "转群主" | `dws chat group transfer-owner --group <openConversationId> --new-owner <openDingTalkId>` |
+| "群公告" | `dws chat group notice create` / `edit` / `get` / `list` |
+| "查看或设置群身份" | `dws chat group-role list` / `add` / `update` / `remove` / `set-user` / `remove-user` / `query-user` |
+| "消息已读未读" | `dws chat message read-status --conversation-id <id> --message-id <id>` |
+| "搜索消息内容" | 简单关键词用 `dws chat message search`；发送者、@、多会话组合条件用 `search-advanced` |
+| "引用回复/转发/合并转发" | `dws chat message reply` / `forward` / `combine-forward` / `forward-topic` |
+| "置顶/钉住消息" | `dws chat message set-top-msg` / `set-pin-msg`；对应取消命令为 `unset-*` |
+| "会话免打扰/隐藏/标记已读" | `dws chat mute` / `hide` / `mark-read` / `mark-unread` |
 
 > **注**：`chat message send` 的 `--title` 可选（不传时用正文首行作标题）；`send-by-bot` / `send-by-webhook` 的 `--title` 必填。
+
+## 命令树（Tree Structure）
+
+先按一级分支选路，再进入叶子命令。`+shortcut` 分支已在上方 Shortcuts 表中单列；下面的树覆盖原生命令与本 skill 自带脚本。
+
+```text
+dingtalk-chat
+├── message
+│   ├── send / send-by-bot / send-by-webhook
+│   ├── send-card → update-card
+│   ├── edit / recall / recall-by-bot
+│   ├── reply / forward / forward-topic / combine-forward
+│   ├── list / list-direct / list-all
+│   ├── list-by-sender / list-mentions / list-focused
+│   ├── list-unread-conversations / list-topic-replies / list-by-ids
+│   ├── search / search-advanced
+│   ├── query-send-status / read-status
+│   ├── add-favorite / remove-favorite / list-favorites
+│   ├── add-emoji / remove-emoji
+│   ├── add-text-emotion / remove-text-emotion / create-text-emotion
+│   ├── list-emotion-replies
+│   ├── set-top-msg / unset-top-msg
+│   ├── set-pin-msg / unset-pin-msg / list-pin-msg
+│   └── download-media
+├── group
+│   ├── create / rename / dismiss / quit / transfer-owner
+│   ├── get-by-group-id / invite-url / share-invite
+│   ├── update-icon / update-settings / update-alias / update-nick
+│   ├── upgrade-to-external / set-history / set-admin
+│   ├── bots / list-my-groups / list-all
+│   ├── list-join-validations / audit-join-validation
+│   ├── members
+│   │   ├── [list] / list-by-ids
+│   │   ├── add / remove
+│   │   └── add-bot / remove-bot
+│   └── notice
+│       └── create / edit / get / list
+├── group-role
+│   └── list / add / update / remove / set-user / remove-user / query-user
+├── bot
+│   └── search / find
+├── category
+│   ├── list / list-by-conv / batch-info / list-conversations
+│   ├── create / create-smart / rename / delete
+│   └── add-conv / remove-conv
+├── search / search-common
+├── conversation-info / list-top-conversations / list-all-conversations
+├── mute / set-top / hide / mark-unread / mark-read
+├── clear-red-point / clear-all-red-point / clear-messages
+├── mute-at-all / mute-red-envelope
+├── group-mute / group-mute-member
+├── text
+│   └── translate
+├── data-auth
+│   └── cross-org
+├── chmod
+├── +shortcut
+│   └── 见上方 Shortcuts 表；有精确脚本/recipe 时优先脚本/recipe
+└── scripts
+    ├── chat_export_messages.py
+    ├── chat_history_with_user.py
+    └── bot_broadcast.py
+```
+
+> 路由规则：普通文本、图片或文件发送走 `message send`；明确要求应用机器人走 `send-by-bot`；明确要求 Webhook 机器人走 `send-by-webhook`。关键词搜索优先 `message search`，只有发送者、@、多会话等组合条件才走 `search-advanced`。
 
 ## 评测高频硬约束
 
@@ -104,6 +184,24 @@ metadata:
 - `chat group upgrade-to-external` 只适用于 `NORMAL_GROUP`，不可逆且仅群主可执行。先 `--dry-run`，获得用户明确确认后再加 `--yes`。
 - `chat group update-nick` 不传 `--nick` 表示清除当前用户的群昵称，不是参数缺失。
 - 会话分组 ID 是数值 ID；按会话反查用 `category list-by-conv`，按多个分组 ID 查详情用 `category batch-info`。
+- 群成员命令使用 `--id <openConversationId>`；不要臆造 `members list` 子命令，也不要把消息发送用的 `--group` 套到成员管理。
+- `message list` 是按时间拉消息，不是关键词搜索；关键词审计用 `message search`。
+- 转发审批、日历、待办等原生卡片时，必须先从源会话消息中取得真实 `openMessageId`；产品对象 ID 不能代替消息 ID。
+- `send-card` 创建的是通用流式卡片，不是原生审批、日历或待办卡片；`update-card --biz-id` 只能使用 `send-card` 返回的 `bizId`。
+- 会话分组标题最多 15 个字符，必须保持用户原文；不得静默截断、缩写或改写。
+
+## 典型 Workflow
+
+- [新人入职群聊接待](references/workflows/01-onboarding.md)：查人 → 拉群 → 欢迎消息 → 待办 → 会议。
+- [消息处理剧本](references/01-messaging.md)：查询、转发、共同群、特别关注与收藏。
+
+## 错误处理与自纠
+
+按 [chat-error-recovery.md](references/chat-error-recovery.md) 处理 chat 局部错误：
+
+- 参数或路径错误：先查当前叶子 `--help`，只修正一次。
+- 群 ID 无效：用 `chat search` 重新取得真实 `openConversationId`。
+- 权限不足、机器人无法加群、搜索仍无结果或目标有歧义：停止并报告用户，不猜测 ID、不反复试错。
 
 ## 跨产品协作
 

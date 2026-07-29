@@ -1039,6 +1039,11 @@ func TestSuggestForBusinessErrorText(t *testing.T) {
 		{map[string]any{"message": "User has no permission to access this email"}, "邮箱"},
 		{map[string]any{"error": "频率超限"}, "rate limit"},
 		{map[string]any{"errorMsg": "参数错误"}, "parameters"},
+		{map[string]any{"error": map[string]any{"code": "IM_ERROR", "message": "listRoles null"}}, "list-my-groups"},
+		{map[string]any{"message": "OpendId is not in conversation"}, "openMessageId"},
+		{map[string]any{"message": "The operator is not in this group chat"}, "源群"},
+		{map[string]any{"message": "targetOpenConversationId和receiverUid不能同时为空"}, "--receiver"},
+		{map[string]any{"summary": "moveConversationV3 error"}, "categoryId"},
 		{map[string]any{"error": "unknown"}, "business error"},
 	}
 	for _, tc := range cases {

@@ -9,7 +9,7 @@
 
 工作流:
   1. 通过 --name 搜索通讯录，获取 userId（或直接传 --user）
-  2. 调用 chat message list --user <userId> 拉取单聊消息
+  2. 调用 chat message list-direct --user <userId> 拉取单聊消息
   3. 输出到终端或导出为 JSON 文件
 """
 
@@ -116,7 +116,7 @@ def main():
 
     while page < max_pages and remaining > 0:
         cmd_args = [
-            'chat', 'message', 'list',
+            'chat', 'message', 'list-direct',
             '--user', user_id or '<USER_ID>',
             '--time', current_time,
             '--format', 'json',
