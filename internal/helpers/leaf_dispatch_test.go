@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cmdcore"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -111,7 +112,7 @@ func TestLeafValidateRequiredEnvDefaultHint(t *testing.T) {
 		Flags: []LeafFlag{{Name: "token", Usage: "令牌", Required: true, EnvVar: "DWS_LEAF_TEST_HINTLESS"}},
 	}
 	cmd := NewLeafCommand(spec)
-	err := leafValidateRequired(cmd, spec)
+	err := cmdcore.ValidateRequired(cmd, spec.Flags)
 	if err == nil || err.Error() != "flag --token is required" {
 		t.Fatalf("leafValidateRequired() = %v, want default hint", err)
 	}
@@ -130,10 +131,10 @@ func TestLeafIntRequiredAcceptsExplicitValue(t *testing.T) {
 	if err := cmd.Flags().Set("n", "5"); err != nil {
 		t.Fatal(err)
 	}
-	if err := leafValidateRequired(cmd, spec); err != nil {
+	if err := cmdcore.ValidateRequired(cmd, spec.Flags); err != nil {
 		t.Fatalf("leafValidateRequired() = %v, want nil for --n 5", err)
 	}
-	args, err := leafArgs(cmd, spec)
+	args, err := cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestLeafIntRequiredAcceptsExplicitValue(t *testing.T) {
 	}
 	// 未提供值时仍按主 flag 名报缺失。
 	missing := NewLeafCommand(spec)
-	if err := leafValidateRequired(missing, spec); err == nil || !strings.Contains(err.Error(), "missing required flag(s): --n") {
+	if err := cmdcore.ValidateRequired(missing, spec.Flags); err == nil || !strings.Contains(err.Error(), "missing required flag(s): --n") {
 		t.Fatalf("leafValidateRequired() = %v, want missing --n", err)
 	}
 }
@@ -159,7 +160,7 @@ func TestLeafIntAliasAndEnvFallback(t *testing.T) {
 	if err := cmd.Flags().Set("limit", "7"); err != nil {
 		t.Fatal(err)
 	}
-	args, err := leafArgs(cmd, spec)
+	args, err := cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +170,7 @@ func TestLeafIntAliasAndEnvFallback(t *testing.T) {
 	// env 提供值。
 	t.Setenv("DWS_LEAF_TEST_PAGE_SIZE", "9")
 	cmd = NewLeafCommand(spec)
-	args, err = leafArgs(cmd, spec)
+	args, err = cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +180,7 @@ func TestLeafIntAliasAndEnvFallback(t *testing.T) {
 	// env 值不可解析必须报错而非静默丢弃。
 	t.Setenv("DWS_LEAF_TEST_PAGE_SIZE", "not-a-number")
 	cmd = NewLeafCommand(spec)
-	if _, err := leafArgs(cmd, spec); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
+	if _, err := cmdcore.BuildArgs(cmd, spec.Flags); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
 		t.Fatalf("leafArgs() = %v, want parse error for garbage env", err)
 	}
 }
@@ -197,7 +198,7 @@ func TestLeafIntAliasRegisteredTyped(t *testing.T) {
 	if err := cmd.Flags().Set("offset", "11"); err != nil {
 		t.Fatal(err)
 	}
-	args, err := leafArgs(cmd, spec)
+	args, err := cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,27 +217,27 @@ func TestLeafDefaultDoesNotShadowFallback(t *testing.T) {
 	// env 覆盖注册默认值。
 	t.Setenv("DWS_LEAF_TEST_TYPE", "from-env")
 	cmd := NewLeafCommand(spec)
-	if got := leafEffectiveValue(cmd, spec.Flags[0]); got != "from-env" {
+	if got := cmdcore.EffectiveValue(cmd, spec.Flags[0]); got != "from-env" {
 		t.Fatalf("effective = %q, want env to beat registered default", got)
 	}
 	// 别名覆盖 env 与默认值。
 	if err := cmd.Flags().Set("kind", "from-alias"); err != nil {
 		t.Fatal(err)
 	}
-	if got := leafEffectiveValue(cmd, spec.Flags[0]); got != "from-alias" {
+	if got := cmdcore.EffectiveValue(cmd, spec.Flags[0]); got != "from-alias" {
 		t.Fatalf("effective = %q, want alias to beat env", got)
 	}
 	// 显式主 flag 最高优先。
 	if err := cmd.Flags().Set("type", "explicit"); err != nil {
 		t.Fatal(err)
 	}
-	if got := leafEffectiveValue(cmd, spec.Flags[0]); got != "explicit" {
+	if got := cmdcore.EffectiveValue(cmd, spec.Flags[0]); got != "explicit" {
 		t.Fatalf("effective = %q, want explicit primary to win", got)
 	}
 	// 全部缺席时回落注册默认值。
 	bare := NewLeafCommand(spec)
 	t.Setenv("DWS_LEAF_TEST_TYPE", "")
-	if got := leafEffectiveValue(bare, spec.Flags[0]); got != "ALL" {
+	if got := cmdcore.EffectiveValue(bare, spec.Flags[0]); got != "ALL" {
 		t.Fatalf("effective = %q, want registered default as tail fallback", got)
 	}
 }
@@ -253,7 +254,7 @@ func TestLeafIntRequiredExplicitZeroReportsMissing(t *testing.T) {
 	if err := cmd.Flags().Set("n", "0"); err != nil {
 		t.Fatal(err)
 	}
-	if err := leafValidateRequired(cmd, spec); err == nil || !strings.Contains(err.Error(), "missing required flag(s): --n") {
+	if err := cmdcore.ValidateRequired(cmd, spec.Flags); err == nil || !strings.Contains(err.Error(), "missing required flag(s): --n") {
 		t.Fatalf("leafValidateRequired() = %v, want missing --n for explicit 0", err)
 	}
 
@@ -265,10 +266,10 @@ func TestLeafIntRequiredExplicitZeroReportsMissing(t *testing.T) {
 	}
 	t.Setenv("DWS_LEAF_TEST_REQ_GARBAGE", "not-a-number")
 	cmdEnv := NewLeafCommand(specEnv)
-	if err := leafValidateRequired(cmdEnv, specEnv); err != nil {
+	if err := cmdcore.ValidateRequired(cmdEnv, specEnv.Flags); err != nil {
 		t.Fatalf("leafValidateRequired() = %v, want nil for unparsable env (leafArgs reports it)", err)
 	}
-	if _, err := leafArgs(cmdEnv, specEnv); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
+	if _, err := cmdcore.BuildArgs(cmdEnv, specEnv.Flags); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
 		t.Fatalf("leafArgs() = %v, want invalid integer error", err)
 	}
 }
@@ -286,7 +287,7 @@ func TestLeafTrimWhitespaceFallsThroughChain(t *testing.T) {
 	if err := cmd.Flags().Set("type", "   "); err != nil {
 		t.Fatal(err)
 	}
-	if got := leafEffectiveValue(cmd, spec.Flags[0]); got != "from-env" {
+	if got := cmdcore.EffectiveValue(cmd, spec.Flags[0]); got != "from-env" {
 		t.Fatalf("effective = %q, want whitespace primary to fall through to env", got)
 	}
 	// 别名纯空白也回退；env 纯空白最终落到注册默认值。
@@ -294,7 +295,7 @@ func TestLeafTrimWhitespaceFallsThroughChain(t *testing.T) {
 	if err := cmd.Flags().Set("kind", "\t"); err != nil {
 		t.Fatal(err)
 	}
-	if got := leafEffectiveValue(cmd, spec.Flags[0]); got != "ALL" {
+	if got := cmdcore.EffectiveValue(cmd, spec.Flags[0]); got != "ALL" {
 		t.Fatalf("effective = %q, want whitespace chain to land on default", got)
 	}
 }

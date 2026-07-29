@@ -19,6 +19,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cmdcore"
 )
 
 func leafTestSpec() LeafSpec {
@@ -86,7 +88,7 @@ func TestLeafValidateRequiredPlainGroup(t *testing.T) {
 	if err := cmd.Flags().Set("users", "u1"); err != nil {
 		t.Fatal(err)
 	}
-	err := leafValidateRequired(cmd, leafTestSpec())
+	err := cmdcore.ValidateRequired(cmd, leafTestSpec().Flags)
 	if err == nil || !strings.Contains(err.Error(), "missing required flag(s): --content") {
 		t.Fatalf("leafValidateRequired() = %v, want missing --content", err)
 	}
@@ -104,7 +106,7 @@ func TestLeafValidateRequiredSatisfiedByAlias(t *testing.T) {
 	if err := cmd.Flags().Set("remark", "仅别名"); err != nil {
 		t.Fatal(err)
 	}
-	if err := leafValidateRequired(cmd, spec); err != nil {
+	if err := cmdcore.ValidateRequired(cmd, spec.Flags); err != nil {
 		t.Fatalf("leafValidateRequired() = %v, want nil (alias satisfies required)", err)
 	}
 }
@@ -118,7 +120,7 @@ func TestLeafValidateRequiredAliasAbsentStillFails(t *testing.T) {
 		},
 	}
 	cmd := NewLeafCommand(spec)
-	err := leafValidateRequired(cmd, spec)
+	err := cmdcore.ValidateRequired(cmd, spec.Flags)
 	if err == nil || !strings.Contains(err.Error(), "missing required flag(s): --content") {
 		t.Fatalf("leafValidateRequired() = %v, want missing --content", err)
 	}
@@ -136,7 +138,7 @@ func TestLeafValidateRequiredTrimWhitespaceOnlyFails(t *testing.T) {
 	if err := cmd.Flags().Set("content", "   "); err != nil {
 		t.Fatal(err)
 	}
-	err := leafValidateRequired(cmd, spec)
+	err := cmdcore.ValidateRequired(cmd, spec.Flags)
 	if err == nil || !strings.Contains(err.Error(), "missing required flag(s): --content") {
 		t.Fatalf("leafValidateRequired() = %v, want whitespace-only treated as missing", err)
 	}
@@ -144,7 +146,7 @@ func TestLeafValidateRequiredTrimWhitespaceOnlyFails(t *testing.T) {
 
 func TestLeafValidateRequiredEnvFallback(t *testing.T) {
 	cmd := NewLeafCommand(leafTestSpec())
-	err := leafValidateRequired(cmd, leafTestSpec())
+	err := cmdcore.ValidateRequired(cmd, leafTestSpec().Flags)
 	// 普通组（users/content）先报错，不触及 env 组。
 	if err == nil || !strings.Contains(err.Error(), "missing required flag(s): --users, --content") {
 		t.Fatalf("leafValidateRequired() = %v, want plain group first", err)
@@ -156,13 +158,13 @@ func TestLeafValidateRequiredEnvFallback(t *testing.T) {
 	if err := cmd.Flags().Set("content", "c"); err != nil {
 		t.Fatal(err)
 	}
-	err = leafValidateRequired(cmd, leafTestSpec())
+	err = cmdcore.ValidateRequired(cmd, leafTestSpec().Flags)
 	if err == nil || !strings.Contains(err.Error(), "DWS_LEAF_TEST_TOKEN") {
 		t.Fatalf("leafValidateRequired() = %v, want env hint", err)
 	}
 	// env 提供后通过。
 	t.Setenv("DWS_LEAF_TEST_TOKEN", "tok")
-	if err := leafValidateRequired(cmd, leafTestSpec()); err != nil {
+	if err := cmdcore.ValidateRequired(cmd, leafTestSpec().Flags); err != nil {
 		t.Fatalf("leafValidateRequired() = %v, want nil", err)
 	}
 }
@@ -182,7 +184,7 @@ func TestLeafArgs(t *testing.T) {
 	if err := cmd.Flags().Set("cursor", "10"); err != nil {
 		t.Fatal(err)
 	}
-	args, err := leafArgs(cmd, leafTestSpec())
+	args, err := cmdcore.BuildArgs(cmd, leafTestSpec().Flags)
 	if err != nil {
 		t.Fatalf("leafArgs() error = %v", err)
 	}
@@ -209,7 +211,7 @@ func TestLeafArgs(t *testing.T) {
 
 func TestLeafArgsOmitsEmptyAndNonPositive(t *testing.T) {
 	cmd := NewLeafCommand(leafTestSpec())
-	args, err := leafArgs(cmd, leafTestSpec())
+	args, err := cmdcore.BuildArgs(cmd, leafTestSpec().Flags)
 	if err != nil {
 		t.Fatalf("leafArgs() error = %v", err)
 	}
@@ -287,7 +289,7 @@ func TestLeafArgsTransformNilSkipsKey(t *testing.T) {
 	if err := cmd.Flags().Set("page", "abc"); err != nil {
 		t.Fatal(err)
 	}
-	args, err := leafArgs(cmd, spec)
+	args, err := cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatalf("leafArgs() error = %v", err)
 	}
@@ -306,7 +308,7 @@ func TestLeafArgsLeafIntOmitsZero(t *testing.T) {
 	}
 	cmd := NewLeafCommand(spec)
 	// 默认 0：不入参。
-	args, err := leafArgs(cmd, spec)
+	args, err := cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatalf("leafArgs() error = %v", err)
 	}
@@ -317,7 +319,7 @@ func TestLeafArgsLeafIntOmitsZero(t *testing.T) {
 	if err := cmd.Flags().Set("develop-type", "2"); err != nil {
 		t.Fatal(err)
 	}
-	args, err = leafArgs(cmd, spec)
+	args, err = cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatalf("leafArgs() error = %v", err)
 	}
@@ -394,7 +396,7 @@ func TestLeafArgsTrimsValue(t *testing.T) {
 	if err := cmd.Flags().Set("note", "  x  "); err != nil {
 		t.Fatal(err)
 	}
-	args, err := leafArgs(cmd, spec)
+	args, err := cmdcore.BuildArgs(cmd, spec.Flags)
 	if err != nil {
 		t.Fatalf("leafArgs() error = %v", err)
 	}
