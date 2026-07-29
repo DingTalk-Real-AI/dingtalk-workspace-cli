@@ -15,8 +15,6 @@ package agentmetadata
 
 import (
 	"bufio"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -33,7 +31,6 @@ const CurrentVersion = 1
 
 type File struct {
 	Version     int                        `json:"version"`
-	SourceHash  string                     `json:"source_hash"`
 	SurfaceHash string                     `json:"surface_hash,omitempty"`
 	Coverage    Coverage                   `json:"coverage"`
 	Products    map[string]ProductMetadata `json:"products"`
@@ -318,7 +315,6 @@ type ReferenceReview struct {
 // from the runtime Agent metadata contract.
 type Audit struct {
 	Version                       int                     `json:"version"`
-	SourceHash                    string                  `json:"source_hash"`
 	SurfaceHash                   string                  `json:"surface_hash,omitempty"`
 	SourceFiles                   int                     `json:"source_files"`
 	HintFiles                     int                     `json:"hint_files,omitempty"`
@@ -391,7 +387,6 @@ func generateFromSources(opts Options) (File, Stats, error) {
 
 	out := File{
 		Version:     CurrentVersion,
-		SourceHash:  hashSources(files),
 		SurfaceHash: strings.TrimSpace(opts.SurfaceHash),
 		Products:    map[string]ProductMetadata{},
 		Tools:       map[string]ToolMetadata{},
@@ -540,7 +535,6 @@ func generateFromSources(opts Options) (File, Stats, error) {
 func BuildAudit(file File, stats Stats) Audit {
 	return Audit{
 		Version:                       CurrentVersion,
-		SourceHash:                    file.SourceHash,
 		SurfaceHash:                   file.SurfaceHash,
 		SourceFiles:                   stats.SourceFiles,
 		HintFiles:                     stats.HintFiles,
@@ -1953,17 +1947,6 @@ func displayPath(root, path string) string {
 		return filepath.ToSlash(filepath.Clean(path))
 	}
 	return filepath.ToSlash(rel)
-}
-
-func hashSources(files []sourceFile) string {
-	h := sha256.New()
-	for _, file := range files {
-		_, _ = h.Write([]byte(file.display))
-		_, _ = h.Write([]byte{0})
-		_, _ = h.Write(file.data)
-		_, _ = h.Write([]byte{0})
-	}
-	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 func parseProductRouting(out *File, body, source string) {

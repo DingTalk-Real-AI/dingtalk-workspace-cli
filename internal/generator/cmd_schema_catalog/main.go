@@ -134,12 +134,14 @@ func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputP
 }
 
 // schemaCatalogEnvelope is the global half of the split catalog. It carries
-// the release envelope (version + integrity hashes) and the Catalog map, whose
+// the release envelope (version + surface_hash) and the Catalog map, whose
 // products array and cross-product aggregates do not partition by product.
+// source_hash is not stored: the loader derives it from {version, surface_hash,
+// catalog, tools} so concurrent product PRs do not collide on a whole-corpus
+// hash line.
 type schemaCatalogEnvelope struct {
 	Version     int            `json:"version"`
 	SurfaceHash string         `json:"surface_hash,omitempty"`
-	SourceHash  string         `json:"source_hash"`
 	Catalog     map[string]any `json:"catalog"`
 }
 
@@ -154,8 +156,8 @@ type schemaCatalogToolShard struct {
 // writeSchemaCatalogShards partitions a validated snapshot into a release
 // directory: catalog.json holds the global envelope + Catalog map, and
 // tools/<product>.json holds each product's leaf ToolSpecs keyed by canonical
-// path. The split is a storage concern only: the loader reassembles the exact
-// same SchemaCatalogSnapshot, so source_hash still validates the whole payload.
+// path. The split is a storage concern only: the loader reassembles the same
+// SchemaCatalogSnapshot and derives source_hash from the full payload.
 func writeSchemaCatalogShards(snapshot cli.SchemaCatalogSnapshot, outputDir string) error {
 	if err := os.RemoveAll(outputDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("clear stale schema catalog output: %w", err)
@@ -168,7 +170,6 @@ func writeSchemaCatalogShards(snapshot cli.SchemaCatalogSnapshot, outputDir stri
 	envelope := schemaCatalogEnvelope{
 		Version:     snapshot.Version,
 		SurfaceHash: snapshot.SurfaceHash,
-		SourceHash:  snapshot.SourceHash,
 		Catalog:     snapshot.Catalog,
 	}
 	if err := writeSchemaCatalogJSON(filepath.Join(outputDir, "catalog.json"), envelope); err != nil {

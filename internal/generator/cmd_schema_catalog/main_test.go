@@ -166,7 +166,6 @@ func loadSplitSchemaCatalogSnapshot(t *testing.T, dir string) cli.SchemaCatalogS
 	var envelope struct {
 		Version     int            `json:"version"`
 		SurfaceHash string         `json:"surface_hash,omitempty"`
-		SourceHash  string         `json:"source_hash"`
 		Catalog     map[string]any `json:"catalog"`
 	}
 	envData, err := os.ReadFile(filepath.Join(dir, "catalog.json"))
@@ -179,7 +178,6 @@ func loadSplitSchemaCatalogSnapshot(t *testing.T, dir string) cli.SchemaCatalogS
 	snapshot := cli.SchemaCatalogSnapshot{
 		Version:     envelope.Version,
 		SurfaceHash: envelope.SurfaceHash,
-		SourceHash:  envelope.SourceHash,
 		Catalog:     envelope.Catalog,
 		Tools:       map[string]map[string]any{},
 	}

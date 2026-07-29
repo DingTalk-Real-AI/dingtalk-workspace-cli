@@ -108,8 +108,7 @@ func TestWriteMetadataDirectorySplitsDomains(t *testing.T) {
 		t.Fatalf("WriteFile(stale) error = %v", err)
 	}
 	metadata := agentmetadata.File{
-		Version:    1,
-		SourceHash: "sha256:test",
+		Version: 1,
 		Products: map[string]agentmetadata.ProductMetadata{
 			"calendar": {UseWhen: []string{"日程"}},
 			"contact":  {UseWhen: []string{"联系人"}},

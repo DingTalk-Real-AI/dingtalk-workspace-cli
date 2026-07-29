@@ -307,8 +307,7 @@ func TestAgentProductSelectionUsesTypedAccessor(t *testing.T) {
 
 func TestRuntimeSchemaIncludesEmbeddedAgentMetadata(t *testing.T) {
 	agentFixture := embeddedAgentMetadata{
-		Version:    1,
-		SourceHash: "sha256:test",
+		Version: 1,
 		Products: map[string]agentProductMetadata{
 			"doc": {
 				AgentSummary:       "创建、读取和维护钉钉文档",
@@ -353,8 +352,11 @@ func TestRuntimeSchemaIncludesEmbeddedAgentMetadata(t *testing.T) {
 		t.Fatalf("runtimeSchemaPayloadForTest(catalog): %v", err)
 	}
 	summary, _ := catalog["agent_metadata"].(map[string]any)
-	if summary["source_hash"] != "sha256:test" {
+	if summary["source"] != embeddedAgentMetadataSource {
 		t.Fatalf("catalog Agent metadata summary = %#v", summary)
+	}
+	if _, hasSourceHash := summary["source_hash"]; hasSourceHash {
+		t.Fatalf("agent_metadata must not expose source_hash: %#v", summary)
 	}
 	products, _ := catalog["products"].([]map[string]any)
 	doc := findSchemaProduct(products, "doc")

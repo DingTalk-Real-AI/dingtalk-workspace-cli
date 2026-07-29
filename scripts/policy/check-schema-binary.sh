@@ -54,8 +54,9 @@ if ! jq -e -n \
   $vector.registry_hash == $catalog.surface_hash and
   $list.surface_hash == $vector.registry_hash and
   $all.surface_hash == $vector.registry_hash and
-  $list.catalog_hash == $catalog.source_hash and
-  $all.catalog_hash == $catalog.source_hash and
+  ($list.catalog_hash | type) == "string" and
+  ($list.catalog_hash | test("^sha256:[0-9a-f]{64}$")) and
+  $list.catalog_hash == $all.catalog_hash and
   ($vector.commands | map(.canonical_path) | sort) == ($catalog.tools | keys | sort) and
   ($vector.commands | map(.canonical_path) | sort) ==
   ([$all.products[].tools[].canonical_path] | sort) and
@@ -73,7 +74,11 @@ fi
 # still has to be the exact typed projection of the same embedded Catalog.
 # Derive the expected overview without invoking another Schema code path so a
 # release binary cannot hide loader/query drift behind two identical helpers.
-jq -S '
+# catalog_hash is injected by the binary at query time from the derived
+# content hash; take it from the actual list so the overview projection check
+# stays focused on Catalog content. Byte-for-byte Catalog freshness is covered
+# by check-generated-drift.sh.
+jq -S --slurpfile list "$tmp/list.json" '
   def nonempty: type == "string" and (gsub("^\\s+|\\s+$"; "") | length) > 0;
   . as $snapshot |
   $snapshot.catalog as $catalog |
@@ -102,7 +107,7 @@ jq -S '
   (if (($catalog.source // "") | type == "string" and length > 0) then {source: $catalog.source} else {} end) +
   (if $catalog | has("interface_metadata") then {interface_metadata: $catalog.interface_metadata} else {} end) +
   (if $catalog | has("agent_metadata") then {agent_metadata: $catalog.agent_metadata} else {} end) +
-  {catalog_hash: $snapshot.source_hash} +
+  {catalog_hash: $list[0].catalog_hash} +
   (if (($snapshot.surface_hash // "") | nonempty) then {surface_hash: $snapshot.surface_hash} else {} end)
 ' "$catalog_combined" >"$tmp/expected-list.json"
 jq -S . "$tmp/list.json" >"$tmp/actual-list.json"

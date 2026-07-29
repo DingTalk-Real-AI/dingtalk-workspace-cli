@@ -207,7 +207,6 @@ func writeAuditFile(path string, audit agentmetadata.Audit) error {
 
 type agentMetadataIndex struct {
 	Version     int                                      `json:"version"`
-	SourceHash  string                                   `json:"source_hash"`
 	SurfaceHash string                                   `json:"surface_hash,omitempty"`
 	Coverage    agentmetadata.Coverage                   `json:"coverage"`
 	Products    map[string]agentmetadata.ProductMetadata `json:"products"`
@@ -265,7 +264,6 @@ func writeMetadataDirectory(dir string, metadata agentmetadata.File) error {
 	sort.Strings(domains)
 	index := agentMetadataIndex{
 		Version:     metadata.Version,
-		SourceHash:  metadata.SourceHash,
 		SurfaceHash: metadata.SurfaceHash,
 		Coverage:    metadata.Coverage,
 		Products:    metadata.Products,

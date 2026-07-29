@@ -29,7 +29,6 @@ const embeddedAgentMetadataSource = "embedded-skill-metadata"
 
 type embeddedAgentMetadata struct {
 	Version     int                             `json:"version"`
-	SourceHash  string                          `json:"source_hash"`
 	SurfaceHash string                          `json:"surface_hash,omitempty"`
 	Coverage    embeddedAgentMetadataCoverage   `json:"coverage"`
 	Products    map[string]agentProductMetadata `json:"products"`
@@ -343,7 +342,6 @@ func agentMetadataSummaryFrom(metadata embeddedAgentMetadata) map[string]any {
 	summary := map[string]any{
 		"source":                 embeddedAgentMetadataSource,
 		"version":                metadata.Version,
-		"source_hash":            strings.TrimSpace(metadata.SourceHash),
 		"products_with_metadata": len(metadata.Products),
 		"tools_with_metadata":    len(metadata.Tools),
 	}

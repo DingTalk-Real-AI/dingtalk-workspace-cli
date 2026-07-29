@@ -1,7 +1,8 @@
 #!/bin/sh
 # Reassemble the split release Catalog shards back into the single JSON
-# document shape (version + surface_hash + source_hash + catalog + tools) that
-# the policy jq queries consume.
+# document shape (version + surface_hash + catalog + tools) that the policy
+# jq queries consume. source_hash is intentionally omitted: the Go loader
+# derives it from the reassembled payload, and jq cannot reproduce that hash.
 #
 # The Catalog is a committed global file (schema_catalog/catalog.json); each
 # product's leaf ToolSpecs live in their own shard (schema_catalog/tools/*.json)
@@ -17,7 +18,6 @@ jq -s '
   ($envelope.surface_hash // null) as $surface |
   {
     version: $envelope.version,
-    source_hash: $envelope.source_hash,
     catalog: $envelope.catalog,
     tools: (reduce .[1:][] as $shard ({}; . + ($shard.tools // {})))
   } +

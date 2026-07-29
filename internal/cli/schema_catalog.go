@@ -36,8 +36,8 @@ const SchemaCatalogSnapshotVersion = 1
 //	schema_catalog/catalog.json        global envelope + Catalog map
 //	schema_catalog/tools/<product>.json   that product's leaf ToolSpecs
 //
-// The loader reassembles the exact same SchemaCatalogSnapshot, so the
-// source_hash integrity check is identical to the single-file layout.
+// The loader reassembles the same SchemaCatalogSnapshot and derives
+// source_hash from the full payload (it is not stored in catalog.json).
 //
 //go:embed schema_catalog/catalog.json
 var embeddedSchemaCatalogEnvelopeJSON []byte
@@ -87,12 +87,13 @@ func embeddedSchemaCatalog() loadedSchemaCatalog {
 }
 
 // schemaCatalogEnvelope is the global half of the split release Catalog. It
-// mirrors the generator's envelope struct; the Catalog map and release hashes
-// do not partition by product and stay in one file.
+// mirrors the generator's envelope struct; the Catalog map and surface_hash
+// do not partition by product and stay in one file. source_hash is derived at
+// load time from the reassembled payload so concurrent product PRs do not
+// collide on a whole-corpus hash line.
 type schemaCatalogEnvelope struct {
 	Version     int            `json:"version"`
 	SurfaceHash string         `json:"surface_hash,omitempty"`
-	SourceHash  string         `json:"source_hash"`
 	Catalog     map[string]any `json:"catalog"`
 }
 
@@ -105,9 +106,9 @@ type schemaCatalogToolShard struct {
 
 // assembleEmbeddedSchemaCatalog reassembles the split release Catalog shards
 // into the same SchemaCatalogSnapshot the single-file layout produced, then
-// validates it through the production loader. source_hash still covers the
-// whole payload: if any shard is missing, stale, or tampered, the content hash
-// check in loadSchemaCatalogSnapshot fails exactly as before.
+// validates it through the production loader. source_hash is derived from the
+// reassembled payload so a missing or tampered shard still changes the hash
+// exposed as catalog_hash.
 func assembleEmbeddedSchemaCatalog() (loadedSchemaCatalog, error) {
 	snapshot, err := assembleSchemaCatalogSnapshot(embeddedSchemaCatalogEnvelopeJSON, embeddedSchemaCatalogTools, "schema_catalog/tools")
 	if err != nil {
@@ -146,13 +147,14 @@ func assembleSchemaCatalogSnapshot(envelopeJSON []byte, shards fs.FS, dir string
 			tools[canonical] = spec
 		}
 	}
-	return SchemaCatalogSnapshot{
+	snapshot := SchemaCatalogSnapshot{
 		Version:     envelope.Version,
 		SurfaceHash: envelope.SurfaceHash,
-		SourceHash:  envelope.SourceHash,
 		Catalog:     envelope.Catalog,
 		Tools:       tools,
-	}, nil
+	}
+	snapshot.SourceHash = schemaCatalogSnapshotHash(snapshot)
+	return snapshot, nil
 }
 
 func embeddedSchemaCatalogError() error {
@@ -269,8 +271,12 @@ func loadSchemaCatalogSnapshot(snapshot SchemaCatalogSnapshot) (loadedSchemaCata
 	if len(snapshot.Catalog) == 0 || len(snapshot.Tools) == 0 {
 		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot is empty")
 	}
-	if snapshot.SourceHash == "" || snapshot.SourceHash != schemaCatalogSnapshotHash(snapshot) {
-		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot source_hash does not match its content")
+	// source_hash is derived from content rather than trusted from storage.
+	// Committed envelopes no longer persist it; in-memory round-trips that
+	// still carry a value are overwritten with the canonical content hash.
+	snapshot.SourceHash = schemaCatalogSnapshotHash(snapshot)
+	if snapshot.SourceHash == "" {
+		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot source_hash could not be derived")
 	}
 	registry, index, err := schemaRegistryFromSnapshot(snapshot)
 	if err != nil {

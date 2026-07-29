@@ -67,7 +67,7 @@ func TestCrossPlatformCoverageGenerateProductionAgentMetadataPipeline(t *testing
 	if len(metadata.Tools) != len(canonicalToolPaths) || stats.Tools == 0 {
 		t.Fatalf("generated metadata mismatch: tools=%d registry=%d stats=%d", len(metadata.Tools), len(canonicalToolPaths), stats.Tools)
 	}
-	if audit := agentmetadata.BuildAudit(metadata, stats); audit.SourceHash == "" {
-		t.Fatal("generated audit has an empty source hash")
+	if audit := agentmetadata.BuildAudit(metadata, stats); audit.SurfaceHash == "" {
+		t.Fatal("generated audit has an empty surface hash")
 	}
 }

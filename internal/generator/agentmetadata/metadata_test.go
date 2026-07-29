@@ -68,7 +68,7 @@ func TestGenerateCompilesSkillSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	if metadata.Version != CurrentVersion || metadata.SourceHash == "" {
+	if metadata.Version != CurrentVersion {
 		t.Fatalf("metadata header = %#v", metadata)
 	}
 	if got := metadata.Products["calendar"].UseWhen; len(got) != 1 || got[0] != "日程/会议室" {
@@ -118,8 +118,8 @@ func TestGenerateCompilesSkillSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Generate() error = %v", err)
 	}
-	if again.SourceHash != metadata.SourceHash {
-		t.Fatalf("source hash is not deterministic: %q != %q", again.SourceHash, metadata.SourceHash)
+	if again.Coverage.ToolsWithMetadata != metadata.Coverage.ToolsWithMetadata {
+		t.Fatalf("coverage is not deterministic: %#v != %#v", again.Coverage, metadata.Coverage)
 	}
 }
 

@@ -8,8 +8,9 @@ cd "$ROOT"
 policy_prepare_runtime "$ROOT"
 
 # The release Catalog is committed as a per-product split; reassemble it into
-# the single-document shape (version + surface_hash + source_hash + catalog +
-# tools) that the jq queries below consume.
+# the single-document shape (version + surface_hash + catalog + tools) that the
+# jq queries below consume. source_hash is derived by the Go loader and is not
+# present in the reassembled document.
 catalog="$(mktemp)"
 trap 'rm -f "$catalog"' EXIT HUP INT TERM
 scripts/policy/with-catalog.sh >"$catalog"

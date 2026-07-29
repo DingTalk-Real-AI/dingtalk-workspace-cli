@@ -88,8 +88,12 @@ func TestCrossPlatformCoverageLoadSchemaCatalogSnapshotGateFailures(t *testing.T
 	}
 	badHash := cloneSnapshotForCoverage(t, base)
 	badHash.SourceHash = "wrong"
-	if _, err := loadSchemaCatalogSnapshot(badHash); err == nil {
-		t.Fatal("bad snapshot hash succeeded")
+	loadedBadHash, err := loadSchemaCatalogSnapshot(badHash)
+	if err != nil {
+		t.Fatalf("loadSchemaCatalogSnapshot(wrong stored hash) error = %v", err)
+	}
+	if loadedBadHash.Snapshot.SourceHash != base.SourceHash {
+		t.Fatalf("derived source_hash = %q, want %q", loadedBadHash.Snapshot.SourceHash, base.SourceHash)
 	}
 	badTyped := cloneSnapshotForCoverage(t, base)
 	badTyped.Catalog["unknown"] = true

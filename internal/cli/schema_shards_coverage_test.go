@@ -35,7 +35,7 @@ func (f failingReadFS) ReadFile(name string) ([]byte, error) {
 }
 
 func TestAssembleSchemaCatalogSnapshotMergesShards(t *testing.T) {
-	envelope := []byte(`{"version":1,"surface_hash":"sha256:s","source_hash":"sha256:c","catalog":{"kind":"schema"}}`)
+	envelope := []byte(`{"version":1,"surface_hash":"sha256:s","catalog":{"kind":"schema"}}`)
 	shards := fstest.MapFS{
 		"tools/doc.json":   {Data: []byte(`{"product":"doc","tools":{"doc.copy":{"title":"复制"}}}`)},
 		"tools/sheet.json": {Data: []byte(`{"product":"sheet","tools":{"sheet.get":{"title":"读取"}}}`)},
@@ -45,7 +45,7 @@ func TestAssembleSchemaCatalogSnapshotMergesShards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assembleSchemaCatalogSnapshot() error = %v", err)
 	}
-	if snapshot.Version != 1 || snapshot.SurfaceHash != "sha256:s" || snapshot.SourceHash != "sha256:c" {
+	if snapshot.Version != 1 || snapshot.SurfaceHash != "sha256:s" || snapshot.SourceHash == "" {
 		t.Fatalf("envelope fields lost: %+v", snapshot)
 	}
 	if len(snapshot.Tools) != 2 || snapshot.Tools["doc.copy"] == nil || snapshot.Tools["sheet.get"] == nil {
@@ -54,7 +54,7 @@ func TestAssembleSchemaCatalogSnapshotMergesShards(t *testing.T) {
 }
 
 func TestAssembleSchemaCatalogSnapshotFailureModes(t *testing.T) {
-	valid := []byte(`{"version":1,"source_hash":"sha256:c","catalog":{}}`)
+	valid := []byte(`{"version":1,"catalog":{}}`)
 	if _, err := assembleSchemaCatalogSnapshot([]byte("{bad"), fstest.MapFS{}, "tools"); err == nil || !strings.Contains(err.Error(), "decode embedded schema catalog.json") {
 		t.Fatalf("bad envelope err = %v", err)
 	}
