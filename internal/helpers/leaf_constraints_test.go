@@ -476,3 +476,111 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 }
 
 var errTransformTest = errors.New("transform failed")
+
+func leafRiskSpec(risk LeafRisk, called *bool) LeafSpec {
+	return LeafSpec{
+		Use:   "danger",
+		Short: "危险",
+		Tool:  "danger_thing",
+		Risk:  risk,
+		Flags: []LeafFlag{{Name: "id", Usage: "ID"}},
+		Call: func(*cobra.Command, string, map[string]any) error {
+			*called = true
+			return nil
+		},
+	}
+}
+
+func leafRiskRun(t *testing.T, risk LeafRisk, stdin string, args ...string) (bool, error) {
+	t.Helper()
+	called := false
+	cmd := NewLeafCommand(leafRiskSpec(risk, &called))
+	// 注入根级 --yes/--dry-run 持久 flag，模拟真实根命令。
+	cmd.PersistentFlags().Bool("yes", false, "")
+	cmd.PersistentFlags().Bool("dry-run", false, "")
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	if stdin != "" {
+		cmd.SetIn(strings.NewReader(stdin))
+	}
+	cmd.SetArgs(args)
+	return called, cmd.Execute()
+}
+
+func TestCrossPlatformCoverageLeafRiskReadNeverPrompts(t *testing.T) {
+	// 只读：无 stdin 也直接派发。
+	if called, err := leafRiskRun(t, LeafRiskRead, "", "--id", "x"); err != nil || !called {
+		t.Fatalf("read risk err = %v called = %v", err, called)
+	}
+	// 空 Risk 等价只读。
+	if called, err := leafRiskRun(t, "", "", "--id", "x"); err != nil || !called {
+		t.Fatalf("empty risk err = %v called = %v", err, called)
+	}
+}
+
+func TestCrossPlatformCoverageLeafRiskWriteConfirmation(t *testing.T) {
+	// 拒绝：不派发，返回取消错误。
+	called, err := leafRiskRun(t, LeafRiskWrite, "no\n", "--id", "x")
+	if called {
+		t.Fatal("declined write should not dispatch")
+	}
+	if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+		t.Fatalf("declined write err = %v", err)
+	}
+	// 同意：派发。
+	if called, err := leafRiskRun(t, LeafRiskWrite, "yes\n", "--id", "x"); err != nil || !called {
+		t.Fatalf("confirmed write err = %v called = %v", err, called)
+	}
+	// 高危同样走确认链。
+	if called, err := leafRiskRun(t, LeafRiskHighWrite, "y\n", "--id", "x"); err != nil || !called {
+		t.Fatalf("confirmed high-write err = %v called = %v", err, called)
+	}
+}
+
+func TestCrossPlatformCoverageLeafRiskYesAndDryRunBypass(t *testing.T) {
+	// --yes 跳过提示直接派发（无 stdin）。
+	if called, err := leafRiskRun(t, LeafRiskHighWrite, "", "--id", "x", "--yes"); err != nil || !called {
+		t.Fatalf("--yes bypass err = %v called = %v", err, called)
+	}
+	// --dry-run 跳过提示直接派发（无 stdin）。
+	if called, err := leafRiskRun(t, LeafRiskWrite, "", "--id", "x", "--dry-run"); err != nil || !called {
+		t.Fatalf("--dry-run bypass err = %v called = %v", err, called)
+	}
+}
+
+func TestCrossPlatformCoverageLeafYesFlagAndIntEdges(t *testing.T) {
+	if leafYesFlag(nil) {
+		t.Fatal("nil cmd should not report --yes")
+	}
+
+	// Required LeafInt 的 env 值不可解析：leafHasEffectiveValue 视为已提供
+	// （err→true 分支），required 通过后由 leafArgs 报 invalid integer。
+	t.Setenv("DWS_LEAF_INT_EDGE", "not-an-int")
+	badInt := NewLeafCommand(LeafSpec{
+		Use:   "int-edge",
+		Tool:  "int_edge_tool",
+		Flags: []LeafFlag{{Name: "n", Usage: "N", Kind: LeafInt, Required: true, EnvVar: "DWS_LEAF_INT_EDGE"}},
+		Call:  func(*cobra.Command, string, map[string]any) error { return nil },
+	})
+	badInt.SilenceErrors = true
+	badInt.SilenceUsage = true
+	badInt.SetArgs(nil)
+	if err := badInt.Execute(); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
+		t.Fatalf("unparseable int env err = %v", err)
+	}
+
+	// 写风险但全局无 --yes flag 注册：leafYesFlag 各 getter 均报错走兜底 false，
+	// 于是进入提示；stdin "no" 取消。
+	called := false
+	noYes := NewLeafCommand(leafRiskSpec(LeafRiskWrite, &called))
+	noYes.SilenceErrors = true
+	noYes.SilenceUsage = true
+	noYes.SetIn(strings.NewReader("no\n"))
+	noYes.SetArgs([]string{"--id", "x"})
+	if err := noYes.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+		t.Fatalf("no-yes-flag cancel err = %v", err)
+	}
+	if called {
+		t.Fatal("declined write dispatched despite no --yes flag")
+	}
+}

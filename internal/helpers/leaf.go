@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
@@ -93,6 +94,28 @@ type LeafFlag struct {
 	Trim bool
 }
 
+// LeafRisk 声明叶子命令的副作用等级，取值与 shortcut 框架的 Risk 逐字
+// 一致（helpers 不能反向依赖 internal/shortcut——shortcut/builtin 依赖
+// helpers 会形成环——故本地声明同名语义）。
+type LeafRisk string
+
+const (
+	// LeafRiskRead 只读操作，从不提示。空值即视为 LeafRiskRead。
+	LeafRiskRead LeafRisk = "read"
+	// LeafRiskWrite 变更状态；未加 --yes 时提示确认。
+	LeafRiskWrite LeafRisk = "write"
+	// LeafRiskHighWrite 破坏性/不可逆操作；未加 --yes 时提示确认。
+	LeafRiskHighWrite LeafRisk = "high-risk-write"
+)
+
+// effective 返回有效副作用等级，空值降级为只读。
+func (r LeafRisk) effective() LeafRisk {
+	if r == "" {
+		return LeafRiskRead
+	}
+	return r
+}
+
 // LeafConstraintKind 是跨 flag 关系约束的类型，取值与 shortcut 框架的
 // ConstraintKind 逐字一致（helpers 不能反向依赖 internal/shortcut——
 // shortcut/builtin 依赖 helpers 会形成环——故本地声明同名语义）。
@@ -136,6 +159,12 @@ type LeafSpec struct {
 	// 框架统一校验并投影到 Runtime Schema 与 --help。复杂的条件式校验
 	// 仍放 Validate 钩子。
 	Constraints []LeafConstraint
+
+	// Risk 声明副作用等级，驱动执行前的写确认（对齐 shortcut 框架的
+	// Risk 语义）。默认 LeafRiskRead：只读，从不提示。LeafRiskWrite /
+	// LeafRiskHighWrite 在未加 --yes 且非 --dry-run 时提示确认，用户拒绝
+	// 则中止且不派发。confirmation 语义与 shortcut 的 confirmRisk 逐字一致。
+	Risk LeafRisk
 
 	// Call 是可插拔派发函数，非空时替代默认的 callMCPTool/callMCPToolOnServer。
 	// 供非 MCP 直连命令（如 devapp 走 executor.Runner）复用本框架：调用方用
@@ -203,6 +232,9 @@ func NewLeafCommand(spec LeafSpec) *cobra.Command {
 		toolArgs, err := leafArgs(cmd, spec)
 		if err != nil {
 			return err
+		}
+		if !leafConfirmRisk(cmd, spec) {
+			return apperrors.NewValidation("用户取消了操作")
 		}
 		if spec.Call != nil {
 			return spec.Call(cmd, spec.Tool, toolArgs)
@@ -525,6 +557,43 @@ func leafValidateConstraints(cmd *cobra.Command, spec LeafSpec) error {
 		}
 	}
 	return nil
+}
+
+// leafConfirmRisk 复现 shortcut 框架 confirmRisk 的写确认语义：只读、
+// --dry-run 或 --yes 直接放行；写/高危操作在交互态提示确认，用户拒绝返回
+// false。提示文案与 shortcut 逐字一致（以命令路径替代 shortcut 的
+// Service+Command），保证 atomic command 与 smart shortcut 的确认体验统一。
+func leafConfirmRisk(cmd *cobra.Command, spec LeafSpec) bool {
+	if spec.Risk.effective() == LeafRiskRead || commandDryRun(cmd) || leafYesFlag(cmd) {
+		return true
+	}
+	output := cmd.ErrOrStderr()
+	fmt.Fprintf(output, "即将执行 %s（%s），确认继续？(yes/no): ", cmd.CommandPath(), spec.Risk.effective())
+	reader := bufio.NewReader(cmd.InOrStdin())
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	return answer == "yes" || answer == "y"
+}
+
+// leafYesFlag 稳健读取 --yes：依次尝试本命令、继承 flag、根持久 flag，
+// 兼容根注入的全局 --yes。
+func leafYesFlag(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	getters := []func(string) (bool, error){
+		cmd.Flags().GetBool,
+		cmd.InheritedFlags().GetBool,
+	}
+	if root := cmd.Root(); root != nil {
+		getters = append(getters, root.PersistentFlags().GetBool)
+	}
+	for _, get := range getters {
+		if v, err := get("yes"); err == nil {
+			return v
+		}
+	}
+	return false
 }
 
 // leafAnnotateConstraints 把关系约束投影到 Agent Runtime Schema：
