@@ -20,6 +20,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 // leaf.go 是叶子命令的统一构建框架。
@@ -45,6 +48,13 @@ const (
 	// LeafInt 整型 flag（注册为 cobra Int）；仅在值 != 0 时进入 toolArgs，
 	// 对应手写「putInt 仅在非零才入参」语义（如 devapp app-group-id）。
 	LeafInt
+	// LeafBool 布尔 flag（注册为 cobra Bool）；仅在用户显式提供（Changed）
+	// 时进入 toolArgs，对应手写「Changed 才透传，显式 false 也下发」语义。
+	// 布尔不参与别名/env 回退链（true/false 无「空值」可回退）。
+	LeafBool
+	// LeafStringSlice 字符串列表 flag（注册为 cobra StringSlice）；仅在存在
+	// 非空元素时进入 toolArgs，元素恒 TrimSpace 后过滤空串。
+	LeafStringSlice
 )
 
 // LeafFlag 声明一个 flag 的注册方式与到 MCP toolArgs 的绑定。
@@ -83,6 +93,33 @@ type LeafFlag struct {
 	Trim bool
 }
 
+// LeafConstraintKind 是跨 flag 关系约束的类型，取值与 shortcut 框架的
+// ConstraintKind 逐字一致（helpers 不能反向依赖 internal/shortcut——
+// shortcut/builtin 依赖 helpers 会形成环——故本地声明同名语义）。
+type LeafConstraintKind string
+
+const (
+	// LeafAtLeastOne 要求 Flags 至少提供一个。
+	LeafAtLeastOne LeafConstraintKind = "at_least_one"
+	// LeafExactlyOne 要求 Flags 必须且只能提供一个。
+	LeafExactlyOne LeafConstraintKind = "exactly_one"
+	// LeafMutuallyExclusive 允许 Flags 中最多提供一个。
+	LeafMutuallyExclusive LeafConstraintKind = "mutually_exclusive"
+)
+
+// LeafConstraint 声明一组 flag 的关系约束。框架在 required 校验之后、
+// Validate 钩子之前统一执行；「是否提供」的判定复用 LeafSpec 的有效值
+// 回退链（显式主 flag → 别名 → env），即只传兼容别名同样视为已提供——
+// 这是 shortcut 裸 Changed 判定所没有的能力。约束同时投影到 Agent
+// Runtime Schema（mutually_exclusive / require_one_of）并渲染进 --help
+// 的「参数约束」段：一次声明，运行时校验、Schema、帮助三处生效。
+type LeafConstraint struct {
+	Kind  LeafConstraintKind
+	Flags []string
+	// Description 非空时替换 --help 中该约束的默认文案。
+	Description string
+}
+
 // LeafSpec 声明一个 MCP 直连叶子命令。
 type LeafSpec struct {
 	Use     string
@@ -95,6 +132,10 @@ type LeafSpec struct {
 	Server string
 	Tool   string
 	Flags  []LeafFlag
+	// Constraints 是跨 flag 的关系约束（至少一个 / 恰好一个 / 互斥），
+	// 框架统一校验并投影到 Runtime Schema 与 --help。复杂的条件式校验
+	// 仍放 Validate 钩子。
+	Constraints []LeafConstraint
 
 	// Call 是可插拔派发函数，非空时替代默认的 callMCPTool/callMCPToolOnServer。
 	// 供非 MCP 直连命令（如 devapp 走 executor.Runner）复用本框架：调用方用
@@ -125,25 +166,20 @@ func NewLeafCommand(spec LeafSpec) *cobra.Command {
 		Example: spec.Example,
 	}
 	for _, flag := range spec.Flags {
-		switch flag.Kind {
-		case LeafInt:
-			cmd.Flags().Int(flag.Name, 0, flag.Usage)
-		default:
-			cmd.Flags().String(flag.Name, flag.Default, flag.Usage)
-		}
+		leafRegisterFlag(cmd, flag.Kind, flag.Name, flag.Default, flag.Usage)
 		// 别名按主 flag 的 Kind 注册，否则整型别名的值永远读不到（静默丢弃）。
 		for _, alias := range flag.Aliases {
-			switch flag.Kind {
-			case LeafInt:
-				cmd.Flags().Int(alias, 0, flag.Usage+" (alias)")
-			default:
-				cmd.Flags().String(alias, "", flag.Usage+" (alias)")
-			}
+			leafRegisterFlag(cmd, flag.Kind, alias, "", flag.Usage+" (alias)")
 			_ = cmd.Flags().MarkHidden(alias)
 		}
 		if flag.MarkRequired {
 			_ = cmd.MarkFlagRequired(flag.Name)
 		}
+	}
+	leafValidateConstraintDecls(spec)
+	leafAnnotateConstraints(cmd, spec)
+	if help := leafConstraintHelp(spec.Constraints); help != "" {
+		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
 	}
 	if spec.PostMount != nil {
 		spec.PostMount(cmd)
@@ -154,6 +190,9 @@ func NewLeafCommand(spec LeafSpec) *cobra.Command {
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := leafValidateRequired(cmd, spec); err != nil {
+			return err
+		}
+		if err := leafValidateConstraints(cmd, spec); err != nil {
 			return err
 		}
 		if spec.Validate != nil {
@@ -174,6 +213,21 @@ func NewLeafCommand(spec LeafSpec) *cobra.Command {
 		return callMCPTool(spec.Tool, toolArgs)
 	}
 	return cmd
+}
+
+// leafRegisterFlag 按 Kind 注册 flag；注册默认值仅 LeafString 使用（其余
+// Kind 的 Default 只作为回退链链尾兜底，与既有 LeafInt 行为一致）。
+func leafRegisterFlag(cmd *cobra.Command, kind LeafFlagKind, name, def, usage string) {
+	switch kind {
+	case LeafInt:
+		cmd.Flags().Int(name, 0, usage)
+	case LeafBool:
+		cmd.Flags().Bool(name, false, usage)
+	case LeafStringSlice:
+		cmd.Flags().StringSlice(name, nil, usage)
+	default:
+		cmd.Flags().String(name, def, usage)
+	}
 }
 
 // leafValidateRequired 复现手写命令的 required 语义：普通 Required 统一报
@@ -206,18 +260,46 @@ func leafValidateRequired(cmd *cobra.Command, spec LeafSpec) error {
 }
 
 // leafHasEffectiveValue 判定 Required 是否满足，标准与 leafArgs 的入参判定
-// 一致（LeafInt 需非零、字符串需非空）：否则会出现校验声称有效、toolArgs
-// 却缺参的分裂。整型解析失败视为已提供，让 leafArgs 报出更精确的
-// invalid integer 错误。
+// 一致（LeafInt 需非零、字符串需非空、LeafBool 需显式提供、LeafStringSlice
+// 需存在非空元素）：否则会出现校验声称有效、toolArgs 却缺参的分裂。整型解析
+// 失败视为已提供，让 leafArgs 报出更精确的 invalid integer 错误。
 func leafHasEffectiveValue(cmd *cobra.Command, flag LeafFlag) bool {
-	if flag.Kind == LeafInt {
+	switch flag.Kind {
+	case LeafInt:
 		v, err := leafIntegerValue(cmd, flag)
 		if err != nil {
 			return true
 		}
 		return v != 0
+	case LeafBool:
+		return cmd.Flags().Changed(flag.Name)
+	case LeafStringSlice:
+		return leafSliceValue(cmd, flag) != nil
 	}
 	return leafEffectiveValue(cmd, flag) != ""
+}
+
+// leafSliceValue 按「显式主 flag → 显式别名」顺序取列表 flag 的有效值：
+// 元素统一 TrimSpace 并过滤空串，全空视为未提供（返回 nil）。列表不参与
+// env/Default 回退链。
+func leafSliceValue(cmd *cobra.Command, flag LeafFlag) []string {
+	names := append([]string{flag.Name}, flag.Aliases...)
+	for _, name := range names {
+		if !cmd.Flags().Changed(name) {
+			continue
+		}
+		raw, _ := cmd.Flags().GetStringSlice(name)
+		var out []string
+		for _, value := range raw {
+			if value = strings.TrimSpace(value); value != "" {
+				out = append(out, value)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
 }
 
 // leafArgs 按绑定关系装配 toolArgs。
@@ -236,6 +318,20 @@ func leafArgs(cmd *cobra.Command, spec LeafSpec) (map[string]any, error) {
 			// 保持「非零才入参」（putInt 语义）。
 			if v != 0 {
 				toolArgs[bind] = int(v)
+			}
+			continue
+		}
+		if flag.Kind == LeafBool {
+			// Changed 才入参：显式 false 同样下发（对应手写「Changed 才透传」语义）。
+			if cmd.Flags().Changed(flag.Name) {
+				v, _ := cmd.Flags().GetBool(flag.Name)
+				toolArgs[bind] = v
+			}
+			continue
+		}
+		if flag.Kind == LeafStringSlice {
+			if v := leafSliceValue(cmd, flag); v != nil {
+				toolArgs[bind] = v
 			}
 			continue
 		}
@@ -328,4 +424,166 @@ func leafIntegerValue(cmd *cobra.Command, flag LeafFlag) (int64, error) {
 		return 0, fmt.Errorf("flag --%s: invalid integer value %q", flag.Name, raw)
 	}
 	return v, nil
+}
+
+// leafValidateConstraintDecls 在构建期校验约束声明：未知类型、空 flag 组或
+// 引用未声明 flag 都是编程错误，直接 panic 让任何测试/启动路径第一时间失败，
+// 而不是等到用户命中运行时才暴露。
+func leafValidateConstraintDecls(spec LeafSpec) {
+	declared := map[string]bool{}
+	for _, flag := range spec.Flags {
+		declared[flag.Name] = true
+	}
+	for _, constraint := range spec.Constraints {
+		switch constraint.Kind {
+		case LeafAtLeastOne, LeafExactlyOne, LeafMutuallyExclusive:
+		default:
+			panic(fmt.Sprintf("leaf %q: unknown constraint kind %q", spec.Use, constraint.Kind))
+		}
+		if len(constraint.Flags) < 2 {
+			panic(fmt.Sprintf("leaf %q: constraint %s needs at least two flags", spec.Use, constraint.Kind))
+		}
+		for _, name := range constraint.Flags {
+			if !declared[name] {
+				panic(fmt.Sprintf("leaf %q: constraint %s references undeclared flag %q", spec.Use, constraint.Kind, name))
+			}
+		}
+	}
+}
+
+// leafConstraintProvided 判定约束语义下 flag 是否「已提供」：显式主 flag、
+// 显式别名或环境变量任一命中即视为提供；注册默认值/ArgDefault 不算——否则
+// 带默认值的 flag 会恒满足 at_least_one 并恒触发 mutually_exclusive。
+// LeafBool 只认 Changed（布尔无别名/env 回退语义）。
+func leafConstraintProvided(cmd *cobra.Command, flag LeafFlag) bool {
+	switch flag.Kind {
+	case LeafBool:
+		return cmd.Flags().Changed(flag.Name)
+	case LeafStringSlice:
+		if cmd.Flags().Changed(flag.Name) {
+			if v, _ := cmd.Flags().GetStringSlice(flag.Name); leafSliceHasValue(v) {
+				return true
+			}
+		}
+		for _, alias := range flag.Aliases {
+			if !cmd.Flags().Changed(alias) {
+				continue
+			}
+			if v, _ := cmd.Flags().GetStringSlice(alias); leafSliceHasValue(v) {
+				return true
+			}
+		}
+		return false
+	}
+	usable := func(v string) bool { return strings.TrimSpace(v) != "" }
+	if cmd.Flags().Changed(flag.Name) && usable(leafFlagString(cmd, flag.Kind, flag.Name)) {
+		return true
+	}
+	for _, alias := range flag.Aliases {
+		if cmd.Flags().Changed(alias) && usable(leafFlagString(cmd, flag.Kind, alias)) {
+			return true
+		}
+	}
+	return flag.EnvVar != "" && usable(os.Getenv(flag.EnvVar))
+}
+
+// leafValidateConstraints 执行关系约束。报错文案与 shortcut 框架的
+// RuntimeContext.AtLeastOne/ExactlyOne/MutuallyExclusive 逐字一致，保证
+// atomic command 与 smart shortcut 面向用户/Agent 的失败形态统一。
+func leafValidateConstraints(cmd *cobra.Command, spec LeafSpec) error {
+	flagsByName := map[string]LeafFlag{}
+	for _, flag := range spec.Flags {
+		flagsByName[flag.Name] = flag
+	}
+	for _, constraint := range spec.Constraints {
+		var set []string
+		for _, name := range constraint.Flags {
+			if leafConstraintProvided(cmd, flagsByName[name]) {
+				set = append(set, name)
+			}
+		}
+		switch constraint.Kind {
+		case LeafAtLeastOne:
+			if len(set) == 0 {
+				return apperrors.NewValidation(fmt.Sprintf(
+					"请至少指定 %s 之一", leafDashed(constraint.Flags)))
+			}
+		case LeafExactlyOne:
+			switch len(set) {
+			case 1:
+			case 0:
+				return apperrors.NewValidation(fmt.Sprintf("请指定 %s 之一", leafDashed(constraint.Flags)))
+			default:
+				return apperrors.NewValidation(fmt.Sprintf(
+					"参数 %s 只能指定其一（当前指定了 %s）", leafDashed(constraint.Flags), leafDashed(set)))
+			}
+		case LeafMutuallyExclusive:
+			if len(set) > 1 {
+				return apperrors.NewValidation(fmt.Sprintf(
+					"参数 %s 互斥，只能指定其一（当前指定了 %s）", leafDashed(constraint.Flags), leafDashed(set)))
+			}
+		}
+	}
+	return nil
+}
+
+// leafAnnotateConstraints 把关系约束投影到 Agent Runtime Schema：
+// exactly_one 分解为 require_one_of + mutually_exclusive（与手写命令对
+// AnnotateRuntimeConstraints 的既有用法一致）。
+func leafAnnotateConstraints(cmd *cobra.Command, spec LeafSpec) {
+	var projected cli.RuntimeSchemaConstraints
+	for _, constraint := range spec.Constraints {
+		flags := append([]string(nil), constraint.Flags...)
+		switch constraint.Kind {
+		case LeafAtLeastOne:
+			projected.RequireOneOf = append(projected.RequireOneOf, flags)
+		case LeafExactlyOne:
+			projected.RequireOneOf = append(projected.RequireOneOf, flags)
+			projected.MutuallyExclusive = append(projected.MutuallyExclusive, flags)
+		case LeafMutuallyExclusive:
+			projected.MutuallyExclusive = append(projected.MutuallyExclusive, flags)
+		}
+	}
+	cli.AnnotateRuntimeConstraints(cmd, projected)
+}
+
+// leafConstraintHelp 渲染 --help 的「参数约束」段，形态与 shortcut 叶子
+// 帮助一致；无约束时返回空串。
+func leafConstraintHelp(constraints []LeafConstraint) string {
+	if len(constraints) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(constraints))
+	for _, constraint := range constraints {
+		text := strings.TrimSpace(constraint.Description)
+		if text == "" {
+			switch constraint.Kind {
+			case LeafAtLeastOne:
+				text = fmt.Sprintf("%s 至少指定一个", leafDashed(constraint.Flags))
+			case LeafExactlyOne:
+				text = fmt.Sprintf("%s 必须且只能指定一个", leafDashed(constraint.Flags))
+			case LeafMutuallyExclusive:
+				text = fmt.Sprintf("%s 互斥，最多指定一个", leafDashed(constraint.Flags))
+			}
+		}
+		lines = append(lines, "  - "+text)
+	}
+	return "\n\n参数约束：\n" + strings.Join(lines, "\n")
+}
+
+func leafDashed(flags []string) string {
+	out := make([]string, len(flags))
+	for i, f := range flags {
+		out[i] = "--" + f
+	}
+	return strings.Join(out, "、")
+}
+
+func leafSliceHasValue(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
 }
