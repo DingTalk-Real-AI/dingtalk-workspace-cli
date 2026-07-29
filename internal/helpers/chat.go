@@ -49,6 +49,64 @@ func resolveMessageForward(cmd *cobra.Command, defaultForward bool) (bool, error
 	}
 }
 
+// dedupChatMessageBoundary drops conversation messages whose createTime equals
+// the pagination anchor time from a successful chat message-list response.
+//
+// 上游 IM 接口使用含等号的时间边界（newer/forward 为 >=，older/backward 为 <=）。
+// 当调用方按文档建议把上一页的边界 createTime 作为下一页的 --time 传入时，这条
+// 精确命中边界的消息会在之后每一页被重复返回，导致无限翻页循环（见 issue #430）。
+//
+// 响应结构：{"result":{"messages":[{...,"createTime":"2006-01-02 15:04:05"},...]}}。
+// 只检查顶层 result.messages，不递归进嵌套的 forwardMessages。比较方式是去空格后的
+// 精确字符串匹配，因此只有当某条消息的 createTime 与调用方传入的锚点逐字节相同（即
+// 正是循环场景）时才会被丢弃。任何解析或结构不匹配都原样返回原文，可无条件安全套用。
+func dedupChatMessageBoundary(raw, anchorTime string) string {
+	anchorTime = strings.TrimSpace(anchorTime)
+	if anchorTime == "" {
+		return raw
+	}
+	var doc map[string]any
+	if json.Unmarshal([]byte(raw), &doc) != nil {
+		return raw
+	}
+	result, ok := doc["result"].(map[string]any)
+	if !ok {
+		return raw
+	}
+	msgs, ok := result["messages"].([]any)
+	if !ok || len(msgs) == 0 {
+		return raw
+	}
+	filtered := make([]any, 0, len(msgs))
+	changed := false
+	for _, m := range msgs {
+		obj, ok := m.(map[string]any)
+		if !ok {
+			filtered = append(filtered, m)
+			continue
+		}
+		if ct, _ := obj["createTime"].(string); strings.TrimSpace(ct) == anchorTime {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	if !changed {
+		return raw
+	}
+	result["messages"] = filtered
+	out, _ := json.Marshal(doc) // doc 来自 json.Unmarshal，只含可编码类型，Marshal 不会失败
+	return string(out)
+}
+
+// callMCPToolDedupBoundary 与 callMCPTool 行为一致，但在输出前丢弃 result.messages
+// 中 createTime 等于 anchorTime 的翻页边界消息（见 issue #430）。
+func callMCPToolDedupBoundary(toolName string, args map[string]any, anchorTime string) error {
+	return callMCPToolInternalOptsPost("", toolName, args, false, func(raw string) string {
+		return dedupChatMessageBoundary(raw, anchorTime)
+	})
+}
+
 func chatIntFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) int {
 	for _, alias := range aliases {
 		if f := cmd.Flags().Lookup(alias); f != nil && f.Changed {
@@ -1353,7 +1411,7 @@ func newChatCommand() *cobra.Command {
 				if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 					toolArgs["limit"] = v
 				}
-				return callMCPTool("list_conversation_message_v2", toolArgs)
+				return callMCPToolDedupBoundary("list_conversation_message_v2", toolArgs, timeVal)
 			}
 			toolArgs := map[string]any{
 				"time":    timeVal,
@@ -1367,7 +1425,7 @@ func newChatCommand() *cobra.Command {
 			if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callMCPTool("list_individual_chat_message", toolArgs)
+			return callMCPToolDedupBoundary("list_individual_chat_message", toolArgs, timeVal)
 		},
 	}
 
@@ -1414,7 +1472,7 @@ func newChatCommand() *cobra.Command {
 			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callMCPTool("list_individual_chat_message", toolArgs)
+			return callMCPToolDedupBoundary("list_individual_chat_message", toolArgs, timeVal)
 		},
 	}
 
@@ -1873,7 +1931,7 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			toolArgs["forward"] = forward
-			return callMCPTool("list_topic_replies", toolArgs)
+			return callMCPToolDedupBoundary("list_topic_replies", toolArgs, mustGetFlag(cmd, "time"))
 		},
 	}
 
