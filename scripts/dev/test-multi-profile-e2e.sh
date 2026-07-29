@@ -641,7 +641,7 @@ expect_contains "$MONO_HOME/.codex/skills/dws/SKILL.md" "corpId:userId"
 expect_contains "$MONO_HOME/.codex/skills/dws/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
 expect_contains "$MONO_HOME/.codex/skills/dws/references/global-reference.md" "userId/userName"
 capture "$OUT_DIR/skill-multi-setup.txt" env HOME="$MULTI_HOME" "$BIN" skill setup --mode multi --target codex --source "$ROOT" --yes
-expect_contains "$MULTI_HOME/.codex/skills/dws-shared/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
+expect_contains "$MULTI_HOME/.codex/skills/dingtalk-profile/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
 expect_contains "$MULTI_HOME/.codex/skills/dingtalk-profile/SKILL.md" "corpId:userId"
 expect_contains "$MULTI_HOME/.codex/skills/dingtalk-profile/SKILL.md" "isOrgCurrent"
 
