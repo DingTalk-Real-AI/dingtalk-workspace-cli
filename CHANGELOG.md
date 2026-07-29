@@ -8,10 +8,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [1.0.55-beta.6] - 2026-07-29
 
-This beta validates the Wukong capability and multi-Skill synchronization,
-declarative command and Schema delivery, hardened Chat shortcuts, external
-contact resolution, and Agent product identity on top of the
-`v1.0.55-beta.5` baseline.
+This beta packages PRs #621, #676, #757, #815, and #816, validating the Wukong
+capability and multi-Skill synchronization, declarative command and Schema
+delivery, hardened Chat shortcuts, external contact resolution, and Agent
+product identity on top of the `v1.0.55-beta.5` baseline.
 
 ### Added
 
