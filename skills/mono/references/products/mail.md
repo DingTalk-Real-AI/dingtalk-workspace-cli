@@ -1765,8 +1765,8 @@ dws mail message search --email user@company.com \
 # 步骤 5.2：用 conversationId 获取会话详情
 dws mail thread get --email user@company.com --id <conversationId> --format json
 
-# 步骤 5.3（可选）：同时返回会话内所有邮件列表
-dws mail thread get --email user@company.com --id <conversationId> --select messages --format json
+# 步骤 5.3（可选）：列出会话所在文件夹的邮件（thread get 无 --select 参数）
+dws mail message list --email user@company.com --folder-id 2 --format json
 ```
 
 ## 上下文传递表

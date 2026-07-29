@@ -2096,7 +2096,7 @@ dws chat message send-by-bot --robot-code <robot-code> --group <openconversation
   --title "通知" --text "内容" --format json
 
 # Step 3: 邀请机器人进群
-dws chat group members add-bot --group <openconversation_id> --robot-code <robot-code>
+dws chat group members add-bot --id <openconversation_id> --robot-code <robot-code>
 
 # Step 4: 重新发送
 dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> \

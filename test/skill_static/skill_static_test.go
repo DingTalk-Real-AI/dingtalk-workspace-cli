@@ -106,6 +106,10 @@ type cmdRef struct {
 	File string
 	Line int
 	Cmd  string
+	// Table marks refs extracted from a markdown table row. Mono/multi docs
+	// use tables as badcase 对照表 whose first column is deliberately wrong
+	// usage, so flag validation must not treat those rows as contract claims.
+	Table bool
 }
 
 // extractCommands scans skills/**/*.md for every `dws ...` command reference:
@@ -154,12 +158,13 @@ func extractCommands(root string) ([]cmdRef, error) {
 			}
 			if !inFence {
 				matches := backtickCmd.FindAllStringSubmatch(lines[i], -1)
+				isTableRow := strings.HasPrefix(trimmed, "|")
 				for _, m := range matches {
 					cmd := strings.TrimSpace(m[1])
 					if shouldSkip(cmd) {
 						continue
 					}
-					refs = append(refs, cmdRef{File: f, Line: lineNo, Cmd: cmd})
+					refs = append(refs, cmdRef{File: f, Line: lineNo, Cmd: cmd, Table: isTableRow})
 				}
 				continue
 			}
@@ -424,7 +429,11 @@ func TestSkillCommandsDispatch(t *testing.T) {
 		seen[key] = true
 		if command := exactCommand(commandRoot, sub); command != nil {
 			var unknownFlags []string
-			if strings.Contains(filepath.ToSlash(r.File), "/skills/multi/") {
+			// Flag validation covers prose and fenced blocks across all
+			// skills (mono + multi). Markdown table rows are excluded: the
+			// docs use tables as badcase 对照表 whose wrong-usage column
+			// would otherwise produce false positives.
+			if !r.Table {
 				for _, flag := range flags {
 					if !commandHasFlag(command, flag) {
 						unknownFlags = append(unknownFlags, flag)
