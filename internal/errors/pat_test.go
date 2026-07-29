@@ -1026,10 +1026,10 @@ func TestStripClassFields_Scalar(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// suggestForBusinessErrorText
+// SuggestBusinessHint
 // ---------------------------------------------------------------------------
 
-func TestSuggestForBusinessErrorText(t *testing.T) {
+func TestSuggestBusinessHint(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		body     map[string]any
@@ -1044,12 +1044,13 @@ func TestSuggestForBusinessErrorText(t *testing.T) {
 		{map[string]any{"message": "The operator is not in this group chat"}, "源群"},
 		{map[string]any{"message": "targetOpenConversationId和receiverUid不能同时为空"}, "--receiver"},
 		{map[string]any{"summary": "moveConversationV3 error"}, "categoryId"},
+		{map[string]any{"code": "moveConversationV3 error"}, "categoryId"},
 		{map[string]any{"error": "unknown"}, "business error"},
 	}
 	for _, tc := range cases {
-		hint := suggestForBusinessErrorText(tc.body)
+		hint := SuggestBusinessHint(tc.body)
 		if !strings.Contains(strings.ToLower(hint), strings.ToLower(tc.contains)) {
-			t.Errorf("suggestForBusinessErrorText(%v) = %q, want to contain %q", tc.body, hint, tc.contains)
+			t.Errorf("SuggestBusinessHint(%v) = %q, want to contain %q", tc.body, hint, tc.contains)
 		}
 	}
 }

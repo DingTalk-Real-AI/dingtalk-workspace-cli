@@ -55,18 +55,12 @@ func configureRootHelp(root *cobra.Command) {
 // Selection prose remains authored in schema_hints/selection/chat.json and is
 // consumed through the repository-wide ResolveMeta API.
 func renderChatAgentSelectionHint(cmd *cobra.Command) {
-	if cmd == nil || cmd.Root() == nil {
-		return
-	}
 	cliPath := strings.TrimSpace(strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" "))
 	meta, ok := cli.ResolveMeta(cliPath)
 	if !ok || meta.Identity.ProductID != "chat" {
 		return
 	}
 	selection := meta.Selection
-	if selection.AgentSummary == "" && len(selection.UseWhen) == 0 && len(selection.AvoidWhen) == 0 {
-		return
-	}
 
 	w := cmd.ErrOrStderr()
 	_, _ = fmt.Fprintln(w, "Agent guidance:")
