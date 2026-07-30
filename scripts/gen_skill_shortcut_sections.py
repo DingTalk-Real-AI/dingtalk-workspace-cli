@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generate shortcut sections for DWS skills.
+"""Generate shortcut discovery sections for DWS skills.
 
-The skill should teach agents which high-level shortcut entries are available
-in the public catalog and Runtime Schema. Leaf Schema publishes the Agent
-contract, while leaf `--help` remains the source of truth for accepted flags.
+Large product catalogs may use progressive discovery instead of embedding
+every shortcut in the always-loaded Skill. Runtime catalog and leaf help remain
+the current sources for selection, parameters, safety, and executable flags.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ MONO_START = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->"
 MONO_END = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->"
 PRODUCT_START = "<!-- VISIBLE_SHORTCUTS_START -->"
 PRODUCT_END = "<!-- VISIBLE_SHORTCUTS_END -->"
+DISCOVERY_ONLY_SERVICES = {"chat"}
 
 
 def md_escape(value: Any) -> str:
@@ -91,12 +92,13 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
         skill = "—"
         if path:
             skill = next((part for part in path.parts if part.startswith("dingtalk-")), path.parent.name)
-        rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws shortcut list --service {md_escape(service)} --format json` |")
+        compact = " --compact" if service in DISCOVERY_ONLY_SERVICES else ""
+        rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws shortcut list --service {md_escape(service)}{compact} --format json` |")
     body = "\n".join(rows)
     return f"""{MONO_START}
 ## Shortcut 总览
 
-下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws shortcut list --service <service> --format json` 读取参数、约束、风险和示例，最后用 `dws <service> +<shortcut> --help` 核对当前 Cobra flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
+下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws shortcut list --service <service> --format json` 读取参数、约束、风险和示例，最后用 `dws <service> +<shortcut> --help` 核对当前 Cobra flags。multi 模式按产品规模提供明细表或动态发现协议。
 
 | 服务 | shortcut 数 | multi skill | 发现命令 |
 |---|---:|---|---|
@@ -105,6 +107,20 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
 
 
 def product_section(service: str, rows: list[dict[str, Any]]) -> str:
+    if service in DISCOVERY_ONLY_SERVICES:
+        return f"""{PRODUCT_START}
+## Shortcut 发现与选择
+
+本产品提供公开内建 `+shortcut`，但本 Skill 不静态枚举，避免与当前 CLI catalog 漂移。
+
+- 路由优先级：精确脚本 / recipe > 匹配的公开 shortcut > reference 中的原子命令。
+- 无精确脚本 / recipe 覆盖，或准备手工组合多个原子命令前，必须先运行 `dws shortcut list --service {service} --compact --format json`；当前 CLI 不接受 `--compact` 时去掉该 flag 重试。
+- 必须依据返回的 `intent`、`description` 和 `cli_path` 选择，不得猜测 `+` 命令名。
+- 选中后用 `dws schema --cli-path "<cli_path>" --format json` 读取完整契约；若该 leaf 暂未进入 Schema，则重新运行不带 `--compact` 的 catalog 命令并选取同一 `cli_path`。
+- 执行前始终用 `dws <cli_path> --help` 核对当前 Cobra flags；无匹配项时回退到意图表、reference 和原子命令。
+- `confirmation=user_required` 时先征得用户确认，再添加 `--yes`；Schema、catalog 与 Help 冲突时采用更安全的解释并报告契约漂移。
+{PRODUCT_END}"""
+
     table = []
     for item in rows:
         table.append(
@@ -134,12 +150,12 @@ def update_product_skills(items: list[dict[str, Any]]) -> None:
     for item in items:
         by_service[item["service"]].append(item)
     for service, path in SERVICE_TO_SKILL.items():
-        if service not in by_service:
+        if service not in by_service and service not in DISCOVERY_ONLY_SERVICES:
             continue
         if not path.exists():
             raise RuntimeError(f"skill file not found for {service}: {path}")
         text = path.read_text(encoding="utf-8")
-        block = product_section(service, by_service[service])
+        block = product_section(service, by_service.get(service, []))
         anchor = "## 概念地图" if service == "devapp" else "## 意图表"
         updated = replace_block(text, PRODUCT_START, PRODUCT_END, block, anchor)
         path.write_text(updated, encoding="utf-8")

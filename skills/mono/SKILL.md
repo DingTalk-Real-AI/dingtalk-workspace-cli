@@ -1,7 +1,8 @@
 ---
 name: dws
 description: 管理钉钉产品能力(AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM 事件、实时监听群成员加入、群成员退出、群改名和群解散时使用。
-cli_version: ">=1.0.15"
+metadata:
+  cli_version: ">=1.0.15"
 ---
 
 # 钉钉全产品 Skill
@@ -29,7 +30,7 @@ cli_version: ">=1.0.15"
 `shortcut` 是对常用操作的高层封装，适合优先承担用户意图；产品参考文档和本 skill 负责判断意图、风险、跨产品流程和复杂参数，CLI 帮助负责声明当前版本真正可调用的命令。
 
 - 先按产品参考、意图表和 recipe 路由。存在精确覆盖场景的专用脚本/recipe 时继续遵循“脚本优先”；否则用户意图可由可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`，不要手写等价的多步原子命令。
-- 公开内建 shortcut 同时进入 Runtime Schema。用 `dws schema --cli-path "<service> +<verb>" --format json` 读取 Agent 选择、参数、跨参数约束、risk/confirmation 与接口语义；`dws shortcut list --service <service> --format json` 只作为轻量批量发现入口。
+- 公开内建 shortcut 以 `dws shortcut list --service <service> --format json` 为动态 catalog；已进入 Runtime Schema 的 leaf 用 `dws schema --cli-path "<service> +<verb>" --format json` 读取 Agent 选择、参数、跨参数约束、risk/confirmation 与接口语义。若 leaf 暂未进入 Schema，则使用 catalog 中同一 `cli_path` 的完整契约。
 - 真正组装参数前用叶子帮助 `dws <service> +<verb> --help` 核对当前 Cobra 接受的 flags。父级 `dws <service> --help` 只能发现子命令，不能替代叶子参数帮助。
 - shortcut catalog 中 `confirmation=user_required` 时，必须先获得用户确认，确认后才加 `--yes`；`not_required` 不额外确认。
 - 如果 shortcut 不在 help / list 中，改用产品参考里的原子命令、脚本或标准流程；不要猜测未展示的 `+` 命令。
@@ -39,26 +40,26 @@ cli_version: ">=1.0.15"
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->
 ## Shortcut 总览
 
-下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws shortcut list --service <service> --format json` 读取参数、约束、风险和示例，最后用 `dws <service> +<shortcut> --help` 核对当前 Cobra flags。multi 模式的各产品 skill 会展开该产品的 shortcut 表。
+下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws shortcut list --service <service> --format json` 读取参数、约束、风险和示例，最后用 `dws <service> +<shortcut> --help` 核对当前 Cobra flags。multi 模式按产品规模提供明细表或动态发现协议。
 
 | 服务 | shortcut 数 | multi skill | 发现命令 |
 |---|---:|---|---|
-| `aitable` | 29 | `dingtalk-workspace` | `dws shortcut list --service aitable --format json` |
-| `attendance` | 19 | `dingtalk-workspace` | `dws shortcut list --service attendance --format json` |
-| `calendar` | 20 | `dingtalk-workspace` | `dws shortcut list --service calendar --format json` |
-| `chat` | 97 | `dingtalk-workspace` | `dws shortcut list --service chat --format json` |
-| `contact` | 14 | `dingtalk-workspace` | `dws shortcut list --service contact --format json` |
-| `devapp` | 19 | `dingtalk-workspace` | `dws shortcut list --service devapp --format json` |
-| `ding` | 4 | `dingtalk-workspace` | `dws shortcut list --service ding --format json` |
-| `doc` | 17 | `dingtalk-workspace` | `dws shortcut list --service doc --format json` |
-| `drive` | 7 | `dingtalk-workspace` | `dws shortcut list --service drive --format json` |
-| `mail` | 10 | `dingtalk-workspace` | `dws shortcut list --service mail --format json` |
-| `minutes` | 6 | `dingtalk-workspace` | `dws shortcut list --service minutes --format json` |
-| `oa` | 7 | `dingtalk-workspace` | `dws shortcut list --service oa --format json` |
-| `report` | 2 | `dingtalk-workspace` | `dws shortcut list --service report --format json` |
-| `sheet` | 2 | `dingtalk-workspace` | `dws shortcut list --service sheet --format json` |
-| `todo` | 11 | `dingtalk-workspace` | `dws shortcut list --service todo --format json` |
-| `wiki` | 1 | `dingtalk-workspace` | `dws shortcut list --service wiki --format json` |
+| `aitable` | 29 | `dingtalk-aitable` | `dws shortcut list --service aitable --format json` |
+| `attendance` | 19 | `dingtalk-misc` | `dws shortcut list --service attendance --format json` |
+| `calendar` | 20 | `dingtalk-calendar` | `dws shortcut list --service calendar --format json` |
+| `chat` | 97 | `dingtalk-chat` | `dws shortcut list --service chat --compact --format json` |
+| `contact` | 14 | `dingtalk-contact` | `dws shortcut list --service contact --format json` |
+| `devapp` | 19 | `dingtalk-dev` | `dws shortcut list --service devapp --format json` |
+| `ding` | 4 | `dingtalk-misc` | `dws shortcut list --service ding --format json` |
+| `doc` | 17 | `dingtalk-doc` | `dws shortcut list --service doc --format json` |
+| `drive` | 7 | `dingtalk-drive` | `dws shortcut list --service drive --format json` |
+| `mail` | 10 | `dingtalk-mail` | `dws shortcut list --service mail --format json` |
+| `minutes` | 6 | `dingtalk-minutes` | `dws shortcut list --service minutes --format json` |
+| `oa` | 7 | `dingtalk-misc` | `dws shortcut list --service oa --format json` |
+| `report` | 2 | `dingtalk-misc` | `dws shortcut list --service report --format json` |
+| `sheet` | 2 | `dingtalk-misc` | `dws shortcut list --service sheet --format json` |
+| `todo` | 11 | `dingtalk-todo` | `dws shortcut list --service todo --format json` |
+| `wiki` | 1 | `dingtalk-wiki` | `dws shortcut list --service wiki --format json` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
 ## 多组织 / 多账号

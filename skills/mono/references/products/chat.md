@@ -4,24 +4,26 @@
 
 ## Shortcut 优先路由
 
-常见 Agent 意图优先使用公开 `+` Shortcut；下面的原子命令章节保留给需要特定原始返回结构、兼容参数或 Shortcut 未覆盖字段的场景。执行前用 `dws schema --cli-path "chat +<shortcut>" --format json` 读取最终参数、约束和确认语义。
+精确脚本 / recipe 未覆盖时，常见 Agent 意图优先使用公开 `+` Shortcut；下面的原子命令章节保留给需要特定原始返回结构、兼容参数或 Shortcut 未覆盖字段的场景。先尝试 `dws shortcut list --service chat --compact --format json` 动态发现；当前 CLI 报 `unknown flag: --compact` 时，立即去掉 `--compact` 重试。选中后读取 `dws schema --cli-path "<cli_path>" --format json`；若 leaf 暂未进入 Schema，则以完整 Catalog 中同一 `cli_path` 的契约为准，最后用 `dws <cli_path> --help` 核对真实 flags。
 
 | 意图 | 首选 |
 |---|---|
 | 以 current-user / bot / webhook 身份发消息 | `dws chat +messages-send --as <identity> ...` |
 | 拉取单个群聊或单聊的消息 | `dws chat +chat-messages ...` |
 | 按关键词、发送者、@对象、会话、类型或时间组合搜索 | `dws chat +search-msg ...` |
-| 查询 @我的消息 | `dws chat +at-me ...` |
+| 查询 @ 我的消息 | `dws chat +at-me ...` |
 | 根据消息 ID 批量取详情与 reaction | `dws chat +messages-mget ...` |
 | 读取已知 thread/topic 的全部回复 | `dws chat +thread-replies ...` |
 | 下载单个 mediaId/fileId | `dws chat +messages-resource-download ...` |
+| 创建并按需立即更新流式卡片 | `dws chat +messages-send-card ...` |
 
 - `+messages-send` 只暴露下层真实支持的身份能力：user 支持文本/Markdown、已有 mediaId 图片、本地文件和幂等键；bot 支持群聊或批量单聊文本/Markdown；webhook 的目标由 token 所在群决定。
-- `+messages-send` 会自动规范化并补齐 @ 占位符。user 使用 `<@id>` / `<@all>`；bot/webhook 使用 `@id` / `@手机号` / `@all`。声明 `--at-*` / `--at-all` 即可，不要为统一 Shortcut 手工拼 `@10`。
+- `+messages-send` 自动规范化并补齐对应身份的 @ 占位符。声明 `--at-*` / `--at-all` 即可，不要为统一 Shortcut 手工拼 `@10`。
 - `+search-msg --page-all` 连续翻页并默认按消息 ID 批量富化；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger。
 - `+at-me`、`+chat-messages`、`+messages-mget`、`+search-msg`、`+thread-replies` 可用 `--download-resources` 下载资源。引用、回复、合并转发中的资源使用结果 `resourceRefs` 自带的子消息 `messageId`；仅当子消息缺会话 ID 时继承父消息 `openConversationId`。
-- 上述五个查询 Shortcut 与 `+messages-resource-download` 都沿用安全本地下载的 `read/not_required` 契约，不应添加 `--yes` 或触发交互确认。下载只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
-- 下载器仅接受经审查的钉钉与公网 OSS HTTPS 地址并逐跳校验重定向；跨主机时不会转发下层提供的请求头。新官方域名被拒绝时记录错误中的 host 供审查，不要放宽为任意 HTTPS。
+- 上述五个查询 Shortcut 与 `+messages-resource-download` 都是 `read/not_required`，不要添加 `--yes`。下载只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
+- 下载器只接受经审查的钉钉与公网 OSS HTTPS 地址并逐跳校验重定向；跨主机时不会转发下层提供的请求头。新官方域名被拒绝时记录错误中的 host 供审查，不要放宽为任意 HTTPS。
+- `+messages-send-card` 的目标为 `--group`、`--receiver`、`--receiver-open-dingtalk-id` 三选一；传 `--content` 时创建并立即更新，不传时返回 `bizId` 供 `message update-card` 使用。
 
 ### group (群组管理)
 
@@ -1169,6 +1171,10 @@ Flags:
 
 #### 下载消息中的资源（图片/视频/语音等）到本地
 
+读取消息时优先在 `+at-me`、`+chat-messages`、`+messages-mget`、`+search-msg`、`+thread-replies` 上加 `--download-resources --output-dir ./downloads`。只下载单个已知资源时优先用 `+messages-resource-download`：mediaId 必须同时传 `--message-id` 和 `--open-conversation-id`，fileId 不需要消息上下文。输出必须是工作目录内相对路径且不能包含 `..`；默认不覆盖，用户明确要求时才传 `--overwrite`。该 Shortcut 暂无 leaf Schema 时按完整 Catalog + 叶子 Help 核对。
+
+以下原子命令保留给需要原始接口行为的场景。
+
 下载聊天消息中的图片、视频、语音等资源到本地文件。流程：先获取下载 URL，再 HTTP GET 下载。
 ```
 Usage:
@@ -1539,10 +1545,12 @@ Flags:
 Usage:
   dws chat category delete [flags]
 Example:
-  dws chat category delete --category-id <分组ID>
+  # 先向用户确认，确认后执行
+  dws chat category delete --category-id <分组ID> --yes
   # 分组ID 可通过 dws chat category list 获取
 Flags:
       --category-id int   会话分组 ID (必填)
+      --yes               跳过运行时确认；只能在用户明确确认后传入
 ```
 
 #### 重命名会话分组
@@ -1771,15 +1779,18 @@ Flags:
 Usage:
   dws chat clear-messages [flags]
 Example:
-  dws chat clear-messages --conversation-id <openConversationId>
-  dws chat clear-messages --id <openConversationId>
+  # 先向用户说明目标会话和影响范围，确认后执行
+  dws chat clear-messages --conversation-id <openConversationId> --yes
+  dws chat clear-messages --id <openConversationId> --yes
 Flags:
       --conversation-id string   会话 openConversationId (必填，支持群聊/单聊)
       --id string                --conversation-id 的别名
       --chat string              --conversation-id 的别名
+      --yes                      跳过运行时确认；只能在用户明确确认后传入
 
 注意:
   - 仅清空当前用户视角的消息，不影响其他成员
+  - 仍属于高风险操作；未确认时不得传 --yes 或执行
   - openConversationId 可通过 chat search（群聊）或 chat conversation-info（单聊）获取
 ```
 
@@ -2201,7 +2212,7 @@ dws chat message send --group <openConversationId> --msg-type image --media-id "
 
 群聊传 --group，单聊传 --receiver，二者互斥。
 
-**注意：send-card 必须和 update-card 搭配使用。** 创建卡片时无需传入内容，后续通过 update-card 更新内容，最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。
+**注意：本节原子 send-card 必须和 update-card 搭配使用。** 创建卡片时无需传入内容，后续通过 update-card 更新内容，最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。若使用 `+messages-send-card --content ...`，Shortcut 会在创建后立即完成一次更新；不传 `--content` 时仍返回 `bizId` 供本节 update-card 使用。
 flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成(FINISH)，4=执行中(EXECUTING)，5=错误(ERROR)。
 ```
 Usage:
@@ -2324,8 +2335,8 @@ Flags:
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [chat_export_messages.py](../../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
-| [chat_history_with_user.py](../../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
+| [chat_export_messages.py](../../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python3 scripts/chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
+| [chat_history_with_user.py](../../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python3 scripts/chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
 
 ## 相关产品
 

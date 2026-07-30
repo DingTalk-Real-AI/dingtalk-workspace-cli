@@ -1,12 +1,12 @@
 {
   "version": 1,
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
-  "source_hash": "sha256:a31c0bd4d3e777e7e70c7cf27178b4e44dfaa548335332e3c17be500a4b8de39",
+  "source_hash": "sha256:8f4b01af3c740340debd0f1302c16331f830512c5315c7bbecf7d0faa498d1d4",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:d8e06de1a90122d375b4e3d2531f00b0a41aceb12738056616141abdaa883b93",
+      "source_hash": "sha256:2e2c0de2c423eb1a2225af58c826b24322a0ef2f49d65afa7fedee252957de62",
       "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
       "surface_products": 26,
       "surface_tools": 875,

@@ -30,7 +30,7 @@
 dws chat search --query "项目冲刺" --format json
 
 # 2. 拉取群消息
-dws chat message list --group <openConversationId> --time "2025-03-01 00:00:00" --direction older --format json
+dws chat +chat-messages --group <openConversationId> --time "2025-03-01 00:00:00" --direction older --format json
 
 # 3. 拉未读会话
 dws chat message list-unread-conversations --count 20 --format json
@@ -40,21 +40,21 @@ dws chat message list-unread-conversations --count 20 --format json
 
 ```bash
 # 个人身份发群消息
-dws chat message send --group <openConversationId> --title "周报提醒" --text "请大家本周五前提交周报" --uuid <uuid> --format json
+dws chat +messages-send --as user --chat-id <openConversationId> --title "周报提醒" --text "请大家本周五前提交周报" --idempotency-key <key> --format json
 
 # 个人身份发单聊
-dws chat message send --user <userId> --text "你好" --uuid <uuid> --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --text "你好" --uuid <uuid> --format json
+dws chat +messages-send --as user --user <userId> --text "你好" --idempotency-key <key> --format json
+dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --text "你好" --idempotency-key <key> --format json
 
 # 发送图片/文件/音频/视频
-dws chat message send --group <openConversationId> --msg-type file --file-path ./screenshot.png --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path ./report.pdf --format json
-dws chat message send --group <openConversationId> --msg-type audio --file-path ./voice.mp3 --format json
-dws chat message send --group <openConversationId> --msg-type video --file-path ./demo.mp4 --format json
+dws chat +messages-send --as user --chat-id <openConversationId> --msg-type file --file ./screenshot.png --format json
+dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type file --file ./report.pdf --format json
+dws chat +messages-send --as user --chat-id <openConversationId> --msg-type audio --file ./voice.mp3 --format json
+dws chat +messages-send --as user --chat-id <openConversationId> --msg-type video --file ./demo.mp4 --format json
 
 # 文件后补文字说明
-dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path ./screenshot.png --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --text "这是本周数据汇总" --format json
+dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type file --file ./screenshot.png --format json
+dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --text "这是本周数据汇总" --format json
 ```
 
 ### 机器人消息
@@ -64,18 +64,18 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --text "这是本周�
 dws chat bot search --name "日报" --format json
 
 # 机器人发群消息，提取 processQueryKey；Markdown 稳定换行用 \n\n，不要只用 \n
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "日报" --text "## 今日完成\n\n- 事项 A\n\n- 事项 B" --format json
+dws chat +messages-send --as bot --robot-code <robot-code> --chat-id <openConversationId> --title "日报" --markdown "## 今日完成\n\n- 事项 A\n\n- 事项 B" --format json
 
 # 撤回机器人消息
 dws chat message recall-by-bot --robot-code <robot-code> --group <openConversationId> --keys <processQueryKey> --format json
 
 # 机器人不在群内时先邀请
 dws chat group members add-bot --id <openConversationId> --robot-code <robot-code> --format json
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "通知" --text "内容" --format json
+dws chat +messages-send --as bot --robot-code <robot-code> --chat-id <openConversationId> --title "通知" --text "内容" --format json
 
 # 给机器人发单聊，必须用 find 拿 openDingTalkId
 dws chat bot find --query "玉澜" --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --text "你好" --format json
+dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --text "你好" --format json
 ```
 
 ### 机器人 @ 指定人
@@ -83,29 +83,29 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --text "你好" --form
 ```bash
 dws aisearch person --keyword "张三" --dimension name --format json
 
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> \
+dws chat +messages-send --as bot --robot-code <robot-code> --chat-id <openConversationId> \
   --at-user-ids userId1,userId2 \
-  --title "提醒" --text "@userId1 @userId2 请查收本周报告" --format json
+  --title "提醒" --text "请查收本周报告" --format json
 
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> \
+dws chat +messages-send --as bot --robot-code <robot-code> --chat-id <openConversationId> \
   --at-open-dingtalk-ids openDingtalkId1,openDingtalkId2 \
-  --title "提醒" --text "@openDingtalkId1 @openDingtalkId2 请查收本周报告" --format json
+  --title "提醒" --text "请查收本周报告" --format json
 
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> \
+dws chat +messages-send --as bot --robot-code <robot-code> --chat-id <openConversationId> \
   --at-all --title "通知" --text "请所有人注意" --format json
 ```
 
 ### Webhook 告警
 
 ```bash
-dws chat message send-by-webhook --token <webhook-token> --title "告警" --text "CPU 超 90% @10" --at-all --format json
+dws chat +messages-send --as webhook --webhook-token <webhook-token> --title "告警" --text "CPU 超 90%" --at-all --format json
 ```
 
 ### 话题完整读取与回复
 
 ```bash
-dws chat message list --group <openConversationId> --time "2026-03-10 00:00:00" --direction older --format json
-dws chat message list-topic-replies --group <openConversationId> --topic-id <openConvThreadId> --format json
+dws chat +chat-messages --group <openConversationId> --time "2026-03-10 00:00:00" --direction older --format json
+dws chat +thread-replies --group <openConversationId> --topic-id <openConvThreadId> --format json
 dws chat message send --group <openConvThreadId> --text "回复话题内容" --format json
 ```
 
@@ -135,12 +135,12 @@ dws chat text translate --query "你好世界" --to en_US --format json
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `chat search` | `openConversationId` | `message send/list`、`group members`、`set-top`、`group-mute` |
+| `chat search` | `openConversationId` | `+messages-send`、`+chat-messages`、`group members`、`set-top`、`group-mute` |
 | `chat group create` | `openConversationId` | 新群后续发消息、成员管理、群设置 |
 | `chat group get-by-group-id` | `openConversationId` | 将数字群号转为可用会话 ID |
 | `chat conversation-info` | `openConversationId` | 单聊消息搜索、转发、会话状态操作 |
-| `aisearch person` | `userId` | `message send --user`、`send-by-bot --users`、`--at-user-ids`、`list-by-sender --sender-user-id` |
-| `aisearch person` | `openDingTalkId` | `message send --open-dingtalk-id`、`--at-open-dingtalk-ids`、`send-by-bot --open-dingtalk-ids` |
+| `aisearch person` | `userId` | `+messages-send --user/--users`、`--at-user-ids`、`list-by-sender --sender-user-id` |
+| `aisearch person` | `openDingTalkId` | `+messages-send --open-dingtalk-id/--open-dingtalk-ids`、`--at-open-dingtalk-ids` |
 | `aisearch person` | `userId` | 可替代人员搜索结果，继续用于 userId 参数 |
 | `chat bot search` | `robotCode` | `send-by-bot`、`recall-by-bot` |
 | `chat bot find` | `openDingTalkId` | 给机器人发单聊 |
@@ -160,15 +160,14 @@ dws chat text translate --query "你好世界" --to en_US --format json
 | `chat message list/search-advanced` | `openMessageId` / `openMsgId` | `list-emotion-replies --msg-ids` |
 | `chat category list` | `categoryId` | `category list-conversations/add-conv/remove-conv --category-id(s)` |
 | `chat category create-smart` | 智能分组 ID/规则结果 | 后续查看或调整智能分组 |
-| `chat message send-card` | `bizId` | `update-card --biz-id` |
+| `chat +messages-send-card`（无 `--content`）/ `chat message send-card` | `bizId` | `message update-card --biz-id` |
 
 ## 自动化脚本
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [chat_export_messages.py](../../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
-| [chat_history_with_user.py](../../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
-| [extract_media_id.py](../../scripts/extract_media_id.py) | 旧链路：从 dt_media_upload URL 提取 mediaId | 新场景不要用，文件/音视频直接 `--msg-type file|audio|video --file-path` |
+| [chat_export_messages.py](../../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python3 scripts/chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
+| [chat_history_with_user.py](../../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python3 scripts/chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
 
 ## 常见错误与回退
 
@@ -176,4 +175,4 @@ dws chat text translate --query "你好世界" --to en_US --format json
 - `chat bot search` 没有 openDingTalkId：改用 `chat bot find`。
 - 群号是纯数字：先 `chat group get-by-group-id`。
 - 翻页不要自造 cursor：使用响应中的 `nextCursor` 原值。
-- 文件/音视频发送不要走旧上传链路：优先 `message send --msg-type file|audio|video --file-path`；`audio/video` 底层按 `file` 发送。
+- 文件/音视频发送不要走旧上传链路：优先 `+messages-send --as user --msg-type file|audio|video --file`；原子回退用 `message send --file-path`。

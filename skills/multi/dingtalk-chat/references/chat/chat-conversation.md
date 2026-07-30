@@ -10,7 +10,8 @@
 
 - 会话状态类命令通常需要 `openConversationId`。群聊可由 `chat search` 获取，单聊可由 `chat conversation-info --user/--open-dingtalk-id` 获取。
 - `set-top` 是会话置顶；`message set-top-msg` 是会话内消息置顶，二者不能混用。
-- `clear-messages` 只清空当前用户视角的消息，不影响其他成员。
+- `clear-messages` 只清空当前用户视角的消息，不影响其他成员，但属于高风险操作。必须先向用户说明目标会话和影响范围，获得明确确认后才传 `--yes`。
+- `category delete` 会删除会话分组，同样必须先确认，确认后才传 `--yes`；不得因为 Schema 示例未展示 `--yes` 就跳过运行时确认。
 - 智能分组规则中的成员使用 openDingTalkId；如果用户只给姓名，先用 `aisearch person --dimension name` 获取。
 
 ## 命令明细
@@ -61,12 +62,15 @@ dws chat hide --conversation-id <openConversationId>
 |------|------|----------|
 | `mark-unread` | 标记指定会话为未读 | `--conversation-id` |
 | `mark-read` | 将指定消息及之前消息标记为已读 | `--conversation-id` `--message-id` |
-| `clear-messages` | 清空当前用户指定会话的消息 | `--conversation-id` |
+| `clear-messages` | 清空当前用户指定会话的消息 | `--conversation-id`；确认后加 `--yes` |
 
 ```bash
 dws chat mark-unread --conversation-id <openConversationId>
 dws chat mark-read --conversation-id <openConversationId> --message-id <openMessageId>
-dws chat clear-messages --conversation-id <openConversationId>
+# 用户确认后执行；Shortcut 暂无 leaf Schema 时按 Catalog + Help 核对
+dws chat +conversation-clear-messages --conversation-id <openConversationId> --yes
+# 原子回退
+dws chat clear-messages --conversation-id <openConversationId> --yes
 ```
 
 ### 会话分组
@@ -79,7 +83,7 @@ dws chat clear-messages --conversation-id <openConversationId>
 | `category batch-info` | 批量拉取用户自定义会话分组信息 | `--category-ids` |
 | `category create` | 创建会话分组 | `--title` |
 | `category create-smart` | 创建智能会话分组，可按群名称关键词和群内成员匹配 | `--name`，可选 `--keywords` `--members` |
-| `category delete` | 删除会话分组 | `--category-id` |
+| `category delete` | 删除会话分组 | `--category-id`；确认后加 `--yes` |
 | `category rename` | 修改分组名称 | `--category-id` `--title` |
 | `category add-conv` | 将会话加入分组 | `--group` `--category-ids` |
 | `category remove-conv` | 将会话移出分组 | `--group` `--category-ids` |
@@ -91,6 +95,10 @@ dws chat category batch-info --category-ids 123,456
 dws chat category create --title "工作群"
 dws chat category create-smart --name "重点群" --keywords "重点,项目" --members openDingTalkId1,openDingTalkId2
 dws chat category add-conv --group <openConversationId> --category-ids 123,456
+# 用户确认后执行
+dws chat +category-delete --category-id <categoryId> --yes
+# 原子回退
+dws chat category delete --category-id <categoryId> --yes
 ```
 
 `create-smart` 中 `--keywords` 是群名称关键词列表，`--members` 是群内成员 openDingTalkId 列表；两者可单独使用，也可组合使用。
@@ -136,5 +144,5 @@ dws chat category create-smart --name "重点群" --keywords "重点" --members 
 - 用户说“置顶消息”：用 `message set-top-msg`，不是 `chat set-top`。
 - 用户说“置顶会话”：用 `chat set-top` 或 `list-top-conversations`。
 - 单聊没有会话 ID：先 `conversation-info --user` 或 `--open-dingtalk-id`。
-- 清空聊天记录前必须确认目标会话；该操作只影响当前用户视角。
+- 清空聊天记录或删除会话分组前必须确认目标和影响范围；未确认时不得传 `--yes` 或执行。
 - 智能分组没有匹配条件：至少确认分组名称；关键词和成员规则不明确时先向用户确认，不要自行猜成员。

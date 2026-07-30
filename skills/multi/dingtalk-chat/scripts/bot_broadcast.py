@@ -3,19 +3,19 @@
 用机器人向多个群批量发送相同消息（如日报提醒）
 
 用法:
-    python bot_broadcast.py \
+    python3 scripts/bot_broadcast.py \
         --robot-code <ROBOT_CODE> \
         --chats "conv_id1,conv_id2,conv_id3" \
         --title "日报提醒" \
         --text "请大家今天下班前提交日报"
 
-    python bot_broadcast.py \
+    python3 scripts/bot_broadcast.py \
         --robot-code <ROBOT_CODE> \
         --chats-file groups.txt \
         --title "周会通知" \
         --text "明天下午3点周会"
 
-    python bot_broadcast.py --dry-run ...
+    python3 scripts/bot_broadcast.py --dry-run ...
 """
 
 import sys
@@ -40,14 +40,19 @@ def run_dws(
         if result.returncode != 0:
             print(f"  ✗ 错误：{result.stderr.strip()}")
             return None
-        return json.loads(result.stdout)
+        data = json.loads(result.stdout)
+        if isinstance(data, dict) and data.get('success') is False:
+            detail = data.get('errorMsg') or data.get('message') or '未知错误'
+            print(f"  ✗ 业务调用失败：{detail}")
+            return None
+        return data
     except (subprocess.TimeoutExpired, json.JSONDecodeError,
             FileNotFoundError) as e:
         print(f"  ✗ 错误：{e}")
         return None
 
 
-def main():
+def run(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description='向多个群批量发送机器人消息'
     )
@@ -64,7 +69,7 @@ def main():
         '--text', required=True, help='消息内容 Markdown'
     )
     parser.add_argument('--dry-run', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     chat_ids: List[str] = []
     if args.chats:
@@ -74,13 +79,13 @@ def main():
         p = Path(args.chats_file)
         if not p.exists():
             print(f"错误：文件不存在: {p}")
-            sys.exit(1)
+            return 1
         chat_ids = [line.strip() for line in
                     p.read_text(encoding='utf-8').splitlines()
                     if line.strip() and not line.startswith('#')]
     if not chat_ids:
         print('错误：需要 --chats 或 --chats-file')
-        sys.exit(1)
+        return 1
 
     print(f"📢 批量发送消息到 {len(chat_ids)} 个群")
     print(f"   标题: {args.title}")
@@ -105,8 +110,8 @@ def main():
             fail += 1
 
     print(f"\n完成: 成功 {success}, 失败 {fail}")
-    sys.exit(0 if fail == 0 else 1)
+    return 0 if fail == 0 else 1
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(run())

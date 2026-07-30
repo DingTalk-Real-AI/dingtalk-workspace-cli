@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:d8e06de1a90122d375b4e3d2531f00b0a41aceb12738056616141abdaa883b93",
+  "source_hash": "sha256:2e2c0de2c423eb1a2225af58c826b24322a0ef2f49d65afa7fedee252957de62",
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
   "source_files": 160,
   "hint_files": 54,
@@ -166,7 +166,7 @@
     {
       "tool_path": "calendar participant delete",
       "source": "skills/mono/SKILL.md",
-      "line": 150,
+      "line": 151,
       "candidates": [
         "calendar attendee delete",
         "calendar event delete",
@@ -892,7 +892,7 @@
     {
       "tool_path": "chat group members",
       "source": "skills/mono/references/products/chat.md",
-      "line": 44,
+      "line": 46,
       "candidates": [
         "chat group members add",
         "chat group members add-bot",
@@ -906,7 +906,7 @@
     {
       "tool_path": "chat group members",
       "source": "skills/mono/references/products/chat.md",
-      "line": 1892,
+      "line": 1903,
       "candidates": [
         "chat group members add",
         "chat group members add-bot",
@@ -920,7 +920,7 @@
     {
       "tool_path": "chat group notice create/edit/get/list",
       "source": "skills/mono/references/products/chat.md",
-      "line": 1945,
+      "line": 1956,
       "candidates": [
         "chat group notice create",
         "chat group notice edit",
