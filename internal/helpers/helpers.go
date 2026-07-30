@@ -157,6 +157,12 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 // returning a synthetic dry-run envelope that looks like business data.
 func CallMCPReadToolTextOnServer(serverID, toolName string, args map[string]any) (string, error) {
 	ctx := context.Background()
+	if !IsReadToolName(toolName) {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: fmt.Sprintf("tool %q is not allowed on the dry-run read channel", toolName),
+		}
+	}
 	if deps == nil || deps.Caller == nil {
 		return "", &CLIError{
 			Code:    CodeMCPToolError,
@@ -175,6 +181,22 @@ func CallMCPReadToolTextOnServer(serverID, toolName string, args map[string]any)
 	}
 	result, err := readCaller.CallReadTool(ctx, serverID, toolName, args)
 	return parseMCPToolTextResult(serverID, toolName, result, err)
+}
+
+// IsReadToolName is the fail-closed naming contract for the dry-run read
+// channel. Both the Shortcut runtime and the helper boundary enforce it so a
+// future direct helper caller cannot accidentally route a write tool through
+// ReadToolCaller.
+func IsReadToolName(toolName string) bool {
+	toolName = strings.TrimSpace(strings.ToLower(toolName))
+	for _, prefix := range []string{
+		"get_", "list_", "query_", "search_", "unread_",
+	} {
+		if strings.HasPrefix(toolName, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResult, err error) (string, error) {

@@ -103,3 +103,65 @@ func TestFlagErrorWithSuggestions_fallbackTailHint(t *testing.T) {
 		t.Fatalf("err tail = %q, want suffix See 'send --help' for usage.", msg)
 	}
 }
+
+func TestFlagErrorWithSuggestionsReviewedProtectionRoutes(t *testing.T) {
+	root := NewRootCommand()
+	for _, tc := range []struct {
+		path       []string
+		flag       string
+		wantReason string
+		wantHint   string
+	}{
+		{path: []string{"chat", "message", "list-by-sender"}, flag: "time", wantReason: "blocked_flag", wantHint: "blocked"},
+		{path: []string{"drive", "list"}, flag: "space", wantReason: "ambiguous_flag", wantHint: "ambiguous"},
+	} {
+		t.Run(strings.Join(tc.path, "/"), func(t *testing.T) {
+			cmd := mustFindCommand(t, root, tc.path...)
+			err := flagErrorWithSuggestions(cmd, fmt.Errorf("unknown flag: --%s", tc.flag))
+			var ae *apperrors.Error
+			if !stderrors.As(err, &ae) {
+				t.Fatalf("want *apperrors.Error, got %T", err)
+			}
+			if ae.Reason != tc.wantReason || !strings.Contains(ae.Hint, tc.wantHint) || !strings.Contains(ae.Hint, "--help") {
+				t.Fatalf("protected error = reason %q hint %q", ae.Reason, ae.Hint)
+			}
+		})
+	}
+}
+
+func TestReviewedFlagProtectionAndInstallerEdges(t *testing.T) {
+	if flag, protection, ok := reviewedFlagProtection(nil, "unknown flag: --time"); ok || flag != "" || protection != "" {
+		t.Fatalf("nil command protection = %q, %q, %v", flag, protection, ok)
+	}
+	installReviewedFlagProtectionHandlers(nil)
+
+	root := NewRootCommand()
+	cmd := mustFindCommand(t, root, "chat", "message", "list-by-sender")
+	flag, protection, ok := reviewedFlagProtection(cmd, "unknown flag: --time=value")
+	if !ok || flag != "time" || protection != "blocked" {
+		t.Fatalf("delimited protected flag = %q, %q, %v", flag, protection, ok)
+	}
+	if flag, protection, ok := reviewedFlagProtection(cmd, "unknown flag: --not-reviewed"); ok || flag != "" || protection != "" {
+		t.Fatalf("unreviewed flag protection = %q, %q, %v", flag, protection, ok)
+	}
+}
+
+func TestReviewedFlagProtectionInstallerPreservesLocalHandler(t *testing.T) {
+	root := NewRootCommand()
+	cmd := mustFindCommand(t, root, "contact", "dept", "list-children")
+	handler := cmd.FlagErrorFunc()
+
+	unreviewed := handler(cmd, fmt.Errorf("unknown flag: --not-reviewed"))
+	var structured *apperrors.Error
+	if stderrors.As(unreviewed, &structured) {
+		t.Fatalf("unreviewed error bypassed the command's local handler: %#v", structured)
+	}
+	if !strings.HasSuffix(unreviewed.Error(), "See 'dws contact dept list-children --help' for usage.") {
+		t.Fatalf("local handler output = %q", unreviewed)
+	}
+
+	guarded := handler(cmd, fmt.Errorf("unknown flag: --name"))
+	if !stderrors.As(guarded, &structured) || structured.Reason != "blocked_flag" {
+		t.Fatalf("reviewed guard did not use the central handler: %#v", guarded)
+	}
+}

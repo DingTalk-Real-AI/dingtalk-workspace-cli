@@ -72,16 +72,17 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "发消息给张三" | `dws chat message send --open-dingtalk-id <id> --text "<内容>"` |
-| "发到XX群" | `dws chat search --query "<群名>"` → `dws chat message send --group <openConversationId> --text "<内容>"` |
+| "发消息给张三" | `dws chat +messages-send --as user --open-dingtalk-id <id> --text "<内容>"` |
+| "发到XX群" | `dws chat +chat-search --query "<群名>"` → `dws chat +messages-send --as user --chat-id <openConversationId> --text "<内容>"` |
 | "建群" / "拉人进群" | `dws chat group create` / `dws chat group members add` |
-| "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove`（先确认群和成员；踢群主会被 CLI 拦截，需先 `transfer-owner`）|
-| "@我消息" | `dws chat message list-mentions` |
-| "查群聊记录" | `dws chat search --query "<群名>"` → `dws chat message list --group <openConversationId> --time "<yyyy-MM-dd HH:mm:ss>" --direction older` |
-| "收藏/取消收藏这条消息" | `dws chat message add-favorite` / `dws chat message remove-favorite`（均需 `openMessageId` 和 `openConversationId`）|
-| "查看我收藏的消息" | `dws chat message list-favorites`（默认 `--cursor 0 --size 20`）|
-| "用机器人发消息" | `dws chat message send-by-bot --robot-code <code> --group <id> --title "<标题>" --text "<内容>"` |
-| "Webhook 推一条" | `dws chat message send-by-webhook --token <token> --title "<标题>" --text "<内容>"` |
+| "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove --yes`（踢人不可逆，先确认目标；踢群主需先 `transfer-owner`） |
+| "@我消息" | `dws chat +at-me` |
+| "查群聊记录" | `dws chat +chat-messages --group <openConversationId>` |
+| "收藏/取消收藏这条消息" | `dws chat +flag-create` / `dws chat +flag-cancel` |
+| "查看我收藏的消息" | `dws chat +flag-list` |
+| "用机器人发消息" | `dws chat +messages-send --as bot --robot-code <code> --chat-id <id> --text "<内容>"` |
+| "Webhook 推一条" | `dws chat +messages-send --as webhook --webhook-token <token> --text "<内容>"` |
+| "发送流式卡片" | `dws chat +messages-send-card --group <openConversationId> --content "<内容>"`；单聊 userId 改用 `--receiver`，openDingTalkId 改用 `--receiver-open-dingtalk-id` |
 | "编辑 / 修改已发送消息" | `dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "<新内容>"` |
 | "撤回我发的消息" | `dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>` |
 | "撤回机器人消息" | `dws chat message recall-by-bot --robot-code <code> --group <openConversationId> --keys <processQueryKey>`（撤回机器人发的）|
@@ -171,7 +172,7 @@ dingtalk-chat
     └── bot_broadcast.py
 ```
 
-> 路由规则：普通文本、图片或文件发送走 `message send`；明确要求应用机器人走 `send-by-bot`；明确要求 Webhook 机器人走 `send-by-webhook`。关键词搜索优先 `message search`，只有发送者、@、多会话等组合条件才走 `search-advanced`。
+> 路由规则：普通文本、图片、文件、机器人或 Webhook 发送优先走统一的 `+messages-send`；有精确 shortcut 时优先 shortcut，没有覆盖时再使用原生叶子命令。关键词搜索优先 `+search-msg`，只有发送者、@、多会话等组合条件才走原生 `search-advanced`。
 
 ## 评测高频硬约束
 

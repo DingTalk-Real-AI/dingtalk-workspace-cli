@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// gen.go is the single entry point for schema metadata generation. It isolates
+// gen.go is the single entry point for reviewed CLI asset generation. It isolates
 // all //go:generate pragmas from business code so that:
 //   - schema_agent_metadata.go / schema_catalog.go contain only types + embed.
 //   - Generation is a standalone process (make generate-schema triggers this).
-//   - The 6-input → 1-output contract is documented in one place.
+//   - The authored-input → generated-output contract is documented in one place.
 //
 // Generation inputs (authored, reviewed):
 //   1. schema_command_registry/             identity (canonical/aliases/navigation)
@@ -23,11 +23,13 @@
 //   3. schema_hints/selection/*.json       selection (use_when/avoid_when)
 //   4. schema_mcp_metadata.json            MCP server tool definitions
 //   5. schema_parameter_bindings.json      parameter type/property mappings
-//   6. cobra command tree (Go runtime)     flags/usage/required (reflected)
+//   6. param_concepts.json + schema       reviewed parameter synonym policy
+//   7. cobra command tree (Go runtime)     flags/usage/required (reflected)
 //
 // Generation outputs (embedded at build):
 //   - schema_agent_metadata/*.json         per-product agent metadata
 //   - schema_catalog/                      per-product catalog shards
+//   - param_aliases_generated.go           per-command parameter normalization
 
 package cli
 
@@ -36,3 +38,4 @@ package cli
 // package cached by the preceding metadata generator with the old embedded
 // JSON files.
 //go:generate go run -a ../generator/cmd_schema_catalog -root ../.. -output schema_catalog
+//go:generate go run ../generator/cmd_param_aliases -root ../.. -output param_aliases_generated.go

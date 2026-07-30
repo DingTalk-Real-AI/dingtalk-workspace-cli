@@ -288,8 +288,8 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
 - "帮我在群里发个消息提醒大家" — **个人身份**发群消息
 - "发个单聊消息给某人" — 个人身份发单聊：
   - 已有 userId 时直接使用 `--user`；已有 openDingTalkId 时使用 `--open-dingtalk-id`
-  - 纯文本/Markdown 单聊传 `--user` 时直接走 userId 发送能力，不需要先手动查询 openDingTalkId
-  - 富媒体消息（image/file）单聊优先使用 `--open-dingtalk-id`；传 `--user` 时 CLI 会尝试解析为 openDingTalkId 后发送
+  - `+messages-send --user` 对所有内容类型都会通过通讯录关键词搜索并按 userId 精确匹配 openDingTalkId；无需手动预查，`--dry-run` 也会执行这次只读解析
+  - 已持有 openDingTalkId 时优先使用显式 `--open-dingtalk-id`，避免额外解析
 - "发张图片/截图/语音/视频/文件到群里" / "发张图给某某" — **统一一条命令**：`dws chat message send ... --msg-type file --file-path <本地路径>`，CLI 内部自动上传并发送，**任意扩展名（png/jpg/pdf/mp4/zip…）都走这条**
 - "发图片+文字说明" — 不要硬塞进一条命令；先发文件消息再补一条 `--text "..."` 即可
 
@@ -299,7 +299,13 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file
 ```
 
 > ❌ 反模式：调 `dt_media_upload` / `extract_media_id.py` / `drive upload` / `drive download` 等前置工具再 `--msg-type image --media-id`。这是**旧链路**，仅当上游已持有 mediaId 才用；新场景一律 `--file-path` 直发，避免长链路与“空白图”现象。
-> 富媒体消息单聊优先使用 `--open-dingtalk-id`；传 `--user` 时 CLI 会尝试解析为 openDingTalkId 后发送。
+> 单聊已持有 openDingTalkId 时优先使用 `--open-dingtalk-id`；传 `--user` 时 CLI 会通过通讯录关键词搜索做 userId 精确匹配后发送。
+
+**用 `chat +messages-send-card` 的场景**：
+- 群聊流式卡片使用 `--group <openConversationId>`。
+- 单聊已有 userId 时使用 `--receiver <userId>`，CLI 始终通过通讯录关键词搜索并按 userId 精确匹配 openDingTalkId；即使 userId 以 D/d 开头也不会猜测类型，`--dry-run` 也会执行该解析。
+- 单聊已有 openDingTalkId 时必须显式使用 `--receiver-open-dingtalk-id <openDingTalkId>`，避免与 userId 混淆。
+- `--group`、`--receiver`、`--receiver-open-dingtalk-id` 严格三选一；传 `--content` 可在同一次调用中创建并结束卡片。
 
 - "发送位置/坐标/地址到群里" / "发个位置给某某" — `dws chat message send ... --msg-type location --latitude <纬度> --longitude <经度> --location-name <地址名称> --map-thumbnail-url @mediaId`；地图缩略图需先通过 `dt_media_upload` 上传获取 mediaId
 

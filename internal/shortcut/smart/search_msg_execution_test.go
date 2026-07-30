@@ -73,7 +73,7 @@ func executeSearchMsg(t *testing.T, caller *searchMsgExecutionCaller, args ...st
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs(append([]string{"chat", "+search-msg"}, args...))
+	root.SetArgs(append([]string{"chat", "+search-msg", "--yes"}, args...))
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}

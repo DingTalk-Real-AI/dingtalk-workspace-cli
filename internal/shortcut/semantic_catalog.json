@@ -435,7 +435,7 @@
     },
     "+messages-send": {
       "disposition": "semantic_adapter",
-      "semantic_delta": "用统一 identity 参数路由 current-user、bot、webhook 文本/Markdown 发送；按身份校验目标与凭据，幂等键只在真实支持的 user 分支开放，媒体上传仍诚实留在 native leaf。",
+      "semantic_delta": "用统一 identity 参数路由 current-user、bot、webhook 发送；current-user 支持文本、Markdown、mediaId 图片、安全相对路径本地文件上传、userId 姓名解析与幂等键，bot/webhook 仍只暴露下层真实支持的文本/Markdown 能力。",
       "risk": "write",
       "public": true,
       "reviewed": true
@@ -487,7 +487,7 @@
     },
     "+messages-mget": {
       "disposition": "semantic_adapter",
-      "semantic_delta": "按最多 50 个消息 ID 批量读取并输出稳定消息投影、reaction 与 resourceRefs；可用 --download-resources 复用 HTTPS、相对路径、无覆盖和原子落盘防护，逐资源返回下载失败 ledger。",
+      "semantic_delta": "按最多 50 个消息 ID 批量读取并输出稳定消息投影、reaction 与 resourceRefs；可用 --download-resources 统一下载 mediaId 与 fileId，复用受信任下载域、相对路径、无覆盖和原子落盘防护，对重复资源去重并逐资源返回下载失败 ledger；安全本地下载沿用 read/not_required 契约，不产生非交互确认盲区。",
       "risk": "read",
       "public": true,
       "reviewed": true
@@ -542,8 +542,8 @@
       "reviewed": true
     },
     "+messages-send-card": {
-      "disposition": "schema_leaf",
-      "semantic_delta": "创建流式卡片是一对一写入；完整卡片生命周期需由 send/update leaf 明确编排。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "既可只创建流式卡片，也可在一次调用中创建、提取 bizId、写入内容并设置流式状态；dry-run 输出两步执行计划，更新失败时保留已创建的 bizId。",
       "risk": "write",
       "public": true,
       "reviewed": true
@@ -564,7 +564,7 @@
     },
     "+messages-resource-download": {
       "disposition": "primary_smart",
-      "semantic_delta": "把临时资源 URL 解析、工作目录内安全路径、默认不覆盖、临时文件下载和原子发布封装为结构化单步结果。",
+      "semantic_delta": "统一承接消息 mediaId 与钉盘 fileId：分别复用 IM 临时资源 URL 和 drive.download_file，只允许钉钉/OSS HTTPS 下载域且重定向复验并隔离跨域凭据，再通过工作目录内安全路径、默认不覆盖、临时文件下载和原子发布输出结构化结果。",
       "risk": "read",
       "public": true,
       "reviewed": true
@@ -627,7 +627,7 @@
     },
     "+at-me": {
       "disposition": "primary_smart",
-      "semantic_delta": "自动构造时间窗，分页拉取跨会话 @我 消息，并保留身份、引用、reaction、resourceRefs 与完整性。",
+      "semantic_delta": "自动构造时间窗，分页拉取跨会话 @我 消息，并保留身份、引用、reaction、resourceRefs 与完整性；可选对资源去重后安全落盘并返回逐项失败 ledger。",
       "risk": "read",
       "public": true,
       "reviewed": true
@@ -641,7 +641,7 @@
     },
     "+chat-messages": {
       "disposition": "primary_smart",
-      "semantic_delta": "统一群聊与两类单聊目标，输出稳定消息身份、引用、reaction、resourceRefs、时间边界翻页和可读正文。",
+      "semantic_delta": "统一群聊与两类单聊目标；省略时间时自动以当前时间向前读取最近消息，并输出稳定消息身份、引用、reaction、resourceRefs、时间边界翻页和可读正文；可选对列表内资源去重后安全落盘并返回逐项失败 ledger。",
       "risk": "read",
       "public": true,
       "reviewed": true
@@ -677,7 +677,7 @@
     },
     "+search-msg": {
       "disposition": "primary_smart",
-      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；支持精确时间窗、page-all、50 条一组 mget 富化，并以 failure ledger 显式报告截断或富化失败。",
+      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化，可选安全下载命中消息资源，并以 failure ledger 显式报告截断、富化或下载失败。",
       "risk": "read",
       "public": true,
       "reviewed": true
@@ -691,7 +691,7 @@
     },
     "+thread-replies": {
       "disposition": "primary_smart",
-      "semantic_delta": "接受消息列表直接返回的 threadId（兼容 topicId），拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文和时间边界分页。",
+      "semantic_delta": "接受消息列表直接返回的 threadId（兼容 topicId），拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文和时间边界分页；可选对回复资源去重后安全落盘并返回逐项失败 ledger。",
       "risk": "read",
       "public": true,
       "reviewed": true

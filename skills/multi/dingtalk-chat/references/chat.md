@@ -4,6 +4,26 @@
 
 > 命令别名：`dws im` 等价于 `dws chat`。
 
+## Shortcut 优先路由
+
+常见 Agent 意图优先使用公开 `+` Shortcut；原子命令保留给需要特定原始返回结构、兼容参数或 Shortcut 未覆盖字段的场景。执行前用 `dws schema --cli-path "chat +<shortcut>" --format json` 读取最终参数、约束和默认确认语义。
+
+| 意图 | 首选 |
+|---|---|
+| 以 current-user / bot / webhook 身份发消息 | `dws chat +messages-send --as <identity> ...` |
+| 拉取单个群聊或单聊的消息 | `dws chat +chat-messages ...` |
+| 按关键词、发送者、@对象、会话、类型或时间组合搜索 | `dws chat +search-msg ...` |
+| 查询 @我的消息 | `dws chat +at-me ...` |
+| 根据消息 ID 批量取详情与 reaction | `dws chat +messages-mget ...` |
+| 读取已知 thread/topic 的全部回复 | `dws chat +thread-replies ...` |
+| 下载单个 mediaId/fileId | `dws chat +messages-resource-download ...` |
+
+- `+messages-send` 只暴露下层真实支持的身份能力，并自动规范化、补齐对应身份的 @ 占位符。
+- `+search-msg --page-all` 连续翻页并默认按消息 ID 批量富化；续页或富化失败会保留已取得结果并返回逐项失败 ledger。
+- 五个查询 Shortcut 的 `--download-resources` 沿用安全本地下载的 `read/not_required` 契约，不应添加 `--yes` 或触发交互确认。引用、回复、合并转发中的资源使用 `resourceRefs` 自带的子消息 `messageId`；仅当子消息缺会话 ID 时继承父消息 `openConversationId`。
+- `+messages-resource-download` 同样无需交互确认，但只允许工作目录内相对路径、默认拒绝覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
+- 下载器只接受经审查的钉钉与公网 OSS HTTPS 地址并逐跳校验重定向；跨主机时不会转发下层提供的请求头。
+
 ## 适用范围与安全硬约束
 
 `chat` 覆盖钉钉会话、群聊、群成员、会话消息、机器人消息、Webhook、会话状态和群身份管理。

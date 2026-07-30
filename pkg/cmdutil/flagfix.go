@@ -150,7 +150,12 @@ func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
 			if v := lf.Annotations["x-cli-enum"]; len(v) > 0 {
 				enumCopy = append([]string{}, v...)
 			}
-			if SuffixLooksLikeValue(bestValue, lf.Value.Type(), fmtStr, enumCopy) {
+			flagType := lf.Value.Type()
+			if SuffixLooksLikeValue(bestValue, flagType, fmtStr, enumCopy) {
+				if flagType == "bool" || flagType == "boolean" {
+					normalized, _ := NormalizeBoolLiteral(bestValue)
+					return FlagFixResult{Suggestion: fmt.Sprintf("Use an explicit boolean value: --%s=%s", bestFlag, normalized)}
+				}
 				suggestion := fmt.Sprintf("Space required between flag and value: --%s %s", bestFlag, bestValue)
 				return FlagFixResult{Suggestion: suggestion, AutoFixFlag: bestFlag, AutoFixValue: bestValue}
 			}

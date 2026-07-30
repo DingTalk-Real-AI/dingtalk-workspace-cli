@@ -29,14 +29,27 @@ func TestCrossPlatformCoverageQuotedResourcesAndScalarVariants(t *testing.T) {
 	resources := Resources(map[string]any{
 		"attachments": []map[string]any{
 			{"resourceType": "mediaId", "resourceId": "@file-a"},
-			{"mediaId": 42},
+			{"resourceType": "fileId", "resourceId": "drive-file"},
+			{"mediaId": 42, "fileId": 42},
 		},
+		"content": `[文件] report.txt fileId: drive-file`,
 	})
-	if len(resources) != 1 || resources[0]["resourceId"] != "@file-a" {
+	if len(resources) != 2 ||
+		resources[0]["resourceId"] != "@file-a" ||
+		resources[1]["resourceId"] != "drive-file" ||
+		resources[1]["type"] != "fileId" {
 		t.Fatalf("resources = %#v", resources)
 	}
-	if got := mediaIDScalar(42); got != "" {
-		t.Fatalf("non-string media ID = %q", got)
+	fileDownload := resources[1]["download"].(map[string]any)
+	fileArguments := fileDownload["arguments"].(map[string]any)
+	if fileDownload["ready"] != true ||
+		fileDownload["shortcut"] != "+messages-resource-download" ||
+		fileArguments["type"] != "fileId" ||
+		fileArguments["resource-id"] != "drive-file" {
+		t.Fatalf("file download = %#v", fileDownload)
+	}
+	if got := resourceIDScalar(42); got != "" {
+		t.Fatalf("non-string resource ID = %q", got)
 	}
 }
 

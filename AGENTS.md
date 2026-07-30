@@ -95,11 +95,12 @@ The Schema system has two physically separated processes:
 **Generation** (build-time, slow, reviewed, one-way):
 - Entry point: `internal/cli/gen.go` (all `//go:generate` pragmas isolated here,
   not in business code).
-- Tools: `internal/generator/cmd_schema_agent_metadata` + `cmd_schema_catalog`
-  (standalone Go mains).
-- Inputs: 6 authored sources (registry + hints metadata + hints selection +
-  MCP metadata + parameter bindings + cobra tree).
-- Output: `schema_catalog/` (per-product shards) + `schema_agent_metadata/`.
+- Tools: `internal/generator/cmd_schema_agent_metadata` + `cmd_schema_catalog` +
+  `cmd_param_aliases` (standalone Go mains).
+- Inputs: 7 authored source groups (registry + hints metadata + hints selection +
+  MCP metadata + parameter bindings + reviewed parameter concepts + cobra tree).
+- Output: `schema_catalog/` (per-product shards) + `schema_agent_metadata/` +
+  `param_aliases_generated.go`.
 - Refresh MCP metadata: `make fetch-mcp-metadata` (iterates 26 MCP server
   endpoints, merges with previous data for cross-server interface_ref).
 - Gates: `make generate-schema` (byte guards on inputs), `check-generated-drift.sh`,

@@ -21,6 +21,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
@@ -35,9 +36,10 @@ var SearchMsg = shortcut.Shortcut{
 	Product:     "im",
 	Description: "多维搜索消息，可全量翻页并批量富化详情",
 	Intent: "当你要按关键词、发送者、@对象、会话、消息类型或机器人来源组合搜索 IM 消息时使用；默认查询近 7 天，" +
-		"也可指定精确起止时间。--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。",
+		"也可指定精确起止时间。--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。" +
+		"--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。",
 	Risk: shortcut.RiskRead,
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "group", Type: shortcut.FlagString, Desc: "单个会话 openConversationId"},
@@ -65,17 +67,22 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "page-limit", Type: shortcut.FlagInt, Desc: "--page-all 的最大页数（1-40）", Default: "20"},
 		{Name: "no-enrich", Type: shortcut.FlagBool, Desc: "不再按消息 ID 批量查询完整详情"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出命中消息的 reaction（默认输出）"},
-	},
-	Constraints: []shortcut.Constraint{
+	}, chatshortcut.MessageResourceDownloadFlags()...),
+	Constraints: append([]shortcut.Constraint{
 		{
-			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"query", "group", "groups", "chat-id", "senders", "sender", "at-me", "is-at-me", "at-ids", "message-type", "only-robot", "conversation-type", "chat-type"},
+			Kind:        shortcut.ConstraintAtLeastOne,
+			Flags:       []string{"query", "keyword", "group", "conversation-id", "id", "groups", "chat-id", "senders", "sender", "at-me", "is-at-me", "at-ids", "message-type", "only-robot", "conversation-type", "chat-type"},
 			Description: "至少指定一个内容、身份、会话或消息类型过滤条件",
 		},
 		{
 			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"start", "end", "days"},
-			Description: "--start 与 --end 必须同时指定；否则使用 --days 时间窗",
+			Flags:       []string{"start"},
+			Description: "需与 --end 一起传",
+		},
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"end"},
+			Description: "需与 --start 一起传",
 		},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"groups", "chat-id"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"senders", "sender"}},
@@ -83,12 +90,12 @@ var SearchMsg = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"conversation-type", "chat-type"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"limit", "page-size"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"cursor", "page-token"}},
-	},
+	}, chatshortcut.MessageResourceDownloadConstraints()...),
 	Tips: []string{
 		`dws chat +search-msg --group <openConversationId> --query "changefree"`,
 		`dws chat +search-msg --senders <openDingTalkId> --at-me --days 3 --page-all`,
 	},
-	Validate: validateSearchMsg,
+	Validate: validateSearchMsgWithResources,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params, err := searchMsgParams(rt)
 		if err != nil {
@@ -200,8 +207,18 @@ var SearchMsg = shortcut.Shortcut{
 		if hasMore && nextCursor != "" && nextCursor != "<nil>" {
 			payload["nextCursor"] = nextCursor
 		}
+		if rt.Bool("download-resources") {
+			payload["resourceDownloads"] = chatshortcut.DownloadMessageResources(rt, messages, "")
+		}
 		return rt.Output(payload)
 	},
+}
+
+func validateSearchMsgWithResources(rt *shortcut.RuntimeContext) error {
+	if err := validateSearchMsg(rt); err != nil {
+		return err
+	}
+	return chatshortcut.ValidateMessageResourceDownload(rt)
 }
 
 func validateSearchMsg(rt *shortcut.RuntimeContext) error {
@@ -392,6 +409,14 @@ func searchMsgItems(data map[string]any) []map[string]any {
 	if data == nil {
 		return nil
 	}
+	for _, root := range []map[string]any{data, searchMsgChildMap(data, "result")} {
+		if root == nil {
+			continue
+		}
+		if groups, ok := root["conversationMessagesList"].([]any); ok {
+			return searchMsgFlattenGroups(groups)
+		}
+	}
 	keys := []string{"list", "messages", "messageList", "items", "data", "records", "result"}
 	for _, key := range keys {
 		if arr, ok := data[key].([]any); ok {
@@ -406,6 +431,53 @@ func searchMsgItems(data map[string]any) []map[string]any {
 		}
 	}
 	return nil
+}
+
+func searchMsgChildMap(data map[string]any, key string) map[string]any {
+	if value, ok := data[key].(map[string]any); ok {
+		return value
+	}
+	return nil
+}
+
+func searchMsgFlattenGroups(groups []any) []map[string]any {
+	out := make([]map[string]any, 0)
+	for _, rawGroup := range groups {
+		group, ok := rawGroup.(map[string]any)
+		if !ok {
+			continue
+		}
+		messages, ok := group["messages"].([]any)
+		if !ok {
+			continue
+		}
+		conversationID := strings.TrimSpace(fmt.Sprint(group["openConversationId"]))
+		conversationTitle := strings.TrimSpace(fmt.Sprint(group["title"]))
+		singleChat, hasSingleChat := group["singleChat"]
+		for _, rawMessage := range messages {
+			message, ok := rawMessage.(map[string]any)
+			if !ok {
+				continue
+			}
+			item := make(map[string]any, len(message)+3)
+			for key, value := range message {
+				item[key] = value
+			}
+			if _, exists := item["openConversationId"]; !exists &&
+				conversationID != "" && conversationID != "<nil>" {
+				item["openConversationId"] = conversationID
+			}
+			if _, exists := item["conversationTitle"]; !exists &&
+				conversationTitle != "" && conversationTitle != "<nil>" {
+				item["conversationTitle"] = conversationTitle
+			}
+			if _, exists := item["singleChat"]; !exists && hasSingleChat {
+				item["singleChat"] = singleChat
+			}
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func searchMsgToMaps(arr []any) []map[string]any {
@@ -453,7 +525,7 @@ func searchMsgProjectWithReactions(m map[string]any, includeReactions bool) map[
 	if quoted := chatmsg.QuotedMessage(m); len(quoted) > 0 {
 		row["quotedMessage"] = quoted
 	}
-	if resources := chatmsg.Resources(m); len(resources) > 0 {
+	if resources := chatmsg.ResourcesDeep(m); len(resources) > 0 {
 		row["resourceRefs"] = resources
 	}
 	projectForwarded := func(item map[string]any) map[string]any {

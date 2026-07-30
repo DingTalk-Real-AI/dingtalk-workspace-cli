@@ -1542,6 +1542,32 @@
       "cli_path": "chat +chat-role-query-user",
       "runtime_gate": "none"
     },
+    "chat.shortcut_chat_messages": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed built-in Shortcut adapter: it routes group or direct-message history reads, projects a stable message shape, and optionally orchestrates safe resource downloads with a failure ledger.",
+      "reviewed": true,
+      "review_reason": "Reviewed against the executable Shortcut and group/direct lower read tools. Optional downloads stay read/not_required under the existing safe local-download convention: workspace-relative paths, no overwrite by default, and atomic publication.",
+      "cli_path": "chat +chat-messages",
+      "runtime_gate": "none"
+    },
+    "chat.shortcut_messages_send": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed composite send adapter: it selects current-user, bot, or webhook transport; current-user additionally supports live-compatible contact search with exact userId matching, mediaId images, and the native init/upload/commit local-file flow.",
+      "reviewed": true,
+      "review_reason": "Reviewed against every executable identity/content/target validation branch, authenticated contact-search response shape, and the real lower tool mappings; bot and webhook media are intentionally rejected because no equivalent lower capability exists.",
+      "cli_path": "chat +messages-send",
+      "runtime_gate": "typed_yes"
+    },
     "chat.shortcut_messages_send_by_webhook": {
       "effect": "write",
       "risk": "medium",
@@ -1553,6 +1579,25 @@
       "reviewed": true,
       "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
       "cli_path": "chat +messages-send-by-webhook",
+      "runtime_gate": "typed_yes"
+    },
+    "chat.shortcut_messages_send_card": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed card lifecycle adapter: it can resolve a userId through contact search with exact matching, call create_and_send_card alone, or compose creation with update_streaming_card after extracting the returned bizId.",
+      "parameters": {
+        "receiver-open-dingtalk-id": {
+          "property": "receiverOpenDingTalkId",
+          "required": false
+        }
+      },
+      "reviewed": true,
+      "review_reason": "Reviewed against authenticated contact-search resolution, create-only, two-action dry-run, create/update success, missing bizId, and partial-failure behavior that preserves the created bizId; the explicit openDingTalkId flag is bound to the lower interface's exact receiverOpenDingTalkId property.",
+      "cli_path": "chat +messages-send-card",
       "runtime_gate": "typed_yes"
     },
     "chat.shortcut_messages_list_direct": {
@@ -1590,7 +1635,7 @@
       "availability": "available",
       "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
       "reviewed": true,
-      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command. Optional downloads stay read/not_required under the existing safe local-download convention and therefore do not create a non-interactive confirmation no-op.",
       "cli_path": "chat +messages-mget",
       "runtime_gate": "none"
     },
@@ -1655,7 +1700,7 @@
       "availability": "available",
       "interface_reason": "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
       "reviewed": true,
-      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
+      "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command. Optional downloads stay read/not_required under the existing safe local-download convention and therefore do not create a non-interactive confirmation no-op.",
       "cli_path": "chat +at-me",
       "runtime_gate": "none"
     },
@@ -1711,6 +1756,19 @@
       "cli_path": "chat +my-groups",
       "runtime_gate": "none"
     },
+    "chat.shortcut_search_msg": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed search adapter: it combines filters, cursor pagination, batched mget enrichment, stable projection, completeness accounting, and optional safe resource downloads.",
+      "reviewed": true,
+      "review_reason": "Reviewed against the executable advanced-search flags plus page and enrichment ledgers. Optional downloads stay read/not_required under the existing safe local-download convention and therefore do not create a non-interactive confirmation no-op.",
+      "cli_path": "chat +search-msg",
+      "runtime_gate": "none"
+    },
     "chat.shortcut_send_to_group": {
       "effect": "write",
       "risk": "medium",
@@ -1723,6 +1781,19 @@
       "review_reason": "Reviewed against the built-in Shortcut registry and mounted Cobra command: publishes the executable risk gate and composite interface without inventing a direct MCP identity.",
       "cli_path": "chat +send-to-group",
       "runtime_gate": "typed_yes"
+    },
+    "chat.shortcut_thread_replies": {
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_reason": "Reviewed thread reader adapter: it accepts threadId/topicId, reads lower topic replies, projects stable message fields, and optionally downloads reply resources safely.",
+      "reviewed": true,
+      "review_reason": "Reviewed against the executable thread/topic alias contract and real list_topic_replies mapping. Optional downloads stay read/not_required under the existing safe local-download convention and therefore do not create a non-interactive confirmation no-op.",
+      "cli_path": "chat +thread-replies",
+      "runtime_gate": "none"
     },
     "chat.shortcut_unread_chats": {
       "effect": "read",

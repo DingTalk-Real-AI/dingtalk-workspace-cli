@@ -138,7 +138,6 @@
         "chat +chat-get-by-id",
         "chat +chat-members-get",
         "chat +chat-members-list",
-        "chat +chat-messages",
         "chat +chat-mute-member",
         "chat +chat-quit",
         "chat +chat-remove-bot",
@@ -175,15 +174,11 @@
         "chat +messages-reply",
         "chat +messages-resource-download",
         "chat +messages-resource-url",
-        "chat +messages-send",
         "chat +messages-send-by-bot",
-        "chat +messages-send-card",
         "chat +messages-set-pin",
         "chat +messages-set-top",
         "chat +messages-unset-pin",
-        "chat +messages-unset-top",
-        "chat +search-msg",
-        "chat +thread-replies"
+        "chat +messages-unset-top"
       ]
     }
   ]

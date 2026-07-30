@@ -189,6 +189,111 @@ func TestQuotedMessageIsBoundedAndSemantic(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageResourcesRespectNestedMessageOwnership(t *testing.T) {
+	message := map[string]any{
+		"openMessageId":      "parent",
+		"openConversationId": "cid-parent",
+		"content":            map[string]any{"mediaId": "media-parent"},
+		"quotedMessage": map[string]any{
+			"openMessageId": "quoted",
+			"content":       map[string]any{"mediaId": "media-quoted"},
+		},
+		"forwardMessages": []any{
+			map[string]any{
+				"openMessageId":      "forwarded",
+				"openConversationId": "cid-forwarded",
+				"content":            map[string]any{"mediaId": "media-forwarded"},
+			},
+		},
+	}
+	owned := Resources(message)
+	if len(owned) != 1 || owned[0]["resourceId"] != "media-parent" {
+		t.Fatalf("parent resources crossed message boundary: %#v", owned)
+	}
+
+	deep := ResourcesDeep(message)
+	if len(deep) != 3 {
+		t.Fatalf("deep resources = %#v", deep)
+	}
+	argumentsByResource := map[string]map[string]any{}
+	for _, resource := range deep {
+		download := resource["download"].(map[string]any)
+		argumentsByResource[resource["resourceId"].(string)] = download["arguments"].(map[string]any)
+	}
+	for resourceID, want := range map[string][2]string{
+		"media-parent":    {"parent", "cid-parent"},
+		"media-quoted":    {"quoted", "cid-parent"},
+		"media-forwarded": {"forwarded", "cid-forwarded"},
+	} {
+		arguments := argumentsByResource[resourceID]
+		if arguments["message-id"] != want[0] ||
+			arguments["open-conversation-id"] != want[1] {
+			t.Errorf("%s arguments = %#v, want message=%q conversation=%q",
+				resourceID, arguments, want[0], want[1])
+		}
+	}
+}
+
+func TestCrossPlatformCoverageResourceBoundaryHelpers(t *testing.T) {
+	encoded := map[string]any{
+		"openMessageId":      "parent",
+		"openConversationId": "cid",
+		"content":            `{"quotedMessage":{"openMessageId":"encoded-child","mediaId":"nested"}}`,
+	}
+	if got := Resources(encoded); got != nil {
+		t.Fatalf("encoded nested resource bound to parent: %#v", got)
+	}
+	if got := ResourcesDeep(encoded); len(got) != 1 {
+		t.Fatalf("encoded nested resources = %#v", got)
+	} else {
+		arguments := got[0]["download"].(map[string]any)["arguments"].(map[string]any)
+		if arguments["message-id"] != "encoded-child" ||
+			arguments["open-conversation-id"] != "cid" {
+			t.Fatalf("encoded child arguments = %#v", arguments)
+		}
+	}
+	if got := resourcesDeep(map[string]any{"mediaId": "x"}, "", maxResourceMessageDepth+1); got != nil {
+		t.Fatalf("over-depth resources = %#v", got)
+	}
+	if got := resourcesDeep(
+		map[string]any{"mediaId": "x"},
+		"",
+		maxResourceMessageDepth,
+	); len(got) != 1 {
+		t.Fatalf("max-depth owned resources = %#v", got)
+	}
+	if got := nestedMessageMaps([]map[string]any{{"id": "a"}}); len(got) != 1 {
+		t.Fatalf("map slice = %#v", got)
+	}
+	if got := nestedMessageMaps(`[{"id":"a"}]`); len(got) != 1 {
+		t.Fatalf("encoded message list = %#v", got)
+	}
+	if got := nestedMessageMaps([]any{"bad", map[string]any{"id": "a"}}); len(got) != 1 {
+		t.Fatalf("mixed message list = %#v", got)
+	}
+	if got := nestedMessageMaps("{"); got != nil {
+		t.Fatalf("invalid encoded messages = %#v", got)
+	}
+	if got := nestedMessageChildren([]map[string]any{
+		{"content": "plain"},
+		{"content": `{"forwardedMessages":[{"openMessageId":"m"}]}`},
+	}); len(got) != 1 {
+		t.Fatalf("nested message children = %#v", got)
+	}
+	if got := nestedMessageChildren([]any{
+		"plain",
+		map[string]any{"quoted": map[string]any{"openMessageId": "m"}},
+	}); len(got) != 1 {
+		t.Fatalf("mixed nested message children = %#v", got)
+	}
+	if got := nestedMessageChildren("{"); len(got) != 0 {
+		t.Fatalf("invalid nested children = %#v", got)
+	}
+	if isNestedMessageBoundaryKey("content") {
+		t.Fatal("ordinary content treated as a message boundary")
+	}
+}
+
 func TestUpdateTimeOmitsUneditedEcho(t *testing.T) {
 	if got := UpdateTime(map[string]any{
 		"createTime": "2026-07-19 13:37:03",
@@ -323,6 +428,17 @@ func TestResourcesReportsMissingDownloadContext(t *testing.T) {
 	missing, _ := download["missing"].([]string)
 	if len(missing) != 2 || missing[0] != "message-id" || missing[1] != "open-conversation-id" {
 		t.Fatalf("missing = %#v", missing)
+	}
+}
+
+func TestResourcesTextMediaIDRequiresWordBoundary(t *testing.T) {
+	resources := Resources(map[string]any{
+		"openMessageId":      "msg-1",
+		"openConversationId": "cid-1",
+		"content":            `notmediaId=@false mediaId=@real`,
+	})
+	if len(resources) != 1 || resources[0]["resourceId"] != "@real" {
+		t.Fatalf("resources = %#v, want only the bounded mediaId", resources)
 	}
 }
 

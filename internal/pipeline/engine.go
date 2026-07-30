@@ -24,6 +24,23 @@ type Engine struct {
 	handlers map[Phase][]Handler
 }
 
+// HandlerError preserves the pipeline location of a handler failure for logs
+// and diagnostics while keeping the underlying domain error available to
+// user-facing adapters through Unwrap.
+type HandlerError struct {
+	Phase   Phase
+	Handler string
+	Cause   error
+}
+
+func (e *HandlerError) Error() string {
+	return fmt.Sprintf("pipeline %s handler %q: %v", e.Phase, e.Handler, e.Cause)
+}
+
+func (e *HandlerError) Unwrap() error {
+	return e.Cause
+}
+
 // NewEngine creates a pipeline engine with no registered handlers.
 func NewEngine() *Engine {
 	return &Engine{
@@ -64,7 +81,7 @@ func (e *Engine) HasHandlers(phase Phase) bool {
 func (e *Engine) RunPhase(phase Phase, ctx *Context) error {
 	for _, h := range e.handlers[phase] {
 		if err := h.Handle(ctx); err != nil {
-			return fmt.Errorf("pipeline %s handler %q: %w", phase, h.Name(), err)
+			return &HandlerError{Phase: phase, Handler: h.Name(), Cause: err}
 		}
 	}
 	return nil

@@ -15,6 +15,7 @@ package shortcut
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -37,6 +38,42 @@ func TestCrossPlatformCoverageRiskDefaultsToRead(t *testing.T) {
 	}
 	if got := (Shortcut{Risk: RiskHighWrite}).risk(); got != RiskHighWrite {
 		t.Fatalf("risk() = %q, want high-risk-write", got)
+	}
+}
+
+func TestCrossPlatformCoverageConfirmRiskPromptsForStaticWrite(t *testing.T) {
+	cmd := &cobra.Command{}
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+	rt := &RuntimeContext{cmd: cmd}
+	s := Shortcut{
+		Service: "chat",
+		Command: "+messages-send",
+		Risk:    RiskWrite,
+	}
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousStdin := os.Stdin
+	os.Stdin = reader
+	t.Cleanup(func() {
+		os.Stdin = previousStdin
+		_ = reader.Close()
+		_ = writer.Close()
+	})
+	if _, err := writer.WriteString("yes\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !confirmRisk(rt, s) {
+		t.Fatal("static write risk was not confirmed")
+	}
+	if got := stderr.String(); !strings.Contains(got, "chat +messages-send（write）") {
+		t.Fatalf("confirmation prompt = %q", got)
 	}
 }
 

@@ -44,7 +44,24 @@ func (f *larkAlignmentCaller) CallTool(_ context.Context, product, tool string, 
 	case "contact/get_current_user_profile":
 		text = `{"result":[{"orgEmployeeModel":{"userId":"self-user"}}]}`
 	case "contact/get_user_info_by_user_ids":
-		text = `{"result":[{"userId":"user-id","openDingTalkId":"D-resolved"}]}`
+		text = `{"result":[{"orgEmployeeModel":{"orgUserId":"user-id","orgUserName":"Resolved User"}}]}`
+	case "contact/search_contact_by_key_word":
+		keyword, _ := args["keyword"].(string)
+		payload, _ := json.Marshal(map[string]any{
+			"result": []map[string]any{
+				{
+					"name":           "Fuzzy Neighbor",
+					"userId":         keyword + "-other",
+					"openDingTalkId": "D-other",
+				},
+				{
+					"name":           "Resolved User",
+					"userId":         keyword,
+					"openDingTalkId": "D-resolved",
+				},
+			},
+		})
+		text = string(payload)
 	case "im/create_group_conversation":
 		text = `{"result":{"cid":"internal-cid","openCid":"open-cid"}}`
 	case "im/list_messages_by_ids":
@@ -117,27 +134,35 @@ func TestMessagesSendRoutesIdentitySpecificTransports(t *testing.T) {
 		product string
 		tool    string
 		want    map[string]any
+		bodyKey string
+		body    string
 	}{
 		{
 			name:    "user",
-			args:    []string{"chat", "+messages-send", "--as", "user", "--chat-id", "cid", "--markdown", "hello", "--idempotency-key", "u1", "--yes"},
+			args:    []string{"chat", "+messages-send", "--as", "user", "--chat-id", "cid", "--markdown", "hello @D1", "--at-open-dingtalk-ids", "D1", "--at-all", "--idempotency-key", "u1", "--yes"},
 			product: "chat",
 			tool:    "send_personal_message",
 			want:    map[string]any{"openConversationId": "cid", "msgType": "markdown", "uuid": "u1"},
+			bodyKey: "content",
+			body:    "<@all> hello <@D1>",
 		},
 		{
 			name:    "bot",
-			args:    []string{"chat", "+messages-send", "--identity", "bot", "--robot-code", "robot", "--group", "cid", "--text", "hello", "--at-all", "--yes"},
+			args:    []string{"chat", "+messages-send", "--identity", "bot", "--robot-code", "robot", "--group", "cid", "--text", "<@u1> hello", "--at-user-ids", "u1", "--at-all", "--yes"},
 			product: "bot",
 			tool:    "send_robot_group_message",
 			want:    map[string]any{"robotCode": "robot", "openConversationId": "cid", "isAtAll": "true"},
+			bodyKey: "markdown",
+			body:    "@all @u1 hello",
 		},
 		{
 			name:    "webhook",
-			args:    []string{"chat", "+messages-send", "--identity", "webhook", "--webhook-token", "token", "--text", "hello", "--at-all", "--yes"},
+			args:    []string{"chat", "+messages-send", "--identity", "webhook", "--webhook-token", "token", "--text", "<@13800000000> hello", "--at-mobiles", "13800000000", "--at-all", "--yes"},
 			product: "bot",
 			tool:    "send_message_by_custom_robot",
 			want:    map[string]any{"robotToken": "token", "isAtAll": true},
+			bodyKey: "text",
+			body:    "@all @13800000000 hello",
 		},
 	}
 	for _, tt := range tests {
@@ -160,6 +185,17 @@ func TestMessagesSendRoutesIdentitySpecificTransports(t *testing.T) {
 				if !reflect.DeepEqual(call.args[key], want) {
 					t.Errorf("%s = %#v, want %#v", key, call.args[key], want)
 				}
+			}
+			if tt.bodyKey == "content" {
+				var content map[string]string
+				if err := json.Unmarshal([]byte(call.args[tt.bodyKey].(string)), &content); err != nil {
+					t.Fatal(err)
+				}
+				if content["text"] != tt.body {
+					t.Errorf("content text = %q, want %q", content["text"], tt.body)
+				}
+			} else if call.args[tt.bodyKey] != tt.body {
+				t.Errorf("%s = %#v, want %q", tt.bodyKey, call.args[tt.bodyKey], tt.body)
 			}
 		})
 	}
@@ -384,7 +420,7 @@ func TestMessagesMgetDryRunPublishesMultiResourceDownloadPlan(t *testing.T) {
 	}
 }
 
-func TestMessagesReplyResolvesUserIDBeforeExecution(t *testing.T) {
+func TestCrossPlatformCoverageMessagesReplyResolvesUserIDBeforeExecution(t *testing.T) {
 	fake := &larkAlignmentCaller{}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
@@ -401,7 +437,7 @@ func TestMessagesReplyResolvesUserIDBeforeExecution(t *testing.T) {
 	}
 	if len(fake.calls) != 2 ||
 		fake.calls[0].product != "contact" ||
-		fake.calls[0].tool != "get_user_info_by_user_ids" ||
+		fake.calls[0].tool != "search_contact_by_key_word" ||
 		fake.calls[1].tool != "send_personal_message" {
 		t.Fatalf("calls = %#v", fake.calls)
 	}

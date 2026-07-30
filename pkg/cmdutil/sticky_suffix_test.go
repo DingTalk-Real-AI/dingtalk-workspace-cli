@@ -15,6 +15,28 @@ package cmdutil
 
 import "testing"
 
+func TestNormalizeBoolLiteral(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{input: "TRUE", want: "true", ok: true},
+		{input: " yes ", want: "true", ok: true},
+		{input: "0", want: "false", ok: true},
+		{input: "Off", want: "false", ok: true},
+		{input: "maybe"},
+	}
+	for _, test := range tests {
+		t.Run(test.input, func(t *testing.T) {
+			got, ok := NormalizeBoolLiteral(test.input)
+			if got != test.want || ok != test.ok {
+				t.Fatalf("NormalizeBoolLiteral(%q) = %q, %v; want %q, %v", test.input, got, ok, test.want, test.ok)
+			}
+		})
+	}
+}
+
 // TestSuffixLooksLikeValue_UTF8FirstRune locks in the UTF-8 first-rune
 // reading contract on SuffixLooksLikeValue. The function previously read
 // suffix[0] (a single byte) which produced incorrect splits / matches for
@@ -65,6 +87,32 @@ func TestSuffixLooksLikeValue_UTF8FirstRune(t *testing.T) {
 			name:   "int + digit-led baseline still splits",
 			suffix: "100",
 			typ:    "int",
+			want:   true,
+		},
+		{
+			// The caller must keep the normalized value inline as
+			// --flag=false; SuffixLooksLikeValue only validates the suffix.
+			name:   "bool + false suffix is recognized",
+			suffix: "false",
+			typ:    "bool",
+			want:   true,
+		},
+		{
+			name:   "boolean + model-friendly no suffix is recognized",
+			suffix: "no",
+			typ:    "boolean",
+			want:   true,
+		},
+		{
+			name:   "boolean + unknown suffix is rejected",
+			suffix: "maybe",
+			typ:    "boolean",
+			want:   false,
+		},
+		{
+			name:   "boolean + true suffix is recognized",
+			suffix: "true",
+			typ:    "boolean",
 			want:   true,
 		},
 		{

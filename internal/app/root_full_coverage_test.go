@@ -40,7 +40,7 @@ func TestCrossPlatformCoverageRootExecuteAllBranchesCoverage(t *testing.T) {
 	})
 	os.Args = []string{"dws"}
 	rootNormalizeProcessProfileArgs = func() func() { return func() {} }
-	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) {}
+	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
 	rootResetRecoveryState = func() {}
 	rootStopAllStdioClients = func() {}
 	rootNewRootCommandWithEngine = func(context.Context, *pipeline.Engine) *cobra.Command {
@@ -51,6 +51,12 @@ func TestCrossPlatformCoverageRootExecuteAllBranchesCoverage(t *testing.T) {
 	if code := Execute(); code != 0 {
 		t.Fatalf("successful Execute code = %d", code)
 	}
+
+	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return errors.New("alias/canonical conflict") }
+	if code := Execute(); code == 0 {
+		t.Fatal("pre-parse conflict returned zero")
+	}
+	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
 
 	wantErr := errors.New("unknown command missing")
 	rootLatestRecoveryCapture = func() *recovery.LastError { return &recovery.LastError{EventID: "evt-test"} }

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +57,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		"--resource-id", "@image",
 		"--message-id", "msg",
 		"--open-conversation-id", "cid",
+		"--yes",
 	}
 	t.Run("dry run", func(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{})
@@ -89,7 +89,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		resetResourceDownloadHooks(t)
 		resourceGetwd = func() (string, error) { return "", errors.New("getwd") }
 		helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
-			"im/get_resource_download_url": `{"result":{"resourceUrl":"https://example.test/file"}}`,
+			"im/get_resource_download_url": `{"result":{"resourceUrl":"https://download.dingtalk.com/file"}}`,
 		}})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(baseArgs)
@@ -101,7 +101,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		resetResourceDownloadHooks(t)
 		resourceAbs = func(string) (string, error) { return "", errors.New("path") }
 		helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
-			"im/get_resource_download_url": `{"result":{"resourceUrl":"https://example.test/file"}}`,
+			"im/get_resource_download_url": `{"result":{"resourceUrl":"https://download.dingtalk.com/file"}}`,
 		}})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(baseArgs)
@@ -132,7 +132,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 			resetResourceDownloadHooks(t)
 			resourceDownload = tc.download
 			helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
-				"im/get_resource_download_url": `{"result":{"resourceUrl":"https://example.test/file"}}`,
+				"im/get_resource_download_url": `{"result":{"resourceUrl":"https://download.dingtalk.com/file"}}`,
 			}})
 			root := newPlatformCoverageRoot()
 			root.SetArgs(append(append([]string{}, baseArgs...), "--output", filepath.Join(t.TempDir(), "file")))
@@ -164,7 +164,7 @@ func TestCrossPlatformCoverageResourceDownloadValidationAndInfo(t *testing.T) {
 		}
 	}
 	resourceURL, headers, err := resourceDownloadInfo(map[string]any{
-		"resourceUrl": "https://example.test/file",
+		"resourceUrl": "https://download.dingtalk.com/file",
 		"headers": map[string]any{
 			"":        "ignored",
 			"X-Count": 3,
@@ -175,12 +175,27 @@ func TestCrossPlatformCoverageResourceDownloadValidationAndInfo(t *testing.T) {
 		t.Fatalf("resource info = %q %#v %v", resourceURL, headers, err)
 	}
 	for host, want := range map[string]bool{
-		"ALIYUNCS.COM.":       true,
-		"bucket.aliyuncs.com": true,
-		"example.com":         false,
+		"ALIYUNCS.COM.":                                false,
+		"bucket.aliyuncs.com":                          false,
+		"bucket.oss-cn-hangzhou.aliyuncs.com":          true,
+		"bucket.oss-internal.aliyuncs.com":             false,
+		"bucket.oss-cn-hangzhou-internal.aliyuncs.com": false,
+		"example.com":                                  false,
 	} {
 		if got := isAliyunOSSHost(host); got != want {
 			t.Errorf("isAliyunOSSHost(%q) = %v, want %v", host, got, want)
+		}
+	}
+	for host, want := range map[string]bool{
+		"DINGTALK.COM.":                       true,
+		"download.dingtalk.com":               true,
+		"bucket.oss-cn-hangzhou.aliyuncs.com": true,
+		"aliyuncs.com.evil.test":              false,
+		"evildingtalk.com":                    false,
+		"download.example.invalid":            false,
+	} {
+		if got := isResourceDownloadAllowedHost(host); got != want {
+			t.Errorf("isResourceDownloadAllowedHost(%q) = %v, want %v", host, got, want)
 		}
 	}
 }
@@ -348,6 +363,24 @@ func TestCrossPlatformCoverageResourceDownloadFilenameFallbacks(t *testing.T) {
 	if got := resourceDownloadFilename("https://example.test/a%20b.txt"); got != "a b.txt" {
 		t.Fatalf("decoded filename = %q", got)
 	}
+	for _, unsafeName := range []string{
+		"..",
+		"CON",
+		"nul.txt",
+		"COM1.log",
+		"trailing.",
+		"trailing ",
+		"line\nbreak.txt",
+		`bad:name.txt`,
+	} {
+		got := resourceDownloadFilename(
+			"https://download.dingtalk.com/fallback.bin",
+			unsafeName,
+		)
+		if got != "fallback.bin" {
+			t.Errorf("unsafe preferred name %q produced %q", unsafeName, got)
+		}
+	}
 }
 
 type resourceRoundTripper func(*http.Request) (*http.Response, error)
@@ -375,62 +408,104 @@ func TestCrossPlatformCoverageDownloadResourceHTTPFailures(t *testing.T) {
 	errorClient := &http.Client{Transport: resourceRoundTripper(func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("transport")
 	})}
-	if _, err := downloadResourceAtomically(context.Background(), errorClient, "https://example.test/file", nil, dest, false); err == nil {
+	if _, err := downloadResourceAtomically(context.Background(), errorClient, "https://download.dingtalk.com/file", nil, dest, false); err == nil {
 		t.Fatal("transport error was swallowed")
 	}
-	if _, err := downloadResourceAtomically(context.Background(), resourceResponseClient(500, "", 0), "https://example.test/file", nil, dest, false); err == nil {
+	if _, err := downloadResourceAtomically(context.Background(), resourceResponseClient(500, "", 0), "https://download.dingtalk.com/file", nil, dest, false); err == nil {
 		t.Fatal("HTTP 500 was accepted")
 	}
-	if _, err := downloadResourceAtomically(context.Background(), resourceResponseClient(200, "x", 2), "https://example.test/file", nil, dest, false); err == nil {
+	if _, err := downloadResourceAtomically(context.Background(), resourceResponseClient(200, "x", 2), "https://download.dingtalk.com/file", nil, dest, false); err == nil {
 		t.Fatal("content-length mismatch was accepted")
 	}
-
-	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("X-Test") != "ok" {
-			t.Errorf("missing forwarded header")
-		}
-		_, _ = w.Write([]byte("body"))
-	}))
-	t.Cleanup(plain.Close)
 	nilClientDest := filepath.Join(t.TempDir(), "nil-client")
-	if _, err := downloadResourceAtomically(context.Background(), nil, plain.URL, map[string]string{"X-Test": "ok"}, nilClientDest, true); err != nil {
-		t.Fatal(err)
+	if _, err := downloadResourceAtomically(
+		context.Background(), nil, "https://evil.example/file",
+		map[string]string{"X-Test": "ok"}, nilClientDest, true,
+	); err == nil {
+		t.Fatal("nil-client path accepted an untrusted URL")
 	}
 }
 
 func TestCrossPlatformCoverageDownloadResourceRedirectGuards(t *testing.T) {
-	httpRedirect := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Redirect(w, &http.Request{}, "http://example.test/file", http.StatusFound)
-	}))
-	t.Cleanup(httpRedirect.Close)
+	httpRedirect := &http.Client{Transport: resourceRoundTripper(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     http.Header{"Location": []string{"http://evil.example/file"}},
+		}, nil
+	})}
 	if _, err := downloadResourceAtomically(
-		context.Background(), httpRedirect.Client(), httpRedirect.URL, nil,
+		context.Background(), httpRedirect, "https://download.dingtalk.com/start", nil,
 		filepath.Join(t.TempDir(), "http-redirect"), false,
 	); err == nil {
 		t.Fatal("HTTP redirect was accepted")
 	}
 
-	var loop *httptest.Server
-	loop = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Redirect(w, &http.Request{}, loop.URL, http.StatusFound)
-	}))
-	t.Cleanup(loop.Close)
+	loop := &http.Client{Transport: resourceRoundTripper(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     http.Header{"Location": []string{"https://download.dingtalk.com/loop"}},
+		}, nil
+	})}
 	if _, err := downloadResourceAtomically(
-		context.Background(), loop.Client(), loop.URL, nil,
+		context.Background(), loop, "https://download.dingtalk.com/loop", nil,
 		filepath.Join(t.TempDir(), "loop"), false,
 	); err == nil {
 		t.Fatal("redirect loop was accepted")
 	}
 
-	original := loop.Client()
+	original := *loop
 	original.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return errors.New("original redirect policy")
 	}
 	if _, err := downloadResourceAtomically(
-		context.Background(), original, loop.URL, nil,
+		context.Background(), &original, "https://download.dingtalk.com/loop", nil,
 		filepath.Join(t.TempDir(), "original"), false,
 	); err == nil {
 		t.Fatal("original redirect rejection was swallowed")
+	}
+
+	redirectCount := 0
+	crossHost := &http.Client{Transport: resourceRoundTripper(func(request *http.Request) (*http.Response, error) {
+		redirectCount++
+		switch redirectCount {
+		case 1:
+			if request.Header.Get("X-Resource-Token") != "secret" {
+				t.Fatal("initial signed header missing")
+			}
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Body:       io.NopCloser(strings.NewReader("")),
+				Header:     http.Header{"Location": []string{"https://bucket.oss-cn-hangzhou.aliyuncs.com/intermediate"}},
+			}, nil
+		case 2:
+			if request.Header.Get("X-Resource-Token") != "" {
+				t.Fatal("server-supplied header leaked on first cross-host hop")
+			}
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Body:       io.NopCloser(strings.NewReader("")),
+				Header:     http.Header{"Location": []string{"https://bucket.oss-cn-hangzhou.aliyuncs.com/final"}},
+			}, nil
+		default:
+			if request.Header.Get("X-Resource-Token") != "" {
+				t.Fatal("server-supplied header was restored on later same-host hop")
+			}
+		}
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Body:          io.NopCloser(strings.NewReader("ok")),
+			ContentLength: 2,
+			Header:        make(http.Header),
+		}, nil
+	})}
+	if _, err := downloadResourceAtomically(
+		context.Background(), crossHost, "https://download.dingtalk.com/start",
+		map[string]string{"X-Resource-Token": "secret"},
+		filepath.Join(t.TempDir(), "cross-host"), false,
+	); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -439,7 +514,7 @@ func TestCrossPlatformCoverageDownloadResourceFileFailures(t *testing.T) {
 	run := func(t *testing.T, overwrite bool) error {
 		t.Helper()
 		_, err := downloadResourceAtomically(
-			context.Background(), client, "https://example.test/file", nil,
+			context.Background(), client, "https://download.dingtalk.com/file", nil,
 			filepath.Join(t.TempDir(), "resource"), overwrite)
 		return err
 	}
@@ -516,7 +591,7 @@ func TestCrossPlatformCoverageDownloadResourceCopySuccessWithBuffer(t *testing.T
 	dest := filepath.Join(t.TempDir(), "resource")
 	if _, err := downloadResourceAtomically(
 		context.Background(), resourceResponseClient(200, "ok", 2),
-		"https://example.test/file", nil, dest, true,
+		"https://download.dingtalk.com/file", nil, dest, true,
 	); err != nil {
 		t.Fatal(err)
 	}

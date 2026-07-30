@@ -4,10 +4,11 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -25,7 +26,7 @@ func TestCrossPlatformCoverageListMessageRichProjection(t *testing.T) {
 			"content":            `{"mediaId":"@image"}`,
 			"quotedMessage": map[string]any{
 				"openMessageId": "quoted",
-				"content":       "quoted",
+				"content":       `{"mediaId":"@quoted-image"}`,
 			},
 		},
 	}}})
@@ -37,13 +38,23 @@ func TestCrossPlatformCoverageListMessageRichProjection(t *testing.T) {
 			t.Errorf("projection missing %s: %#v", key, rows[0])
 		}
 	}
+	resources := rows[0]["resourceRefs"].([]map[string]any)
+	if len(resources) != 2 {
+		t.Fatalf("projected resources = %#v", resources)
+	}
+	quotedArgs := resources[1]["download"].(map[string]any)["arguments"].(map[string]any)
+	if resources[1]["resourceId"] != "@quoted-image" ||
+		quotedArgs["message-id"] != "quoted" ||
+		quotedArgs["open-conversation-id"] != "cid" {
+		t.Fatalf("quoted resource context = %#v", resources[1])
+	}
 }
 
 func TestCrossPlatformCoverageMgetResourceDownloadOutcomes(t *testing.T) {
-	baseArgs := []string{"chat", "+messages-mget", "--msg-ids", "msg", "--download-resources"}
+	baseArgs := []string{"chat", "+messages-mget", "--msg-ids", "msg", "--download-resources", "--yes"}
 	readyMget := `{"result":[{"openMessageId":"msg","openConversationId":"cid","content":"{\"mediaId\":\"@file\"}"}]}`
 	missingContextMget := `{"result":[{"content":"{\"mediaId\":\"@file\"}"}]}`
-	validInfo := `{"result":{"resourceUrl":"https://example.test/resource.bin"}}`
+	validInfo := `{"result":{"resourceUrl":"https://download.dingtalk.com/resource.bin"}}`
 
 	t.Run("dry run", func(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
@@ -62,9 +73,53 @@ func TestCrossPlatformCoverageMgetResourceDownloadOutcomes(t *testing.T) {
 			"im/list_messages_by_ids": readyMget,
 		}})
 		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
 		root.SetArgs(baseArgs)
-		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "工作目录") {
-			t.Fatalf("getwd error = %v", err)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("getwd ledger error = %v", err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		ledger, _ := payload["resourceDownloads"].(map[string]any)
+		if ledger["requestedCount"] != float64(1) ||
+			ledger["failedCount"] != ledger["requestedCount"] {
+			t.Fatalf("getwd ledger = %#v", ledger)
+		}
+	})
+	t.Run("zero resources skip getwd", func(t *testing.T) {
+		resetResourceDownloadHooks(t)
+		getwdCalled := false
+		resourceGetwd = func() (string, error) {
+			getwdCalled = true
+			return "", errors.New("getwd")
+		}
+		helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
+			"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"cid","content":"plain text"}]}`,
+		}})
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs(baseArgs)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("zero-resource download error = %v", err)
+		}
+		if getwdCalled {
+			t.Fatal("zero-resource download unnecessarily read the working directory")
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		ledger, _ := payload["resourceDownloads"].(map[string]any)
+		failures, _ := ledger["failures"].([]any)
+		if ledger["ok"] != true ||
+			ledger["requestedCount"] != float64(0) ||
+			ledger["failedCount"] != float64(0) ||
+			len(failures) != 0 {
+			t.Fatalf("zero-resource ledger = %#v", ledger)
 		}
 	})
 
@@ -118,5 +173,50 @@ func TestCrossPlatformCoverageMgetResourceDownloadOutcomes(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageMgetDownloadRunsWithoutConfirmation(t *testing.T) {
+	resetResourceDownloadHooks(t)
+	t.Chdir(t.TempDir())
+	resourceDownload = func(
+		_ context.Context,
+		_ *http.Client,
+		_ string,
+		_ map[string]string,
+		dest string,
+		_ bool,
+	) (int64, error) {
+		return 7, nil
+	}
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_messages_by_ids":      `{"result":[{"openMessageId":"msg","openConversationId":"cid","content":"{\"mediaId\":\"@file\"}"}]}`,
+		"im/get_resource_download_url": `{"result":{"resourceUrl":"https://download.dingtalk.com/resource.bin"}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetIn(bytes.NewBuffer(nil))
+	root.SetArgs([]string{
+		"chat", "+messages-mget",
+		"--msg-ids", "msg",
+		"--download-resources",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 ||
+		fake.calls[0].tool != "list_messages_by_ids" ||
+		fake.calls[1].tool != "get_resource_download_url" {
+		t.Fatalf("download calls = %#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	ledger, _ := payload["resourceDownloads"].(map[string]any)
+	if ledger["downloadedCount"] != float64(1) || ledger["failedCount"] != float64(0) {
+		t.Fatalf("download ledger = %#v", ledger)
 	}
 }

@@ -15,18 +15,41 @@ package chat
 
 import (
 	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestResourceDownloadInfo(t *testing.T) {
+func TestCrossPlatformCoverageCanonicalMessageResourceType(t *testing.T) {
+	for input, want := range map[string]string{
+		"mediaId":  "mediaId",
+		"MEDIAID":  "mediaId",
+		" fileid ": "fileId",
+		"FileId":   "fileId",
+	} {
+		got, ok := canonicalMessageResourceType(input)
+		if !ok || got != want {
+			t.Errorf("canonicalMessageResourceType(%q) = %q, %v; want %q, true",
+				input, got, ok, want)
+		}
+	}
+	if got, ok := canonicalMessageResourceType("attachment"); ok || got != "attachment" {
+		t.Errorf("unsupported resource type = %q, %v", got, ok)
+	}
+	if _, err := resolveMessageResourceDownloadData(
+		nil, "attachment", "resource", "message", "conversation",
+	); err == nil || !strings.Contains(err.Error(), "不支持的消息资源类型") {
+		t.Fatalf("unsupported resolver type error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageResourceDownloadInfo(t *testing.T) {
 	url, headers, err := resourceDownloadInfo(map[string]any{
 		"result": map[string]any{
-			"resourceUrl": []any{"https://download.example.test/path/image.png"},
+			"resourceUrl": []any{"https://download.dingtalk.com/path/image.png"},
 			"headers": map[string]any{
 				"X-Test": "value",
 			},
@@ -35,7 +58,7 @@ func TestResourceDownloadInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if url != "https://download.example.test/path/image.png" {
+	if url != "https://download.dingtalk.com/path/image.png" {
 		t.Fatalf("url = %q", url)
 	}
 	if headers["X-Test"] != "value" {
@@ -56,6 +79,19 @@ func TestResourceDownloadInfo(t *testing.T) {
 		"result": map[string]any{"resourceUrl": "http://download.example.test/a"},
 	}); err == nil {
 		t.Fatal("plain HTTP URL unexpectedly accepted")
+	}
+	for _, resourceURL := range []string{
+		"https://evil.example/file",
+		"https://aliyuncs.com.evil.example/file",
+		"https://127.0.0.1/file",
+		"https://user:secret@download.dingtalk.com/file",
+		"https://download.dingtalk.com:8443/file",
+	} {
+		if _, _, err := resourceDownloadInfo(
+			map[string]any{"resourceUrl": resourceURL},
+		); err == nil {
+			t.Fatalf("untrusted URL %q unexpectedly accepted", resourceURL)
+		}
 	}
 }
 
@@ -115,16 +151,23 @@ func TestResolveResourceDownloadPathRejectsSymlinkParentBeforeCreatingOutside(t 
 	}
 }
 
-func TestDownloadResourceAtomically(t *testing.T) {
+func TestCrossPlatformCoverageDownloadResourceAtomically(t *testing.T) {
 	const body = "verified download bytes"
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(server.Close)
+	client := &http.Client{Transport: resourceRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != "https://download.dingtalk.com/resource.bin" {
+			t.Fatalf("request URL = %q", request.URL)
+		}
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Body:          io.NopCloser(strings.NewReader(body)),
+			ContentLength: int64(len(body)),
+			Header:        make(http.Header),
+		}, nil
+	})}
 	dest := filepath.Join(t.TempDir(), "resource.bin")
 
 	size, err := downloadResourceAtomically(
-		context.Background(), server.Client(), server.URL, nil, dest, false)
+		context.Background(), client, "https://download.dingtalk.com/resource.bin", nil, dest, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +182,7 @@ func TestDownloadResourceAtomically(t *testing.T) {
 		t.Fatalf("body = %q", got)
 	}
 	if _, err := downloadResourceAtomically(
-		context.Background(), server.Client(), server.URL, nil, dest, false,
+		context.Background(), client, "https://download.dingtalk.com/resource.bin", nil, dest, false,
 	); err == nil || !strings.Contains(err.Error(), "已存在") {
 		t.Fatalf("no-clobber error = %v", err)
 	}

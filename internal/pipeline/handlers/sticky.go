@@ -14,15 +14,13 @@
 package handlers
 
 import (
-	"strings"
-
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
-// StickyHandler detects glued flag-value pairs in raw argv and splits
-// them into separate tokens. For example, "--limit100" becomes
-// "--limit", "100" when "limit" is a known flag name.
+// StickyHandler detects glued flag-value pairs in raw argv and normalizes
+// them. For example, "--limit100" becomes "--limit", "100" while a boolean
+// such as "--verbosefalse" becomes the single safe token "--verbose=false".
 //
 // The handler only operates on tokens that start with "--" and do not
 // contain "=". It tries to match the longest known flag name prefix
@@ -45,11 +43,25 @@ func (StickyHandler) Handle(ctx *pipeline.Context) error {
 	specByName := buildFlagSpecIndex(ctx.FlagSpecs)
 	result := make([]string, 0, len(ctx.Args))
 
-	for _, arg := range ctx.Args {
+	for i, arg := range ctx.Args {
+		if arg == "--" {
+			result = append(result, ctx.Args[i:]...)
+			break
+		}
+		if bare, _, isFlag := splitFlagToken(arg); isFlag && ctx.IsFlagProtected(cmdutil.Morph(bare)) {
+			result = append(result, arg)
+			continue
+		}
 		split, ok := trySplitSticky(arg, specByName)
 		if ok {
-			ctx.AddCorrection("sticky", pipeline.PreParse, split.flag, arg, split.flag+" "+split.value, "sticky")
-			result = append(result, split.flag, split.value)
+			if split.inline {
+				corrected := split.flag + "=" + split.value
+				ctx.AddCorrection("sticky", pipeline.PreParse, split.flag, arg, corrected, "sticky")
+				result = append(result, corrected)
+			} else {
+				ctx.AddCorrection("sticky", pipeline.PreParse, split.flag, arg, split.flag+" "+split.value, "sticky")
+				result = append(result, split.flag, split.value)
+			}
 		} else {
 			result = append(result, arg)
 		}
@@ -60,8 +72,9 @@ func (StickyHandler) Handle(ctx *pipeline.Context) error {
 }
 
 type stickyPair struct {
-	flag  string
-	value string
+	flag   string
+	value  string
+	inline bool
 }
 
 // trySplitSticky checks if arg looks like a glued flag-value (e.g.
@@ -79,69 +92,8 @@ type stickyPair struct {
 // that camelCase+glued values like "--pageSize50" are correctly
 // split to "--page-size", "50".
 func trySplitSticky(arg string, specByName map[string]pipeline.FlagInfo) (stickyPair, bool) {
-	if !strings.HasPrefix(arg, "--") || strings.Contains(arg, "=") {
-		return stickyPair{}, false
-	}
-
-	// Strip "--" prefix to work with the bare token.
-	bare := arg[2:]
-	if bare == "" {
-		return stickyPair{}, false
-	}
-
-	// If the whole token is a known flag, it is not sticky — it is
-	// a normal flag expecting a separate value token.
-	if _, ok := specByName[bare]; ok {
-		return stickyPair{}, false
-	}
-	if _, ok := specByName[toKebabCase(bare)]; ok {
-		return stickyPair{}, false
-	}
-
-	// Try longest-prefix match: walk from len-1 down to 1, looking
-	// for the longest known flag that is a prefix of bare. For each
-	// candidate prefix, try both the raw form and kebab-case form.
-	bestLen := 0
-	bestFlag := ""
-	for i := len(bare) - 1; i >= 1; i-- {
-		prefix := bare[:i]
-
-		matchedFlag := ""
-		if _, ok := specByName[prefix]; ok {
-			matchedFlag = prefix
-		} else {
-			kebab := toKebabCase(prefix)
-			if kebab != "" {
-				if _, ok := specByName[kebab]; ok {
-					matchedFlag = kebab
-				}
-			}
-		}
-
-		if matchedFlag != "" && i > bestLen {
-			bestLen = i
-			bestFlag = matchedFlag
-			break // longest first since we walk from the end
-		}
-	}
-	if bestFlag == "" {
-		return stickyPair{}, false
-	}
-
-	suffix := bare[bestLen:]
-	// Guard: only split if the suffix plausibly looks like a value
-	// for this flag's declared type/format/enum. Otherwise leave the
-	// token untouched so Cobra reports "unknown flag" instead of
-	// silently corrupting the value.
-	fi := specByName[bestFlag]
-	if !cmdutil.SuffixLooksLikeValue(suffix, fi.Type, fi.Format, fi.Enum) {
-		return stickyPair{}, false
-	}
-
-	return stickyPair{
-		flag:  "--" + bestFlag,
-		value: suffix,
-	}, true
+	pair, ok := pipeline.SplitStickyFlag(arg, specByName)
+	return stickyPair{flag: pair.Flag, value: pair.Value, inline: pair.Inline}, ok
 }
 
 // buildFlagSpecIndex creates an index of known flag names (without "--"

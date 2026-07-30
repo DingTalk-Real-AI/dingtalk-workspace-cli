@@ -18,9 +18,9 @@ left that Release run ineligible for stable promotion.
 
 - **Complete promotion evidence** — republishes the validated v1.0.55 command, Runtime Schema, Skill, authentication, and projection changes with the optional Gitee upload fallback disabled, so the release can produce one successful auditable delivery proof before stable promotion.
 
-## [1.0.55] - 2026-07-29
+## [1.0.55] - 2026-07-30
 
-This release promotes the validated `v1.0.55-beta.7` baseline to stable. It
+This release promotes the validated `v1.0.55-beta.8` baseline to stable. It
 expands the public Workspace command surface and personal event consumption,
 makes the full built-in shortcut catalog available to Agents, and hardens
 multi-account routing, authentication compatibility, command safety, and

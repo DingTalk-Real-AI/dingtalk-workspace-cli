@@ -139,13 +139,13 @@ var MessagesReply = shortcut.Shortcut{
 	Command:     "+messages-reply",
 	Product:     "chat",
 	Description: "以当前用户身份引用回复消息（自动补全原发送者）",
-	Intent:      "当你要以当前用户身份对已有消息发送纯文本引用回复时使用；提供会话和被引用消息即可，默认通过 mget 自动读取原发送者，也可显式传 openDingTalkId/userId。它不支持 bot 身份、富媒体、卡片或 thread 内回复。",
+	Intent:      "当你要以当前用户身份对已有消息发送纯文本引用回复时使用；提供会话和被引用消息即可，默认通过 mget 自动读取原发送者，也可显式传 openDingTalkId/userId；userId 会通过通讯录搜索精确匹配 openDingTalkId。它不支持 bot 身份、富媒体、卡片或 thread 内回复。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
 		{Name: "ref-msg-id", Type: shortcut.FlagString, Desc: "被引用消息 openMessageId"},
 		{Name: "message-id", Type: shortcut.FlagString, Desc: "--ref-msg-id 的 lark-cli 对齐别名"},
-		{Name: "ref-sender", Type: shortcut.FlagString, Desc: "原消息发送者 openDingTalkId/userId（不传则自动读取）"},
+		{Name: "ref-sender", Type: shortcut.FlagString, Desc: "原消息发送者 openDingTalkId/userId（userId 通过通讯录搜索精确匹配；不传则自动读取）"},
 		{Name: "text", Type: shortcut.FlagString, Desc: "纯文本回复内容", Required: true},
 		{Name: "uuid", Type: shortcut.FlagString, Desc: "幂等键（可选）"},
 		{Name: "idempotency-key", Type: shortcut.FlagString, Desc: "--uuid 的 lark-cli 对齐别名"},
@@ -184,16 +184,11 @@ func resolveReplySender(rt *shortcut.RuntimeContext) (string, error) {
 		if isOpenID(value) {
 			return value, nil
 		}
-		data, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
-			"user_id_list": []string{value},
-		})
+		openID, err := resolveUserOpenDingTalkID(rt, value)
 		if err != nil {
 			return "", fmt.Errorf("把 --ref-sender userId 解析为 openDingTalkId 失败: %w", err)
 		}
-		if openID := findOpenDingTalkID(data); openID != "" {
-			return openID, nil
-		}
-		return "", apperrors.NewValidation("无法把 --ref-sender 解析为 openDingTalkId")
+		return openID, nil
 	}
 
 	messageID := replyMessageID(rt)

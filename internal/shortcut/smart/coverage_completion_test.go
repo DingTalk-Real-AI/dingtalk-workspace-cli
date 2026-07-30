@@ -67,7 +67,7 @@ func TestCrossPlatformCoverageRichMessageProjections(t *testing.T) {
 		"emotionReplyList":   []any{map[string]any{"emojiName": "赞", "replyCount": 1}},
 		"quotedMessage": map[string]any{
 			"openMessageId": "quoted",
-			"content":       "quoted body",
+			"content":       `{"mediaId":"@quoted-image"}`,
 		},
 	}
 	for name, row := range map[string]map[string]any{
@@ -80,6 +80,16 @@ func TestCrossPlatformCoverageRichMessageProjections(t *testing.T) {
 				t.Errorf("%s projection missing %s: %#v", name, key, row)
 			}
 		}
+		resources := row["resourceRefs"].([]map[string]any)
+		if len(resources) != 2 {
+			t.Fatalf("%s projected resources = %#v", name, resources)
+		}
+		quotedArgs := resources[1]["download"].(map[string]any)["arguments"].(map[string]any)
+		if resources[1]["resourceId"] != "@quoted-image" ||
+			quotedArgs["message-id"] != "quoted" ||
+			quotedArgs["open-conversation-id"] != "cid" {
+			t.Fatalf("%s quoted resource context = %#v", name, resources[1])
+		}
 	}
 }
 
@@ -89,7 +99,7 @@ func TestCrossPlatformCoverageChatMessagesOpenIDRoute(t *testing.T) {
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-messages", "--open-dingtalk-id", "D-user", "--limit", "1"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--open-dingtalk-id", "D-user", "--limit", "1", "--yes"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +212,7 @@ func TestCrossPlatformCoverageSearchValidationAndTimeErrors(t *testing.T) {
 	for _, tail := range cases {
 		helpers.InitDeps(&smartCoverageCaller{})
 		root := newPlatformCoverageRoot()
-		root.SetArgs(append([]string{"chat", "+search-msg"}, tail...))
+		root.SetArgs(append([]string{"chat", "+search-msg", "--yes"}, tail...))
 		if err := root.Execute(); err == nil {
 			t.Errorf("invalid search args succeeded: %v", tail)
 		}
@@ -247,7 +257,7 @@ func TestCrossPlatformCoverageSearchPaginationFailureModes(t *testing.T) {
 			root := newPlatformCoverageRoot()
 			var output bytes.Buffer
 			root.SetOut(&output)
-			root.SetArgs(append([]string{"chat", "+search-msg"}, tc.args...))
+			root.SetArgs(append([]string{"chat", "+search-msg", "--yes"}, tc.args...))
 			err := root.Execute()
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error = %v, wantError=%v", err, tc.wantError)

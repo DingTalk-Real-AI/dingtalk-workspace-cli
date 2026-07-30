@@ -43,22 +43,22 @@ cli_version: ">=1.0.15"
 
 | 服务 | shortcut 数 | multi skill | 发现命令 |
 |---|---:|---|---|
-| `aitable` | 29 | `dingtalk-aitable` | `dws shortcut list --service aitable --format json` |
-| `attendance` | 19 | `dingtalk-misc` | `dws shortcut list --service attendance --format json` |
-| `calendar` | 20 | `dingtalk-calendar` | `dws shortcut list --service calendar --format json` |
-| `chat` | 42 | `dingtalk-chat` | `dws shortcut list --service chat --format json` |
-| `contact` | 14 | `dingtalk-contact` | `dws shortcut list --service contact --format json` |
-| `devapp` | 19 | `dingtalk-dev` | `dws shortcut list --service devapp --format json` |
-| `ding` | 4 | `dingtalk-misc` | `dws shortcut list --service ding --format json` |
-| `doc` | 17 | `dingtalk-doc` | `dws shortcut list --service doc --format json` |
-| `drive` | 7 | `dingtalk-drive` | `dws shortcut list --service drive --format json` |
-| `mail` | 10 | `dingtalk-mail` | `dws shortcut list --service mail --format json` |
-| `minutes` | 6 | `dingtalk-minutes` | `dws shortcut list --service minutes --format json` |
-| `oa` | 7 | `dingtalk-misc` | `dws shortcut list --service oa --format json` |
-| `report` | 2 | `dingtalk-misc` | `dws shortcut list --service report --format json` |
-| `sheet` | 2 | `dingtalk-misc` | `dws shortcut list --service sheet --format json` |
-| `todo` | 11 | `dingtalk-todo` | `dws shortcut list --service todo --format json` |
-| `wiki` | 1 | `dingtalk-wiki` | `dws shortcut list --service wiki --format json` |
+| `aitable` | 29 | `dingtalk-workspace` | `dws shortcut list --service aitable --format json` |
+| `attendance` | 19 | `dingtalk-workspace` | `dws shortcut list --service attendance --format json` |
+| `calendar` | 20 | `dingtalk-workspace` | `dws shortcut list --service calendar --format json` |
+| `chat` | 97 | `dingtalk-workspace` | `dws shortcut list --service chat --format json` |
+| `contact` | 14 | `dingtalk-workspace` | `dws shortcut list --service contact --format json` |
+| `devapp` | 19 | `dingtalk-workspace` | `dws shortcut list --service devapp --format json` |
+| `ding` | 4 | `dingtalk-workspace` | `dws shortcut list --service ding --format json` |
+| `doc` | 17 | `dingtalk-workspace` | `dws shortcut list --service doc --format json` |
+| `drive` | 7 | `dingtalk-workspace` | `dws shortcut list --service drive --format json` |
+| `mail` | 10 | `dingtalk-workspace` | `dws shortcut list --service mail --format json` |
+| `minutes` | 6 | `dingtalk-workspace` | `dws shortcut list --service minutes --format json` |
+| `oa` | 7 | `dingtalk-workspace` | `dws shortcut list --service oa --format json` |
+| `report` | 2 | `dingtalk-workspace` | `dws shortcut list --service report --format json` |
+| `sheet` | 2 | `dingtalk-workspace` | `dws shortcut list --service sheet --format json` |
+| `todo` | 11 | `dingtalk-workspace` | `dws shortcut list --service todo --format json` |
+| `wiki` | 1 | `dingtalk-workspace` | `dws shortcut list --service wiki --format json` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
 ## 多组织 / 多账号

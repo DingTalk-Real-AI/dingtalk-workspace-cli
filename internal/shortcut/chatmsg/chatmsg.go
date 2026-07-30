@@ -207,21 +207,25 @@ func firstMessageValue(m map[string]any, keys ...string) any {
 	return nil
 }
 
-// Resources extracts actionable media references from both structured message
-// fields and the textual mediaId notation returned by older DingTalk message
-// APIs. Every reference publishes the exact Shortcut arguments already known
-// from the message, plus ready=false and missing fields when a follow-up lookup
-// is still required. This shared shape is used by list, search, mget, quoted
-// messages and thread replies.
+// Resources extracts actionable media and drive-file references from both
+// structured message fields and the textual mediaId/fileId notation returned
+// by older DingTalk message APIs. Every reference publishes the exact Shortcut
+// arguments already known from the message, plus ready=false and missing fields
+// when a follow-up lookup is still required. This shared shape is used by list,
+// search, mget, quoted messages and thread replies.
 func Resources(m map[string]any) []map[string]any {
 	if m == nil {
 		return nil
 	}
-	ids := make([]string, 0)
-	collectMediaIDs(m, &ids)
-	ids = uniqueMediaIDs(ids)
-	sort.Strings(ids)
-	if len(ids) == 0 {
+	mediaIDs := make([]string, 0)
+	collectResourceIDs(m, "mediaid", mediaIDTextRE, &mediaIDs)
+	mediaIDs = uniqueResourceIDs(mediaIDs)
+	sort.Strings(mediaIDs)
+	fileIDs := make([]string, 0)
+	collectResourceIDs(m, "fileid", fileIDTextRE, &fileIDs)
+	fileIDs = uniqueResourceIDs(fileIDs)
+	sort.Strings(fileIDs)
+	if len(mediaIDs) == 0 && len(fileIDs) == 0 {
 		return nil
 	}
 
@@ -234,8 +238,8 @@ func Resources(m map[string]any) []map[string]any {
 		conversationID = ""
 	}
 
-	out := make([]map[string]any, 0, len(ids))
-	for _, id := range ids {
+	out := make([]map[string]any, 0, len(mediaIDs)+len(fileIDs))
+	for _, id := range mediaIDs {
 		arguments := map[string]any{
 			"type":        "mediaId",
 			"resource-id": id,
@@ -262,36 +266,94 @@ func Resources(m map[string]any) []map[string]any {
 			},
 		})
 	}
+	for _, id := range fileIDs {
+		out = append(out, map[string]any{
+			"type":       "fileId",
+			"resourceId": id,
+			"download": map[string]any{
+				"shortcut": "+messages-resource-download",
+				"arguments": map[string]any{
+					"type":        "fileId",
+					"resource-id": id,
+				},
+				"ready":   true,
+				"missing": []string{},
+			},
+		})
+	}
 	return out
 }
 
-var mediaIDTextRE = regexp.MustCompile(`(?i)media[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
+// ResourcesDeep returns resources from a message and each nested quoted,
+// replied-to or forwarded message. Every nested resource is projected from the
+// child message that owns it, so its download arguments never reuse the parent
+// message ID. A missing child conversation ID inherits the enclosing
+// conversation because quoted and forwarded records often omit that duplicate
+// field.
+func ResourcesDeep(m map[string]any) []map[string]any {
+	return resourcesDeep(m, "", 0)
+}
 
-func collectMediaIDs(value any, out *[]string) {
+const maxResourceMessageDepth = 32
+
+func resourcesDeep(m map[string]any, inheritedConversationID string, depth int) []map[string]any {
+	if m == nil || depth > maxResourceMessageDepth {
+		return nil
+	}
+	conversationID := strings.TrimSpace(fmt.Sprint(ConversationID(m)))
+	if conversationID == "" || conversationID == "<nil>" {
+		conversationID = inheritedConversationID
+	}
+	owned := m
+	if ConversationID(m) == nil && conversationID != "" {
+		owned = make(map[string]any, len(m)+1)
+		for key, value := range m {
+			owned[key] = value
+		}
+		owned["openConversationId"] = conversationID
+	}
+	out := append([]map[string]any(nil), Resources(owned)...)
+	if depth == maxResourceMessageDepth {
+		return out
+	}
+	for _, child := range nestedMessageChildren(m) {
+		out = append(out, resourcesDeep(child, conversationID, depth+1)...)
+	}
+	return out
+}
+
+var mediaIDTextRE = regexp.MustCompile(`(?i)\bmedia[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
+var fileIDTextRE = regexp.MustCompile(`(?i)\bfile[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
+
+func collectResourceIDs(value any, targetKey string, textPattern *regexp.Regexp, out *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
 		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceType", "resource_type")))
 		for key, child := range typed {
-			normalizedKey := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
-			if normalizedKey == "mediaid" || (normalizedKey == "resourceid" && strings.EqualFold(resourceType, "mediaId")) {
-				if id := mediaIDScalar(child); id != "" {
+			normalizedKey := normalizeMessageKey(key)
+			if normalizedKey == targetKey ||
+				(normalizedKey == "resourceid" && strings.EqualFold(resourceType, targetKey)) {
+				if id := resourceIDScalar(child); id != "" {
 					*out = append(*out, id)
 				}
 			}
-			collectMediaIDs(child, out)
+			if isNestedMessageBoundaryKey(normalizedKey) {
+				continue
+			}
+			collectResourceIDs(child, targetKey, textPattern, out)
 		}
 	case []any:
 		for _, child := range typed {
-			collectMediaIDs(child, out)
+			collectResourceIDs(child, targetKey, textPattern, out)
 		}
 	case []map[string]any:
 		for _, child := range typed {
-			collectMediaIDs(child, out)
+			collectResourceIDs(child, targetKey, textPattern, out)
 		}
 	case string:
-		for _, match := range mediaIDTextRE.FindAllStringSubmatch(typed, -1) {
+		for _, match := range textPattern.FindAllStringSubmatch(typed, -1) {
 			if len(match) > 1 {
-				if id := mediaIDScalar(match[1]); id != "" {
+				if id := resourceIDScalar(match[1]); id != "" {
 					*out = append(*out, id)
 				}
 			}
@@ -300,13 +362,81 @@ func collectMediaIDs(value any, out *[]string) {
 		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 			var decoded any
 			if json.Unmarshal([]byte(trimmed), &decoded) == nil {
-				collectMediaIDs(decoded, out)
+				collectResourceIDs(decoded, targetKey, textPattern, out)
 			}
 		}
 	}
 }
 
-func mediaIDScalar(value any) string {
+func normalizeMessageKey(key string) string {
+	return strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
+}
+
+func isNestedMessageBoundaryKey(key string) bool {
+	switch key {
+	case "quotedmessage", "replymessage", "quoted", "replytomessage",
+		"forwardmessages", "forwardedmessages", "forwarded":
+		return true
+	default:
+		return false
+	}
+}
+
+func nestedMessageMaps(value any) []map[string]any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return []map[string]any{typed}
+	case []map[string]any:
+		return typed
+	case []any:
+		out := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if child, ok := item.(map[string]any); ok {
+				out = append(out, child)
+			}
+		}
+		return out
+	case string:
+		var decoded any
+		if json.Unmarshal([]byte(strings.TrimSpace(typed)), &decoded) == nil {
+			return nestedMessageMaps(decoded)
+		}
+	}
+	return nil
+}
+
+func nestedMessageChildren(value any) []map[string]any {
+	out := make([]map[string]any, 0)
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if isNestedMessageBoundaryKey(normalizeMessageKey(key)) {
+				out = append(out, nestedMessageMaps(child)...)
+				continue
+			}
+			out = append(out, nestedMessageChildren(child)...)
+		}
+	case []any:
+		for _, child := range typed {
+			out = append(out, nestedMessageChildren(child)...)
+		}
+	case []map[string]any:
+		for _, child := range typed {
+			out = append(out, nestedMessageChildren(child)...)
+		}
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			var decoded any
+			if json.Unmarshal([]byte(trimmed), &decoded) == nil {
+				out = append(out, nestedMessageChildren(decoded)...)
+			}
+		}
+	}
+	return out
+}
+
+func resourceIDScalar(value any) string {
 	text, ok := value.(string)
 	if !ok {
 		return ""
@@ -314,7 +444,7 @@ func mediaIDScalar(value any) string {
 	return strings.Trim(strings.TrimSpace(text), `"'`)
 }
 
-func uniqueMediaIDs(values []string) []string {
+func uniqueResourceIDs(values []string) []string {
 	out := make([]string, 0, len(values))
 	seen := map[string]bool{}
 	for _, value := range values {

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
@@ -296,6 +297,47 @@ func normalizeAtPlaceholders(text string, ids []string, wrapAngle bool) string {
 		}
 	}
 	return text
+}
+
+// NormalizeMessageMentions applies the placeholder convention required by the
+// selected sender identity and ensures a declared @all is present in the body.
+// Current-user messages use <@id>/<@all>; bot and webhook messages use
+// @id/@mobile/@all.
+func NormalizeMessageMentions(text string, ids []string, atAll, wrapAngle bool) string {
+	text = normalizeAtPlaceholders(text, ids, wrapAngle)
+	allPlaceholder := "@all"
+	if wrapAngle {
+		text = normalizeAtPlaceholders(text, []string{"all"}, true)
+		allPlaceholder = "<@all>"
+	} else {
+		text = strings.ReplaceAll(text, "<@all>", "@all")
+	}
+	if atAll && !containsMessageMention(text, allPlaceholder) {
+		text = allPlaceholder + " " + text
+	}
+	return text
+}
+
+func containsMessageMention(text, placeholder string) bool {
+	if strings.HasPrefix(placeholder, "<") {
+		return strings.Contains(text, placeholder)
+	}
+	for searchFrom := 0; ; {
+		offset := strings.Index(text[searchFrom:], placeholder)
+		if offset < 0 {
+			return false
+		}
+		end := searchFrom + offset + len(placeholder)
+		if end == len(text) {
+			return true
+		}
+		next, _ := utf8.DecodeRuneInString(text[end:])
+		if !unicode.IsLetter(next) && !unicode.IsDigit(next) &&
+			next != '_' && next != '-' {
+			return true
+		}
+		searchFrom = end
+	}
 }
 
 func resolveOpenDingTalkID(ctx context.Context, value string) (string, error) {
