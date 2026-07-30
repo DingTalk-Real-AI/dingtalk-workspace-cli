@@ -17,27 +17,9 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
-
-func validateChatMessageMediaSelection(mediaID, msgType string, cmd *cobra.Command) error {
-	if mediaID == "" || msgType == "image" {
-		return nil
-	}
-	return apperrors.NewValidation(
-		"检测到 --media-id，但 --msg-type 不是 image；已阻止把媒体文件名作为普通文字发送",
-		apperrors.WithReason("ambiguous_media_message"),
-		apperrors.WithHint("发送图片时补充 --msg-type image 并保留 --media-id；发送 PDF/DOCX/XLSX 等本地文件时移除 --media-id，改用 --msg-type file --file-path <本地文件>。"),
-		apperrors.WithActions(
-			"发送图片：补充 --msg-type image",
-			"发送文件：改用 --msg-type file --file-path <本地文件>",
-			"只发送文字：移除 --media-id",
-		),
-		apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-	)
-}
 
 func resolveMessageForward(cmd *cobra.Command, defaultForward bool) (bool, error) {
 	forwardStr, _ := cmd.Flags().GetString("forward")
@@ -1543,9 +1525,6 @@ func newChatCommand() *cobra.Command {
 
 			mediaId, _ := cmd.Flags().GetString("media-id")
 			msgType, _ := cmd.Flags().GetString("msg-type")
-			if err := validateChatMessageMediaSelection(mediaId, msgType, cmd); err != nil {
-				return err
-			}
 			clawType := ""
 			aiTag, _ := cmd.Flags().GetBool("ai-tag")
 			if aiTag {

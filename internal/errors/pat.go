@@ -349,13 +349,11 @@ func suggestForBusinessErrorText(body map[string]any) string {
 	case strings.Contains(msg, "listRoles null"):
 		return "当前群的群身份或权限上下文不可用。请先用 dws chat group list-my-groups --format json 选择当前账号实际加入或管理的群，再核对群成员与权限。"
 	case strings.Contains(msg, "OpendId is not in conversation") || strings.Contains(msg, "OpenId is not in conversation"):
-		return "当前账号不在该会话中。请从 dws chat group list-my-groups --format json 选择实际加入的群，并重新获取该会话中的真实 openMessageId。"
+		return "当前账号不在该会话中。请先用 dws chat group list-my-groups --format json 选择实际加入的群，并重新获取该会话中的真实 OpendId。"
 	case strings.Contains(msg, "The operator is not in this group chat"):
 		return "当前操作者不在源群中。请重新选择当前账号已加入的群，或先完成入群；不要只替换接收方后重复原命令。"
 	case strings.Contains(msg, "targetOpenConversationId和receiverUid不能同时为空"):
 		return "分享群邀请链接必须提供接收目标：群到群使用 --target，群到人使用 --receiver；同时确认 --source 是当前操作者已加入的源群。"
-	case strings.Contains(msg, "moveConversationV3 error"):
-		return "移动会话到分组失败。请先用 dws chat category list --format json 获取真实可写的 categoryId，并选择当前账号可访问的 openConversationId。"
 	default:
 		return "MCP tool returned a business error; check parameters and refer to skill documentation."
 	}
