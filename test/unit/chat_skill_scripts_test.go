@@ -20,8 +20,6 @@ func TestChatSkillPythonScripts(t *testing.T) {
 	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 	cmd := exec.Command(
 		python,
-		"-m",
-		"unittest",
 		"test/scripts/chat_skill_scripts_test.py",
 	)
 	cmd.Dir = root

@@ -207,6 +207,161 @@ func TestCrossPlatformCoveragePATURLAndMutationCoverageEdges(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePATClassificationAndBusinessHints(t *testing.T) {
+	patErr := &PATError{RawJSON: `{"code":"PAT_NO_PERMISSION"}`}
+	if patErr.Error() != patErr.RawJSON || patErr.RawStderr() != patErr.RawJSON || patErr.ExitCode() != ExitCodePermission {
+		t.Fatalf("PATError contract changed: %#v", patErr)
+	}
+	if !IsPATError(patErr) || IsPATError(stderrors.New("plain")) {
+		t.Fatal("PAT error classification changed")
+	}
+	if !IsPATNoPermissionCode("PAT_NO_PERMISSION") || IsPATNoPermissionCode("UNKNOWN") {
+		t.Fatal("PAT permission code classification changed")
+	}
+
+	if code, ok := lookupCodeIn(map[string]any{
+		"code":      1,
+		"errorCode": "PAT_NO_PERMISSION",
+	}, patNoPermissionCodes); !ok || code != "PAT_NO_PERMISSION" {
+		t.Fatalf("lookupCodeIn fallback = %q, %v", code, ok)
+	}
+	if code, ok := lookupCodeIn(map[string]any{"code": "UNKNOWN"}, patNoPermissionCodes); ok || code != "" {
+		t.Fatalf("lookupCodeIn unknown = %q, %v", code, ok)
+	}
+	for _, tc := range []struct {
+		body map[string]any
+		want string
+		ok   bool
+	}{
+		{body: map[string]any{"code": "PAT_NO_PERMISSION"}, want: "PAT_NO_PERMISSION", ok: true},
+		{body: map[string]any{"error_code": "PAT_SCOPE_AUTH_REQUIRED"}, want: "PAT_SCOPE_AUTH_REQUIRED", ok: true},
+		{body: map[string]any{"code": "UNKNOWN"}},
+	} {
+		code, ok := getPATErrorCode(tc.body)
+		if code != tc.want || ok != tc.ok {
+			t.Fatalf("getPATErrorCode(%v) = %q, %v", tc.body, code, ok)
+		}
+	}
+	if code, ok := getDWSGatewayErrorCode(map[string]any{"errorCode": "DWS_AUTH_SERVICE_FAILED"}); !ok || code != "DWS_AUTH_SERVICE_FAILED" {
+		t.Fatalf("gateway code = %q, %v", code, ok)
+	}
+
+	if !isNotLoggedInError(map[string]any{
+		"error":   1,
+		"message": "Missing service_id or access_key",
+	}) {
+		t.Fatal("missing-login response was not recognized")
+	}
+	if isNotLoggedInError(map[string]any{"message": "other"}) {
+		t.Fatal("ordinary response was recognized as missing login")
+	}
+	for _, body := range []map[string]any{
+		{"error": "failure"},
+		{"success": false},
+		{"success": "FALSE"},
+	} {
+		if !isBusinessError(body) {
+			t.Fatalf("business error was not recognized: %#v", body)
+		}
+	}
+	for _, body := range []map[string]any{
+		{},
+		{"success": true},
+		{"success": "true"},
+	} {
+		if isBusinessError(body) {
+			t.Fatalf("successful response was classified as a business error: %#v", body)
+		}
+	}
+
+	if err := ClassifyToolResultContent(map[string]any{"code": "DWS_SERVICE_UNAUTHORIZED"}); err == nil {
+		t.Fatal("gateway tool result was not classified")
+	}
+	if err := ClassifyToolResultContent(map[string]any{"code": "PAT_BATCH_AUTH_PENDING"}); !IsPATError(err) {
+		t.Fatalf("PAT tool result = %T %v", err, err)
+	}
+	if err := ClassifyToolResultContent(map[string]any{"success": true}); err != nil {
+		t.Fatalf("successful tool result = %v", err)
+	}
+
+	responseCases := []struct {
+		name string
+		text string
+		kind string
+	}{
+		{name: "invalid json", text: "not-json", kind: "nil"},
+		{name: "gateway", text: `{"code":"DWS_AUTH_SERVICE_FAILED"}`, kind: "error"},
+		{name: "not logged in", text: `{"message":"Missing service_id or access_key"}`, kind: "error"},
+		{name: "pat", text: `{"code":"PAT_NO_PERMISSION"}`, kind: "pat"},
+		{name: "business", text: `{"success":false,"message":"参数错误"}`, kind: "error"},
+		{name: "success", text: `{"success":true}`, kind: "nil"},
+	}
+	for _, tc := range responseCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ClassifyMCPResponseText(tc.text)
+			switch tc.kind {
+			case "nil":
+				if err != nil {
+					t.Fatalf("ClassifyMCPResponseText() = %v", err)
+				}
+			case "pat":
+				if !IsPATError(err) {
+					t.Fatalf("ClassifyMCPResponseText() = %T %v", err, err)
+				}
+			default:
+				if err == nil {
+					t.Fatal("ClassifyMCPResponseText() returned nil")
+				}
+			}
+		})
+	}
+	if !strings.Contains(authExpiredHint(), "auth login") || !strings.Contains(notLoggedInHint(), "auth login") {
+		t.Fatal("authentication recovery hints lost the login command")
+	}
+
+	hintCases := []struct {
+		body map[string]any
+		want string
+	}{
+		{body: map[string]any{"errorMsg": "搜索内容不能为空"}, want: "doc search"},
+		{body: map[string]any{"message": "User has no permission to access this email"}, want: "mailbox list"},
+		{body: map[string]any{"error": "频率超限"}, want: "rate limit"},
+		{body: map[string]any{"errorMsg": "参数错误"}, want: "parameters"},
+		{
+			body: map[string]any{
+				"error":   map[string]any{"code": "IM_ERROR", "message": "listRoles null"},
+				"summary": "context",
+				"code":    "TOP_LEVEL",
+			},
+			want: "list-my-groups",
+		},
+		{body: map[string]any{"message": "OpendId is not in conversation"}, want: "实际加入"},
+		{body: map[string]any{"message": "OpenId is not in conversation"}, want: "实际加入"},
+		{body: map[string]any{"message": "The operator is not in this group chat"}, want: "源群"},
+		{body: map[string]any{"message": "targetOpenConversationId和receiverUid不能同时为空"}, want: "--receiver"},
+		{body: map[string]any{"summary": "unknown", "code": "UNKNOWN"}, want: "business error"},
+	}
+	for _, tc := range hintCases {
+		if got := SuggestBusinessHint(tc.body); !strings.Contains(got, tc.want) {
+			t.Errorf("SuggestBusinessHint(%v) = %q, want containing %q", tc.body, got, tc.want)
+		}
+	}
+
+	if got := ClassifyPatAuthCheck(map[string]any{"code": "PAT_LOW_RISK_NO_PERMISSION"}); got == nil {
+		t.Fatal("ClassifyPatAuthCheck() returned nil")
+	}
+	if got := ClassifyPatAuthCheck(map[string]any{"code": "UNKNOWN"}); got != nil {
+		t.Fatalf("ClassifyPatAuthCheck() = %#v", got)
+	}
+	wrapped := stderrors.Join(stderrors.New("outer"), patErr)
+	if got := AsPatAuthCheckError(wrapped); got != patErr {
+		t.Fatalf("AsPatAuthCheckError() = %#v", got)
+	}
+	if got := AsPatAuthCheckError(stderrors.New("plain")); got != nil {
+		t.Fatalf("AsPatAuthCheckError() = %#v", got)
+	}
+}
+
 func mustParseURLForTest(t *testing.T, raw string) *url.URL {
 	t.Helper()
 	parsed, err := url.Parse(raw)

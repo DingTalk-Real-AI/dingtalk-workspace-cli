@@ -57,6 +57,22 @@ func executeGuardedMutationCommand(t *testing.T, caller *guardedMutationCaller, 
 	return root.Execute()
 }
 
+func TestChatConversationDestructiveCommandsRequireConfirmation(t *testing.T) {
+	for _, args := range [][]string{
+		{"category", "delete", "--category-id", "42"},
+		{"clear-messages", "--conversation-id", "cid-1"},
+	} {
+		caller := &guardedMutationCaller{}
+		err := executeGuardedMutationCommand(t, caller, newChatCommand, args...)
+		if err == nil || !strings.Contains(err.Error(), "确认") {
+			t.Fatalf("chat %v error = %v, want confirmation error", args, err)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("chat %v made tool calls before confirmation: %#v", args, caller.calls)
+		}
+	}
+}
+
 type contractDefectCaller struct {
 	dryRun    bool
 	calls     []guardedMutationCall
