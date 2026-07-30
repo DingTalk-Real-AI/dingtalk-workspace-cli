@@ -359,7 +359,7 @@ dws aitable base search --query "项目" --format json
 dws aitable base get --base-id <BASE_ID> --format json
 
 # 3. 获取表结构 — 提取 fieldId
-dws aitable table get --base-id <BASE_ID> --table-id <TABLE_ID> --format json
+dws aitable table get --base-id <BASE_ID> --table-ids <TABLE_ID> --format json
 
 # 4. 查询记录
 dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --format json

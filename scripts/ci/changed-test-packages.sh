@@ -89,7 +89,14 @@ while IFS= read -r file; do
       fi
     done
     if [ "$has_go_files" = true ]; then
-      if ! package="$(go list -f '{{.ImportPath}}' "$pattern")"; then
+      if ! package="$(go list -f '{{.ImportPath}}' "$pattern" 2>"$changed_packages.err")"; then
+        # Build-tag-only packages (e.g. test/skill_static behind the
+        # skill_verify tag) are exercised by dedicated invocations, not the
+        # default test matrix; they carry no default-build test package.
+        if grep -q 'build constraints exclude all Go files' "$changed_packages.err"; then
+          continue
+        fi
+        cat "$changed_packages.err" >&2
         printf 'failed to resolve changed Go package: %s\n' "$directory" >&2
         exit 1
       fi
