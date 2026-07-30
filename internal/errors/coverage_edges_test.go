@@ -362,6 +362,114 @@ func TestCrossPlatformCoveragePATClassificationAndBusinessHints(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePATSerializationAndPolicyEdges(t *testing.T) {
+	oldHost := hostControlProvider
+	oldBrowser := patBrowserProvider
+	t.Cleanup(func() {
+		SetHostControlProvider(oldHost)
+		SetPATOpenBrowserProvider(oldBrowser)
+	})
+
+	SetHostControlProvider(func() string { return "" })
+	if block := HostControlBlock(); block != nil {
+		t.Fatalf("empty host provider returned %#v", block)
+	}
+	SetHostControlProvider(func() string { return "codex" })
+	SetPATOpenBrowserProvider(func() bool { return false })
+
+	out := map[string]any{
+		"data": map[string]any{
+			"authUrl":   " https://example.test/fe/old#%2FpersonalAuthorization%3FflowId%3Df%26userCode%3Du ",
+			"callbacks": map[string]any{"owner": "cli"},
+		},
+	}
+	ApplyHostMutations(out)
+	data := out["data"].(map[string]any)
+	if data["openBrowser"] != false || data["hostControl"] == nil || data["uri"] == "" {
+		t.Fatalf("host mutations = %#v", data)
+	}
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("authUrl alias was not removed: %#v", data)
+	}
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("legacy callbacks were not removed: %#v", data)
+	}
+
+	rawPolicy := cleanPATJSON(map[string]any{
+		"message": "organization denied",
+		"scope":   "chat.read",
+	}, "PAT_ORG_POLICY_DENIED")
+	var policyPayload map[string]any
+	if err := json.Unmarshal([]byte(rawPolicy), &policyPayload); err != nil {
+		t.Fatalf("decode policy PAT JSON: %v", err)
+	}
+	policyData := policyPayload["data"].(map[string]any)
+	for key, want := range map[string]any{
+		"policy":      "OPEN_SOURCE_ORG_SCOPE_FORBIDDEN",
+		"message":     "organization denied",
+		"action":      "contact_org_admin",
+		"openBrowser": false,
+		"retryable":   false,
+	} {
+		if got := policyData[key]; got != want {
+			t.Fatalf("policy data %s = %#v, want %#v", key, got, want)
+		}
+	}
+	if !strings.Contains(policyData["hint"].(string), "organization denied") {
+		t.Fatalf("policy hint = %#v", policyData["hint"])
+	}
+
+	rawDefault := cleanPATJSON(map[string]any{}, "PAT_ORG_POLICY_DENIED")
+	var defaultPayload map[string]any
+	if err := json.Unmarshal([]byte(rawDefault), &defaultPayload); err != nil {
+		t.Fatalf("decode default policy PAT JSON: %v", err)
+	}
+	defaultData := defaultPayload["data"].(map[string]any)
+	if !strings.Contains(defaultData["hint"].(string), "组织策略") {
+		t.Fatalf("default policy hint = %#v", defaultData["hint"])
+	}
+
+	prepopulated := map[string]any{"data": map[string]any{
+		"policy":  "CUSTOM",
+		"message": "existing",
+		"hint":    "existing hint",
+	}}
+	applyOrgPolicyDeniedHint(prepopulated, map[string]any{"message": "ignored"})
+	prepopulatedData := prepopulated["data"].(map[string]any)
+	if prepopulatedData["policy"] != "CUSTOM" ||
+		prepopulatedData["message"] != "existing" ||
+		prepopulatedData["hint"] != "existing hint" {
+		t.Fatalf("prepopulated policy fields changed: %#v", prepopulatedData)
+	}
+
+	if got := stringValue(map[string]any{
+		"number": 1,
+		"blank":  " ",
+		"value":  " kept ",
+	}, "number", "blank", "value"); got != "kept" {
+		t.Fatalf("stringValue fallback = %q", got)
+	}
+	if got := stringValue(map[string]any{"blank": " "}, "blank", "missing"); got != "" {
+		t.Fatalf("stringValue empty = %q", got)
+	}
+
+	cleaned := stripClassFields(map[string]any{
+		"class": "top",
+		"items": []any{
+			map[string]any{"class": "nested", "keep": "yes"},
+			"scalar",
+		},
+	}).(map[string]any)
+	if _, ok := cleaned["class"]; ok {
+		t.Fatalf("top-level class was retained: %#v", cleaned)
+	}
+	items := cleaned["items"].([]any)
+	nested := items[0].(map[string]any)
+	if _, ok := nested["class"]; ok || nested["keep"] != "yes" || items[1] != "scalar" {
+		t.Fatalf("nested class cleanup = %#v", cleaned)
+	}
+}
+
 func mustParseURLForTest(t *testing.T, raw string) *url.URL {
 	t.Helper()
 	parsed, err := url.Parse(raw)
