@@ -1,12 +1,12 @@
 {
   "version": 1,
   "surface_hash": "sha256:7e52c21569728ce895510615893c80f2581626a7cec34247959d70ce6a1a052b",
-  "source_hash": "sha256:00f7e1e6542cdd7271a8f0983f400250329d587f3d0633a36ac86354dc9217cd",
+  "source_hash": "sha256:74d6a984771d567c0d22c76754318f7d03ffcb26210be8932a4eafdb5fca8c86",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:67d47c8825d6c95f898e41484e8ae35818d9d5712369e63f1f870c35f252e405",
+      "source_hash": "sha256:1b5edf6c233eb3f5e8f5f548d971008a127813260728a1df66d92aebc7771cf9",
       "surface_hash": "sha256:7e52c21569728ce895510615893c80f2581626a7cec34247959d70ce6a1a052b",
       "surface_products": 26,
       "surface_tools": 870,
@@ -8052,16 +8052,16 @@
             "canonical_path": "chat.clear_conversation_messages",
             "cli_name": "clear-messages",
             "cli_path": "chat clear-messages",
-            "confirmation": "not_required",
-            "description": "清空当前用户在指定会话中的聊天记录。仅清空当前用户视角的消息，不影响其他成员。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e",
-            "effect": "write",
+            "confirmation": "user_required",
+            "description": "清空当前用户在指定会话中的聊天记录。仅清空当前用户视角的消息，不影响其他成员。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e",
+            "effect": "destructive",
             "idempotency": "unknown",
             "interface_mode": "composite",
             "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote conversation-clear helper absent from the pinned MCP snapshot.",
             "name": "clear_conversation_messages",
             "primary_cli_path": "chat clear-messages",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "清空当前用户指定会话的聊天记录",
             "use_when": [
               "用户明确要求清空某个已知会话的本地聊天记录时"
@@ -8311,9 +8311,9 @@
             "canonical_path": "chat.delete_conv_category",
             "cli_name": "delete",
             "cli_path": "chat category delete",
-            "confirmation": "not_required",
-            "description": "删除用户自定义会话分组",
-            "effect": "write",
+            "confirmation": "user_required",
+            "description": "删除用户自定义会话分组。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。",
+            "effect": "destructive",
             "group": "category",
             "idempotency": "unknown",
             "interface_mode": "composite",
@@ -8321,7 +8321,7 @@
             "name": "delete_conv_category",
             "primary_cli_path": "chat category delete",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "删除用户自定义会话分组",
             "use_when": [
               "用户明确要删除已知 categoryId 的自定义分组时"

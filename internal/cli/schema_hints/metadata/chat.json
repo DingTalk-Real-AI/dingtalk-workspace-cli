@@ -828,17 +828,17 @@
       "runtime_gate": "none"
     },
     "chat.delete_conv_category": {
-      "effect": "write",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote category-delete helper absent from the pinned MCP snapshot.",
       "reviewed": true,
-      "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+      "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
       "cli_path": "chat category delete",
-      "runtime_gate": "none"
+      "runtime_gate": "typed_yes"
     },
     "chat.remove_conv_from_categories": {
       "effect": "write",
@@ -893,17 +893,17 @@
       "runtime_gate": "none"
     },
     "chat.clear_conversation_messages": {
-      "effect": "write",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote conversation-clear helper absent from the pinned MCP snapshot.",
       "reviewed": true,
-      "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+      "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
       "cli_path": "chat clear-messages",
-      "runtime_gate": "none"
+      "runtime_gate": "typed_yes"
     },
     "chat.clear_conversation_red_point": {
       "effect": "write",

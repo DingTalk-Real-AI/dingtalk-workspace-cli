@@ -12499,8 +12499,8 @@
       "avoid_when": [
         "只想把会话移出分组时使用 category remove-conv；目标不明确时不要删除"
       ],
-      "confirmation": "not_required",
-      "effect": "write",
+      "confirmation": "user_required",
+      "effect": "destructive",
       "effect_source": "agent-hint",
       "examples": [
         "dws chat category delete --category-id 123"
@@ -12527,14 +12527,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             }
           ]
         },
@@ -12559,18 +12559,18 @@
           ]
         },
         "confirmation": {
-          "value": "not_required",
+          "value": "user_required",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
-              "value": "not_required",
+              "value": "user_required",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "not_required",
@@ -12581,18 +12581,18 @@
           ]
         },
         "effect": {
-          "value": "write",
+          "value": "destructive",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
-              "value": "write",
+              "value": "destructive",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "write",
@@ -12627,14 +12627,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "unknown",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "unknown",
@@ -12649,14 +12649,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "composite",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             }
           ]
         },
@@ -12665,14 +12665,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "Reviewed unpinned IM adapter: the executable CLI calls a remote category-delete helper absent from the pinned MCP snapshot.",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             }
           ]
         },
@@ -12697,14 +12697,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             },
             {
               "value": true,
@@ -12716,18 +12716,18 @@
           ]
         },
         "risk": {
-          "value": "medium",
+          "value": "high",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement.",
+          "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
-              "value": "medium",
+              "value": "high",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native category deletion command without inventing a confirmation gate that the runtime does not implement."
+              "review_reason": "Publish the documented native category deletion command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "medium",
@@ -12762,7 +12762,7 @@
       "interface_mode": "composite",
       "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote category-delete helper absent from the pinned MCP snapshot.",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source_refs": [
         "cobra-help:dws chat category delete",
         "internal/cli/schema_command_registry/products/chat.json#chat.delete_conv_category",
@@ -14681,8 +14681,8 @@
       "avoid_when": [
         "仅清除未读红点使用 clear-red-point；未确认真实 openConversationId 时不要执行"
       ],
-      "confirmation": "not_required",
-      "effect": "write",
+      "confirmation": "user_required",
+      "effect": "destructive",
       "effect_source": "agent-hint",
       "examples": [
         "dws chat clear-messages --conversation-id \u003copenConversationId\u003e"
@@ -14709,14 +14709,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             }
           ]
         },
@@ -14741,18 +14741,18 @@
           ]
         },
         "confirmation": {
-          "value": "not_required",
+          "value": "user_required",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
-              "value": "not_required",
+              "value": "user_required",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "not_required",
@@ -14763,18 +14763,18 @@
           ]
         },
         "effect": {
-          "value": "write",
+          "value": "destructive",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
-              "value": "write",
+              "value": "destructive",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "write",
@@ -14809,14 +14809,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "unknown",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "unknown",
@@ -14831,14 +14831,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "composite",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             }
           ]
         },
@@ -14847,14 +14847,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": "Reviewed unpinned IM adapter: the executable CLI calls a remote conversation-clear helper absent from the pinned MCP snapshot.",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             }
           ]
         },
@@ -14879,14 +14879,14 @@
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             },
             {
               "value": true,
@@ -14898,18 +14898,18 @@
           ]
         },
         "risk": {
-          "value": "medium",
+          "value": "high",
           "source": "internal/cli/schema_hints/metadata/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate.",
+          "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate.",
           "candidates": [
             {
-              "value": "medium",
+              "value": "high",
               "source": "internal/cli/schema_hints/metadata/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "Publish the documented native clear-messages command while reflecting that the current runtime has no explicit confirmation gate."
+              "review_reason": "Publish the documented native clear-messages command with its explicit typed --yes confirmation gate."
             },
             {
               "value": "medium",
@@ -14944,7 +14944,7 @@
       "interface_mode": "composite",
       "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote conversation-clear helper absent from the pinned MCP snapshot.",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source_refs": [
         "cobra-help:dws chat clear-messages",
         "internal/cli/schema_command_registry/products/chat.json#chat.clear_conversation_messages",

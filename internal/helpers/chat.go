@@ -23,11 +23,11 @@ import (
 )
 
 func validateChatMessageMediaSelection(mediaID, msgType string, cmd *cobra.Command) error {
-	if mediaID == "" || msgType != "" {
+	if mediaID == "" || msgType == "image" {
 		return nil
 	}
 	return apperrors.NewValidation(
-		"检测到 --media-id，但未指定 --msg-type image；已阻止把 --text 中的文件名作为普通文字发送",
+		"检测到 --media-id，但 --msg-type 不是 image；已阻止把媒体文件名作为普通文字发送",
 		apperrors.WithReason("ambiguous_media_message"),
 		apperrors.WithHint("发送图片时补充 --msg-type image 并保留 --media-id；发送 PDF/DOCX/XLSX 等本地文件时移除 --media-id，改用 --msg-type file --file-path <本地文件>。"),
 		apperrors.WithActions(
@@ -2964,12 +2964,21 @@ func newChatCommand() *cobra.Command {
 	chatCategoryDeleteCmd := &cobra.Command{
 		Use:   "delete",
 		Short: "删除用户自定义会话分组",
-		Example: `  dws chat category delete --category-id <分组ID>
+		Long:  "删除用户自定义会话分组。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。",
+		Example: `  dws chat category delete --category-id <分组ID> --yes
   # 分组ID 可通过 dws chat category list 获取`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			categoryId, _ := cmd.Flags().GetInt64("category-id")
 			if categoryId == 0 {
 				return fmt.Errorf("flag --category-id is required")
+			}
+			if !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"删除会话分组不可逆；获得用户确认后加 --yes 执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认目标分组及影响范围；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认目标会话分组", "获得用户确认后使用 --yes 执行"),
+				)
 			}
 			return callMCPToolOnServer("im", "delete_conv_category", map[string]any{
 				"categoryId": categoryId,
@@ -4827,17 +4836,25 @@ status 可选值:
 	chatClearMessagesCmd := &cobra.Command{
 		Use:   "clear-messages",
 		Short: "清空当前用户指定会话的聊天记录",
-		Long: `清空当前用户在指定会话中的聊天记录。仅清空当前用户视角的消息，不影响其他成员。
+		Long: `清空当前用户在指定会话中的聊天记录。仅清空当前用户视角的消息，不影响其他成员。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。
 
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>`,
-		Example: `  dws chat clear-messages --conversation-id <openConversationId>
-  dws chat clear-messages --id <openConversationId>`,
+		Example: `  dws chat clear-messages --conversation-id <openConversationId> --yes
+  dws chat clear-messages --id <openConversationId> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat clear-messages --conversation-id <openConversationId>")
+			}
+			if !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"清空会话聊天记录不可逆；获得用户确认后加 --yes 执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认目标会话及影响范围；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认目标会话", "获得用户确认后使用 --yes 执行"),
+				)
 			}
 			return callMCPToolOnServer("im", "clear_conversation_messages", map[string]any{
 				"openConversationId": convID,

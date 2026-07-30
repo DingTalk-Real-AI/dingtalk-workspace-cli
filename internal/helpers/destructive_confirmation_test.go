@@ -98,6 +98,56 @@ func TestChatDismissGroupRequiresConfirmationBeforeToolCall(t *testing.T) {
 	}
 }
 
+func TestChatClearMessagesRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"clear-messages", "--conversation-id", "conversation-1")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newChatCommand,
+		"clear-messages", "--conversation-id", "conversation-1", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed clear-messages returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "im",
+		toolName:  "clear_conversation_messages",
+		args:      map[string]any{"openConversationId": "conversation-1"},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestChatCategoryDeleteRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"category", "delete", "--category-id", "7")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newChatCommand,
+		"category", "delete", "--category-id", "7", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed category delete returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "im",
+		toolName:  "delete_conv_category",
+		args:      map[string]any{"categoryId": int64(7)},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
 func TestSheetClearRangeRequiresConfirmationBeforeToolCall(t *testing.T) {
 	args := []string{
 		"range", "clear",
