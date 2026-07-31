@@ -8,7 +8,7 @@ python3 scripts/gen_skill_shortcut_sections.py --check
 
 chat_skill="skills/multi/dingtalk-chat/SKILL.md"
 mono_skill="skills/mono/SKILL.md"
-chat_max_bytes=22000
+chat_max_bytes=14000
 
 chat_bytes="$(wc -c < "$chat_skill" | tr -d ' ')"
 if [ "$chat_bytes" -gt "$chat_max_bytes" ]; then
@@ -21,7 +21,7 @@ shortcut_rows="$(
 	awk '
 		/<!-- VISIBLE_SHORTCUTS_START -->/ { in_block = 1; next }
 		/<!-- VISIBLE_SHORTCUTS_END -->/ { in_block = 0 }
-		in_block && /^\| `dws chat \+/ { count++ }
+		in_block && /^\|[[:space:]]*`/ { count++ }
 		END { print count + 0 }
 	' "$chat_skill"
 )"

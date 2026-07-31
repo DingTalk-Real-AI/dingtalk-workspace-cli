@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate shortcut discovery sections for DWS skills.
 
-Product skills may use either a compact full index or progressive discovery.
-Leaf Schema publishes the Agent contract, while leaf `--help` remains the
-source of truth for accepted flags.
+The skill should teach agents which high-level shortcut entries are available
+without forcing large product catalogs into every common task. Leaf Schema
+publishes the Agent contract, while leaf `--help` remains the source of truth
+for accepted flags.
 """
 
 from __future__ import annotations
@@ -47,26 +48,13 @@ MONO_START = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->"
 MONO_END = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->"
 PRODUCT_START = "<!-- VISIBLE_SHORTCUTS_START -->"
 PRODUCT_END = "<!-- VISIBLE_SHORTCUTS_END -->"
-MULTI_COMPACT_TABLE_SERVICES = {"chat"}
 
-# Keep the Chinese intent cue while shortening long, mechanical chat details.
-# Short Chinese descriptions are already token-efficient and stay source-owned.
-CHAT_COMPACT_DESCRIPTIONS = {
-    "+at-me": "查最近 @我；auto window, project sender/time/content/chat.",
-    "+bot-find": "搜索全部机器人；include others/official, return DM-ready openDingTalkId.",
-    "+broadcast": "多人单聊群发；resolve userId and send individually.",
-    "+chat-audit-join": "审批入群验证；approve/reject/delete/ignore/block.",
-    "+chat-members-list": "列出群成员；group users/bots, resolve chat name.",
-    "+chat-messages": "拉取会话消息；group/DM, project sender/text/time.",
-    "+conversation-clear-messages": "清空本人会话记录；current-user view only, irreversible.",
-    "+conversation-mark-read": "标记消息已读；includes all earlier messages.",
-    "+conversation-set-top": "批量置顶/取消；max 10 chats.",
-    "+messages-resource-download": "安全下载消息资源；image/video/audio/file.",
-    "+messages-update-card": "流式更新卡片；final `--flow-status` must be 3.",
-    "+send-to-group": "按群名发消息；resolve openConversationId.",
-    "+thread-replies": "拉取话题全部回复；project sender/text/time.",
-    "+unread-chats": "列出未读会话；project name/count/chat ID.",
-}
+# Large, high-frequency product skills should route known intents directly and
+# keep their full shortcut inventory in Runtime Catalog/Schema. Add services
+# here only after verifying that the product skill has its own reviewed routing
+# section and intent table; compacting a sparse skill without an alternative
+# route would make its shortcuts harder to discover.
+COMPACT_PRODUCT_SERVICES = {"chat"}
 
 def md_escape(value: Any) -> str:
     text = str(value or "")
@@ -125,31 +113,8 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
 
 
 def product_section(service: str, rows: list[dict[str, Any]]) -> str:
-    if service in MULTI_COMPACT_TABLE_SERVICES:
-        table = []
-        for item in rows:
-            description = CHAT_COMPACT_DESCRIPTIONS.get(
-                item["command"], item["desc"]
-            )
-            table.append(
-                f"| `{md_escape(item['command'])}` | {md_escape(description)} |"
-            )
-        high_risk = [
-            f"`{md_escape(item['command'])}`"
-            for item in rows
-            if item["risk"] == "high-risk-write"
-        ]
-        return f"""{PRODUCT_START}
-## Shortcuts（无专用脚本/recipe 时优先）
-
-Complete public catalog index; every command uses the `dws {service}` prefix. Each row keeps a Chinese intent cue. Once selected, execute directly; read leaf Schema only when parameters, constraints, or safety are uncertain, and leaf Help only when flags are uncertain. See “Shortcut 执行契约” below.
-
-| Shortcut | 适用场景 |
-|---|---|
-{os.linesep.join(table)}
-
-`risk=high-risk-write`（高风险）: {", ".join(high_risk)}. Confirmation follows leaf Schema `confirmation` and the runtime gate; never infer it from risk.
-{PRODUCT_END}"""
+    if service in COMPACT_PRODUCT_SERVICES:
+        return compact_product_section(service, rows)
 
     table = []
     for item in rows:
@@ -165,6 +130,16 @@ Complete public catalog index; every command uses the `dws {service}` prefix. Ea
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
 {os.linesep.join(table)}
+{PRODUCT_END}"""
+
+
+def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
+    return f"""{PRODUCT_START}
+## Shortcut 发现（按需）
+
+`{md_escape(service)}` 当前有 {len(rows)} 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+
+仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service {md_escape(service)} --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 {PRODUCT_END}"""
 
 

@@ -18,111 +18,11 @@ metadata:
 > Command reference: [chat.md](references/chat.md); emoji list: [chat-emoji-list.md](references/chat-emoji-list.md); workflows: [01-messaging.md](references/01-messaging.md).
 
 <!-- VISIBLE_SHORTCUTS_START -->
-## Shortcuts（无专用脚本/recipe 时优先）
+## Shortcut 发现（按需）
 
-Complete public catalog index; every command uses the `dws chat` prefix. Each row keeps a Chinese intent cue. Once selected, execute directly; read leaf Schema only when parameters, constraints, or safety are uncertain, and leaf Help only when flags are uncertain. See “Shortcut 执行契约” below.
+`chat` 当前有 97 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
 
-| Shortcut | 适用场景 |
-|---|---|
-| `+at-me` | 查最近 @我；auto window, project sender/time/content/chat. |
-| `+bot-find` | 搜索全部机器人；include others/official, return DM-ready openDingTalkId. |
-| `+bot-search` | 搜索当前用户自己创建的机器人 |
-| `+broadcast` | 多人单聊群发；resolve userId and send individually. |
-| `+category-add-conversation` | 将会话移动到指定的自定义分组中 |
-| `+category-create` | 创建用户自定义会话分组 |
-| `+category-delete` | 删除用户自定义会话分组 |
-| `+category-list` | 获取用户自定义会话分组 |
-| `+category-list-conversations` | 拉取指定自定义会话分组下的会话 |
-| `+category-remove-conversation` | 将会话从指定的自定义分组中移出 |
-| `+category-rename` | 更新用户自定义会话分组的名称 |
-| `+chat-add-bot` | 将机器人添加到群中 |
-| `+chat-audit-join` | 审批入群验证；approve/reject/delete/ignore/block. |
-| `+chat-bots` | 查看群内所有机器人 |
-| `+chat-create` | 以当前用户身份创建钉钉群聊 |
-| `+chat-dismiss` | 解散群聊（不可逆，需群主权限） |
-| `+chat-get-by-id` | 根据群号获取群聊信息 |
-| `+chat-invite-url` | 获取群邀请链接 |
-| `+chat-list-all` | 分页拉取我加入的所有群列表 |
-| `+chat-list-join-requests` | 分页拉取入群验证记录 |
-| `+chat-list-mine` | 拉取我创建/管理的群 |
-| `+chat-members-get` | 根据成员 openDingTalkId 批量查询群成员详情 |
-| `+chat-members-list` | 列出群成员；group users/bots, resolve chat name. |
-| `+chat-messages` | 拉取会话消息；group/DM, project sender/text/time. |
-| `+chat-mute` | 全员禁言 / 取消全员禁言 |
-| `+chat-mute-member` | 指定群成员禁言 / 取消禁言 |
-| `+chat-quit` | 退出群聊 |
-| `+chat-remove-bot` | 从群内移除机器人 |
-| `+chat-role-add` | 添加群身份 |
-| `+chat-role-list` | 拉取会话的群身份列表 |
-| `+chat-role-query-user` | 查询群成员的群身份 |
-| `+chat-role-remove` | 删除群身份 |
-| `+chat-role-remove-user` | 移除用户的指定群身份 |
-| `+chat-role-set-user` | 设置用户的群身份（覆盖该用户的全部群身份） |
-| `+chat-role-update` | 更新群身份名称 |
-| `+chat-search` | 按关键词搜索群聊 |
-| `+chat-set-admin` | 设置 / 取消群管理员 |
-| `+chat-set-history` | 设置新成员入群可查看历史消息范围 |
-| `+chat-transfer-owner` | 转让群主 |
-| `+chat-update` | 更新群名称（仅名称，不支持 description） |
-| `+chat-update-alias` | 设置群备注（仅自己可见） |
-| `+chat-update-icon` | 更新群头像 |
-| `+chat-update-nick` | 设置当前用户在群内的群昵称 |
-| `+chat-update-settings` | 更新群设置（settingKey + status） |
-| `+conversation-clear-all-red-point` | 清除所有会话红点（全部已读） |
-| `+conversation-clear-messages` | 清空本人会话记录；current-user view only, irreversible. |
-| `+conversation-clear-red-point` | 清除会话红点 |
-| `+conversation-hide` | 会话列表中隐藏会话（收到新消息会重新出现） |
-| `+conversation-info` | 获取会话信息（群聊传 --group，单聊传 --open-dingtalk-id） |
-| `+conversation-list` | 分页获取当前用户的全部会话列表（单聊+群聊） |
-| `+conversation-list-top` | 拉取置顶会话列表，可只看群聊或单聊 |
-| `+conversation-mark-read` | 标记消息已读；includes all earlier messages. |
-| `+conversation-mark-unread` | 标记会话为未读 |
-| `+conversation-mute` | 会话消息免打扰（支持单聊/群聊） |
-| `+conversation-set-top` | 批量置顶/取消；max 10 chats. |
-| `+dm` | 按姓名直接给某人发单聊消息（自动解析 userId） |
-| `+feed-group-query-item` | 在会话分组结果中按会话 ID 精确查询多项 |
-| `+flag-cancel` | 取消收藏一条或多条消息（最多 10 条） |
-| `+flag-create` | 收藏一条或多条消息（最多 10 条） |
-| `+flag-list` | 分页查询当前用户收藏的消息 |
-| `+group-members` | 按群名列出群成员（自动搜群解析 openConversationId） |
-| `+messages-add-emoji` | 对消息添加 emoji 表情回应 |
-| `+messages-add-text-emotion` | 对消息添加文字表情回应 |
-| `+messages-batch-recall-by-bot` | 机器人撤回单聊消息 |
-| `+messages-batch-send-by-bot` | 机器人批量向用户发送单聊 Markdown 消息 |
-| `+messages-combine-forward` | 合并转发多条消息 |
-| `+messages-create-text-emotion` | 创建文字表情（获取 emotionId） |
-| `+messages-forward` | 转发单条消息 |
-| `+messages-forward-topic` | 转发话题消息到目标会话 |
-| `+messages-list` | 拉取群聊会话消息 |
-| `+messages-list-direct` | 拉取单聊会话消息 |
-| `+messages-list-pin` | 拉取会话中钉住的消息列表 |
-| `+messages-list-unread-conversations` | 获取有未读消息的会话列表 |
-| `+messages-mget` | 根据消息 ID 批量查询消息（最多 50 条） |
-| `+messages-query-send-status` | 查询消息发送状态 |
-| `+messages-read-status` | 查询消息的已读/未读状态 |
-| `+messages-recall` | 撤回当前用户发送的消息 |
-| `+messages-recall-by-bot` | 机器人撤回群消息 |
-| `+messages-remove-emoji` | 移除消息的 emoji 表情回应 |
-| `+messages-remove-text-emotion` | 移除消息的文字表情回应 |
-| `+messages-reply` | 以当前用户身份引用回复消息（自动补全原发送者） |
-| `+messages-resource-download` | 安全下载消息资源；image/video/audio/file. |
-| `+messages-resource-url` | 获取消息资源（图片/视频/语音）下载链接 |
-| `+messages-send` | 统一发送文本、Markdown、当前用户文件或已有 mediaId 图片 |
-| `+messages-send-by-bot` | 机器人向群聊发送 Markdown 消息 |
-| `+messages-send-by-webhook` | 自定义机器人 Webhook 发送群消息 |
-| `+messages-send-card` | 创建流式卡片，可在同一次调用中写入内容并结束 |
-| `+messages-set-pin` | 钉住消息（Pin） |
-| `+messages-set-top` | 置顶消息 |
-| `+messages-unset-pin` | 取消钉住消息（Unpin） |
-| `+messages-unset-top` | 取消置顶消息 |
-| `+messages-update-card` | 流式更新卡片；final `--flow-status` must be 3. |
-| `+my-groups` | 列出我加入的群，可按类型过滤并投影关键字段 |
-| `+search-msg` | 多维搜索消息，可全量翻页并批量富化详情 |
-| `+send-to-group` | 按群名发消息；resolve openConversationId. |
-| `+thread-replies` | 拉取话题全部回复；project sender/text/time. |
-| `+unread-chats` | 列出未读会话；project name/count/chat ID. |
-
-`risk=high-risk-write`（高风险）: `+category-delete`, `+chat-dismiss`, `+chat-remove-bot`, `+chat-role-remove`, `+conversation-clear-messages`. Confirmation follows leaf Schema `confirmation` and the runtime gate; never infer it from risk.
+仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service chat --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## Shortcut 执行契约
@@ -131,8 +31,9 @@ This is the only Shortcut entry point for multi/chat; `references/` documents
 atomic commands only. Routing priority:
 exact script/recipe > matching public Shortcut > atomic command.
 
-- Select a real `cli_path` from the table; never guess names. Use
-  `dws shortcut list --service chat --format json` only if no row matches.
+- Select a real `cli_path` from the high-frequency routes below; never guess names.
+  Use `dws shortcut list --service chat --compact --format json` only when no
+  reviewed route matches.
 - Once selected, execute directly. Read leaf Schema only when parameters,
   constraints, or safety are uncertain; read leaf `--help` only when flags are
   uncertain. If absent from Schema, use the same path in the full Catalog.

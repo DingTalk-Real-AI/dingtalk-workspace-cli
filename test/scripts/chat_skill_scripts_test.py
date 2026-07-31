@@ -33,7 +33,7 @@ def load_script(name: str):
 
 
 class ChatSkillScriptPathTest(unittest.TestCase):
-    def test_shortcuts_are_self_contained_in_multi_skill(self):
+    def test_shortcuts_use_progressive_discovery_in_multi_skill(self):
         text = (MULTI_ROOT / 'SKILL.md').read_text(encoding='utf-8')
         block = text.split('<!-- VISIBLE_SHORTCUTS_START -->', 1)[1].split(
             '<!-- VISIBLE_SHORTCUTS_END -->', 1
@@ -46,49 +46,21 @@ class ChatSkillScriptPathTest(unittest.TestCase):
         chat_rows = [
             row for row in catalog['results'] if row.get('service') == 'chat'
         ]
-        table_rows = re.findall(
-            r'\|\s*`(\+[a-z0-9-]+)`\s*\|\s*([^|\n]+)\s*\|',
+        self.assertEqual(97, len(chat_rows))
+        self.assertIn('## Shortcut 发现（按需）', block)
+        self.assertIn('`chat` 当前有 97 条公开 shortcut', block)
+        self.assertIn('Runtime Catalog 与 Schema', block)
+        self.assertIn(
+            'dws shortcut list --service chat --compact --format json',
             block,
         )
-        self.assertEqual(
-            {row['command'] for row in chat_rows},
-            {command for command, _ in table_rows},
-        )
-        self.assertTrue(all(description.strip() for _, description in table_rows))
-        self.assertTrue(
-            all(
-                re.search(r'[\u4e00-\u9fff]', description)
-                for _, description in table_rows
-            ),
-            'every shortcut description must retain a Chinese intent cue',
-        )
-        self.assertIn('| Shortcut | 适用场景 |', block)
-        self.assertNotIn('| Shortcut | 风险 |', block)
+        self.assertNotRegex(block, r'(?m)^\|\s*`\+[a-z0-9-]+`')
+        self.assertNotRegex(block, r'(?m)^\|\s*`dws chat \+[a-z0-9-]+`')
         self.assertNotIn('dws chat +', block)
-        for required in (
-            '+messages-send',
-            '+chat-messages',
-            '+search-msg',
-            '+conversation-clear-messages',
-        ):
-            self.assertIn(required, block)
-        high_risk = {
-            row['command']
-            for row in chat_rows
-            if row.get('risk') == 'high-risk-write'
-        }
-        high_risk_line = next(
-            line for line in block.splitlines()
-            if line.startswith('`risk=high-risk-write`')
-        )
-        self.assertEqual(
-            high_risk,
-            set(re.findall(r'`(\+[a-z0-9-]+)`', high_risk_line)),
-        )
         for required in (
             'This is the only Shortcut entry point for multi/chat',
             'exact script/recipe > matching public Shortcut > atomic command',
-            'dws shortcut list --service chat --format json',
+            'dws shortcut list --service chat --compact --format json',
             'never guess names',
             'confirmation=user_required',
             '--idempotency-key',
