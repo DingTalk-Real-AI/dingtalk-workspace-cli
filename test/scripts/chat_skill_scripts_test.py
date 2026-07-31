@@ -59,7 +59,7 @@ class ChatSkillScriptPathTest(unittest.TestCase):
         self.assertNotIn('dws chat +', block)
         for required in (
             'This is the only Shortcut entry point for multi/chat',
-            'exact script/recipe > matching public Shortcut > atomic command',
+            'exact recipe/runnable script > matching public Shortcut > atomic command',
             'dws shortcut list --service chat --compact --format json',
             'never guess names',
             'confirmation=user_required',

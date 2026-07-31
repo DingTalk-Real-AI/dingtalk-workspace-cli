@@ -29,7 +29,8 @@ metadata:
 
 This is the only Shortcut entry point for multi/chat; `references/` documents
 atomic commands only. Routing priority:
-exact script/recipe > matching public Shortcut > atomic command.
+exact recipe/runnable script > matching public Shortcut > atomic command.
+Skip a script if its interpreter (for example, `python3`) is unavailable.
 
 - Select a real `cli_path` from the high-frequency routes below; never guess names.
   Use `dws shortcut list --service chat --compact --format json` only when no
