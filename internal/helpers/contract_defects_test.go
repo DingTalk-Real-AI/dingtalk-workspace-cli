@@ -16,47 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type guardedMutationCall struct {
-	productID string
-	toolName  string
-	args      map[string]any
-}
-
-type guardedMutationCaller struct {
-	calls  []guardedMutationCall
-	dryRun bool
-}
-
-func (c *guardedMutationCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
-	c.calls = append(c.calls, guardedMutationCall{productID: productID, toolName: toolName, args: args})
-	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{}`}}}, nil
-}
-
-func (*guardedMutationCaller) Format() string { return "json" }
-func (c *guardedMutationCaller) DryRun() bool { return c.dryRun }
-func (*guardedMutationCaller) Fields() string { return "" }
-func (*guardedMutationCaller) JQ() string     { return "" }
-
-func executeGuardedMutationCommand(t *testing.T, caller *guardedMutationCaller, build func() *cobra.Command, args ...string) error {
-	t.Helper()
-	previousDeps := deps
-	t.Cleanup(func() { deps = previousDeps })
-
-	InitDeps(caller)
-	deps.Out.w = io.Discard
-	root := build()
-	if root.PersistentFlags().Lookup("yes") == nil {
-		root.PersistentFlags().Bool("yes", false, "confirm high-risk operation")
-	}
-	if root.PersistentFlags().Lookup("dry-run") == nil {
-		root.PersistentFlags().Bool("dry-run", false, "preview without executing")
-	}
-	root.SilenceErrors = true
-	root.SilenceUsage = true
-	root.SetArgs(args)
-	return root.Execute()
-}
-
 func TestChatConversationDestructiveCommandsRequireConfirmation(t *testing.T) {
 	for _, args := range [][]string{
 		{"category", "delete", "--category-id", "42"},
